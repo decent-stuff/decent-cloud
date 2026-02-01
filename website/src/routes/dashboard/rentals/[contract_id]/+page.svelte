@@ -558,11 +558,17 @@
 									<code class="text-white text-sm font-mono select-all">{instanceDetails.gateway_subdomain}</code>
 								</div>
 							{/if}
-							{#if contract.gateway_port_range_start && contract.gateway_port_range_end}
+							{#if contract.gateway_ssh_port && contract.gateway_port_range_start && contract.gateway_port_range_end}
 								<div class="bg-black/20  p-3">
-									<div class="text-neutral-500 text-xs mb-1">Available Ports</div>
-									<code class="text-white text-sm font-mono">{contract.gateway_port_range_start} - {contract.gateway_port_range_end}</code>
-									<div class="text-neutral-600 text-xs mt-1">Use these ports for custom services</div>
+									<div class="text-neutral-500 text-xs mb-1">Port Forwarding</div>
+									<div class="text-xs text-neutral-400 space-y-1 font-mono">
+										<div>SSH: External {contract.gateway_ssh_port} → VM:22</div>
+										<div>TCP: External {contract.gateway_ssh_port + 1}-{contract.gateway_ssh_port + 4} → VM:10001-10004</div>
+										<div>UDP: External {contract.gateway_ssh_port + 5}-{contract.gateway_ssh_port + 9} → VM:10005-10009</div>
+									</div>
+									<div class="text-neutral-600 text-xs mt-2">
+										Run services on VM ports 10001-10009 to expose them externally
+									</div>
 								</div>
 							{/if}
 						</div>
