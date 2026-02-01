@@ -1,10 +1,12 @@
 use super::*;
+use serial_test::serial;
 
 // =============================================================================
 // ChatwootClient (Account API) tests
 // =============================================================================
 
 #[test]
+#[serial]
 fn test_chatwoot_client_from_env_missing_vars() {
     // Clear env vars
     std::env::remove_var("CHATWOOT_BASE_URL");
@@ -32,6 +34,7 @@ fn test_account_id_parse_invalid() {
 }
 
 #[test]
+#[serial]
 fn test_chatwoot_client_from_env_valid() {
     std::env::set_var("CHATWOOT_BASE_URL", "https://test.chatwoot.com");
     std::env::set_var("CHATWOOT_API_TOKEN", "test_token");
@@ -57,6 +60,7 @@ fn test_chatwoot_client_from_env_valid() {
 // =============================================================================
 
 #[test]
+#[serial]
 fn test_platform_client_from_env_missing_vars() {
     std::env::remove_var("CHATWOOT_PLATFORM_API_TOKEN");
     std::env::remove_var("CHATWOOT_BASE_URL");
@@ -71,6 +75,7 @@ fn test_platform_client_from_env_missing_vars() {
 }
 
 #[test]
+#[serial]
 fn test_platform_client_from_env_valid() {
     std::env::set_var("CHATWOOT_BASE_URL", "https://test.chatwoot.com");
     std::env::set_var("CHATWOOT_PLATFORM_API_TOKEN", "platform_token");
