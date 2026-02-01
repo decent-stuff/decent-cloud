@@ -17,6 +17,8 @@ path = "src/bin/api-cli.rs"
 
 [dependencies]
 anyhow.workspace = true
+dirs.workspace = true
+urlencoding = "2"
 async-stripe = { version = "0.41.0", features = ["runtime-tokio-hyper"] }
 async-trait.workspace = true
 base64.workspace = true
@@ -37,10 +39,10 @@ icrc-ledger-types.workspace = true
 lazy_static = "1.5"
 ledger-map = { path = "../ledger-map" }
 num-bigint.workspace = true
-oauth2 = "4.4"
+oauth2 = "5.0.0"
 poem = { workspace = true, features = ["cookie"] }
 poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
-rand = "0.8"
+rand = "0.9"
 time = { version = "0.3", features = ["serde", "macros"] }
 regex.workspace = true
 reqwest.workspace = true
