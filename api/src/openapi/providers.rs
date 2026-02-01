@@ -1909,8 +1909,17 @@ impl ProvidersApi {
             match db.get_contract(&contract_id_bytes).await {
                 Ok(Some(contract)) => {
                     // Check if contract belongs to this provider
-                    let contract_provider =
-                        hex::decode(&contract.provider_pubkey).unwrap_or_default();
+                    let contract_provider = match hex::decode(&contract.provider_pubkey) {
+                        Ok(pk) => pk,
+                        Err(e) => {
+                            tracing::warn!("Malformed hex in contract.provider_pubkey: {:#}", e);
+                            unknown.push(ReconcileUnknownInstance {
+                                external_id: instance.external_id.clone(),
+                                message: "Invalid pubkey format in database".to_string(),
+                            });
+                            continue;
+                        }
+                    };
                     if contract_provider != pubkey_bytes {
                         unknown.push(ReconcileUnknownInstance {
                             external_id: instance.external_id.clone(),
@@ -2188,7 +2197,18 @@ impl ProvidersApi {
         // Optional: Check if pool belongs to this provider
         match db.get_agent_pool(&pool_id.0).await {
             Ok(Some(pool)) => {
-                if hex::decode(pool.provider_pubkey).unwrap_or_default() != provider_pubkey {
+                let pool_pubkey = match hex::decode(&pool.provider_pubkey) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        tracing::warn!("Malformed hex in pool.provider_pubkey: {:#}", e);
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Invalid pubkey format in database".to_string()),
+                        });
+                    }
+                };
+                if pool_pubkey != provider_pubkey {
                     return Json(ApiResponse {
                         success: false,
                         data: None,

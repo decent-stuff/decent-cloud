@@ -57,8 +57,28 @@ impl InvoicesApi {
         };
 
         // Verify auth: requester or provider
-        let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
-        let provider_pk = hex::decode(&contract.provider_pubkey).unwrap_or_default();
+        let requester_pk = match hex::decode(&contract.requester_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                tracing::warn!("Malformed hex in contract.requester_pubkey: {:#}", e);
+                return PoemResponse::new(InvoicePdfResponse::InternalError(Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format in database".to_string()),
+                })));
+            }
+        };
+        let provider_pk = match hex::decode(&contract.provider_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                tracing::warn!("Malformed hex in contract.provider_pubkey: {:#}", e);
+                return PoemResponse::new(InvoicePdfResponse::InternalError(Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format in database".to_string()),
+                })));
+            }
+        };
 
         if auth.pubkey != requester_pk && auth.pubkey != provider_pk {
             return PoemResponse::new(InvoicePdfResponse::Forbidden(Json(ApiResponse {
@@ -127,8 +147,28 @@ impl InvoicesApi {
         };
 
         // Verify auth: requester or provider
-        let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
-        let provider_pk = hex::decode(&contract.provider_pubkey).unwrap_or_default();
+        let requester_pk = match hex::decode(&contract.requester_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                tracing::warn!("Malformed hex in contract.requester_pubkey: {:#}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format in database".to_string()),
+                });
+            }
+        };
+        let provider_pk = match hex::decode(&contract.provider_pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                tracing::warn!("Malformed hex in contract.provider_pubkey: {:#}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format in database".to_string()),
+                });
+            }
+        };
 
         if auth.pubkey != requester_pk && auth.pubkey != provider_pk {
             return Json(ApiResponse {

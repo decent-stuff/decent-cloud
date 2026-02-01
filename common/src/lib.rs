@@ -15,6 +15,7 @@ pub mod ledger_refresh;
 pub mod next_block_sync;
 pub mod payment_method;
 pub mod registration;
+pub mod regions;
 pub mod rewards;
 
 pub use account_transfer_approvals::*;
@@ -33,6 +34,7 @@ pub use ledger_refresh::*;
 pub use next_block_sync::*;
 use num_traits::cast::ToPrimitive;
 pub use payment_method::*;
+pub use regions::*;
 pub use registration::*;
 pub use rewards::*;
 
