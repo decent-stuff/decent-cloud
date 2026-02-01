@@ -120,12 +120,10 @@ impl GatewaySetup {
         let public_iface = self.detect_public_interface()?;
         println!("  [ok] Public interface: {}", public_iface);
 
-        // 4. Configure NAT masquerade for VM traffic (skip if provider handles 1:1 NAT)
-        if nat_mode {
-            println!("  [ok] 1:1 NAT detected - skipping masquerade rules (provider handles NAT)");
-        } else {
-            self.configure_nat_masquerade(&public_iface)?;
-        }
+        // 4. Configure NAT masquerade for VM traffic
+        // Always needed: even behind 1:1 NAT, DNAT'd traffic needs SNAT for return path
+        // because VMs are on a private bridge and can't route directly to external clients
+        self.configure_nat_masquerade(&public_iface)?;
 
         // 5. Configure firewall rules
         self.configure_firewall()?;
@@ -260,15 +258,21 @@ net.bridge.bridge-nf-call-iptables = 1
         Ok(iface.to_string())
     }
 
-    fn configure_nat_masquerade(&self, public_iface: &str) -> Result<()> {
-        // All RFC1918 private ranges - VMs could get any private IP via DHCP
+    fn configure_nat_masquerade(&self, _public_iface: &str) -> Result<()> {
+        // MASQUERADE traffic from private subnets going to non-private destinations
+        // This handles DNAT return traffic: external client -> DNAT to VM -> VM replies
+        // The VM reply needs SNAT so the client sees the reply from the public IP
+        //
+        // Using "! -d <private>" instead of "-o <iface>" is more robust:
+        // - Works regardless of interface naming
+        // - Works with bridged setups where traffic stays on the bridge
         const PRIVATE_RANGES: &[&str] = &["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
         for subnet in PRIVATE_RANGES {
-            // Check if rule already exists
+            // Check if rule already exists (either format)
             let check_cmd = format!(
-                "iptables -t nat -C POSTROUTING -s {} -o {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
-                subnet, public_iface
+                "iptables -t nat -C POSTROUTING -s {} ! -d {} -j MASQUERADE 2>/dev/null && echo exists || echo missing",
+                subnet, subnet
             );
             let result = self.execute(&check_cmd)?;
 
@@ -277,10 +281,10 @@ net.bridge.bridge-nf-call-iptables = 1
                 continue;
             }
 
-            // Add masquerade rule
+            // Add masquerade rule: traffic from private subnet NOT going to private subnet
             let cmd = format!(
-                "iptables -t nat -A POSTROUTING -s {} -o {} -j MASQUERADE",
-                subnet, public_iface
+                "iptables -t nat -A POSTROUTING -s {} ! -d {} -j MASQUERADE",
+                subnet, subnet
             );
             let result = self.execute(&cmd)?;
             if result.exit_status != 0 {
