@@ -1,13 +1,14 @@
 <script lang="ts">
-	import type { ProviderTrustMetrics, ProviderResponseMetrics } from '$lib/services/api';
+	import type { ProviderTrustMetrics, ProviderResponseMetrics, ProviderHealthSummary } from '$lib/services/api';
 	import { formatDuration } from '$lib/utils/contract-format';
 
 	interface Props {
 		metrics: ProviderTrustMetrics;
 		responseMetrics?: ProviderResponseMetrics | null;
+		healthSummary?: ProviderHealthSummary | null;
 	}
 
-	let { metrics, responseMetrics = null }: Props = $props();
+	let { metrics, responseMetrics = null, healthSummary = null }: Props = $props();
 
 	// Trust score color based on value
 	function getScoreColor(score: number): string {
@@ -92,6 +93,20 @@
 		if (hours < 1) return `${Math.round(hours * 60)}m`;
 		return `${hours.toFixed(1)}h`;
 	}
+
+	// Uptime percentage color based on value
+	function getUptimeColor(uptime: number): string {
+		if (uptime >= 99) return 'text-green-400';
+		if (uptime >= 95) return 'text-green-300';
+		if (uptime >= 90) return 'text-yellow-400';
+		return 'text-red-400';
+	}
+
+	// Format average latency
+	function formatLatency(ms: number | null | undefined): string {
+		if (ms === null || ms === undefined) return 'N/A';
+		return `${ms.toFixed(0)}ms`;
+	}
 </script>
 
 <div class="card p-6 border border-neutral-800">
@@ -164,6 +179,65 @@
 			<span class="text-xs opacity-70">(&gt;20 contracts)</span>
 		{/if}
 	</div>
+
+	<!-- Uptime Metrics Section -->
+	{#if healthSummary}
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<h4 class="text-sm font-semibold mb-3">Infrastructure Uptime</h4>
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Uptime (30d)</div>
+					<div class="text-lg font-semibold {getUptimeColor(healthSummary.uptimePercent)}">
+						{healthSummary.uptimePercent.toFixed(1)}%
+					</div>
+				</div>
+
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Avg Latency</div>
+					<div class="text-lg font-semibold">
+						{formatLatency(healthSummary.avgLatencyMs)}
+					</div>
+				</div>
+
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Health Checks</div>
+					<div class="text-lg font-semibold">{healthSummary.totalChecks}</div>
+				</div>
+
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Contracts Monitored</div>
+					<div class="text-lg font-semibold">{healthSummary.contractsMonitored}</div>
+				</div>
+			</div>
+
+			<!-- Health Check Breakdown -->
+			<div class="mt-3 pt-3 border-t border-white/5">
+				<div class="grid grid-cols-3 gap-3">
+					<div>
+						<div class="text-xs text-neutral-500">Healthy</div>
+						<div class="text-sm font-medium text-green-400">
+							{healthSummary.healthyChecks}
+							<span class="text-neutral-600">({healthSummary.totalChecks > 0 ? ((healthSummary.healthyChecks / healthSummary.totalChecks) * 100).toFixed(1) : 0}%)</span>
+						</div>
+					</div>
+					<div>
+						<div class="text-xs text-neutral-500">Unhealthy</div>
+						<div class="text-sm font-medium text-red-400">
+							{healthSummary.unhealthyChecks}
+							<span class="text-neutral-600">({healthSummary.totalChecks > 0 ? ((healthSummary.unhealthyChecks / healthSummary.totalChecks) * 100).toFixed(1) : 0}%)</span>
+						</div>
+					</div>
+					<div>
+						<div class="text-xs text-neutral-500">Unknown</div>
+						<div class="text-sm font-medium text-neutral-400">
+							{healthSummary.unknownChecks}
+							<span class="text-neutral-600">({healthSummary.totalChecks > 0 ? ((healthSummary.unknownChecks / healthSummary.totalChecks) * 100).toFixed(1) : 0}%)</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Critical Flags Section -->
 	{#if metrics.has_critical_flags && metrics.critical_flag_reasons.length > 0}

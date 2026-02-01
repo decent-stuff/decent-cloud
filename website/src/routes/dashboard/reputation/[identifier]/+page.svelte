@@ -20,8 +20,10 @@
 	import {
 		getProviderTrustMetrics,
 		getProviderResponseMetrics,
+		getProviderHealthSummary,
 		type ProviderTrustMetrics,
 		type ProviderResponseMetrics,
+		type ProviderHealthSummary,
 	} from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import Icon from "$lib/components/Icons.svelte";
@@ -52,6 +54,7 @@
 	let socials = $state<UserSocial[]>([]);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let responseMetrics = $state<ProviderResponseMetrics | null>(null);
+	let healthSummary = $state<ProviderHealthSummary | null>(null);
 	let accountInfo = $state<{ emailVerified: boolean; email?: string } | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -215,6 +218,7 @@
 				contactsData,
 				trustMetricsData,
 				responseMetricsData,
+				healthSummaryData,
 			] = await Promise.all([
 				getUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
@@ -225,6 +229,7 @@
 				getUserContacts(pubkey).catch(() => []),
 				getProviderTrustMetrics(pubkey).catch(() => null),
 				getProviderResponseMetrics(pubkey).catch(() => null),
+				getProviderHealthSummary(pubkey, 30).catch(() => null),
 			]);
 
 			activity = activityData;
@@ -236,6 +241,7 @@
 			socials = socialsData;
 			trustMetrics = trustMetricsData;
 			responseMetrics = responseMetricsData;
+			healthSummary = healthSummaryData;
 
 			if (!profile && username) {
 				profile = {
@@ -450,9 +456,49 @@
 			</div>
 		</div>
 
+		<!-- Provider Health -->
+		{#if healthSummary}
+			<div class="card p-5">
+				<h2 class="text-lg font-semibold text-white mb-4">Provider Health (Last 30 Days)</h2>
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+					<div>
+						<div class="data-label mb-1">Uptime</div>
+						<div class="text-2xl font-semibold text-white">
+							{healthSummary.uptimePercent.toFixed(1)}%
+						</div>
+						{#if healthSummary.uptimePercent >= 99}
+							<div class="badge badge-success mt-2">Excellent</div>
+						{:else if healthSummary.uptimePercent >= 95}
+							<div class="badge badge-success mt-2">Good</div>
+						{:else if healthSummary.uptimePercent >= 90}
+							<div class="badge badge-warning mt-2">Fair</div>
+						{:else}
+							<div class="badge badge-danger mt-2">Poor</div>
+						{/if}
+					</div>
+					<div>
+						<div class="data-label mb-1">Health Checks</div>
+						<div class="text-xl font-semibold text-white">{healthSummary.totalChecks}</div>
+						<div class="text-sm text-neutral-500 mt-1">
+							<span class="text-success">{healthSummary.healthyChecks}</span> / <span class="text-danger">{healthSummary.unhealthyChecks}</span> healthy
+						</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Contracts Monitored</div>
+						<div class="text-xl font-semibold text-white">{healthSummary.contractsMonitored}</div>
+						{#if healthSummary.avgLatencyMs}
+							<div class="text-sm text-neutral-500 mt-1">
+								Avg latency: {healthSummary.avgLatencyMs.toFixed(0)}ms
+							</div>
+						{/if}
+					</div>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Trust Dashboard -->
 		{#if trustMetrics}
-			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
+			<TrustDashboard metrics={trustMetrics} {responseMetrics} {healthSummary} />
 		{/if}
 
 		<!-- Cancellation Metrics -->

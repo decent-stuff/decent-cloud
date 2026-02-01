@@ -7,6 +7,7 @@ import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserPro
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 import type { ProviderTrustMetrics as ProviderTrustMetricsRaw } from '$lib/types/generated/ProviderTrustMetrics';
 import type { ProviderOnboarding as ProviderOnboardingRaw } from '$lib/types/generated/ProviderOnboarding';
+import type { ProviderHealthSummary as ProviderHealthSummaryRaw } from '$lib/types/generated/ProviderHealthSummary';
 import type { ContractUsage } from '$lib/types/generated/ContractUsage';
 import type { PoolCapabilities } from '$lib/types/generated/PoolCapabilities';
 import type { OfferingSuggestion } from '$lib/types/generated/OfferingSuggestion';
@@ -27,6 +28,7 @@ export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: str
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
 export type ProviderTrustMetrics = ConvertNullToUndefined<ProviderTrustMetricsRaw>;
 export type ProviderOnboarding = ConvertNullToUndefined<ProviderOnboardingRaw>;
+export type ProviderHealthSummary = ConvertNullToUndefined<ProviderHealthSummaryRaw>;
 
 // Generic API response wrapper
 export interface ApiResponse<T> {
@@ -221,6 +223,28 @@ export async function getProviderResponseMetrics(
 
 	if (!payload.success || !payload.data) {
 		throw new Error(payload.error ?? 'Failed to fetch provider response metrics');
+	}
+
+	return payload.data;
+}
+
+export async function getProviderHealthSummary(
+	pubkey: string | Uint8Array,
+	days?: number | null
+): Promise<ProviderHealthSummary> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const searchParams = days !== undefined && days !== null ? `?days=${days}` : '';
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/health-summary${searchParams}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch provider health summary: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderHealthSummary>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider health summary');
 	}
 
 	return payload.data;
