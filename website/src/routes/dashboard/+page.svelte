@@ -6,7 +6,7 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
-	import { getProviderTrustMetrics, getProviderResponseMetrics, type ProviderTrustMetrics, type ProviderResponseMetrics } from "$lib/services/api";
+	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary } from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import Icon from "$lib/components/Icons.svelte";
 
@@ -21,6 +21,7 @@
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let responseMetrics = $state<ProviderResponseMetrics | null>(null);
+	let healthSummary = $state<ProviderHealthSummary | null>(null);
 	let trustMetricsLoading = $state(false);
 	let trustMetricsError = $state<string | null>(null);
 
@@ -28,6 +29,7 @@
 		if (!publicKeyBytes) {
 			trustMetrics = null;
 			responseMetrics = null;
+			healthSummary = null;
 			trustMetricsError = null;
 			return;
 		}
@@ -36,16 +38,19 @@
 		trustMetricsError = null;
 		try {
 			const pubkeyHex = computePubkey(publicKeyBytes);
-			const [trustData, responseData] = await Promise.all([
+			const [trustData, responseData, healthData] = await Promise.all([
 				getProviderTrustMetrics(publicKeyBytes),
 				getProviderResponseMetrics(pubkeyHex).catch(() => null),
+				getProviderHealthSummary(pubkeyHex).catch(() => null),
 			]);
 			trustMetrics = trustData;
 			responseMetrics = responseData;
+			healthSummary = healthData;
 		} catch (err) {
 			console.error('Failed to load trust metrics:', err);
 			trustMetrics = null;
 			responseMetrics = null;
+			healthSummary = null;
 			trustMetricsError = err instanceof Error ? err.message : 'Failed to load trust metrics';
 		} finally {
 			trustMetricsLoading = false;
@@ -126,7 +131,7 @@
 					<Icon name="arrow-right" size={20} />
 				</a>
 			</div>
-			<TrustDashboard metrics={trustMetrics} {responseMetrics} />
+			<TrustDashboard metrics={trustMetrics} {responseMetrics} {healthSummary} />
 		{/if}
 	{/if}
 
