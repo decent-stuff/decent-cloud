@@ -180,27 +180,56 @@ impl GatewaySetup {
     }
 
     fn enable_ip_forwarding(&self) -> Result<()> {
-        // Check current state
+        // Check current IP forwarding state
         let result = self.execute("sysctl -n net.ipv4.ip_forward")?;
-        if result.stdout.trim() == "1" {
-            println!("  [ok] IP forwarding already enabled");
+        let ip_forward_enabled = result.stdout.trim() == "1";
+
+        // Check bridge netfilter state (required for iptables to work with bridged VMs)
+        let result = self.execute("sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || echo 0")?;
+        let bridge_nf_enabled = result.stdout.trim() == "1";
+
+        if ip_forward_enabled && bridge_nf_enabled {
+            println!("  [ok] IP forwarding and bridge netfilter already enabled");
             return Ok(());
         }
 
-        // Enable immediately
-        let result = self.execute("sysctl -w net.ipv4.ip_forward=1")?;
-        if result.exit_status != 0 {
-            bail!("Failed to enable IP forwarding: {}", result.stdout);
+        // Load br_netfilter module (required for bridge-nf-call-iptables)
+        let _ = self.execute("modprobe br_netfilter");
+
+        // Enable IP forwarding
+        if !ip_forward_enabled {
+            let result = self.execute("sysctl -w net.ipv4.ip_forward=1")?;
+            if result.exit_status != 0 {
+                bail!("Failed to enable IP forwarding: {}", result.stdout);
+            }
+        }
+
+        // Enable bridge netfilter (required for iptables NAT to work with bridged traffic)
+        if !bridge_nf_enabled {
+            let result = self.execute("sysctl -w net.bridge.bridge-nf-call-iptables=1")?;
+            if result.exit_status != 0 {
+                // Non-fatal: some systems may not have this
+                println!("  [warn] Could not enable bridge netfilter - bridged VM traffic may not be NAT'd");
+            }
         }
 
         // Make persistent
-        let result =
-            self.execute(r#"echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-dc-gateway.conf"#)?;
+        let sysctl_conf = r#"# DC Gateway networking settings
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-iptables = 1
+"#;
+        let result = self.execute(&format!(
+            "echo '{}' > /etc/sysctl.d/99-dc-gateway.conf",
+            sysctl_conf.replace('\n', "\\n")
+        ))?;
         if result.exit_status != 0 {
-            bail!("Failed to persist IP forwarding: {}", result.stdout);
+            bail!("Failed to persist sysctl settings: {}", result.stdout);
         }
 
-        println!("  [ok] IP forwarding enabled");
+        // Ensure br_netfilter module loads on boot
+        let _ = self.execute("echo 'br_netfilter' >> /etc/modules-load.d/br_netfilter.conf 2>/dev/null || true");
+
+        println!("  [ok] IP forwarding and bridge netfilter enabled");
         Ok(())
     }
 
