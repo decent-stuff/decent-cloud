@@ -5,8 +5,8 @@ use crate::database::Database;
 use anyhow::{anyhow, Result};
 use ed25519_dalek::SigningKey;
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    PkceCodeChallenge, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
+    ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use poem::{
     handler,
@@ -16,7 +16,7 @@ use poem::{
     web::Query,
     Response, Result as PoemResult,
 };
-use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,21 +78,22 @@ fn create_google_oauth_client() -> Result<BasicClient> {
     let redirect_url = std::env::var("GOOGLE_OAUTH_REDIRECT_URL")
         .unwrap_or_else(|_| "http://localhost:59011/api/v1/oauth/google/callback".to_string());
 
-    let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())?;
-    let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".to_string())?;
-
     Ok(BasicClient::new(
         ClientId::new(client_id),
         Some(ClientSecret::new(client_secret)),
-        auth_url,
-        Some(token_url),
+        AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".to_string())?,
+        Some(TokenUrl::new(
+            "https://oauth2.googleapis.com/token".to_string(),
+        )?),
     )
     .set_redirect_uri(RedirectUrl::new(redirect_url)?))
 }
 
 /// Generate a random Ed25519 keypair
 fn generate_ed25519_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
-    let signing_key = SigningKey::generate(&mut OsRng);
+    let mut seed = [0u8; 32];
+    rand::rng().fill_bytes(&mut seed);
+    let signing_key = SigningKey::from_bytes(&seed);
     let private_key = signing_key.to_bytes().to_vec();
     let verifying_key = signing_key.verifying_key();
     let public_key = verifying_key.to_bytes().to_vec();
@@ -173,7 +174,7 @@ pub async fn google_callback(
     let token_response = client
         .exchange_code(AuthorizationCode::new(params.code))
         .set_pkce_verifier(pkce_verifier)
-        .request_async(oauth2::reqwest::async_http_client)
+        .request_async(async_http_client)
         .await
         .map_err(|e| {
             poem::Error::from_string(

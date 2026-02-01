@@ -39,7 +39,7 @@ icrc-ledger-types.workspace = true
 lazy_static = "1.5"
 ledger-map = { path = "../ledger-map" }
 num-bigint.workspace = true
-oauth2 = "5.0.0"
+oauth2 = { version = "4.4", features = ["reqwest"] }
 poem = { workspace = true, features = ["cookie"] }
 poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
 rand = "0.9"

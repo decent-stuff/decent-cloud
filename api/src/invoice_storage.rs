@@ -97,6 +97,7 @@ pub async fn load_invoice_pdf(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tempfile::TempDir;
 
     fn setup_test_env() -> TempDir {
@@ -106,6 +107,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_save_and_load_typst_invoice() {
         let _temp = setup_test_env();
         let contract_id = vec![1u8; 32];
@@ -122,6 +124,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_save_and_load_stripe_invoice() {
         let _temp = setup_test_env();
         let contract_id = vec![2u8; 32];
@@ -138,6 +141,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_load_nonexistent_invoice() {
         let _temp = setup_test_env();
         let contract_id = vec![3u8; 32];
@@ -149,6 +153,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_both_invoice_types_coexist() {
         let _temp = setup_test_env();
         let contract_id = vec![15u8; 32];
