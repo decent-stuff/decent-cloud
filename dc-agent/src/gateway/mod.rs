@@ -83,8 +83,28 @@ impl GatewayManager {
     /// Returns the updated instance with gateway fields populated.
     pub async fn setup_gateway(
         &mut self,
+        instance: Instance,
+        contract_id: &str,
+    ) -> Result<Instance> {
+        self.setup_gateway_internal(instance, contract_id, false).await
+    }
+
+    /// Setup gateway for testing (skips DNS record creation).
+    /// Useful for local testing when DNS API is not configured.
+    pub async fn setup_gateway_local(
+        &mut self,
+        instance: Instance,
+        contract_id: &str,
+    ) -> Result<Instance> {
+        self.setup_gateway_internal(instance, contract_id, true).await
+    }
+
+    /// Internal gateway setup with optional DNS skip.
+    async fn setup_gateway_internal(
+        &mut self,
         mut instance: Instance,
         contract_id: &str,
+        skip_dns: bool,
     ) -> Result<Instance> {
         // Generate slug
         let slug = Self::generate_slug();
@@ -102,22 +122,29 @@ impl GatewayManager {
             .as_ref()
             .context("Instance must have an IP address for gateway setup")?;
 
-        // Create DNS record FIRST via central API
+        // Create DNS record FIRST via central API (unless skipped for testing)
         // Must exist before Caddy config so HTTP-01 challenge can succeed
-        self.api_client
-            .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
-            .await
-            .context("Failed to create DNS record")?;
+        if skip_dns {
+            tracing::info!("Skipping DNS record creation (--skip-dns specified)");
+        } else {
+            self.api_client
+                .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
+                .await
+                .context("Failed to create DNS record")?;
+        }
 
         // Setup iptables DNAT for TCP/UDP port forwarding
         IptablesNat::setup_forwarding(&slug, internal_ip, &allocation)
             .context("Failed to setup iptables port forwarding")?;
 
-        // Write Caddy config AFTER DNS exists
-        // Caddy will reload and obtain Let's Encrypt cert via HTTP-01
-        self.caddy_manager
-            .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
-            .context("Failed to write Caddy config")?;
+        // Write Caddy config (will work for HTTP but HTTPS needs DNS for cert)
+        if !skip_dns {
+            self.caddy_manager
+                .write_vm_config(&slug, &subdomain, internal_ip, &allocation, contract_id)
+                .context("Failed to write Caddy config")?;
+        } else {
+            tracing::info!("Skipping Caddy config (no DNS means no HTTPS cert)");
+        }
 
         // Setup bandwidth monitoring
         if let Err(e) = BandwidthMonitor::setup_accounting(&slug, internal_ip) {

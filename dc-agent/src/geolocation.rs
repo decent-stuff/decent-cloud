@@ -15,4 +15,4 @@ pub async fn detect_country() -> Result<Option<String>> {
 }
 
 // Re-export regions module from dcc-common to avoid duplication
-pub use dcc_common::regions::country_to_region;
+pub use dcc_common::regions::{country_to_region, region_display_name};

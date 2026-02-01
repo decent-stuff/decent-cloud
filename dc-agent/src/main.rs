@@ -67,6 +67,14 @@ enum Commands {
         /// Custom contract ID for the test (default: test-<timestamp>)
         #[arg(long)]
         contract_id: Option<String>,
+
+        /// Also test gateway setup (subdomain, port forwarding, DNS)
+        #[arg(long, default_value = "false")]
+        test_gateway: bool,
+
+        /// Skip DNS record creation during gateway test (for local testing)
+        #[arg(long, default_value = "false")]
+        skip_dns: bool,
     },
     /// Check for and apply updates
     Upgrade {
@@ -183,7 +191,12 @@ async fn main() -> Result<()> {
                     ssh_pubkey,
                     keep,
                     contract_id,
-                } => run_test_provision(config, ssh_pubkey, keep, contract_id).await,
+                    test_gateway,
+                    skip_dns,
+                } => {
+                    run_test_provision(config, ssh_pubkey, keep, contract_id, test_gateway, skip_dns)
+                        .await
+                }
                 _ => unreachable!(),
             }
         }
@@ -1041,6 +1054,8 @@ async fn run_test_provision(
     ssh_pubkey: Option<String>,
     keep: bool,
     contract_id: Option<String>,
+    test_gateway: bool,
+    skip_dns: bool,
 ) -> Result<()> {
     println!("dc-agent test-provision");
     println!("=======================\n");
@@ -1067,6 +1082,12 @@ async fn run_test_provision(
 
     println!("Contract ID: {}", contract_id);
     println!("SSH Public Key: {}...", &ssh_key[..ssh_key.len().min(50)]);
+    if test_gateway {
+        println!(
+            "Gateway testing: enabled{}",
+            if skip_dns { " (DNS skipped)" } else { "" }
+        );
+    }
     println!();
 
     let request = ProvisionRequest {
@@ -1081,7 +1102,7 @@ async fn run_test_provision(
 
     println!("Provisioning test VM...");
     let start = std::time::Instant::now();
-    let instance = provisioner.provision(&request).await?;
+    let mut instance = provisioner.provision(&request).await?;
     let provision_time = start.elapsed();
 
     println!(
@@ -1098,6 +1119,67 @@ async fn run_test_provision(
         println!("  IPv6: {}", ipv6);
     }
 
+    // Gateway setup if requested
+    let gateway_manager = if test_gateway {
+        match &config.gateway {
+            Some(gw_config) => {
+                // Create a minimal API client for gateway (DNS operations will be skipped in test mode)
+                let api_client = std::sync::Arc::new(
+                    ApiClient::new(&config.api).context("Failed to create API client for gateway")?,
+                );
+                match GatewayManager::new(gw_config.clone(), api_client) {
+                    Ok(mut gm) => {
+                        println!("\nSetting up gateway{}...", if skip_dns { " (local only, no DNS)" } else { "" });
+                        let gw_result = if skip_dns {
+                            gm.setup_gateway_local(instance.clone(), &contract_id).await
+                        } else {
+                            gm.setup_gateway(instance.clone(), &contract_id).await
+                        };
+                        match gw_result {
+                            Ok(updated_instance) => {
+                                instance = updated_instance;
+                                println!("✓ Gateway setup complete");
+                                println!();
+                                println!("Gateway details:");
+                                if let Some(slug) = &instance.gateway_slug {
+                                    println!("  Slug: {}", slug);
+                                }
+                                if let Some(subdomain) = &instance.gateway_subdomain {
+                                    println!("  Subdomain: {}", subdomain);
+                                }
+                                if let Some(port) = instance.gateway_ssh_port {
+                                    println!("  SSH Port: {}", port);
+                                }
+                                if let (Some(start), Some(end)) = (
+                                    instance.gateway_port_range_start,
+                                    instance.gateway_port_range_end,
+                                ) {
+                                    println!("  Port Range: {}-{}", start, end);
+                                }
+                                Some(gm)
+                            }
+                            Err(e) => {
+                                println!("⚠ Gateway setup failed: {:#}", e);
+                                println!("  (VM provisioning succeeded, continuing without gateway)");
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("⚠ Failed to initialize gateway manager: {:#}", e);
+                        None
+                    }
+                }
+            }
+            None => {
+                println!("\n⚠ --test-gateway specified but no gateway configured in dc-agent.toml");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // Health check
     println!("\nRunning health check...");
     let health = provisioner.health_check(&instance.external_id).await?;
@@ -1106,11 +1188,29 @@ async fn run_test_provision(
     if keep {
         println!("\n--keep specified, VM will remain running.");
         println!("To terminate later, use the Proxmox web UI or API.");
-        if let Some(ipv4) = &instance.ip_address {
-            println!("\nYou can SSH into the VM:");
-            println!("  ssh root@{}", ipv4);
+
+        // Show connection instructions
+        if let Some(subdomain) = &instance.gateway_subdomain {
+            if let Some(port) = instance.gateway_ssh_port {
+                println!("\nSSH via gateway:");
+                println!("  ssh -p {} ubuntu@{}", port, subdomain);
+                println!("  ssh -p {} ubuntu@{}", port, config.gateway.as_ref().map(|g| &g.public_ip).unwrap_or(&"<public_ip>".to_string()));
+            }
+        } else if let Some(ipv4) = &instance.ip_address {
+            println!("\nYou can SSH into the VM (internal network only):");
+            println!("  ssh ubuntu@{}", ipv4);
         }
     } else {
+        // Cleanup gateway first if it was set up
+        if let Some(mut gm) = gateway_manager {
+            println!("\nCleaning up gateway...");
+            if let Err(e) = gm.cleanup_gateway(&contract_id).await {
+                println!("⚠ Gateway cleanup warning: {:#}", e);
+            } else {
+                println!("✓ Gateway cleaned up");
+            }
+        }
+
         println!("\nTerminating test VM...");
         provisioner.terminate(&instance.external_id).await?;
         println!("✓ VM terminated successfully");
