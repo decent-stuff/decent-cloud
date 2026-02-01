@@ -1,5 +1,68 @@
 # TODO
 
+## HIGH PRIORITY: Self-Hosted Resource Management
+
+**Goal:** Transform platform from pure marketplace into unified resource management + marketplace. Users can manage own infrastructure, rent from others, and deploy value-add services on top.
+
+### Vision
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Decent Cloud Platform                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 3: Value-Add Services                                    │
+│  - Coding agents (OpenCode, Aider)                              │
+│  - AI tools (OpenClaw, local LLMs)                              │
+│  - Custom applications deployed on rented/owned resources       │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 2: Resource Marketplace                                  │
+│  - Rent from others (paid or free)                              │
+│  - Offer own resources to others                                │
+├─────────────────────────────────────────────────────────────────┤
+│  Layer 1: Own Infrastructure Management                         │
+│  - Register own servers/agents                                  │
+│  - Private by default (only visible to owner)                   │
+│  - Self-rental is FREE (no payments)                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Features
+1. **Visibility Controls** (per offering/resource):
+   - `private` - Only visible to owner (default)
+   - `shared` - Visible to specific users/accounts
+   - `public` - Listed in marketplace
+
+2. **Self-Rental = Free**: Same pubkey as requester and provider → no payment required
+
+3. **Flexible Pricing**: Offerings to others can be free or paid
+
+4. **Value-Add Deployment**: Derived services are independent (no relationship tracking)
+
+### Design Decisions
+- **Infrastructure**: Users run `dc-agent` on their own servers (same as providers)
+- **Identity**: Same pubkey = same person (simple verification)
+- **Derived services**: Completely independent offerings, no parent-child tracking
+- **Abuse prevention**: None for now (simplicity over complexity)
+
+### Implementation Phases
+
+**Phase 1: Visibility & Self-Rental**
+- [ ] Add `visibility` field to offerings: `private` (default), `shared`, `public`
+- [ ] Filter offerings API by visibility + requester pubkey
+- [ ] Detect self-rental (requester_pubkey == provider_pubkey) → skip payment
+- [ ] UI: "My Resources" section showing private offerings
+
+**Phase 2: Shared Visibility**
+- [ ] Add `visibility_allowlist` table (offering_id, allowed_pubkey)
+- [ ] Filter shared offerings to allowlisted users only
+- [ ] UI: Manage who can see/rent your shared offerings
+
+**Phase 3: Templated Deployments**
+- [ ] Add `post_provision_script` or `cloud_init_config` field to offerings
+- [ ] dc-agent executes deployment script after VM provisioning
+- [ ] Enable "rent base VM + auto-deploy service" pattern
+
+---
+
 ## API-CLI Testing Framework
 
 **Goal:** Enable automated E2E testing of the full VM provisioning flow without the website frontend, for CI/CD pipelines and AI agent-assisted testing.
