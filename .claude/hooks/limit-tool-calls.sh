@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hook: Limit tool calls for orchestrator child agents
-# Prevents infinite loops by enforcing max 200 tool calls per session
+# Prevents infinite loops by enforcing max 400 tool calls per session
 
 set -euo pipefail
 
@@ -50,8 +50,8 @@ CURRENT_COUNT=$(cat "$STATE_FILE")
 NEW_COUNT=$((CURRENT_COUNT + 1))
 echo "$NEW_COUNT" > "$STATE_FILE"
 
-# Check if limit exceeded (200 tool calls)
-MAX_CALLS=200
+# Check if limit exceeded (400 tool calls)
+MAX_CALLS=400
 if [[ $NEW_COUNT -gt $MAX_CALLS ]]; then
     # Deny the tool call and provide feedback
     cat <<EOF
