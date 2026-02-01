@@ -258,6 +258,10 @@ services:
       - LLM_API_MODEL=${LLM_API_MODEL:-}
       # Agent Bot auto-registration (public URL for Chatwoot callbacks)
       - API_PUBLIC_URL=${API_PUBLIC_URL:-https://dev-api.decent-cloud.org}
+      # Cloudflare DNS (for gateway DNS record management)
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      - CF_DOMAIN=${CF_DOMAIN:-decent-cloud.org}
     volumes:
       - ../data/api-data-dev:/data
     ports:
