@@ -1,5 +1,46 @@
 # TODO
 
+## API-CLI Testing Framework
+
+**Goal:** Enable automated E2E testing of the full VM provisioning flow without the website frontend, for CI/CD pipelines and AI agent-assisted testing.
+
+### Completed ✓
+- Identity management (generate, import, list, show, delete) with storage at `~/.dc-test-keys/`
+- Ed25519ph signing client matching API authentication requirements
+- Account operations (create, get, update-email, add-ssh-key, list-ssh-keys)
+- Contract operations (list-offerings, create, get, wait, list, cancel)
+- Offering/Provider listing commands
+- Health checks for all external services (API, Stripe, Telegram, Cloudflare, MailChannels)
+- Gateway connectivity testing structure (ssh, tcp, contract)
+- E2E test scaffolding (provision, lifecycle, all)
+- `--skip-payment` flag with `set_payment_status_for_testing()` DB function
+
+### Remaining Work
+- [ ] **Fix api-server build** - oauth2 crate compatibility issues blocking full test suite
+- [ ] **Test contract create/wait/cancel** - Requires running provider with dc-agent
+- [ ] **Test gateway commands** - Requires active contracts with assigned gateways
+- [ ] **Test DNS commands** - Requires Cloudflare credentials in environment
+- [ ] **Full E2E test run** - Provision → verify SSH → cleanup cycle
+
+### Usage
+```bash
+# Generate test identity
+api-cli identity generate --name test1
+
+# Create account
+api-cli --api-url https://api.decent-cloud.org account create --identity test1 --username myuser --email test@example.com
+
+# List offerings and create contract (with skip-payment for testing)
+api-cli contract list-offerings --limit 10
+api-cli contract create --identity test1 --offering-id 1 --ssh-pubkey "ssh-ed25519 ..." --skip-payment
+
+# Wait for provisioning and test gateway
+api-cli contract wait <contract-id> --identity test1 --state provisioned --timeout 300
+api-cli gateway contract <contract-id> --identity test1
+```
+
+---
+
 ## HIGH PRIORITY: Streamlined Rental UX (Pick → Pay → Use)
 
 **Priority:** CRITICAL - Competitive feature parity with modern cloud providers

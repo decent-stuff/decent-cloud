@@ -605,6 +605,7 @@ async fn handle_identity_action(action: IdentityAction) -> Result<()> {
 // =============================================================================
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct RegisterAccountRequest {
     username: String,
     email: String,
@@ -757,10 +758,13 @@ struct CancelContractRequest {
 struct Offering {
     id: i64,
     offering_id: String,
-    provider_pubkey: String,
+    #[serde(alias = "provider_pubkey")]
+    pubkey: String,
     product_type: Option<String>,
-    name: Option<String>,
-    price_monthly_usd: Option<f64>,
+    #[serde(alias = "name")]
+    offer_name: Option<String>,
+    #[serde(alias = "price_monthly_usd")]
+    monthly_price: Option<f64>,
     stock_status: Option<String>,
 }
 
@@ -813,14 +817,14 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
                     "ID", "Name", "Type", "Provider", "Price/mo", "Stock");
                 println!("{}", "-".repeat(120));
                 for o in &offerings {
-                    let name = o.name.as_deref().unwrap_or("N/A");
+                    let name = o.offer_name.as_deref().unwrap_or("N/A");
                     let ptype = o.product_type.as_deref().unwrap_or("N/A");
-                    let price = o.price_monthly_usd.map(|p| format!("${:.2}", p)).unwrap_or_else(|| "N/A".to_string());
+                    let price = o.monthly_price.map(|p| format!("${:.2}", p)).unwrap_or_else(|| "N/A".to_string());
                     let stock = o.stock_status.as_deref().unwrap_or("N/A");
-                    let provider_short = if o.provider_pubkey.len() > 16 {
-                        format!("{}...", &o.provider_pubkey[..16])
+                    let provider_short = if o.pubkey.len() > 16 {
+                        format!("{}...", &o.pubkey[..16])
                     } else {
-                        o.provider_pubkey.clone()
+                        o.pubkey.clone()
                     };
                     println!("{:<8} {:<40} {:<15} {:<20} {:<10} {:<10}",
                         o.id, &name[..name.len().min(38)], ptype, provider_short, price, stock);
@@ -982,9 +986,9 @@ async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result
                 println!("{}", "=".repeat(100));
                 for o in &offerings {
                     println!("ID: {} ({})", o.id, o.offering_id);
-                    println!("  Name: {}", o.name.as_deref().unwrap_or("N/A"));
+                    println!("  Name: {}", o.offer_name.as_deref().unwrap_or("N/A"));
                     println!("  Type: {}", o.product_type.as_deref().unwrap_or("N/A"));
-                    println!("  Price: ${:.2}/mo", o.price_monthly_usd.unwrap_or(0.0));
+                    println!("  Price: ${:.2}/mo", o.monthly_price.unwrap_or(0.0));
                     println!("{}", "-".repeat(100));
                 }
             }
@@ -998,9 +1002,9 @@ async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result
 
             println!("Offering: {}", offering.offering_id);
             println!("  ID: {}", offering.id);
-            println!("  Name: {}", offering.name.as_deref().unwrap_or("N/A"));
+            println!("  Name: {}", offering.offer_name.as_deref().unwrap_or("N/A"));
             println!("  Type: {}", offering.product_type.as_deref().unwrap_or("N/A"));
-            println!("  Price: ${:.2}/mo", offering.price_monthly_usd.unwrap_or(0.0));
+            println!("  Price: ${:.2}/mo", offering.monthly_price.unwrap_or(0.0));
             println!("  Stock: {}", offering.stock_status.as_deref().unwrap_or("N/A"));
         }
     }
@@ -1013,9 +1017,11 @@ async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result
 
 #[derive(Debug, Deserialize)]
 struct ProviderProfile {
-    pubkey: String,
+    #[serde(default)]
+    pubkey: Option<String>,
     name: Option<String>,
-    website: Option<String>,
+    #[serde(alias = "website")]
+    website_url: Option<String>,
 }
 
 async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result<()> {
@@ -1038,8 +1044,9 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
                 println!("{}", "-".repeat(100));
                 for p in &providers {
                     let name = p.name.as_deref().unwrap_or("N/A");
-                    let website = p.website.as_deref().unwrap_or("N/A");
-                    println!("{:<66} {:<20} {:<30}", p.pubkey, name, website);
+                    let website = p.website_url.as_deref().unwrap_or("N/A");
+                    let pubkey = p.pubkey.as_deref().unwrap_or("N/A");
+                    println!("{:<66} {:<20} {:<30}", pubkey, name, website);
                 }
                 println!("{}", "=".repeat(100));
                 println!("Total: {} provider(s)", providers.len());
@@ -1052,9 +1059,9 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
             let api_response: api_cli::client::ApiResponse<ProviderProfile> = serde_json::from_str(&text)?;
             let provider = api_response.into_result()?;
 
-            println!("Provider: {}", provider.pubkey);
+            println!("Provider: {}", provider.pubkey.as_deref().unwrap_or(&pubkey));
             println!("  Name: {}", provider.name.as_deref().unwrap_or("N/A"));
-            println!("  Website: {}", provider.website.as_deref().unwrap_or("N/A"));
+            println!("  Website: {}", provider.website_url.as_deref().unwrap_or("N/A"));
         }
         ProviderAction::Offerings { pubkey } => {
             let url = format!("{}/api/v1/providers/{}/offerings", api_url, pubkey);
@@ -1069,10 +1076,10 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
                 println!("\nProvider Offerings:");
                 println!("{}", "=".repeat(100));
                 for o in &offerings {
-                    println!("ID: {} - {}", o.id, o.name.as_deref().unwrap_or("N/A"));
+                    println!("ID: {} - {}", o.id, o.offer_name.as_deref().unwrap_or("N/A"));
                     println!("  Type: {}, Price: ${:.2}/mo, Stock: {}",
                         o.product_type.as_deref().unwrap_or("N/A"),
-                        o.price_monthly_usd.unwrap_or(0.0),
+                        o.monthly_price.unwrap_or(0.0),
                         o.stock_status.as_deref().unwrap_or("N/A"));
                     println!("{}", "-".repeat(100));
                 }

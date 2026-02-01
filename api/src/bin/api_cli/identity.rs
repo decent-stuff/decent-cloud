@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use dcc_common::DccIdentity;
 use ed25519_dalek::SigningKey;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -30,8 +31,12 @@ impl Identity {
 
     /// Generate a new identity with random keys
     pub fn generate(name: &str) -> Result<Self> {
-        let mut rng = rand::thread_rng();
-        let signing_key = SigningKey::generate(&mut rng);
+        // Generate random seed bytes
+        let mut seed = [0u8; 32];
+        rand::rng().fill_bytes(&mut seed);
+
+        // Create signing key from seed
+        let signing_key = SigningKey::from_bytes(&seed);
         let verifying_key = signing_key.verifying_key();
 
         let identity = Identity {
