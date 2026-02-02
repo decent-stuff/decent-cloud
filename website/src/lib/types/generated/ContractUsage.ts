@@ -3,4 +3,8 @@
 /**
  * Contract usage tracking for billing periods
  */
-export type ContractUsage = { id: number, contract_id: string, billing_period_start: number, billing_period_end: number, units_used: number, units_included: number | undefined, overage_units: number, estimated_charge_cents: number | undefined, reported_to_stripe: boolean, stripe_usage_record_id: string | null, created_at: number, updated_at: number, };
+export type ContractUsage = { id: number, contract_id: string, billing_period_start: number, billing_period_end: number, units_used: number, units_included: number | undefined, overage_units: number, estimated_charge_cents: number | undefined, reported_to_stripe: boolean, stripe_usage_record_id: string | null, created_at: number, updated_at: number, 
+/**
+ * Billing unit from the offering (minute, hour, day, month)
+ */
+billing_unit: string, };

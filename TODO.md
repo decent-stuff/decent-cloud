@@ -271,10 +271,10 @@ If contract-specific messaging isn't needed, the SLA tracking infrastructure (`c
 
 ---
 
-## Usage-Based Billing for Rentals - Backend ✅ COMPLETE
+## Usage-Based Billing for Rentals ✅ COMPLETE (2026-02-02)
 
-**Priority:** MEDIUM - Frontend UI remaining
-**Status:** Backend complete, frontend pending
+**Priority:** MEDIUM
+**Status:** Complete (backend + frontend)
 
 ### What's Implemented ✅
 
@@ -285,16 +285,21 @@ If contract-specific messaging isn't needed, the SLA tracking infrastructure (`c
 
 **API Endpoints:**
 - `POST /contracts/{id}/usage` - Record usage events (event_type, units_delta, heartbeat_at, source, metadata)
-- `GET /contracts/{id}/usage` - Get current billing period usage
+- `GET /contracts/{id}/usage` - Get current billing period usage (now includes `billing_unit` from offering)
 
 **Database Functions:**
 - `record_usage_event()` and `get_current_usage()` in `api/src/database/contracts.rs`
 
-### What's Missing (Frontend)
+**Frontend UI:**
+- [x] Offering Edit UI: QuickEditOfferingDialog now has usage-based billing section with:
+  - Enable/disable toggle for usage tracking (pricing_model = 'usage_overage')
+  - Billing unit selector (minute, hour, day, month)
+  - Included units, price per unit, overage price inputs
+- [x] Rental Dashboard: Usage display shows dynamic unit labels based on offering's billing_unit
 
-- [ ] Offering Creation UI: billing_unit dropdown, pricing_model toggle, overage pricing fields
-- [ ] Rental Dashboard: usage display, "X of Y hours used" progress bar, estimated overage charges
-- [ ] Stripe metered billing end-to-end testing
+### Remaining (Low Priority)
+
+- [ ] Stripe metered billing end-to-end testing with live account
 
 ---
 

@@ -32,6 +32,13 @@
 	let templateName = $state('');
 	let postProvisionScript = $state('');
 
+	// Usage-based billing fields
+	let billingUnit = $state('month');
+	let pricingModel = $state<string | undefined>(undefined);
+	let pricePerUnit = $state<number | undefined>(undefined);
+	let includedUnits = $state<number | undefined>(undefined);
+	let overagePricePerUnit = $state<number | undefined>(undefined);
+
 	// Allowlist management
 	let allowlistEntries = $state<AllowlistEntry[]>([]);
 	let loadingAllowlist = $state(false);
@@ -54,6 +61,12 @@
 			visibility = offering.visibility;
 			templateName = offering.template_name || '';
 			postProvisionScript = offering.post_provision_script || '';
+			// Usage-based billing
+			billingUnit = offering.billing_unit || 'month';
+			pricingModel = offering.pricing_model || undefined;
+			pricePerUnit = offering.price_per_unit || undefined;
+			includedUnits = offering.included_units || undefined;
+			overagePricePerUnit = offering.overage_price_per_unit || undefined;
 			error = null;
 			// Load allowlist if visibility is shared
 			if (offering.visibility.toLowerCase() === 'shared') {
@@ -208,12 +221,12 @@
 				agent_pool_id: offering.agent_pool_id || undefined,
 				post_provision_script: postProvisionScript.trim() || undefined,
 				provider_online: undefined,
-				// Subscription fields
-				billing_unit: offering.billing_unit || 'month',
-				pricing_model: offering.pricing_model || undefined,
-				price_per_unit: offering.price_per_unit || undefined,
-				included_units: offering.included_units || undefined,
-				overage_price_per_unit: offering.overage_price_per_unit || undefined,
+				// Usage-based billing fields (editable)
+				billing_unit: billingUnit,
+				pricing_model: pricingModel || undefined,
+				price_per_unit: pricePerUnit || undefined,
+				included_units: includedUnits || undefined,
+				overage_price_per_unit: overagePricePerUnit || undefined,
 				stripe_metered_price_id: offering.stripe_metered_price_id || undefined,
 				is_subscription: offering.is_subscription || false,
 				subscription_interval_days: offering.subscription_interval_days || undefined
@@ -349,6 +362,93 @@
 							disabled={saving}
 						/>
 					</div>
+				</div>
+
+				<!-- Usage-Based Billing -->
+				<div class="border-t border-neutral-800 pt-4">
+					<div class="flex items-center justify-between mb-3">
+						<h3 class="text-white font-medium">Usage-Based Billing</h3>
+						<label class="flex items-center gap-2 cursor-pointer">
+							<input
+								type="checkbox"
+								checked={pricingModel === 'usage_overage'}
+								onchange={(e) => pricingModel = e.currentTarget.checked ? 'usage_overage' : undefined}
+								class="w-4 h-4 rounded border-neutral-600 bg-surface-elevated text-primary-500 focus:ring-primary-500"
+								disabled={saving}
+							/>
+							<span class="text-sm text-neutral-400">Enable usage tracking</span>
+						</label>
+					</div>
+
+					{#if pricingModel === 'usage_overage'}
+						<div class="grid grid-cols-2 gap-4 mb-4">
+							<div>
+								<label for="billing-unit" class="block text-neutral-400 text-sm mb-1">
+									Billing Unit
+								</label>
+								<select
+									id="billing-unit"
+									bind:value={billingUnit}
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+									disabled={saving}
+								>
+									<option value="minute">Minute</option>
+									<option value="hour">Hour</option>
+									<option value="day">Day</option>
+									<option value="month">Month</option>
+								</select>
+							</div>
+							<div>
+								<label for="included-units" class="block text-neutral-400 text-sm mb-1">
+									Included Units
+								</label>
+								<input
+									id="included-units"
+									type="number"
+									bind:value={includedUnits}
+									min="0"
+									placeholder="0"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-700 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+									disabled={saving}
+								/>
+							</div>
+						</div>
+						<div class="grid grid-cols-2 gap-4">
+							<div>
+								<label for="price-per-unit" class="block text-neutral-400 text-sm mb-1">
+									Price per Unit ({offering.currency})
+								</label>
+								<input
+									id="price-per-unit"
+									type="number"
+									bind:value={pricePerUnit}
+									step="0.01"
+									min="0"
+									placeholder="0.00"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-700 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+									disabled={saving}
+								/>
+							</div>
+							<div>
+								<label for="overage-price" class="block text-neutral-400 text-sm mb-1">
+									Overage Price ({offering.currency})
+								</label>
+								<input
+									id="overage-price"
+									type="number"
+									bind:value={overagePricePerUnit}
+									step="0.01"
+									min="0"
+									placeholder="0.00"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-700 text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+									disabled={saving}
+								/>
+							</div>
+						</div>
+						<p class="text-neutral-500 text-xs mt-2">
+							Usage beyond included units will be charged at the overage price.
+						</p>
+					{/if}
 				</div>
 
 				<!-- Status and Visibility -->

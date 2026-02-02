@@ -753,6 +753,7 @@
 
 			<!-- Usage information (shown for contracts with usage tracking) -->
 			{#if usage}
+				{@const billingUnitLabel = usage.billing_unit === 'minute' ? 'minutes' : usage.billing_unit === 'hour' ? 'hours' : usage.billing_unit === 'day' ? 'days' : usage.billing_unit === 'month' ? 'months' : usage.billing_unit}
 				<div class="bg-primary-500/10 border border-primary-500/30  p-4 mt-4">
 					<div class="text-primary-400 font-semibold mb-2">Current Billing Period Usage</div>
 					<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
@@ -764,7 +765,7 @@
 						</div>
 						<div>
 							<span class="text-neutral-500">Usage:</span>
-							<span class="text-white ml-2 font-medium">{usage.units_used.toFixed(2)} hours</span>
+							<span class="text-white ml-2 font-medium">{usage.units_used.toFixed(2)} {billingUnitLabel}</span>
 							{#if usage.units_included}
 								<span class="text-neutral-500">/ {usage.units_included} included</span>
 							{/if}
@@ -772,7 +773,7 @@
 						{#if usage.overage_units > 0}
 							<div>
 								<span class="text-neutral-500">Overage:</span>
-								<span class="text-amber-400 ml-2 font-medium">{usage.overage_units.toFixed(2)} hours</span>
+								<span class="text-amber-400 ml-2 font-medium">{usage.overage_units.toFixed(2)} {billingUnitLabel}</span>
 							</div>
 						{/if}
 						{#if usage.estimated_charge_cents}

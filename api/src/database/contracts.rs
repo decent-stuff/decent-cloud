@@ -2008,29 +2008,31 @@ impl Database {
     /// Get current billing period usage for a contract
     pub async fn get_current_usage(&self, contract_id: &[u8]) -> Result<Option<ContractUsage>> {
         let now = chrono::Utc::now().timestamp();
-        let usage = sqlx::query_as!(
-            ContractUsage,
+        let usage = sqlx::query_as::<_, ContractUsage>(
             r#"SELECT
-                id as "id!: i64",
-                lower(encode(contract_id, 'hex')) as "contract_id!: String",
-                billing_period_start as "billing_period_start!: i64",
-                billing_period_end as "billing_period_end!: i64",
-                units_used as "units_used!: f64",
-                units_included,
-                overage_units as "overage_units!: f64",
-                estimated_charge_cents,
-                reported_to_stripe as "reported_to_stripe!: bool",
-                stripe_usage_record_id,
-                created_at as "created_at!: i64",
-                updated_at as "updated_at!: i64"
-            FROM contract_usage
-            WHERE contract_id = $1 AND billing_period_start <= $2 AND billing_period_end > $3
-            ORDER BY billing_period_start DESC
+                cu.id,
+                lower(encode(cu.contract_id, 'hex')) as contract_id,
+                cu.billing_period_start,
+                cu.billing_period_end,
+                cu.units_used,
+                cu.units_included,
+                cu.overage_units,
+                cu.estimated_charge_cents,
+                cu.reported_to_stripe,
+                cu.stripe_usage_record_id,
+                cu.created_at,
+                cu.updated_at,
+                COALESCE(po.billing_unit, 'hour') as billing_unit
+            FROM contract_usage cu
+            JOIN contract_sign_requests csr ON cu.contract_id = csr.contract_id
+            LEFT JOIN provider_offerings po ON csr.offering_id = po.offering_id
+            WHERE cu.contract_id = $1 AND cu.billing_period_start <= $2 AND cu.billing_period_end > $3
+            ORDER BY cu.billing_period_start DESC
             LIMIT 1"#,
-            contract_id,
-            now,
-            now
         )
+        .bind(contract_id)
+        .bind(now)
+        .bind(now)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -2138,26 +2140,28 @@ impl Database {
     /// Get unreported usage records that are past their billing period end
     pub async fn get_unreported_usage(&self) -> Result<Vec<ContractUsage>> {
         let now = chrono::Utc::now().timestamp();
-        let usage = sqlx::query_as!(
-            ContractUsage,
+        let usage = sqlx::query_as::<_, ContractUsage>(
             r#"SELECT
-                id as "id!: i64",
-                lower(encode(contract_id, 'hex')) as "contract_id!: String",
-                billing_period_start as "billing_period_start!: i64",
-                billing_period_end as "billing_period_end!: i64",
-                units_used as "units_used!: f64",
-                units_included,
-                overage_units as "overage_units!: f64",
-                estimated_charge_cents,
-                reported_to_stripe as "reported_to_stripe!: bool",
-                stripe_usage_record_id,
-                created_at as "created_at!: i64",
-                updated_at as "updated_at!: i64"
-            FROM contract_usage
-            WHERE reported_to_stripe = FALSE AND billing_period_end <= $1
-            ORDER BY billing_period_end ASC"#,
-            now
+                cu.id,
+                lower(encode(cu.contract_id, 'hex')) as contract_id,
+                cu.billing_period_start,
+                cu.billing_period_end,
+                cu.units_used,
+                cu.units_included,
+                cu.overage_units,
+                cu.estimated_charge_cents,
+                cu.reported_to_stripe,
+                cu.stripe_usage_record_id,
+                cu.created_at,
+                cu.updated_at,
+                COALESCE(po.billing_unit, 'hour') as billing_unit
+            FROM contract_usage cu
+            JOIN contract_sign_requests csr ON cu.contract_id = csr.contract_id
+            LEFT JOIN provider_offerings po ON csr.offering_id = po.offering_id
+            WHERE cu.reported_to_stripe = FALSE AND cu.billing_period_end <= $1
+            ORDER BY cu.billing_period_end ASC"#,
         )
+        .bind(now)
         .fetch_all(&self.pool)
         .await?;
 
@@ -2372,6 +2376,8 @@ pub struct ContractUsage {
     pub created_at: i64,
     #[ts(type = "number")]
     pub updated_at: i64,
+    /// Billing unit from the offering (minute, hour, day, month)
+    pub billing_unit: String,
 }
 
 /// Pending Stripe receipt for background processing

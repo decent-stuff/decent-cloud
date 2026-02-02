@@ -15,10 +15,7 @@ use std::sync::Arc;
 use ts_rs::TS;
 
 // Re-export shared types from dcc-common
-pub use dcc_common::api_types::{
-    GpuDeviceInfo, HeartbeatResponse, ResourceInventory, StoragePoolInfo, TemplateInfo,
-    VmBandwidthReport,
-};
+pub use dcc_common::api_types::{HeartbeatResponse, ResourceInventory, VmBandwidthReport};
 
 /// Request to register agent using a setup token
 #[derive(Debug, Deserialize, Object, TS)]
