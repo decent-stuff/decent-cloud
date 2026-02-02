@@ -17,6 +17,10 @@ tracing-subscriber.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# API type derives (shared between api-server and dc-agent)
+poem-openapi = "5"
+ts-rs.workspace = true
+
 ahash.workspace = true
 anyhow.workspace = true
 base32.workspace = true

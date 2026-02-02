@@ -14,6 +14,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use ts_rs::TS;
 
+// Re-export shared types from dcc-common
+pub use dcc_common::api_types::{
+    GpuDeviceInfo, HeartbeatResponse, ResourceInventory, StoragePoolInfo, TemplateInfo,
+    VmBandwidthReport,
+};
+
 /// Request to register agent using a setup token
 #[derive(Debug, Deserialize, Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -46,102 +52,6 @@ pub struct AgentSetupResponse {
     pub permissions: Vec<String>,
 }
 
-/// Bandwidth stats for a single VM
-#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct VmBandwidthReport {
-    /// Gateway slug (6-char identifier)
-    pub gateway_slug: String,
-    /// Contract ID this VM belongs to
-    pub contract_id: String,
-    /// Bytes received by the VM since last reset
-    #[ts(type = "number")]
-    pub bytes_in: u64,
-    /// Bytes sent by the VM since last reset
-    #[ts(type = "number")]
-    pub bytes_out: u64,
-}
-
-/// Storage pool information
-#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct StoragePoolInfo {
-    /// Storage pool name (e.g., "local-lvm")
-    pub name: String,
-    /// Total capacity in GB
-    #[ts(type = "number")]
-    pub total_gb: u64,
-    /// Available capacity in GB
-    #[ts(type = "number")]
-    pub available_gb: u64,
-    /// Storage type (e.g., "lvmthin", "zfspool", "dir")
-    pub storage_type: String,
-}
-
-/// GPU device information
-#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct GpuDeviceInfo {
-    /// PCI device ID (e.g., "0000:01:00.0")
-    pub pci_id: String,
-    /// Device name (e.g., "NVIDIA GeForce RTX 4090")
-    pub name: String,
-    /// Vendor name (e.g., "NVIDIA Corporation")
-    pub vendor: String,
-    /// VRAM in MB (if detectable)
-    #[ts(type = "number | undefined")]
-    pub memory_mb: Option<u32>,
-}
-
-/// VM template information
-#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct TemplateInfo {
-    /// Template VM ID
-    pub vmid: u32,
-    /// Template name (e.g., "ubuntu-22.04")
-    pub name: String,
-}
-
-/// Hardware resource inventory reported by agent
-#[derive(Debug, Clone, Deserialize, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceInventory {
-    /// CPU model name (e.g., "AMD EPYC 7763 64-Core Processor")
-    pub cpu_model: Option<String>,
-    /// Number of physical CPU cores
-    pub cpu_cores: u32,
-    /// Number of logical CPU threads
-    pub cpu_threads: u32,
-    /// CPU clock speed in MHz
-    pub cpu_mhz: Option<u32>,
-    /// Total RAM in MB
-    #[ts(type = "number")]
-    pub memory_total_mb: u64,
-    /// Available (uncommitted) RAM in MB
-    #[ts(type = "number")]
-    pub memory_available_mb: u64,
-    /// Storage pools with capacity info
-    #[serde(default)]
-    pub storage_pools: Vec<StoragePoolInfo>,
-    /// GPU devices available for passthrough
-    #[serde(default)]
-    pub gpu_devices: Vec<GpuDeviceInfo>,
-    /// VM templates available for provisioning
-    #[serde(default)]
-    pub templates: Vec<TemplateInfo>,
-}
-
 /// Request for agent heartbeat
 #[derive(Debug, Deserialize, Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -171,25 +81,6 @@ pub struct HeartbeatRequest {
 pub struct UpdateLabelRequest {
     /// New label for the agent
     pub label: String,
-}
-
-/// Response for heartbeat
-#[derive(Debug, Serialize, Object, TS)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct HeartbeatResponse {
-    /// Whether heartbeat was acknowledged
-    pub acknowledged: bool,
-    /// Recommended seconds until next heartbeat
-    #[ts(type = "number")]
-    pub next_heartbeat_seconds: i64,
-    /// The agent's pool ID, if it belongs to one
-    #[oai(skip_serializing_if_is_none)]
-    pub pool_id: Option<String>,
-    /// The agent's pool name, if it belongs to one
-    #[oai(skip_serializing_if_is_none)]
-    pub pool_name: Option<String>,
 }
 
 /// Request to manage gateway DNS records

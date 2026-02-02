@@ -373,23 +373,21 @@ No database changes needed - the account→pubkey linking already exists.
 **Added:** 2025-01-21 (from codebase audit)
 **Priority:** MEDIUM - Technical debt that should be addressed
 
-### 1. Duplicate API Response Types (DRY Violation)
+### 1. ~~Duplicate API Response Types (DRY Violation)~~ ✅ FIXED (2026-02-02)
 
-**Issue:** `ApiResponse<T>` and related types are duplicated between `api` crate and `dc-agent` crate.
+**Status:** Fixed - Created shared `api_types` module in `dcc-common` crate. Both `api` and `dc-agent` now use the same type definitions:
+- `common/src/api_types.rs` - Canonical definitions with poem-openapi + ts-rs derives
+- `api/src/openapi/common.rs` - Re-exports shared types
+- `api/src/openapi/agents.rs` - Re-exports shared types
+- `dc-agent/src/api_client.rs` - Re-exports shared types
 
-**Locations:**
-- `api/src/openapi/common.rs:18` - OpenAPI version with poem attributes
-- `dc-agent/src/api_client.rs:30` - Client version without poem attributes
+**Fixed types:** HeartbeatResponse, VmBandwidthReport, ResourceInventory, StoragePoolInfo, GpuDeviceInfo, TemplateInfo, ReconcileResponse, ReconcileKeepInstance, ReconcileTerminateInstance, ReconcileUnknownInstance, LockResponse
 
-**Also duplicated:**
-- `HeartbeatResponse`
-- `VmBandwidthReport`
-- `ReconcileResponse`, `ReconcileKeepInstance`, `ReconcileTerminateInstance`
-- `ContractPendingTermination`
+**Also fixed:**
+- HeartbeatResponse drift: dc-agent was missing `pool_id` and `pool_name` fields
+- LockResponse inconsistency: `expires_at_ns` was `Option<i64>` in dc-agent but `i64` in API
 
-**Impact:** Changes must be synchronized manually; risk of drift.
-
-**Recommended Fix:** Create a shared `dcc-api-types` crate with serde-only types that both crates can depend on. OpenAPI attributes would be added via wrapper types in the API crate.
+**Note:** `ApiResponse<T>` kept separate (different trait bounds for poem_openapi generics).
 
 ### 2. ~~Chatwoot Client Error Detail Loss~~ ✅ FIXED (2025-01-21)
 

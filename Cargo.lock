@@ -1006,6 +1006,7 @@ dependencies = [
  "num-traits",
  "pem 3.0.6",
  "pkcs8",
+ "poem-openapi",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1014,6 +1015,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
 ]
 
 [[package]]

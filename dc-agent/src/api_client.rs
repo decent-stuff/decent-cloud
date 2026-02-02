@@ -7,6 +7,13 @@ use uuid::Uuid;
 use crate::config::ApiConfig;
 use crate::provisioner::{HealthStatus, Instance, RunningInstance};
 
+// Re-export shared types from dcc-common
+pub use dcc_common::api_types::{
+    GpuDeviceInfo, HeartbeatResponse, LockResponse, ReconcileKeepInstance, ReconcileResponse,
+    ReconcileTerminateInstance, ReconcileUnknownInstance, ResourceInventory, StoragePoolInfo,
+    TemplateInfo, VmBandwidthReport,
+};
+
 /// Authentication mode for the API client.
 #[derive(Debug, Clone)]
 pub enum AuthMode {
@@ -153,88 +160,6 @@ struct HealthCheckRequest {
     health_status: HealthStatus,
 }
 
-/// Bandwidth stats for a single VM
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VmBandwidthReport {
-    /// Gateway slug (6-char identifier)
-    pub gateway_slug: String,
-    /// Contract ID this VM belongs to
-    pub contract_id: String,
-    /// Bytes received by the VM since last reset
-    pub bytes_in: u64,
-    /// Bytes sent by the VM since last reset
-    pub bytes_out: u64,
-}
-
-/// Hardware resource inventory reported by agent
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceInventory {
-    /// CPU model name (e.g., "AMD EPYC 7763 64-Core Processor")
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_model: Option<String>,
-    /// Number of physical CPU cores
-    pub cpu_cores: u32,
-    /// Number of logical CPU threads
-    pub cpu_threads: u32,
-    /// CPU clock speed in MHz
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_mhz: Option<u32>,
-    /// Total RAM in MB
-    pub memory_total_mb: u64,
-    /// Available (uncommitted) RAM in MB
-    pub memory_available_mb: u64,
-    /// Storage pools with capacity info
-    #[serde(default)]
-    pub storage_pools: Vec<StoragePoolInfo>,
-    /// GPU devices available for passthrough
-    #[serde(default)]
-    pub gpu_devices: Vec<GpuDeviceInfo>,
-    /// VM templates available for provisioning
-    #[serde(default)]
-    pub templates: Vec<TemplateInfo>,
-}
-
-/// Storage pool information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StoragePoolInfo {
-    /// Storage pool name (e.g., "local-lvm")
-    pub name: String,
-    /// Total capacity in GB
-    pub total_gb: u64,
-    /// Available capacity in GB
-    pub available_gb: u64,
-    /// Storage type (e.g., "lvmthin", "zfspool", "dir")
-    pub storage_type: String,
-}
-
-/// GPU device information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GpuDeviceInfo {
-    /// PCI device ID (e.g., "0000:01:00.0")
-    pub pci_id: String,
-    /// Device name (e.g., "NVIDIA GeForce RTX 4090")
-    pub name: String,
-    /// Vendor name (e.g., "NVIDIA Corporation")
-    pub vendor: String,
-    /// VRAM in MB (if detectable)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory_mb: Option<u32>,
-}
-
-/// VM template information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TemplateInfo {
-    /// Template VM ID
-    pub vmid: u32,
-    /// Template name (e.g., "ubuntu-22.04")
-    pub name: String,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HeartbeatRequest {
@@ -250,14 +175,7 @@ struct HeartbeatRequest {
     resources: Option<ResourceInventory>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HeartbeatResponse {
-    pub acknowledged: bool,
-    pub next_heartbeat_seconds: i64,
-}
-
-// Reconciliation types
+// Reconciliation types (internal request types)
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -270,37 +188,6 @@ struct ReconcileRunningInstanceRequest {
 #[serde(rename_all = "camelCase")]
 struct ReconcileRequest {
     running_instances: Vec<ReconcileRunningInstanceRequest>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReconcileKeepInstance {
-    pub external_id: String,
-    pub contract_id: String,
-    pub ends_at: i64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReconcileTerminateInstance {
-    pub external_id: String,
-    pub contract_id: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReconcileUnknownInstance {
-    pub external_id: String,
-    pub message: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReconcileResponse {
-    pub keep: Vec<ReconcileKeepInstance>,
-    pub terminate: Vec<ReconcileTerminateInstance>,
-    pub unknown: Vec<ReconcileUnknownInstance>,
 }
 
 /// HTTP method for requests.
@@ -713,14 +600,6 @@ impl ApiClient {
 #[serde(rename_all = "camelCase")]
 pub struct DnsResponse {
     pub subdomain: String,
-}
-
-/// Response from lock acquisition
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LockResponse {
-    pub acquired: bool,
-    pub expires_at_ns: Option<i64>,
 }
 
 /// Response from agent setup
