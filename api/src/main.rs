@@ -592,6 +592,30 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
+    // === Critical URLs (used in emails, OAuth, payments) ===
+    println!("\nCritical URLs:");
+    match env::var("FRONTEND_URL") {
+        Ok(url) => {
+            if url.contains("localhost") || url.contains("127.0.0.1") {
+                println!(
+                    "  [WARN] FRONTEND_URL = {} - localhost URL will NOT work in production!",
+                    url
+                );
+                println!("         Emails, OAuth redirects, and payment callbacks will be broken.");
+                println!("         Set FRONTEND_URL to your production domain (e.g., https://decent-cloud.org)");
+                warnings += 1;
+            } else {
+                println!("  [OK] FRONTEND_URL = {}", url);
+            }
+        }
+        Err(_) => {
+            println!("  [WARN] FRONTEND_URL - NOT SET (defaults to localhost:59010)");
+            println!("         This will break emails, OAuth, and payment callbacks in production!");
+            println!("         Set FRONTEND_URL to your production domain (e.g., https://decent-cloud.org)");
+            warnings += 1;
+        }
+    }
+
     // === Summary ===
     println!("\n=== Summary ===");
     if errors > 0 {
@@ -682,6 +706,22 @@ async fn serve_command() -> Result<(), std::io::Error> {
         (Err(_), Err(_)) => {
             tracing::info!("Chatwoot integration not configured (API_PUBLIC_URL and CHATWOOT_PLATFORM_API_TOKEN not set)");
         }
+    }
+
+    // Warn about critical URL configuration
+    match env::var("FRONTEND_URL") {
+        Ok(url) if url.contains("localhost") || url.contains("127.0.0.1") => {
+            tracing::warn!(
+                "FRONTEND_URL is set to localhost ({}) - emails, OAuth, and payment callbacks will NOT work in production!",
+                url
+            );
+        }
+        Err(_) => {
+            tracing::warn!(
+                "FRONTEND_URL not set - defaults to localhost. Emails, OAuth redirects, and payment callbacks will NOT work in production!"
+            );
+        }
+        Ok(_) => {} // Production URL is set, all good
     }
 
     tracing::info!("Starting Decent Cloud API server on {}", addr);

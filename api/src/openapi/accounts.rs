@@ -231,7 +231,7 @@ impl AccountsApi {
                     Ok(token) => {
                         // Build verification URL
                         let base_url = std::env::var("FRONTEND_URL")
-                            .unwrap_or_else(|_| "http://localhost:59000".to_string());
+                            .unwrap_or_else(|_| "http://localhost:59010".to_string());
                         let token_hex = hex::encode(&token);
                         let verification_url =
                             format!("{}/verify-email?token={}", base_url, token_hex);
@@ -1731,7 +1731,7 @@ impl AccountsApi {
 
         // Build recovery URL
         let base_url =
-            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59000".to_string());
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
         let token_hex = hex::encode(&token);
         let recovery_url = format!("{}/recover?token={}", base_url, token_hex);
 
@@ -1994,7 +1994,7 @@ impl AccountsApi {
 
         // Build verification URL
         let base_url =
-            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59000".to_string());
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
         let token_hex = hex::encode(&token);
         let verification_url = format!("{}/verify-email?token={}", base_url, token_hex);
 
