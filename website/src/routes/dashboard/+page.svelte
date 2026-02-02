@@ -6,8 +6,10 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
-	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary } from "$lib/services/api";
+	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
+	import { signRequest } from "$lib/services/auth-api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
+	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import Icon from "$lib/components/Icons.svelte";
 
 	let dashboardData = $state<DashboardData>({
@@ -24,6 +26,12 @@
 	let healthSummary = $state<ProviderHealthSummary | null>(null);
 	let trustMetricsLoading = $state(false);
 	let trustMetricsError = $state<string | null>(null);
+
+	// My Resources state
+	let myOfferings = $state<Offering[]>([]);
+	let myOfferingsLoading = $state(false);
+	let myOfferingsError = $state<string | null>(null);
+	let selectedOfferingForRental = $state<Offering | null>(null);
 
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
@@ -57,6 +65,37 @@
 		}
 	}
 
+	async function loadMyOfferings(identity: IdentityInfo | null) {
+		if (!identity) {
+			myOfferings = [];
+			myOfferingsError = null;
+			return;
+		}
+
+		myOfferingsLoading = true;
+		myOfferingsError = null;
+		try {
+			const { headers } = await signRequest(identity.identity, 'GET', '/api/v1/provider/my-offerings', '');
+			const offerings = await getMyOfferings(headers);
+			myOfferings = offerings;
+		} catch (err) {
+			console.error('Failed to load my offerings:', err);
+			myOfferings = [];
+			// Don't show error if user simply has no offerings
+			if (err instanceof Error && !err.message.includes('404')) {
+				myOfferingsError = err.message;
+			}
+		} finally {
+			myOfferingsLoading = false;
+		}
+	}
+
+	function handleRentalSuccess(contractId: string) {
+		selectedOfferingForRental = null;
+		// Redirect to rentals page to see the new contract
+		window.location.href = `/dashboard/rentals`;
+	}
+
 	onMount(() => {
 		if (!browser) return;
 
@@ -69,6 +108,7 @@
 		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
 			loadTrustMetrics(value?.publicKeyBytes ?? null);
+			loadMyOfferings(value);
 		});
 
 		dashboardStore.load();
@@ -261,4 +301,108 @@
 			</a>
 		</div>
 	</div>
+
+	<!-- My Resources Section -->
+	{#if currentIdentity}
+		<div class="card p-5">
+			<div class="flex items-center justify-between mb-4">
+				<div>
+					<h2 class="text-base font-semibold text-white">My Resources</h2>
+					<p class="text-xs text-neutral-500 mt-1">Your infrastructure offerings - rent for free (self-rental)</p>
+				</div>
+				<a
+					href="/dashboard/offerings"
+					class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+				>
+					<span>Manage offerings</span>
+					<Icon name="arrow-right" size={16} />
+				</a>
+			</div>
+
+			{#if myOfferingsLoading}
+				<div class="flex justify-center items-center p-8">
+					<div class="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
+				</div>
+			{:else if myOfferingsError}
+				<div class="bg-danger/10 border border-danger/20 p-4">
+					<p class="text-sm text-danger">Failed to load resources</p>
+					<p class="text-xs text-neutral-500 mt-1">{myOfferingsError}</p>
+				</div>
+			{:else if myOfferings.length === 0}
+				<div class="text-center py-8 border border-dashed border-neutral-800">
+					<Icon name="server" size={32} class="mx-auto text-neutral-600 mb-3" />
+					<p class="text-sm text-neutral-500">No resources yet</p>
+					<p class="text-xs text-neutral-600 mt-1 mb-4">Create offerings to manage your own infrastructure</p>
+					<a
+						href="/dashboard/provider"
+						class="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+					>
+						<Icon name="plus" size={16} />
+						<span>Get Started</span>
+					</a>
+				</div>
+			{:else}
+				<div class="space-y-3">
+					{#each myOfferings.slice(0, 5) as offering (offering.id)}
+						<div class="flex items-center gap-4 p-3 bg-surface-elevated border border-neutral-800">
+							<div class="flex-1 min-w-0">
+								<div class="flex items-center gap-2">
+									<h3 class="text-sm font-medium text-white truncate">{offering.offer_name}</h3>
+									{#if offering.visibility?.toLowerCase() === 'private'}
+										<span class="px-1.5 py-0.5 text-[10px] font-medium bg-neutral-700 text-neutral-300">Private</span>
+									{:else}
+										<span class="px-1.5 py-0.5 text-[10px] font-medium bg-success/20 text-success">Public</span>
+									{/if}
+								</div>
+								<div class="flex items-center gap-3 text-xs text-neutral-500 mt-1">
+									{#if offering.processor_cores}
+										<span>{offering.processor_cores} cores</span>
+									{/if}
+									{#if offering.memory_amount}
+										<span>{offering.memory_amount}</span>
+									{/if}
+									{#if offering.total_ssd_capacity}
+										<span>{offering.total_ssd_capacity} SSD</span>
+									{/if}
+									<span class="text-neutral-600">|</span>
+									<span>{offering.datacenter_country}</span>
+								</div>
+							</div>
+							<div class="text-right">
+								<p class="text-sm font-medium text-white">
+									{offering.monthly_price.toFixed(2)} {offering.currency}
+								</p>
+								<p class="text-[10px] text-neutral-500">/month</p>
+							</div>
+							<button
+								onclick={() => selectedOfferingForRental = offering}
+								class="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+							>
+								Rent Free
+							</button>
+						</div>
+					{/each}
+					{#if myOfferings.length > 5}
+						<div class="text-center pt-2">
+							<a
+								href="/dashboard/offerings"
+								class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+							>
+								View all {myOfferings.length} offerings
+							</a>
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
+
+<!-- Rental Dialog -->
+{#if selectedOfferingForRental}
+	<RentalRequestDialog
+		offering={selectedOfferingForRental}
+		onClose={() => selectedOfferingForRental = null}
+		onSuccess={handleRentalSuccess}
+	/>
+{/if}

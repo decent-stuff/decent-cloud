@@ -45,11 +45,19 @@
 
 ### Implementation Phases
 
-**Phase 1: Visibility & Self-Rental**
-- [ ] Add `visibility` field to offerings: `private` (default), `shared`, `public`
-- [ ] Filter offerings API by visibility + requester pubkey
-- [ ] Detect self-rental (requester_pubkey == provider_pubkey) → skip payment
-- [ ] UI: "My Resources" section showing private offerings
+**Phase 1: Visibility & Self-Rental** ✅ COMPLETE (2026-02-02)
+- [x] `visibility` field already exists in offerings table
+- [x] Filter offerings API by visibility + requester pubkey:
+  - `GET /offerings/:id` - returns 404 for non-public unless requester is owner
+  - `GET /providers/:pubkey/offerings` - returns only public offerings (public API)
+  - `GET /provider/my-offerings` - returns ALL offerings for authenticated provider
+- [x] `POST /contracts` enforces visibility (can only rent public OR own offerings)
+- [x] Detect self-rental (requester_pubkey == provider_pubkey) → skip payment
+  - Payment amount set to 0 for self-rental
+  - Payment status set to "succeeded" immediately
+  - Stripe checkout skipped, auto-accept triggered
+- [x] UI: "My Resources" section on dashboard showing all offerings with "Rent Free" button
+- [x] `OptionalApiAuth` extractor added for endpoints that need optional authentication
 
 **Phase 2: Shared Visibility**
 - [ ] Add `visibility_allowlist` table (offering_id, allowed_pubkey)

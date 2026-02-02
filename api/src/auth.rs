@@ -547,6 +547,88 @@ impl AgentAuthenticatedUser {
     }
 }
 
+/// Optional API authentication - returns authenticated pubkey if headers present, None otherwise.
+/// Used for endpoints that work differently based on whether the user is authenticated (e.g. visibility filtering).
+#[derive(Debug, Clone)]
+pub struct OptionalApiAuth {
+    pub pubkey: Option<Vec<u8>>,
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for OptionalApiAuth {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = false; // Optional - endpoint works without auth
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        registry.create_security_scheme(
+            "OptionalSignatureAuth",
+            MetaSecurityScheme {
+                ty: "apiKey",
+                description: Some(
+                    "Optional signature-based authentication. If headers are provided, signature is verified. \
+                     Otherwise, the request proceeds as unauthenticated.",
+                ),
+                name: Some("X-Public-Key"),
+                key_in: Some("header"),
+                scheme: None,
+                bearer_format: None,
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["OptionalSignatureAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        let headers = request.headers();
+
+        // Check if auth headers are present
+        let pubkey_hex = headers.get("X-Public-Key").and_then(|v| v.to_str().ok());
+        let signature_hex = headers.get("X-Signature").and_then(|v| v.to_str().ok());
+        let timestamp = headers.get("X-Timestamp").and_then(|v| v.to_str().ok());
+        let nonce = headers.get("X-Nonce").and_then(|v| v.to_str().ok());
+
+        // If no auth headers, return None (unauthenticated access)
+        let (pubkey_hex, signature_hex, timestamp, nonce) =
+            match (pubkey_hex, signature_hex, timestamp, nonce) {
+                (Some(pk), Some(sig), Some(ts), Some(n)) => (pk, sig, ts, n),
+                _ => return Ok(OptionalApiAuth { pubkey: None }),
+            };
+
+        // Auth headers present - verify signature
+        let body_bytes = body.take()?.into_vec().await?;
+        let full_path = format!("/api/v1{}", request.uri().path());
+
+        let pubkey = verify_request_signature(
+            pubkey_hex,
+            signature_hex,
+            timestamp,
+            nonce,
+            request.method().as_str(),
+            &full_path,
+            &body_bytes,
+            None,
+        )?;
+
+        // Restore body for downstream handlers
+        *body = poem::RequestBody::new(poem::Body::from(body_bytes));
+
+        Ok(OptionalApiAuth {
+            pubkey: Some(pubkey),
+        })
+    }
+}
+
 /// Authentication that accepts either a provider (via X-Public-Key) or an agent (via X-Agent-Pubkey)
 /// Used for endpoints that can be called by either the provider directly or their delegated agent.
 #[derive(Debug, Clone)]

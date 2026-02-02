@@ -612,9 +612,10 @@ impl ProvidersApi {
         }
     }
 
-    /// Get provider offerings
+    /// Get provider offerings (public)
     ///
-    /// Returns all offerings for a specific provider
+    /// Returns public offerings for a specific provider.
+    /// Private offerings are only visible via the authenticated /provider/my-offerings endpoint.
     #[oai(
         path = "/providers/:pubkey/offerings",
         method = "get",
@@ -636,7 +637,36 @@ impl ProvidersApi {
             }
         };
 
-        match db.get_provider_offerings(&pubkey_bytes).await {
+        // Return only public offerings - private offerings require authentication
+        match db.get_provider_offerings_public(&pubkey_bytes).await {
+            Ok(offerings) => Json(ApiResponse {
+                success: true,
+                data: Some(offerings),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get my offerings (authenticated)
+    ///
+    /// Returns all offerings for the authenticated provider, including private ones.
+    /// Use this endpoint for "My Resources" UI section.
+    #[oai(
+        path = "/provider/my-offerings",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_my_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
+        match db.get_provider_offerings(&auth.pubkey).await {
             Ok(offerings) => Json(ApiResponse {
                 success: true,
                 data: Some(offerings),

@@ -295,6 +295,35 @@ export async function getProviderOfferings(pubkey: string | Uint8Array): Promise
 	}));
 }
 
+/**
+ * Get the authenticated user's own offerings (all visibilities including private).
+ * Requires authentication.
+ * Used for "My Resources" UI section to enable self-rental.
+ */
+export async function getMyOfferings(headers: SignedRequestHeaders): Promise<Offering[]> {
+	const url = `${API_BASE_URL}/api/v1/provider/my-offerings`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch my offerings: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Offering[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Decent Cloud API my offerings response failed');
+	}
+
+	const offerings = payload.data ?? [];
+	return offerings.map((o) => ({
+		...o,
+		pubkey: normalizePubkey(o.pubkey)
+	}));
+}
+
 export async function exportProviderOfferingsCSV(
 	pubkey: string | Uint8Array,
 	headers: SignedRequestHeaders

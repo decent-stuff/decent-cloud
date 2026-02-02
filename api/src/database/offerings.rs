@@ -688,6 +688,34 @@ impl Database {
         Ok(result)
     }
 
+    /// Get public offerings by provider (for public API - respects visibility)
+    pub async fn get_provider_offerings_public(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
+        let offerings = sqlx::query_as::<_, Offering>(
+            r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval,
+               billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+               is_subscription, subscription_interval_days,
+               stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
+               ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
+               datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               FROM provider_offerings WHERE pubkey = $2 AND LOWER(visibility) = 'public' ORDER BY monthly_price ASC"#
+        )
+        .bind(example_provider_pubkey)
+        .bind(pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let result = self.compute_provider_online_status(offerings).await?;
+
+        Ok(result)
+    }
+
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());

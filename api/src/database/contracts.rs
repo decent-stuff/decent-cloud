@@ -465,14 +465,23 @@ impl Database {
         let start_timestamp_ns = created_at_ns;
         let end_timestamp_ns = start_timestamp_ns + (duration_hours * 3600 * 1_000_000_000);
 
+        // Decode provider pubkey for comparison
+        let offering_pubkey_bytes = hex::decode(&offering.pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid pubkey hex in offering"))?;
+
+        // Detect self-rental: requester_pubkey == provider_pubkey
+        let is_self_rental = requester_pubkey == offering_pubkey_bytes.as_slice();
+
         // Calculate payment based on duration (monthly_price is per ~720 hours)
-        let payment_amount_e9s =
-            ((offering.monthly_price * duration_hours as f64 / 720.0) * 1_000_000_000.0) as i64;
+        // Self-rental is FREE - no payment required
+        let payment_amount_e9s = if is_self_rental {
+            0
+        } else {
+            ((offering.monthly_price * duration_hours as f64 / 720.0) * 1_000_000_000.0) as i64
+        };
 
         // Generate deterministic contract ID from SHA256 hash of request data
         use sha2::{Digest, Sha256};
-        let offering_pubkey_bytes = hex::decode(&offering.pubkey)
-            .map_err(|_| anyhow::anyhow!("Invalid pubkey hex in offering"))?;
         let mut hasher = Sha256::new();
         hasher.update(requester_pubkey);
         hasher.update(&offering_pubkey_bytes);
@@ -490,10 +499,11 @@ impl Database {
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
-        // Set payment_status based on payment method
+        // Set payment_status based on payment method and self-rental
+        // Self-rental is FREE - payment succeeds immediately
         // ICPay payments are pre-paid, so they succeed immediately
         // Stripe payments require webhook confirmation, so they start as pending
-        let payment_status = if payment_method_str == "icpay" {
+        let payment_status = if is_self_rental || payment_method_str == "icpay" {
             "succeeded"
         } else {
             "pending"

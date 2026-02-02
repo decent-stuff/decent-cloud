@@ -254,6 +254,20 @@ impl ContractsApi {
             }
         };
 
+        // Check visibility: public OR requester is the provider owner (self-rental)
+        let requester_pubkey_hex = hex::encode(&auth.pubkey);
+        let is_public = offering.visibility.eq_ignore_ascii_case("public");
+        let is_self_rental = requester_pubkey_hex == offering.pubkey;
+
+        if !is_public && !is_self_rental {
+            // Return "not found" to avoid leaking existence of private offerings
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Offering not found".to_string()),
+            });
+        }
+
         // Check subscription rental limits
         if let Some(account_id) = db
             .get_account_id_by_public_key(&auth.pubkey)
@@ -296,41 +310,51 @@ impl ContractsApi {
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
-                let checkout_url = if payment_method.to_lowercase() == "stripe" {
-                    match create_stripe_checkout_session(
-                        &db,
-                        &contract_id,
-                        &offering.currency,
-                        &offering.offer_name,
-                    )
-                    .await
-                    {
-                        Ok(url) => Some(url),
-                        Err(e) => {
-                            return Json(ApiResponse {
-                                success: false,
-                                data: None,
-                                error: Some(e),
-                            })
+                // Self-rental: no payment needed, skip Stripe checkout
+                // Also applies to ICPay which is pre-paid
+                let checkout_url =
+                    if is_self_rental || payment_method.to_lowercase() != "stripe" {
+                        // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
+                        if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
+                            tracing::warn!(
+                                "Auto-accept check failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
                         }
-                    }
+                        None
+                    } else {
+                        // Stripe payment required
+                        match create_stripe_checkout_session(
+                            &db,
+                            &contract_id,
+                            &offering.currency,
+                            &offering.offer_name,
+                        )
+                        .await
+                        {
+                            Ok(url) => Some(url),
+                            Err(e) => {
+                                return Json(ApiResponse {
+                                    success: false,
+                                    data: None,
+                                    error: Some(e),
+                                })
+                            }
+                        }
+                    };
+
+                let message = if is_self_rental {
+                    "Self-rental created successfully (no payment required)".to_string()
                 } else {
-                    // ICPay: payment_status is "succeeded" immediately, try auto-accept
-                    if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
-                        tracing::warn!(
-                            "Auto-accept check failed for contract {}: {}",
-                            hex::encode(&contract_id),
-                            e
-                        );
-                    }
-                    None
+                    "Rental request created successfully".to_string()
                 };
 
                 Json(ApiResponse {
                     success: true,
                     data: Some(RentalRequestResponse {
                         contract_id: hex::encode(&contract_id),
-                        message: "Rental request created successfully".to_string(),
+                        message,
                         checkout_url,
                     }),
                     error: None,

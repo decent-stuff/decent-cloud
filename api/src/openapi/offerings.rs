@@ -1,4 +1,5 @@
 use super::common::{default_false, default_limit, ApiResponse, ApiTags};
+use crate::auth::OptionalApiAuth;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
@@ -70,19 +71,40 @@ impl OfferingsApi {
 
     /// Get offering by ID
     ///
-    /// Returns details of a specific offering
+    /// Returns details of a specific offering. Visibility rules apply:
+    /// - Public offerings: visible to everyone
+    /// - Private offerings: only visible to the provider who owns them
     #[oai(path = "/offerings/:id", method = "get", tag = "ApiTags::Offerings")]
     async fn get_offering(
         &self,
         db: Data<&Arc<Database>>,
         id: Path<i64>,
+        auth: OptionalApiAuth,
     ) -> Json<ApiResponse<crate::database::offerings::Offering>> {
         match db.get_offering(id.0).await {
-            Ok(Some(offering)) => Json(ApiResponse {
-                success: true,
-                data: Some(offering),
-                error: None,
-            }),
+            Ok(Some(offering)) => {
+                // Check visibility: public OR requester is the provider owner
+                let is_public = offering.visibility.eq_ignore_ascii_case("public");
+                let is_owner = auth
+                    .pubkey
+                    .as_ref()
+                    .is_some_and(|pk| hex::encode(pk) == offering.pubkey);
+
+                if is_public || is_owner {
+                    Json(ApiResponse {
+                        success: true,
+                        data: Some(offering),
+                        error: None,
+                    })
+                } else {
+                    // Return "not found" rather than "forbidden" to not leak existence of private offerings
+                    Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Offering not found".to_string()),
+                    })
+                }
+            }
             Ok(None) => Json(ApiResponse {
                 success: false,
                 data: None,
