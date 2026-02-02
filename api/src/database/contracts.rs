@@ -216,6 +216,9 @@ pub struct ContractWithSpecs {
     /// Provisioner config JSON from offering
     #[oai(skip_serializing_if_is_none)]
     pub provisioner_config: Option<String>,
+    /// Script to execute via SSH after VM provisioning (uses shebang for interpreter)
+    #[oai(skip_serializing_if_is_none)]
+    pub post_provision_script: Option<String>,
 }
 
 /// Contract pending termination for dc-agent
@@ -1903,6 +1906,7 @@ impl Database {
             storage_capacity: Option<String>,
             provisioner_type: Option<String>,
             provisioner_config: Option<String>,
+            post_provision_script: Option<String>,
             agent_pool_id: Option<String>,
             datacenter_country: Option<String>,
         }
@@ -1921,6 +1925,7 @@ impl Database {
                o.total_ssd_capacity as storage_capacity,
                o.provisioner_type,
                o.provisioner_config,
+               o.post_provision_script,
                o.agent_pool_id,
                o.datacenter_country
                FROM contract_sign_requests c
@@ -1964,6 +1969,7 @@ impl Database {
                 storage_capacity: c.storage_capacity,
                 provisioner_type: c.provisioner_type,
                 provisioner_config: c.provisioner_config,
+                post_provision_script: c.post_provision_script,
             })
             .collect();
 

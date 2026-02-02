@@ -30,6 +30,7 @@ mod tests {
             storage_gb: Some(20),
             requester_ssh_pubkey: Some("ssh-ed25519 AAAA... user@host".to_string()),
             instance_config: None,
+            post_provision_script: None,
         }
     }
 
@@ -968,6 +969,7 @@ mod tests {
             storage_gb: Some(20),
             requester_ssh_pubkey: Some("ssh-ed25519 AAAA... user@host".to_string()),
             instance_config: Some(serde_json::json!({"template_vmid": 8000})),
+            post_provision_script: None,
         };
 
         let result = provisioner.provision(&request).await;

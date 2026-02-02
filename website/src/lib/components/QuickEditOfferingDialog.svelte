@@ -30,6 +30,7 @@
 	let stockStatus = $state('in_stock');
 	let visibility = $state('public');
 	let templateName = $state('');
+	let postProvisionScript = $state('');
 
 	// Allowlist management
 	let allowlistEntries = $state<AllowlistEntry[]>([]);
@@ -52,6 +53,7 @@
 			stockStatus = offering.stock_status;
 			visibility = offering.visibility;
 			templateName = offering.template_name || '';
+			postProvisionScript = offering.post_provision_script || '';
 			error = null;
 			// Load allowlist if visibility is shared
 			if (offering.visibility.toLowerCase() === 'shared') {
@@ -204,6 +206,7 @@
 				provisioner_config: offering.provisioner_config || undefined,
 				template_name: templateName.trim() || undefined,
 				agent_pool_id: offering.agent_pool_id || undefined,
+				post_provision_script: postProvisionScript.trim() || undefined,
 				provider_online: undefined,
 				// Subscription fields
 				billing_unit: offering.billing_unit || 'month',
@@ -475,6 +478,24 @@
 							Proxmox template VMID for instant provisioning. Leave empty to use the default template from your dc-agent config.
 						</p>
 					{/if}
+				</div>
+
+				<!-- Post-Provision Script -->
+				<div>
+					<label for="post-provision-script" class="block text-white font-medium mb-2">
+						Post-Provision Script
+					</label>
+					<textarea
+						id="post-provision-script"
+						bind:value={postProvisionScript}
+						rows="6"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+						placeholder="#!/bin/bash&#10;# Script to run after VM is provisioned&#10;apt-get update && apt-get install -y docker.io"
+						disabled={saving}
+					/>
+					<p class="text-neutral-500 text-sm mt-2">
+						Script to execute via SSH after VM provisioning. Include a shebang (e.g., <code class="text-primary-400">#!/bin/bash</code>, <code class="text-primary-400">#!/usr/bin/env python3</code>) to specify the interpreter.
+					</p>
 				</div>
 
 				<!-- Error Display -->

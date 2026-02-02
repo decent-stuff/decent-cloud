@@ -5,6 +5,7 @@ use dc_agent::{
     config::{Config, ProvisionerConfig},
     gateway::GatewayManager,
     orphan_tracker::OrphanTracker,
+    post_provision::execute_post_provision_script,
     provisioner::{
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
         ProvisionRequest, Provisioner,
@@ -1098,6 +1099,7 @@ async fn run_test_provision(
         storage_gb: Some(10),
         requester_ssh_pubkey: Some(ssh_key),
         instance_config: None,
+        post_provision_script: None,
     };
 
     println!("Provisioning test VM...");
@@ -1673,6 +1675,7 @@ async fn poll_and_provision(
                         storage_gb,
                         requester_ssh_pubkey: Some(contract.requester_ssh_pubkey.clone()),
                         instance_config,
+                        post_provision_script: contract.post_provision_script.clone(),
                     };
 
                     // Mark contract as provisioning before starting (for UI feedback)
@@ -1721,6 +1724,41 @@ async fn poll_and_provision(
                                             "Gateway setup failed - VM accessible via internal IP only"
                                         );
                                     }
+                                }
+                            }
+
+                            // Execute post-provision script if configured
+                            if let Some(ref script) = request.post_provision_script {
+                                if let Some(ref ip) = instance.ip_address {
+                                    match execute_post_provision_script(
+                                        ip,
+                                        instance.ssh_port,
+                                        script,
+                                        &contract.contract_id,
+                                    )
+                                    .await
+                                    {
+                                        Ok(()) => {
+                                            info!(
+                                                contract_id = %contract.contract_id,
+                                                "Post-provision script completed successfully"
+                                            );
+                                        }
+                                        Err(e) => {
+                                            // Script failed - log but continue
+                                            // VM is still usable, just custom setup didn't work
+                                            warn!(
+                                                contract_id = %contract.contract_id,
+                                                error = ?e,
+                                                "Post-provision script failed - VM is still accessible"
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    warn!(
+                                        contract_id = %contract.contract_id,
+                                        "Cannot execute post-provision script: no IP address available"
+                                    );
                                 }
                             }
 
@@ -2355,6 +2393,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                     storage_gb: None, // Use template default
                     requester_ssh_pubkey: None,
                     instance_config: None,
+                    post_provision_script: None,
                 };
 
                 println!("  Cloning test VM from template...");

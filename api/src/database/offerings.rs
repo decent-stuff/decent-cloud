@@ -118,6 +118,8 @@ pub struct Offering {
     // Agent pool override - if set, only agents in this pool can provision
     // NULL = auto-match by location
     pub agent_pool_id: Option<String>,
+    // Post-provision script to execute via SSH after VM provisioning
+    pub post_provision_script: Option<String>,
     // Provider agent online status (from provider_agent_status table)
     #[ts(type = "boolean | undefined")]
     #[sqlx(default)]
@@ -467,7 +469,7 @@ impl Database {
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
         let mut query = String::from(
-            "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, COALESCE(pas.online AND pas.last_heartbeat_ns > $2, FALSE) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey WHERE LOWER(o.visibility) = 'public'"
+            "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, COALESCE(pas.online AND pas.last_heartbeat_ns > $2, FALSE) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey WHERE LOWER(o.visibility) = 'public'"
         );
 
         // Track placeholder index (starts at 3 since $1 and $2 are already used)
@@ -673,7 +675,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $2 ORDER BY monthly_price ASC"#
         )
         .bind(example_provider_pubkey)
@@ -703,7 +705,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $2 AND LOWER(visibility) = 'public' ORDER BY monthly_price ASC"#
         )
         .bind(example_provider_pubkey)
@@ -731,7 +733,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE id = $2"#)
                 .bind(example_provider_pubkey)
                 .bind(offering_id)
@@ -758,7 +760,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $2 ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -786,7 +788,7 @@ impl Database {
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
-               provisioner_type, provisioner_config, template_name, agent_pool_id, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $2 AND product_type = $3 ORDER BY offering_id ASC"#
         )
         .bind(&example_provider_pubkey_hex)
@@ -838,7 +840,7 @@ impl Database {
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
-        let base_select = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, COALESCE(pas.online AND pas.last_heartbeat_ns > $2, FALSE) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey";
+        let base_select = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, COALESCE(pas.online AND pas.last_heartbeat_ns > $2, FALSE) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id LEFT JOIN provider_agent_status pas ON o.pubkey = pas.provider_pubkey";
 
         // Build WHERE clause: base filters + DSL filters
         let where_clause = if dsl_where.is_empty() {
@@ -990,6 +992,7 @@ impl Database {
             provisioner_config,
             template_name,
             agent_pool_id,
+            post_provision_script,
             provider_online: _,
             resolved_pool_id: _,
             resolved_pool_name: _,
@@ -1048,7 +1051,8 @@ impl Database {
                 datacenter_latitude, datacenter_longitude, control_panel, gpu_name,
                 gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours,
                 payment_methods, features, operating_systems, offering_source,
-                external_checkout_url, provisioner_type, provisioner_config, template_name, agent_pool_id, created_at_ns
+                external_checkout_url, provisioner_type, provisioner_config, template_name, agent_pool_id,
+                post_provision_script, created_at_ns
             ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8, $9, $10,
@@ -1063,7 +1067,8 @@ impl Database {
                 $39, $40, $41, $42,
                 $43, $44, $45, $46,
                 $47, $48, $49, $50,
-                $51, $52, $53, $54, $55, $56
+                $51, $52, $53, $54, $55,
+                $56, $57
             )
             RETURNING id"#,
             pubkey,
@@ -1121,6 +1126,7 @@ impl Database {
             provisioner_config,
             template_name,
             agent_pool_id,
+            post_provision_script,
             created_at_ns
         )
         .fetch_one(&mut *tx)
@@ -1230,6 +1236,7 @@ impl Database {
             provisioner_config,
             template_name,
             agent_pool_id,
+            post_provision_script,
             provider_online: _,
             resolved_pool_id: _,
             resolved_pool_name: _,
@@ -1270,8 +1277,9 @@ impl Database {
                 min_contract_hours = $44, max_contract_hours = $45,
                 payment_methods = $46, features = $47, operating_systems = $48,
                 offering_source = $49, external_checkout_url = $50,
-                provisioner_type = $51, provisioner_config = $52, template_name = $53, agent_pool_id = $54
-            WHERE id = $55"#,
+                provisioner_type = $51, provisioner_config = $52, template_name = $53, agent_pool_id = $54,
+                post_provision_script = $55
+            WHERE id = $56"#,
             offering_id,
             offer_name,
             description,
@@ -1326,6 +1334,7 @@ impl Database {
             provisioner_config,
             template_name,
             agent_pool_id,
+            post_provision_script,
             offering_db_id
         )
         .execute(&mut *tx)
@@ -1455,6 +1464,7 @@ impl Database {
             provisioner_config: source.provisioner_config,
             template_name: source.template_name,
             agent_pool_id: source.agent_pool_id,
+            post_provision_script: source.post_provision_script,
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
@@ -1794,6 +1804,7 @@ impl Database {
             provisioner_config: get_opt_str("provisioner_config"),
             template_name: get_opt_str("template_name"),
             agent_pool_id: get_opt_str("agent_pool_id"),
+            post_provision_script: get_opt_str("post_provision_script"),
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,

@@ -273,6 +273,7 @@ mod tests {
             storage_gb: Some(50),
             requester_ssh_pubkey: Some("ssh-ed25519 AAAA...".to_string()),
             instance_config: None,
+            post_provision_script: None,
         };
 
         let input = ScriptInput {

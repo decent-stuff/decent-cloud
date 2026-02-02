@@ -3454,6 +3454,7 @@ impl ProvidersApi {
                 provisioner_config: None,
                 template_name: capabilities.available_templates.first().cloned(),
                 agent_pool_id: Some(pool_id.0.clone()),
+                post_provision_script: None,
                 provider_online: None,
                 resolved_pool_id: None,
                 resolved_pool_name: None,

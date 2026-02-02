@@ -50,6 +50,8 @@ pub struct PendingContract {
     pub provisioner_type: Option<String>,
     /// Provisioner config JSON from offering
     pub provisioner_config: Option<String>,
+    /// Script to execute via SSH after VM provisioning (uses shebang for interpreter)
+    pub post_provision_script: Option<String>,
 }
 
 /// Contract pending termination (cancelled with VM still running)
@@ -1064,6 +1066,7 @@ mod tests {
             storage_capacity: Some("100 GB".to_string()),
             provisioner_type: None,
             provisioner_config: None,
+            post_provision_script: None,
         };
 
         assert_eq!(contract.memory_mb(), Some(16 * 1024));

@@ -61,6 +61,8 @@ pub struct ProvisionRequest {
     pub storage_gb: Option<u32>,
     pub requester_ssh_pubkey: Option<String>,
     pub instance_config: Option<serde_json::Value>,
+    /// Script to execute via SSH after VM provisioning (uses shebang for interpreter)
+    pub post_provision_script: Option<String>,
 }
 
 /// Result of verifying provisioner setup

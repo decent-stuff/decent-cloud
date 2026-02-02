@@ -75,10 +75,18 @@
   - QuickEditOfferingDialog shows allowlist management when visibility is "shared"
   - Add/remove users by public key
 
-**Phase 3: Templated Deployments**
-- [ ] Add `post_provision_script` or `cloud_init_config` field to offerings
-- [ ] dc-agent executes deployment script after VM provisioning
-- [ ] Enable "rent base VM + auto-deploy service" pattern
+**Phase 3: Post-Provision Scripts** ✅ COMPLETE (2026-02-02)
+- [x] Add `post_provision_script` field to offerings
+  - Migration: `008_post_provision_script.sql`
+  - Supports any interpreter via shebang (#!/bin/bash, #!/usr/bin/env python3, etc.)
+  - Default: #!/bin/sh if no shebang provided
+- [x] dc-agent executes script via SSH after VM provisioning
+  - New module: `dc-agent/src/post_provision.rs`
+  - Waits for SSH availability (60s timeout)
+  - Uploads script, makes executable, runs with output capture
+  - Non-blocking: failures logged but don't block contract provisioning
+- [x] UI: QuickEditOfferingDialog shows script textarea with shebang hints
+- [x] Enable "rent base VM + auto-deploy service" pattern
 
 ---
 
