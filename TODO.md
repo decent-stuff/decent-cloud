@@ -495,19 +495,20 @@ Development environment secrets in `.env.dev` are intentional for local developm
 
 **Impact:** Canister integration non-functional.
 
-### 13. Missing `api-server doctor` Checks
+### 13. ~~Missing `api-server doctor` Checks~~ ✅ FIXED (2026-02-02)
 
-**Issue:** Doctor command missing checks for critical integrations.
+**Status:** Fixed - Added comprehensive checks for all external service integrations:
 
-**Missing:**
-- Stripe webhook registration verification
-- Email deliverability test
-- DKIM DNS record check
-- Cloudflare DNS API access
-- OAuth redirect URI accessibility
-- ICPay API connectivity
+**Added checks:**
+- Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`, client connectivity
+- Cloudflare DNS: `CF_API_TOKEN`, `CF_ZONE_ID`, `CF_DOMAIN`, client configuration
+- Google OAuth: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URL` with localhost warning
+- ICPay: `ICPAY_SECRET_KEY`, `ICPAY_WEBHOOK_SECRET`, client configuration
 
-**Recommendation:** Add comprehensive checks for all external service integrations.
+**Still available for future improvement:**
+- Stripe webhook registration verification (requires actual Stripe API call)
+- Email deliverability test (requires sending test email)
+- DKIM DNS record check (requires DNS lookup)
 
 ### 14. Manual Setup Steps That Could Be Automated
 

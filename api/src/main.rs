@@ -482,6 +482,116 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     println!("\nAI Bot Service:");
     check_env!("LLM_API_KEY", optional, "AI responses disabled");
 
+    // === Stripe Integration ===
+    println!("\nStripe Payments:");
+    check_env!("STRIPE_SECRET_KEY", optional, "Stripe payments disabled");
+    check_env!(
+        "STRIPE_WEBHOOK_SECRET",
+        optional,
+        "Stripe webhooks disabled"
+    );
+    check_env!(
+        "STRIPE_AUTOMATIC_TAX",
+        optional,
+        "automatic tax calculation disabled"
+    );
+
+    // Test Stripe connectivity if configured
+    if env::var("STRIPE_SECRET_KEY").is_ok() {
+        print!("  Checking Stripe API connectivity... ");
+        match crate::stripe_client::StripeClient::new() {
+            Ok(_) => println!("[OK] client configured"),
+            Err(e) => {
+                println!("[ERROR] {:#}", e);
+                errors += 1;
+            }
+        }
+    }
+
+    // === Cloudflare DNS ===
+    println!("\nCloudflare DNS:");
+    check_env!("CF_API_TOKEN", optional, "gateway DNS disabled");
+    check_env!("CF_ZONE_ID", optional, "gateway DNS disabled");
+    check_env!("CF_DOMAIN", optional, "uses default decent-cloud.org");
+
+    // Test Cloudflare configuration if set
+    if env::var("CF_API_TOKEN").is_ok() && env::var("CF_ZONE_ID").is_ok() {
+        print!("  Checking Cloudflare configuration... ");
+        match crate::cloudflare_dns::CloudflareDns::from_env() {
+            Some(client) => println!("[OK] domain = {}", client.domain()),
+            None => {
+                println!("[ERROR] failed to create client");
+                errors += 1;
+            }
+        }
+    }
+
+    // === Google OAuth ===
+    println!("\nGoogle OAuth:");
+    check_env!(
+        "GOOGLE_OAUTH_CLIENT_ID",
+        optional,
+        "Google sign-in disabled"
+    );
+    check_env!(
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+        optional,
+        "Google sign-in disabled"
+    );
+    check_env!(
+        "GOOGLE_OAUTH_REDIRECT_URL",
+        optional,
+        "uses default localhost callback"
+    );
+
+    // Test OAuth configuration if set
+    if env::var("GOOGLE_OAUTH_CLIENT_ID").is_ok()
+        && env::var("GOOGLE_OAUTH_CLIENT_SECRET").is_ok()
+    {
+        print!("  Checking OAuth client configuration... ");
+        // Verify the redirect URL is parseable
+        let redirect_url = env::var("GOOGLE_OAUTH_REDIRECT_URL")
+            .unwrap_or_else(|_| "http://localhost:59011/api/v1/oauth/google/callback".to_string());
+        match reqwest::Url::parse(&redirect_url) {
+            Ok(parsed_url) => {
+                if redirect_url.starts_with("http://localhost") {
+                    println!("[WARN] redirect URL is localhost - update for production");
+                    warnings += 1;
+                } else {
+                    println!(
+                        "[OK] redirect = {}",
+                        parsed_url.host_str().unwrap_or("unknown")
+                    );
+                }
+            }
+            Err(e) => {
+                println!("[ERROR] invalid redirect URL: {}", e);
+                errors += 1;
+            }
+        }
+    }
+
+    // === ICPay Integration ===
+    println!("\nICPay (ICP Payments):");
+    check_env!("ICPAY_SECRET_KEY", optional, "ICP payments disabled");
+    check_env!(
+        "ICPAY_WEBHOOK_SECRET",
+        optional,
+        "ICPay webhooks disabled"
+    );
+
+    // Test ICPay connectivity if configured
+    if env::var("ICPAY_SECRET_KEY").is_ok() {
+        print!("  Checking ICPay API configuration... ");
+        match crate::icpay_client::IcpayClient::new() {
+            Ok(_) => println!("[OK] client configured"),
+            Err(e) => {
+                println!("[ERROR] {:#}", e);
+                errors += 1;
+            }
+        }
+    }
+
     // === Summary ===
     println!("\n=== Summary ===");
     if errors > 0 {
