@@ -199,7 +199,11 @@ Software that providers run to automatically provision services when contracts a
   - Cleanup job in `CleanupService` removes expired credentials
 
 **Phase 7 Follow-ups (not blocking):**
-- [ ] **dc-agent: Set root_password in provisioners** - Proxmox/manual provisioners don't populate `Instance.root_password` yet. Encryption infra exists but won't trigger without this.
+- [x] **dc-agent: Set root_password in Proxmox provisioner** ✅ (2026-02-02)
+  - Generates 24-char cryptographically secure alphanumeric password
+  - Sets via Proxmox cloud-init `cipassword` parameter during VM configuration
+  - Returns password in Instance struct for API encryption
+  - Note: Manual provisioner relies on external scripts to provide password
 - [ ] **Consider on-demand password reset** - Alternative approach: dc-agent SSHs into VM and runs `passwd` on user request. Eliminates storage, multi-device issues, and expiration complexity. Trade-off: requires dc-agent to be online.
 - [ ] **Add AAD binding** - Include contract_id in encryption context to prevent blob swapping attacks
 - [ ] **Multi-device limitation** - Current design: only the device/browser that created the contract can decrypt. Documented in UI warning. Consider account-level key derivation for cross-device access.

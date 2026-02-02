@@ -4,6 +4,7 @@ use super::{
 use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
+use rand::Rng;
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize};
 use std::time::Duration;
@@ -48,6 +49,20 @@ pub(crate) fn fnv1a_hash(data: &[u8]) -> u64 {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
     hash
+}
+
+/// Generate a cryptographically secure random password.
+/// Uses alphanumeric characters for compatibility with various systems.
+pub(crate) fn generate_secure_password(length: usize) -> String {
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::thread_rng();
+
+    (0..length)
+        .map(|_| {
+            let idx = rng.gen_range(0..CHARSET.len());
+            CHARSET[idx] as char
+        })
+        .collect()
 }
 
 pub struct ProxmoxProvisioner {
@@ -452,7 +467,12 @@ impl ProxmoxProvisioner {
         Ok(task_response.upid())
     }
 
-    async fn configure_vm(&self, vmid: u32, request: &ProvisionRequest) -> Result<()> {
+    async fn configure_vm(
+        &self,
+        vmid: u32,
+        request: &ProvisionRequest,
+        root_password: Option<&str>,
+    ) -> Result<()> {
         let path = format!("/api2/json/nodes/{}/qemu/{}/config", self.config.node, vmid);
 
         let mut params = vec![("ipconfig0", "ip=dhcp".to_string())];
@@ -460,6 +480,11 @@ impl ProxmoxProvisioner {
         if let Some(ssh_key) = &request.requester_ssh_pubkey {
             let encoded_key = urlencoding::encode(ssh_key);
             params.push(("sshkeys", encoded_key.to_string()));
+        }
+
+        // Set root password via cloud-init if provided
+        if let Some(password) = root_password {
+            params.push(("cipassword", password.to_string()));
         }
 
         if let Some(cores) = request.cpu_cores {
@@ -876,9 +901,13 @@ impl Provisioner for ProxmoxProvisioner {
             .await
             .context("Clone task failed")?;
 
-        // Step 2: Configure VM
+        // Generate a secure root password for cloud-init
+        let root_password = generate_secure_password(24);
+        tracing::debug!("Generated root password for VM {}", vmid);
+
+        // Step 2: Configure VM with password
         tracing::debug!("Configuring VM {}", vmid);
-        self.configure_vm(vmid, request)
+        self.configure_vm(vmid, request, Some(&root_password))
             .await
             .context("Failed to configure VM")?;
 
@@ -929,7 +958,7 @@ impl Provisioner for ProxmoxProvisioner {
             ip_address: ipv4,
             ipv6_address: ipv6,
             ssh_port: 22,
-            root_password: None,
+            root_password: Some(root_password),
             additional_details: Some(serde_json::json!({
                 "vmid": vmid,
                 "node": self.config.node,

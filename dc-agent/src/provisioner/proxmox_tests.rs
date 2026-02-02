@@ -978,4 +978,34 @@ mod tests {
         // Verify the clone was made from template 8000, not the default 9000
         clone_mock.assert();
     }
+
+    #[test]
+    fn test_generate_secure_password() {
+        use crate::provisioner::proxmox::generate_secure_password;
+        use std::collections::HashSet;
+
+        // Test correct length
+        let password = generate_secure_password(24);
+        assert_eq!(password.len(), 24);
+
+        // Test alphanumeric only
+        assert!(
+            password.chars().all(|c: char| c.is_ascii_alphanumeric()),
+            "Password should be alphanumeric only: {}",
+            password
+        );
+
+        // Test uniqueness (generate 100 passwords, all should be unique)
+        let passwords: HashSet<_> = (0..100).map(|_| generate_secure_password(24)).collect();
+        assert_eq!(
+            passwords.len(),
+            100,
+            "All generated passwords should be unique"
+        );
+
+        // Test various lengths
+        assert_eq!(generate_secure_password(8).len(), 8);
+        assert_eq!(generate_secure_password(32).len(), 32);
+        assert_eq!(generate_secure_password(0).len(), 0);
+    }
 }
