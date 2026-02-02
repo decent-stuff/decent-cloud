@@ -73,6 +73,7 @@ impl OfferingsApi {
     ///
     /// Returns details of a specific offering. Visibility rules apply:
     /// - Public offerings: visible to everyone
+    /// - Shared offerings: visible to owner and users in the allowlist
     /// - Private offerings: only visible to the provider who owns them
     #[oai(path = "/offerings/:id", method = "get", tag = "ApiTags::Offerings")]
     async fn get_offering(
@@ -83,14 +84,28 @@ impl OfferingsApi {
     ) -> Json<ApiResponse<crate::database::offerings::Offering>> {
         match db.get_offering(id.0).await {
             Ok(Some(offering)) => {
-                // Check visibility: public OR requester is the provider owner
-                let is_public = offering.visibility.eq_ignore_ascii_case("public");
-                let is_owner = auth
-                    .pubkey
-                    .as_ref()
-                    .is_some_and(|pk| hex::encode(pk) == offering.pubkey);
+                // Check visibility using the unified access check
+                let can_access = match db
+                    .can_access_offering(
+                        id.0,
+                        &offering.visibility,
+                        &offering.pubkey,
+                        auth.pubkey.as_deref(),
+                    )
+                    .await
+                {
+                    Ok(access) => access,
+                    Err(e) => {
+                        tracing::error!("Failed to check offering access: {:#?}", e);
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Internal error checking access".to_string()),
+                        });
+                    }
+                };
 
-                if is_public || is_owner {
+                if can_access {
                     Json(ApiResponse {
                         success: true,
                         data: Some(offering),

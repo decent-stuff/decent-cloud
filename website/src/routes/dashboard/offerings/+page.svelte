@@ -106,13 +106,42 @@
 
 	async function handleVisibilityToggle(offering: Offering, event: Event) {
 		event.stopPropagation();
-		const newVisibility = offering.visibility === 'public' ? 'private' : 'public';
+		// Cycle through: public → shared → private → public
+		const visibilityOrder = ['public', 'shared', 'private'];
+		const currentIndex = visibilityOrder.indexOf(offering.visibility.toLowerCase());
+		const newVisibility = visibilityOrder[(currentIndex + 1) % visibilityOrder.length];
 
 		try {
 			await updateOfferingField(offering, { visibility: newVisibility });
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to update visibility';
 			console.error('Error updating visibility:', e);
+		}
+	}
+
+	function getVisibilityStyle(visibility: string): string {
+		switch (visibility.toLowerCase()) {
+			case 'public':
+				return 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30';
+			case 'shared':
+				return 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30';
+			case 'private':
+				return 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30';
+			default:
+				return 'bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30';
+		}
+	}
+
+	function getVisibilityLabel(visibility: string): string {
+		switch (visibility.toLowerCase()) {
+			case 'public':
+				return 'Public';
+			case 'shared':
+				return 'Shared';
+			case 'private':
+				return 'Private';
+			default:
+				return visibility;
 		}
 	}
 
@@ -352,12 +381,10 @@
 							<!-- Visibility toggle -->
 							<button
 								onclick={(e) => handleVisibilityToggle(offering, e)}
-								class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border transition-all hover:scale-105 cursor-pointer {offering.visibility === 'public'
-									? 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30'
-									: 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30'}"
-								title="Click to toggle visibility"
+								class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getVisibilityStyle(offering.visibility)}"
+								title="Click to cycle visibility: public → shared → private"
 							>
-								{offering.visibility === 'public' ? 'Public' : 'Private'}
+								{getVisibilityLabel(offering.visibility)}
 							</button>
 							<!-- Stock status toggle -->
 							<button

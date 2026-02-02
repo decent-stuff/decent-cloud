@@ -23,6 +23,7 @@ pub mod telegram_tracking;
 pub mod tokens;
 pub mod types;
 pub mod users;
+pub mod visibility_allowlist;
 
 // Re-export main types
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};

@@ -440,6 +440,99 @@ export async function updateProviderOffering(
 	}
 }
 
+// Visibility Allowlist API functions
+export interface AllowlistEntry {
+	id: number;
+	offering_id: number;
+	allowed_pubkey: string;
+	created_at: number;
+}
+
+export async function getOfferingAllowlist(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	headers: SignedRequestHeaders
+): Promise<AllowlistEntry[]> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}/allowlist`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to get allowlist: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<AllowlistEntry[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to get allowlist');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function addToAllowlist(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	allowedPubkey: string,
+	headers: SignedRequestHeaders,
+	body: string
+): Promise<number> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}/allowlist`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to add to allowlist: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<number>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to add to allowlist');
+	}
+
+	return payload.data ?? 0;
+}
+
+export async function removeFromAllowlist(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	allowedPubkey: string,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}/allowlist/${allowedPubkey}`;
+
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to remove from allowlist: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to remove from allowlist');
+	}
+
+	return payload.data ?? false;
+}
+
 export function offeringToCSVRow(offering: Offering): string[] {
 	return [
 		offering.offering_id,

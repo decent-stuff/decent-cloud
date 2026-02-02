@@ -59,10 +59,21 @@
 - [x] UI: "My Resources" section on dashboard showing all offerings with "Rent Free" button
 - [x] `OptionalApiAuth` extractor added for endpoints that need optional authentication
 
-**Phase 2: Shared Visibility**
-- [ ] Add `visibility_allowlist` table (offering_id, allowed_pubkey)
-- [ ] Filter shared offerings to allowlisted users only
-- [ ] UI: Manage who can see/rent your shared offerings
+**Phase 2: Shared Visibility** ✅ COMPLETE (2026-02-02)
+- [x] Add `visibility_allowlist` table (offering_id, allowed_pubkey)
+  - Migration: `006_visibility_allowlist.sql`
+  - Database functions: `add_to_allowlist`, `remove_from_allowlist`, `get_allowlist`, `is_in_allowlist`, `can_access_offering`
+- [x] Filter shared offerings to allowlisted users only
+  - Updated `GET /offerings/:id` visibility check to include allowlist
+  - Updated `POST /contracts` visibility check to include allowlist
+- [x] API endpoints for allowlist management:
+  - `GET /providers/:pubkey/offerings/:id/allowlist` - List allowlist entries
+  - `POST /providers/:pubkey/offerings/:id/allowlist` - Add to allowlist
+  - `DELETE /providers/:pubkey/offerings/:id/allowlist/:allowed_pubkey` - Remove from allowlist
+- [x] UI: Manage who can see/rent your shared offerings
+  - Visibility toggle now cycles: public → shared → private
+  - QuickEditOfferingDialog shows allowlist management when visibility is "shared"
+  - Add/remove users by public key
 
 **Phase 3: Templated Deployments**
 - [ ] Add `post_provision_script` or `cloud_init_config` field to offerings

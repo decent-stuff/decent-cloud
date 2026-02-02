@@ -254,12 +254,32 @@ impl ContractsApi {
             }
         };
 
-        // Check visibility: public OR requester is the provider owner (self-rental)
+        // Check visibility: public, shared (allowlist), or self-rental
         let requester_pubkey_hex = hex::encode(&auth.pubkey);
-        let is_public = offering.visibility.eq_ignore_ascii_case("public");
         let is_self_rental = requester_pubkey_hex == offering.pubkey;
 
-        if !is_public && !is_self_rental {
+        // Use unified access check for visibility
+        let can_access = match db
+            .can_access_offering(
+                params.0.offering_db_id,
+                &offering.visibility,
+                &offering.pubkey,
+                Some(&auth.pubkey),
+            )
+            .await
+        {
+            Ok(access) => access,
+            Err(e) => {
+                tracing::error!("Failed to check offering access: {:#?}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Internal error checking access".to_string()),
+                });
+            }
+        };
+
+        if !can_access {
             // Return "not found" to avoid leaking existence of private offerings
             return Json(ApiResponse {
                 success: false,

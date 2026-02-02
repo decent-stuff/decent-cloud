@@ -89,6 +89,15 @@ pub struct CsvImportError {
     pub message: String,
 }
 
+/// Request to add a pubkey to an offering's visibility allowlist
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AllowlistAddRequest {
+    /// Hex-encoded public key of the user to allow
+    pub allowed_pubkey: String,
+}
+
 /// Response time distribution across time buckets
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]

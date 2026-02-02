@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import type { Offering, CreateOfferingParams } from '$lib/services/api';
-	import { updateProviderOffering, hexEncode } from '$lib/services/api';
+	import type { Offering, CreateOfferingParams, AllowlistEntry } from '$lib/services/api';
+	import { updateProviderOffering, hexEncode, getOfferingAllowlist, addToAllowlist, removeFromAllowlist } from '$lib/services/api';
 	import { signRequest } from '$lib/services/auth-api';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
@@ -31,6 +31,13 @@
 	let visibility = $state('public');
 	let templateName = $state('');
 
+	// Allowlist management
+	let allowlistEntries = $state<AllowlistEntry[]>([]);
+	let loadingAllowlist = $state(false);
+	let newAllowedPubkey = $state('');
+	let addingToAllowlist = $state(false);
+	let removingPubkey = $state<string | null>(null);
+
 	// Check if template name is non-numeric (won't auto-generate provisioner_config)
 	let templateWarning = $derived(
 		templateName.trim() !== '' && !/^\d+$/.test(templateName.trim())
@@ -46,8 +53,84 @@
 			visibility = offering.visibility;
 			templateName = offering.template_name || '';
 			error = null;
+			// Load allowlist if visibility is shared
+			if (offering.visibility.toLowerCase() === 'shared') {
+				loadAllowlist();
+			} else {
+				allowlistEntries = [];
+			}
 		}
 	});
+
+	// Load allowlist when visibility changes to shared
+	$effect(() => {
+		if (visibility.toLowerCase() === 'shared' && offering && open) {
+			loadAllowlist();
+		}
+	});
+
+	async function loadAllowlist() {
+		if (!identity || !pubkeyBytes || !offering?.id) return;
+
+		loadingAllowlist = true;
+		try {
+			const pubkeyHex = hexEncode(pubkeyBytes);
+			const path = `/api/v1/providers/${pubkeyHex}/offerings/${offering.id}/allowlist`;
+			const signed = await signRequest(identity, 'GET', path);
+			allowlistEntries = await getOfferingAllowlist(pubkeyBytes, offering.id, signed.headers);
+		} catch (e) {
+			console.error('Failed to load allowlist:', e);
+			// Don't show error - allowlist might just be empty
+		} finally {
+			loadingAllowlist = false;
+		}
+	}
+
+	async function handleAddToAllowlist() {
+		if (!identity || !pubkeyBytes || !offering?.id || !newAllowedPubkey.trim()) return;
+
+		// Validate hex format (should be 64 characters for 32-byte Ed25519 key)
+		const trimmed = newAllowedPubkey.trim();
+		if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+			error = 'Invalid public key format. Must be 64 hex characters (32-byte Ed25519 public key).';
+			return;
+		}
+
+		addingToAllowlist = true;
+		error = null;
+		try {
+			const pubkeyHex = hexEncode(pubkeyBytes);
+			const path = `/api/v1/providers/${pubkeyHex}/offerings/${offering.id}/allowlist`;
+			const params = { allowedPubkey: trimmed.toLowerCase() };
+			const signed = await signRequest(identity, 'POST', path, params);
+			if (!signed.body) throw new Error('Failed to sign request');
+			await addToAllowlist(pubkeyBytes, offering.id, trimmed.toLowerCase(), signed.headers, signed.body);
+			newAllowedPubkey = '';
+			await loadAllowlist();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to add to allowlist';
+		} finally {
+			addingToAllowlist = false;
+		}
+	}
+
+	async function handleRemoveFromAllowlist(allowedPubkey: string) {
+		if (!identity || !pubkeyBytes || !offering?.id) return;
+
+		removingPubkey = allowedPubkey;
+		error = null;
+		try {
+			const pubkeyHex = hexEncode(pubkeyBytes);
+			const path = `/api/v1/providers/${pubkeyHex}/offerings/${offering.id}/allowlist/${allowedPubkey}`;
+			const signed = await signRequest(identity, 'DELETE', path);
+			await removeFromAllowlist(pubkeyBytes, offering.id, allowedPubkey, signed.headers);
+			await loadAllowlist();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to remove from allowlist';
+		} finally {
+			removingPubkey = null;
+		}
+	}
 
 	async function handleSave() {
 		if (!identity || !pubkeyBytes || !offering) {
@@ -292,11 +375,82 @@
 							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
 							disabled={saving}
 						>
-							<option value="public">Public</option>
-							<option value="private">Private</option>
+							<option value="public">Public (marketplace)</option>
+							<option value="shared">Shared (allowlist only)</option>
+							<option value="private">Private (owner only)</option>
 						</select>
 					</div>
 				</div>
+
+				<!-- Allowlist Management (shown when visibility is shared) -->
+				{#if visibility.toLowerCase() === 'shared'}
+					<div class="bg-blue-500/10 border border-blue-500/30 p-4 space-y-4">
+						<div class="flex items-center justify-between">
+							<h3 class="text-blue-400 font-semibold">Allowlist</h3>
+							<span class="text-blue-400/60 text-sm">
+								{allowlistEntries.length} user{allowlistEntries.length !== 1 ? 's' : ''} allowed
+							</span>
+						</div>
+						<p class="text-blue-400/80 text-sm">
+							Only users in this allowlist can see and rent this offering.
+						</p>
+
+						<!-- Add to allowlist -->
+						<div class="flex gap-2">
+							<input
+								type="text"
+								bind:value={newAllowedPubkey}
+								placeholder="Enter user's public key (64 hex characters)"
+								class="flex-1 px-3 py-2 bg-surface-elevated border border-neutral-700 text-white placeholder-white/40 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+								disabled={addingToAllowlist || saving}
+							/>
+							<button
+								onclick={handleAddToAllowlist}
+								class="px-4 py-2 bg-blue-500/20 border border-blue-500/30 text-blue-400 font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50"
+								disabled={addingToAllowlist || saving || !newAllowedPubkey.trim()}
+							>
+								{#if addingToAllowlist}
+									Adding...
+								{:else}
+									Add
+								{/if}
+							</button>
+						</div>
+
+						<!-- Allowlist entries -->
+						{#if loadingAllowlist}
+							<div class="text-blue-400/60 text-sm text-center py-2">
+								Loading allowlist...
+							</div>
+						{:else if allowlistEntries.length === 0}
+							<div class="text-blue-400/60 text-sm text-center py-2">
+								No users in allowlist yet. Add public keys to allow access.
+							</div>
+						{:else}
+							<div class="space-y-2 max-h-32 overflow-y-auto">
+								{#each allowlistEntries as entry}
+									<div class="flex items-center justify-between bg-surface-elevated/50 px-3 py-2">
+										<code class="text-xs text-blue-400/80 font-mono truncate flex-1 mr-2" title={entry.allowed_pubkey}>
+											{entry.allowed_pubkey.slice(0, 16)}...{entry.allowed_pubkey.slice(-8)}
+										</code>
+										<button
+											onclick={() => handleRemoveFromAllowlist(entry.allowed_pubkey)}
+											class="text-red-400 hover:text-red-300 text-sm px-2 py-1 hover:bg-red-500/20 transition-colors"
+											disabled={removingPubkey === entry.allowed_pubkey || saving}
+											title="Remove from allowlist"
+										>
+											{#if removingPubkey === entry.allowed_pubkey}
+												...
+											{:else}
+												×
+											{/if}
+										</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 
 				<!-- VM Template for Instant Provisioning -->
 				<div>
