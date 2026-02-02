@@ -237,37 +237,31 @@ Integrate with or scrape external sources for additional trust signals:
 
 ---
 
-## Contract-Specific Customer-Provider Messaging
+## Contract-Specific Customer-Provider Messaging ✅ COMPLETE (2026-02-02)
 
-**Status:** Backend infrastructure exists (SLA tracking, message events), but no usable UI.
+**Status:** Complete - Customers can now message providers about specific contracts
 **Priority:** MEDIUM - Improves customer experience and enables SLA enforcement
 
-### Motivation
-When customers rent services, they need a way to communicate with providers about that specific contract (questions, issues, configuration). Currently:
-- Backend can create Chatwoot conversations with `contract_id` metadata
-- Message events are tracked for SLA response time calculation
-- Provider response metrics are exposed via API (`/providers/:pubkey/metrics`)
-- BUT: No frontend UI for customers to access these conversations
+### What's Implemented ✅
+- [x] "Contact Provider" button on rental detail page (`/dashboard/rentals/[contract_id]`)
+- [x] "Contact" link next to provider name in rentals list (`/dashboard/rentals`)
+- [x] Button opens Chatwoot widget with `contract_id` and `provider_pubkey` as custom attributes
+- [x] Backend webhook extracts `contract_id` from conversation custom_attributes for tracking
+- [x] `chatwoot_message_events` table tracks messages per contract
+- [x] SLA breach detection and provider response time metrics calculation
+- [x] Provider response metrics exposed via API (`/providers/:pubkey/metrics`)
 
-### What Exists (Backend)
-- `chatwoot_message_events` table tracks messages per contract
-- SLA breach detection in `email_processor.rs`
-- Provider response time metrics calculation
-- Webhook handler extracts `contract_id` from conversation custom_attributes
+### How It Works
+1. Customer clicks "Contact Provider" on any rental
+2. Chatwoot widget opens with contract context automatically set
+3. When customer sends message, webhook records it with `contract_id`
+4. Provider sees conversation in their Chatwoot inbox
+5. Response time is tracked for SLA enforcement
 
-### What's Missing (Frontend)
-- "Contact Provider" button on rentals page that opens contract-specific chat
-- Provider inbox/dashboard showing contract conversations
-- Link between Chatwoot conversation and contract in UI
-
-### Implementation Approach
-1. Add "Contact Provider" button to `/dashboard/rentals` for each contract
-2. Button opens Chatwoot widget pre-configured with contract context
-3. Or: Embed mini-chat directly in contract details view
-4. Provider sees conversations tagged by contract in their Chatwoot inbox
-
-### Alternative: Remove SLA Tracking
-If contract-specific messaging isn't needed, the SLA tracking infrastructure (`chatwoot_message_events`, response metrics) could be removed to simplify the codebase.
+### Future Enhancements (Low Priority)
+- Provider inbox filtering by contract in dashboard
+- Unread message badge on rental cards
+- Embedded mini-chat in contract details instead of widget popup
 
 ---
 
@@ -484,15 +478,11 @@ let token_value = 1_000_000; // $1 USD hardcoded
 
 **Impact:** All financial calculations using token value are incorrect.
 
-### 11. Hardcoded Secrets in Version Control
+### 11. ~~Hardcoded Secrets in Version Control~~ ✅ NOT AN ISSUE
 
-**Issue:** HMAC secrets hardcoded in environment files.
+**Status:** Reviewed - `.env.dev` contains development-only secrets, `.env.prod` doesn't exist.
 
-**Locations:**
-- `cf/.env.prod:70` - Production HMAC secret
-- `cf/.env.dev:75` - Development HMAC secret
-
-**Impact:** Security vulnerability. Secrets should be loaded from secure storage, not version control.
+Development environment secrets in `.env.dev` are intentional for local development. Production uses separate secret management (not in version control). The TODO referenced a non-existent `.env.prod` file.
 
 ### 12. Half-Implemented Canister Proxy
 

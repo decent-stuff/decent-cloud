@@ -333,6 +333,28 @@
 		navigator.clipboard.writeText(window.location.href);
 	}
 
+	/**
+	 * Open Chatwoot widget with contract context for messaging the provider.
+	 * Sets contract_id as custom attribute so the backend can track messages per contract.
+	 */
+	function contactProvider() {
+		// @ts-expect-error - Chatwoot global
+		if (typeof window !== 'undefined' && window.$chatwoot) {
+			// Set contract context as custom attribute
+			// @ts-expect-error - Chatwoot global
+			window.$chatwoot.setCustomAttributes({
+				contract_id: contractId,
+				provider_pubkey: contract?.provider_pubkey || '',
+			});
+			// Open the chat widget
+			// @ts-expect-error - Chatwoot global
+			window.$chatwoot.toggle('open');
+		} else {
+			// Fallback if Chatwoot not loaded - show error
+			error = "Chat widget not available. Please refresh the page and try again.";
+		}
+	}
+
 	onDestroy(() => {
 		unsubscribeAuth?.();
 		stopAutoRefresh();
@@ -391,6 +413,13 @@
 				<p class="text-neutral-500 font-mono text-sm">{contract.contract_id}</p>
 			</div>
 			<div class="flex items-center gap-3">
+				<button
+					onclick={contactProvider}
+					class="px-3 py-1.5 text-sm bg-primary-600/80 text-white border border-primary-500/30 hover:bg-primary-700 transition-colors"
+					title="Message the provider about this contract"
+				>
+					Contact Provider
+				</button>
 				<button
 					onclick={copyLink}
 					class="px-3 py-1.5  text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:bg-surface-elevated transition-colors"

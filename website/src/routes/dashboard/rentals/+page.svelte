@@ -287,6 +287,22 @@
 		navigateToLogin($page.url.pathname);
 	}
 
+	/**
+	 * Open Chatwoot widget with contract context for messaging the provider.
+	 */
+	function contactProvider(contractId: string, providerPubkey: string) {
+		// @ts-expect-error - Chatwoot global
+		if (typeof window !== 'undefined' && window.$chatwoot) {
+			// @ts-expect-error - Chatwoot global
+			window.$chatwoot.setCustomAttributes({
+				contract_id: contractId,
+				provider_pubkey: providerPubkey,
+			});
+			// @ts-expect-error - Chatwoot global
+			window.$chatwoot.toggle('open');
+		}
+	}
+
 	onDestroy(() => {
 		unsubscribeAuth?.();
 		stopAutoRefresh();
@@ -579,16 +595,29 @@
 							<div class="text-neutral-500 text-xs mb-1">
 								Provider
 							</div>
-							<button
-								onclick={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									goto(`/dashboard/reputation/${contract.provider_pubkey}`);
-								}}
-								class="text-white text-sm font-mono hover:text-primary-400 transition-colors text-left"
-							>
-								{truncateHash(contract.provider_pubkey)}
-							</button>
+							<div class="flex items-center gap-2">
+								<button
+									onclick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										goto(`/dashboard/reputation/${contract.provider_pubkey}`);
+									}}
+									class="text-white text-sm font-mono hover:text-primary-400 transition-colors text-left"
+								>
+									{truncateHash(contract.provider_pubkey)}
+								</button>
+								<button
+									onclick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										contactProvider(contract.contract_id, contract.provider_pubkey);
+									}}
+									class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+									title="Message the provider"
+								>
+									Contact
+								</button>
+							</div>
 						</div>
 					</div>
 
