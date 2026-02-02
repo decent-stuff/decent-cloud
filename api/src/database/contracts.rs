@@ -757,6 +757,9 @@ impl Database {
     }
 
     /// Add provisioning details to a contract
+    /// Credentials expiration: 7 days after provisioning
+    const CREDENTIALS_EXPIRATION_DAYS: i64 = 7;
+
     pub async fn add_provisioning_details(
         &self,
         contract_id: &[u8],
@@ -764,27 +767,82 @@ impl Database {
     ) -> Result<()> {
         let provisioned_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
-        // Extract gateway fields from instance JSON
+        // Extract gateway fields and root_password from instance JSON
         #[derive(serde::Deserialize)]
-        struct InstanceGatewayFields {
+        struct InstanceFields {
             gateway_slug: Option<String>,
             gateway_ssh_port: Option<u16>,
             gateway_port_range_start: Option<u16>,
             gateway_port_range_end: Option<u16>,
+            root_password: Option<String>,
         }
 
-        let gateway = serde_json::from_str::<InstanceGatewayFields>(instance_details).unwrap_or(
-            InstanceGatewayFields {
+        let instance = serde_json::from_str::<InstanceFields>(instance_details).unwrap_or(
+            InstanceFields {
                 gateway_slug: None,
                 gateway_ssh_port: None,
                 gateway_port_range_start: None,
                 gateway_port_range_end: None,
+                root_password: None,
             },
         );
 
-        let gateway_ssh_port = gateway.gateway_ssh_port.map(|p| p as i32);
-        let gateway_port_range_start = gateway.gateway_port_range_start.map(|p| p as i32);
-        let gateway_port_range_end = gateway.gateway_port_range_end.map(|p| p as i32);
+        let gateway_ssh_port = instance.gateway_ssh_port.map(|p| p as i32);
+        let gateway_port_range_start = instance.gateway_port_range_start.map(|p| p as i32);
+        let gateway_port_range_end = instance.gateway_port_range_end.map(|p| p as i32);
+
+        // If root_password is present, encrypt it for the requester
+        let (encrypted_credentials, credentials_expires_at_ns) =
+            if let Some(ref password) = instance.root_password {
+                // Get requester's pubkey from the contract
+                let requester_pubkey: Option<Vec<u8>> = sqlx::query_scalar(
+                    "SELECT requester_pubkey FROM contract_sign_requests WHERE contract_id = $1",
+                )
+                .bind(contract_id)
+                .fetch_optional(&self.pool)
+                .await?;
+
+                match requester_pubkey {
+                    Some(pubkey) if pubkey.len() == 32 => {
+                        match crate::crypto::encrypt_credentials(password, &pubkey) {
+                            Ok(encrypted) => {
+                                let expires_at = provisioned_at_ns
+                                    + (Self::CREDENTIALS_EXPIRATION_DAYS
+                                        * 24
+                                        * 60
+                                        * 60
+                                        * 1_000_000_000);
+                                (Some(encrypted.to_json()), Some(expires_at))
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to encrypt credentials for contract {}: {:#?}",
+                                    hex::encode(contract_id),
+                                    e
+                                );
+                                (None, None)
+                            }
+                        }
+                    }
+                    Some(pubkey) => {
+                        tracing::warn!(
+                            "Invalid requester pubkey length for contract {}: {} bytes",
+                            hex::encode(contract_id),
+                            pubkey.len()
+                        );
+                        (None, None)
+                    }
+                    None => {
+                        tracing::warn!(
+                            "No requester pubkey found for contract {}",
+                            hex::encode(contract_id)
+                        );
+                        (None, None)
+                    }
+                }
+            } else {
+                (None, None)
+            };
 
         let mut tx = self.pool.begin().await?;
 
@@ -799,7 +857,7 @@ impl Database {
                WHERE contract_id = $7"#,
             instance_details,
             provisioned_at_ns,
-            gateway.gateway_slug,
+            instance.gateway_slug,
             gateway_ssh_port,
             gateway_port_range_start,
             gateway_port_range_end,
@@ -809,23 +867,67 @@ impl Database {
         .await?;
 
         let empty_instance_ip: Option<&str> = None;
-        let empty_credentials: Option<&str> = None;
-        sqlx::query!(
-            r#"INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns)
-               VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT(contract_id) DO UPDATE SET instance_ip = excluded.instance_ip, instance_credentials = excluded.instance_credentials, connection_instructions = excluded.connection_instructions, provisioned_at_ns = excluded.provisioned_at_ns"#,
-            contract_id,
-            empty_instance_ip,
-            empty_credentials,
-            instance_details,
-            provisioned_at_ns
+        sqlx::query(
+            r#"INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns, credentials_expires_at_ns)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT(contract_id) DO UPDATE SET
+                   instance_ip = excluded.instance_ip,
+                   instance_credentials = excluded.instance_credentials,
+                   connection_instructions = excluded.connection_instructions,
+                   provisioned_at_ns = excluded.provisioned_at_ns,
+                   credentials_expires_at_ns = excluded.credentials_expires_at_ns"#,
         )
+        .bind(contract_id)
+        .bind(empty_instance_ip)
+        .bind(&encrypted_credentials)
+        .bind(instance_details)
+        .bind(provisioned_at_ns)
+        .bind(credentials_expires_at_ns)
         .execute(&mut *tx)
         .await?;
 
         tx.commit().await?;
 
         Ok(())
+    }
+
+    /// Delete expired credentials (should be called periodically)
+    pub async fn cleanup_expired_credentials(&self) -> Result<i64> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let result = sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET instance_credentials = NULL, credentials_expires_at_ns = NULL
+               WHERE credentials_expires_at_ns IS NOT NULL AND credentials_expires_at_ns < $1"#,
+        )
+        .bind(now_ns)
+        .execute(&self.pool)
+        .await?;
+
+        let deleted = result.rows_affected() as i64;
+        if deleted > 0 {
+            tracing::info!("Cleaned up {} expired credential(s)", deleted);
+        }
+
+        Ok(deleted)
+    }
+
+    /// Get encrypted credentials for a contract (only returns if not expired)
+    pub async fn get_encrypted_credentials(&self, contract_id: &[u8]) -> Result<Option<String>> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let credentials: Option<String> = sqlx::query_scalar(
+            r#"SELECT instance_credentials FROM contract_provisioning_details
+               WHERE contract_id = $1
+               AND instance_credentials IS NOT NULL
+               AND (credentials_expires_at_ns IS NULL OR credentials_expires_at_ns > $2)"#,
+        )
+        .bind(contract_id)
+        .bind(now_ns)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(credentials)
     }
 
     /// Extend contract duration

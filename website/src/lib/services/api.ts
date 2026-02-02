@@ -533,6 +533,45 @@ export async function removeFromAllowlist(
 	return payload.data ?? false;
 }
 
+// Encrypted credentials API
+export interface EncryptedCredentials {
+	version: number;
+	ephemeral_pubkey: string;
+	nonce: string;
+	ciphertext: string;
+}
+
+export async function getContractCredentials(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<string | null> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/credentials`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null; // No credentials available
+		}
+		const errorText = await response.text();
+		throw new Error(`Failed to get credentials: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		if (payload.error?.includes('No credentials available')) {
+			return null;
+		}
+		throw new Error(payload.error ?? 'Failed to get credentials');
+	}
+
+	return payload.data ?? null;
+}
+
 export function offeringToCSVRow(offering: Offering): string[] {
 	return [
 		offering.offering_id,

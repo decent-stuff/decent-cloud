@@ -2,6 +2,7 @@ mod auth;
 mod chatwoot;
 mod cleanup_service;
 mod cloudflare_dns;
+mod crypto;
 mod database;
 mod email_processor;
 mod email_service;

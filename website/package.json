@@ -51,6 +51,7 @@
 		"@dfinity/principal": "^3.4.2",
 		"@ic-pay/icpay-sdk": "^1.4.19",
 		"@ic-pay/icpay-widget": "^1.2.52",
+		"@noble/ciphers": "^2.1.1",
 		"@noble/curves": "^1.9.2",
 		"@noble/ed25519": "^3.0.0",
 		"@noble/hashes": "^1.8.0",

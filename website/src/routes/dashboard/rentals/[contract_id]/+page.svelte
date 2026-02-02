@@ -8,10 +8,12 @@
 		cancelRentalRequest,
 		downloadContractInvoice,
 		getContractUsage,
+		getContractCredentials,
 		type Contract,
 		type ContractUsage,
 		hexEncode,
 	} from "$lib/services/api";
+	import { decryptCredentials } from "$lib/services/credential-crypto";
 	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
 	import {
 		formatContractDate as formatDate,
@@ -31,6 +33,12 @@
 	let downloadingInvoice = $state(false);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
+
+	// Encrypted credentials state
+	let decryptedPassword = $state<string | null>(null);
+	let credentialsLoading = $state(false);
+	let credentialsError = $state<string | null>(null);
+	let showPassword = $state(false);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -189,6 +197,11 @@
 					// Usage not available is not an error
 					console.debug("No usage data for contract:", e);
 				}
+
+				// Try to fetch and decrypt credentials for provisioned contracts
+				if (contract.status === 'provisioned' || contract.status === 'active') {
+					await loadCredentials(signingIdentityInfo);
+				}
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -196,6 +209,38 @@
 			console.error("Error loading contract:", e);
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadCredentials(signingIdentityInfo: any) {
+		try {
+			credentialsLoading = true;
+			credentialsError = null;
+
+			// Sign request to get encrypted credentials
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity,
+				"GET",
+				`/api/v1/contracts/${contractId}/credentials`,
+			);
+
+			const encryptedJson = await getContractCredentials(contractId, headers);
+			if (!encryptedJson) {
+				// No credentials available (either not set or expired)
+				return;
+			}
+
+			// Get the secret key for decryption
+			const keyPair = signingIdentityInfo.identity.getKeyPair();
+			const secretKey = keyPair.secretKey;
+
+			// Decrypt the credentials
+			decryptedPassword = await decryptCredentials(encryptedJson, secretKey);
+		} catch (e) {
+			console.debug("No credentials available:", e);
+			// Don't show error - credentials may not be set for all contracts
+		} finally {
+			credentialsLoading = false;
 		}
 	}
 
@@ -597,6 +642,30 @@
 						<div class="text-white text-sm whitespace-pre-wrap font-mono">
 							{contract.provisioning_instance_details}
 						</div>
+					{/if}
+
+					{#if decryptedPassword}
+						<div class="bg-black/20 p-3 mt-3 border border-amber-500/30">
+							<div class="flex items-center justify-between mb-1">
+								<div class="text-amber-400 text-xs font-medium">Root Password</div>
+								<button
+									onclick={() => showPassword = !showPassword}
+									class="text-xs text-neutral-400 hover:text-white transition-colors"
+								>
+									{showPassword ? 'Hide' : 'Show'}
+								</button>
+							</div>
+							{#if showPassword}
+								<code class="text-amber-300 text-sm font-mono select-all block">{decryptedPassword}</code>
+							{:else}
+								<code class="text-neutral-500 text-sm font-mono">••••••••••••</code>
+							{/if}
+							<div class="text-amber-400/60 text-xs mt-2">
+								This password will be automatically deleted 7 days after provisioning
+							</div>
+						</div>
+					{:else if credentialsLoading}
+						<div class="text-neutral-500 text-xs mt-3">Loading credentials...</div>
 					{/if}
 
 					{#if contract.provisioning_completed_at_ns}

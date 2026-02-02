@@ -175,10 +175,20 @@ Software that providers run to automatically provision services when contracts a
 - [x] **6.2 API:** Uptime calculation per provider ✓ (`GET /providers/{pubkey}/health-summary` endpoint)
 - [x] **6.3 Dashboard:** Show uptime percentage on provider profile ✓ (TrustDashboard + reputation page)
 
-#### Phase 7: Credential Encryption
-- [ ] Encrypt VM passwords with requester's pubkey (Ed25519→X25519)
-- [ ] Frontend decryption with user's private key
-- [ ] Auto-delete credentials after 7 days
+#### Phase 7: Credential Encryption ✅ COMPLETE (2026-02-02)
+- [x] Encrypt VM passwords with requester's pubkey (Ed25519→X25519)
+  - New crypto module: `api/src/crypto/credential_encryption.rs`
+  - Ed25519→X25519 key conversion + XChaCha20Poly1305 encryption
+  - Ephemeral key pairs for forward secrecy
+- [x] API: `GET /contracts/:id/credentials` returns encrypted credentials (requester only)
+  - Encrypted credentials stored in `contract_provisioning_details.instance_credentials`
+  - Migration: `007_encrypted_credentials.sql`
+- [x] Frontend decryption with user's private key
+  - `credential-crypto.ts` using @noble/ciphers + @noble/curves
+  - Rental detail page shows decrypted root password when available
+- [x] Auto-delete credentials after 7 days
+  - `credentials_expires_at_ns` field tracks expiration
+  - Cleanup job in `CleanupService` removes expired credentials
 
 ### Future Phases
 - Phase 8: Hetzner Cloud provisioner

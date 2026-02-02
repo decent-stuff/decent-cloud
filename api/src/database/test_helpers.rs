@@ -319,6 +319,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/004_agent_resources.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/005_contract_health_checks.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/006_visibility_allowlist.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/007_encrypted_credentials.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -500,6 +501,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "006_visibility_allowlist.sql",
                     include_str!("../../migrations_pg/006_visibility_allowlist.sql"),
+                ),
+                (
+                    "007_encrypted_credentials.sql",
+                    include_str!("../../migrations_pg/007_encrypted_credentials.sql"),
                 ),
             ];
 

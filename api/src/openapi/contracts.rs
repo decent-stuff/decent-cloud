@@ -130,6 +130,85 @@ impl ContractsApi {
         }
     }
 
+    /// Get encrypted credentials for a contract
+    ///
+    /// Returns encrypted VM credentials (e.g., root password) for a contract.
+    /// Only the contract requester can retrieve credentials.
+    /// Credentials are encrypted with the requester's public key and can only
+    /// be decrypted with their private key.
+    /// Credentials auto-expire 7 days after provisioning.
+    #[oai(
+        path = "/contracts/:id/credentials",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn get_contract_credentials(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Get contract to verify authorization
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Only the requester can retrieve credentials
+        // (Provider should already know the password since they set it up)
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: only the contract requester can access credentials".to_string()),
+            });
+        }
+
+        // Get encrypted credentials
+        match db.get_encrypted_credentials(&contract_id).await {
+            Ok(Some(credentials)) => Json(ApiResponse {
+                success: true,
+                data: Some(credentials),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("No credentials available (expired or not set)".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get user contracts
     ///
     /// Returns contracts for a specific user (as requester).
