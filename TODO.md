@@ -1,16 +1,5 @@
 # TODO
 
-## HIGH PRIORITY: Self-Hosted Resource Management ✅ COMPLETE
-
-**Goal:** Transform platform from pure marketplace into unified resource management + marketplace. Users can manage own infrastructure, rent from others, and deploy value-add services on top.
-
-All three phases complete:
-- Phase 1: Visibility & Self-Rental
-- Phase 2: Shared Visibility
-- Phase 3: Post-Provision Scripts
-
----
-
 ## API-CLI Testing Framework
 
 **Goal:** Enable automated E2E testing of the full VM provisioning flow without the website frontend, for CI/CD pipelines and AI agent-assisted testing.
@@ -34,28 +23,10 @@ All three phases complete:
 
 ---
 
-## Streamlined Rental UX ✅ COMPLETE
-
-**Goal:** Eliminate provider approval bottleneck; enable instant provisioning like AWS/GCP/Azure
-
-Complete:
-- Auto-Accept Mode
-- Instant SSH Key Injection
-- Pre-configured Offering Templates
-
----
-
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
 **Status:** MVP complete through Phase 7 (Credential Encryption)
-
-### Completed ✓ (Phases 1-7)
-- Agent skeleton, TOML config, Ed25519 auth, Proxmox provisioner
-- Setup wizard, test provisioning, delegated agent keys
-- Agent pools with location-based routing
-- Health & Reputation (API + dashboard)
-- Credential Encryption (Ed25519→X25519 + XChaCha20Poly1305)
 
 ### Phase 7 Follow-ups (Low Priority)
 - [ ] **Consider on-demand password reset** - dc-agent SSHs into VM and runs `passwd` on user request
@@ -156,28 +127,18 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 **Location:** `api/src/main.rs:214-227`
 
-#### 14. Manual Setup Steps That Could Be Automated
-
-**Issue:** Several setup steps require manual intervention when APIs support automation.
-
-**Examples:**
-- Stripe webhook creation (can use Stripe API)
-- DKIM DNS record setup (can use Cloudflare API)
-- Proxmox template VM creation
-
-**Recommendation:** Add `api-server setup-<service>` commands.
-
-### Fixed Issues (2026-02-02)
+### Fixed Issues
 
 - ✅ Issue 1: Duplicate API Response Types - Moved to `dcc-common` crate
 - ✅ Issue 2: Chatwoot Client Error Detail Loss - Proper error context added
 - ✅ Issue 3: Hex Decoding Without Validation - Match error handling added
 - ✅ Issue 4: Commented-Out ICRC3 Modules - Dead code removed
-- ✅ Issue 5: Hardcoded Localhost URLs - Doctor check + startup warning added, port inconsistency fixed
+- ✅ Issue 5: Hardcoded Localhost URLs - Doctor check + startup warning added
 - ✅ Issue 8: Geographic Region Mapping Duplicate - Moved to `dcc-common`
 - ✅ Issue 9: CLI Commands with `todo!()` Stubs - Non-functional commands removed
 - ✅ Issue 11: Hardcoded Secrets - Reviewed, not an issue
 - ✅ Issue 13: Missing `api-server doctor` Checks - All service checks added
+- ✅ Issue 14: Manual Setup Steps - Added `api-server setup stripe-webhooks` and `api-server setup dkim` commands
 
 ---
 

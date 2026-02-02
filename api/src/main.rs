@@ -82,6 +82,27 @@ enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Automated setup for external services
+    Setup {
+        #[command(subcommand)]
+        service: SetupService,
+    },
+}
+
+#[derive(Subcommand)]
+enum SetupService {
+    /// Create or update Stripe webhook endpoint
+    StripeWebhooks {
+        /// Webhook endpoint URL (defaults to API_PUBLIC_URL/api/v1/webhooks/stripe)
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// Generate DKIM key pair and create DNS TXT record
+    Dkim {
+        /// DKIM selector (e.g., "dc" for dc._domainkey.domain.com)
+        #[arg(long, default_value = "dc")]
+        selector: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,6 +274,7 @@ async fn main() -> Result<(), std::io::Error> {
         Commands::Sync => sync_command().await,
         Commands::Doctor => doctor_command().await,
         Commands::SyncDocs { portal, dry_run } => sync_docs_command(&portal, dry_run).await,
+        Commands::Setup { service } => setup_command(service).await,
     }
 }
 
@@ -265,6 +287,248 @@ async fn sync_docs_command(portal: &str, dry_run: bool) -> Result<(), std::io::E
             e
         ))),
     }
+}
+
+/// Automated setup for external services
+async fn setup_command(service: SetupService) -> Result<(), std::io::Error> {
+    match service {
+        SetupService::StripeWebhooks { url } => setup_stripe_webhooks(url).await,
+        SetupService::Dkim { selector } => setup_dkim(&selector).await,
+    }
+}
+
+/// Create or update Stripe webhook endpoint with all required events
+async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io::Error> {
+    println!("=== Stripe Webhooks Setup ===\n");
+
+    // Get API key
+    let secret_key = match env::var("STRIPE_SECRET_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            println!("[ERROR] STRIPE_SECRET_KEY not set");
+            println!("\n  Set STRIPE_SECRET_KEY in your .env file or environment:");
+            println!("    export STRIPE_SECRET_KEY=sk_live_...");
+            return Err(std::io::Error::other("STRIPE_SECRET_KEY not set"));
+        }
+    };
+
+    // Determine webhook URL
+    let webhook_url = match custom_url {
+        Some(url) => url,
+        None => {
+            let api_url = env::var("API_PUBLIC_URL").map_err(|_| {
+                std::io::Error::other(
+                    "API_PUBLIC_URL not set. Either set it or provide --url argument.",
+                )
+            })?;
+            format!("{}/api/v1/webhooks/stripe", api_url.trim_end_matches('/'))
+        }
+    };
+
+    println!("Webhook URL: {}", webhook_url);
+
+    // Required events for our webhook handler
+    let events = vec![
+        "checkout.session.completed",
+        "invoice.paid",
+        "invoice.payment_failed",
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    ];
+
+    println!("Events: {:?}", events);
+
+    // Use Stripe API to list existing webhooks
+    let client = reqwest::Client::new();
+
+    // First, check if a webhook for this URL already exists
+    print!("\nChecking existing webhooks... ");
+    let list_response = client
+        .get("https://api.stripe.com/v1/webhook_endpoints")
+        .basic_auth(&secret_key, None::<&str>)
+        .send()
+        .await
+        .map_err(|e| std::io::Error::other(format!("Failed to list webhooks: {}", e)))?;
+
+    if !list_response.status().is_success() {
+        let error_text = list_response.text().await.unwrap_or_default();
+        println!("[ERROR]");
+        return Err(std::io::Error::other(format!(
+            "Failed to list webhooks: {}",
+            error_text
+        )));
+    }
+
+    let list_body: serde_json::Value = list_response.json().await.map_err(|e| {
+        std::io::Error::other(format!("Failed to parse webhook list response: {}", e))
+    })?;
+
+    // Find existing webhook with matching URL
+    let existing_webhook = list_body["data"]
+        .as_array()
+        .and_then(|webhooks| webhooks.iter().find(|wh| wh["url"].as_str() == Some(&webhook_url)));
+
+    if let Some(webhook) = existing_webhook {
+        let webhook_id = webhook["id"].as_str().unwrap_or("");
+        println!("[OK] found existing ({})", webhook_id);
+
+        // Update existing webhook
+        print!("Updating webhook events... ");
+        let mut form: Vec<(&str, &str)> = events.iter().map(|e| ("enabled_events[]", *e)).collect();
+        form.push(("url", &webhook_url));
+
+        let update_response = client
+            .post(format!(
+                "https://api.stripe.com/v1/webhook_endpoints/{}",
+                webhook_id
+            ))
+            .basic_auth(&secret_key, None::<&str>)
+            .form(&form)
+            .send()
+            .await
+            .map_err(|e| std::io::Error::other(format!("Failed to update webhook: {}", e)))?;
+
+        if !update_response.status().is_success() {
+            let error_text = update_response.text().await.unwrap_or_default();
+            println!("[ERROR]");
+            return Err(std::io::Error::other(format!(
+                "Failed to update webhook: {}",
+                error_text
+            )));
+        }
+
+        println!("[OK]");
+        println!("\n=== Webhook Updated Successfully ===");
+        println!("\nNote: The webhook signing secret remains unchanged.");
+        println!("If you need the secret, delete and recreate the webhook in the Stripe dashboard.");
+    } else {
+        println!("[OK] none found");
+
+        // Create new webhook
+        print!("Creating webhook endpoint... ");
+        let mut form: Vec<(&str, &str)> = events.iter().map(|e| ("enabled_events[]", *e)).collect();
+        form.push(("url", &webhook_url));
+
+        let create_response = client
+            .post("https://api.stripe.com/v1/webhook_endpoints")
+            .basic_auth(&secret_key, None::<&str>)
+            .form(&form)
+            .send()
+            .await
+            .map_err(|e| std::io::Error::other(format!("Failed to create webhook: {}", e)))?;
+
+        if !create_response.status().is_success() {
+            let error_text = create_response.text().await.unwrap_or_default();
+            println!("[ERROR]");
+            return Err(std::io::Error::other(format!(
+                "Failed to create webhook: {}",
+                error_text
+            )));
+        }
+
+        let create_body: serde_json::Value = create_response.json().await.map_err(|e| {
+            std::io::Error::other(format!("Failed to parse create response: {}", e))
+        })?;
+
+        let webhook_id = create_body["id"].as_str().unwrap_or("unknown");
+        let webhook_secret = create_body["secret"].as_str().unwrap_or("");
+
+        println!("[OK] ({})", webhook_id);
+
+        println!("\n=== Webhook Created Successfully ===\n");
+        println!("Add this to your .env file:\n");
+        println!("  STRIPE_WEBHOOK_SECRET={}", webhook_secret);
+        println!("\n[IMPORTANT] Save this secret now - it cannot be retrieved later!");
+    }
+
+    Ok(())
+}
+
+/// Generate DKIM key pair and create DNS TXT record
+async fn setup_dkim(selector: &str) -> Result<(), std::io::Error> {
+    use ed25519_dalek::SigningKey;
+    use rand::RngCore;
+
+    println!("=== DKIM Setup ===\n");
+
+    // Validate selector
+    if selector.is_empty() || selector.len() > 63 || !selector.chars().all(|c| c.is_alphanumeric() || c == '-') {
+        return Err(std::io::Error::other(
+            "Invalid selector: must be 1-63 alphanumeric characters or hyphens",
+        ));
+    }
+
+    // Check Cloudflare configuration
+    let cf_client = cloudflare_dns::CloudflareDns::from_env();
+    if cf_client.is_none() {
+        println!("[WARN] Cloudflare not configured (CF_API_TOKEN and CF_ZONE_ID required)");
+        println!("       DNS record will not be created automatically.\n");
+    }
+
+    // Get domain for DKIM
+    let domain = match env::var("DKIM_DOMAIN") {
+        Ok(d) => d,
+        Err(_) => {
+            // Fall back to CF_DOMAIN or default
+            env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string())
+        }
+    };
+
+    println!("Domain: {}", domain);
+    println!("Selector: {}", selector);
+
+    // Generate Ed25519 key pair
+    print!("\nGenerating Ed25519 key pair... ");
+    let mut seed = [0u8; 32];
+    rand::rng().fill_bytes(&mut seed);
+    let signing_key = SigningKey::from_bytes(&seed);
+    let verifying_key = signing_key.verifying_key();
+    println!("[OK]");
+
+    // Encode keys
+    let private_key_bytes = signing_key.to_bytes();
+    let public_key_bytes = verifying_key.to_bytes();
+    let private_key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key_bytes);
+    let public_key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_key_bytes);
+
+    // Build DKIM TXT record value
+    // Format: v=DKIM1; k=ed25519; p=<base64_public_key>
+    let txt_value = format!("v=DKIM1; k=ed25519; p={}", public_key_base64);
+    let record_name = format!("{}._domainkey", selector);
+    let full_record = format!("{}.{}", record_name, domain);
+
+    println!("\n=== DNS Record ===");
+    println!("Name: {}", full_record);
+    println!("Type: TXT");
+    println!("Value: {}", txt_value);
+
+    // Create DNS record if Cloudflare is configured
+    if let Some(cf) = cf_client {
+        print!("\nCreating DNS TXT record... ");
+        match cf.create_txt_record(&record_name, &txt_value).await {
+            Ok(()) => {
+                println!("[OK]");
+            }
+            Err(e) => {
+                println!("[ERROR] {}", e);
+                println!("\n  Manual setup required. Create TXT record:");
+                println!("    Name: {}", full_record);
+                println!("    Value: {}", txt_value);
+            }
+        }
+    } else {
+        println!("\n[INFO] Create this TXT record manually in your DNS provider.");
+    }
+
+    println!("\n=== Environment Variables ===\n");
+    println!("Add these to your .env file:\n");
+    println!("  DKIM_DOMAIN={}", domain);
+    println!("  DKIM_SELECTOR={}", selector);
+    println!("  DKIM_PRIVATE_KEY={}", private_key_base64);
+    println!("\n[IMPORTANT] Save the private key now - it cannot be regenerated!");
+
+    Ok(())
 }
 
 /// Check if database schema has been applied by verifying key tables exist

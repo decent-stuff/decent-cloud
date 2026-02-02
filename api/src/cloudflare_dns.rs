@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Cloudflare DNS client for A record management.
+/// Cloudflare DNS client for DNS record management.
 pub struct CloudflareDns {
     client: Client,
     api_token: String,
@@ -153,7 +153,7 @@ impl CloudflareDns {
         let full_name = format!("{}.{}.{}", slug, datacenter, self.domain);
 
         // First, find the record ID
-        let record_id = self.find_record_id(&full_name).await?;
+        let record_id = self.find_record_id(&full_name, "A").await?;
 
         match record_id {
             Some(id) => {
@@ -187,10 +187,10 @@ impl CloudflareDns {
     }
 
     /// Find a DNS record ID by full name.
-    async fn find_record_id(&self, name: &str) -> Result<Option<String>> {
+    async fn find_record_id(&self, name: &str, record_type: &str) -> Result<Option<String>> {
         let url = format!(
-            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?type=A&name={}",
-            self.zone_id, name
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records?type={}&name={}",
+            self.zone_id, record_type, name
         );
 
         let response = self
@@ -227,6 +227,101 @@ impl CloudflareDns {
             .result
             .and_then(|records| records.into_iter().next().map(|r| r.id)))
     }
+
+    /// Create or update a TXT record.
+    /// Record name should be the full subdomain (e.g., "selector._domainkey" for DKIM).
+    pub async fn create_txt_record(&self, name: &str, content: &str) -> Result<()> {
+        let full_name = format!("{}.{}", name, self.domain);
+
+        // Check if record already exists
+        if let Some(record_id) = self.find_record_id(&full_name, "TXT").await? {
+            // Update existing record
+            let url = format!(
+                "https://api.cloudflare.com/client/v4/zones/{}/dns_records/{}",
+                self.zone_id, record_id
+            );
+
+            let record = CreateDnsRecord {
+                record_type: "TXT".to_string(),
+                name: name.to_string(),
+                content: content.to_string(),
+                ttl: 3600,
+                proxied: false,
+            };
+
+            let response = self
+                .client
+                .put(&url)
+                .header("Authorization", format!("Bearer {}", self.api_token))
+                .header("Content-Type", "application/json")
+                .json(&record)
+                .send()
+                .await
+                .context("Failed to send Cloudflare update request")?;
+
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .context("Failed to read Cloudflare response")?;
+
+            if !status.is_success() {
+                bail!("Cloudflare API error ({}): {}", status, body);
+            }
+
+            tracing::info!("Updated DNS TXT record: {}", full_name);
+            return Ok(());
+        }
+
+        // Create new record
+        let url = format!(
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
+            self.zone_id
+        );
+
+        let record = CreateDnsRecord {
+            record_type: "TXT".to_string(),
+            name: name.to_string(),
+            content: content.to_string(),
+            ttl: 3600,
+            proxied: false,
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .header("Content-Type", "application/json")
+            .json(&record)
+            .send()
+            .await
+            .context("Failed to send Cloudflare API request")?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .context("Failed to read Cloudflare response")?;
+
+        if !status.is_success() {
+            bail!("Cloudflare API error ({}): {}", status, body);
+        }
+
+        let cf_response: CloudflareResponse<DnsRecord> =
+            serde_json::from_str(&body).context("Failed to parse Cloudflare response")?;
+
+        if !cf_response.success {
+            let errors: Vec<String> = cf_response
+                .errors
+                .iter()
+                .map(|e| e.message.clone())
+                .collect();
+            bail!("Cloudflare API errors: {}", errors.join(", "));
+        }
+
+        tracing::info!("Created DNS TXT record: {}", full_name);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -238,5 +333,23 @@ mod tests {
         // In test environment, env vars are typically not set
         // This just verifies the function handles missing vars gracefully
         assert!(client.is_none() || client.is_some());
+    }
+
+    #[test]
+    fn test_create_dns_record_serialization() {
+        let record = super::CreateDnsRecord {
+            record_type: "TXT".to_string(),
+            name: "selector._domainkey".to_string(),
+            content: "v=DKIM1; k=ed25519; p=ABC123".to_string(),
+            ttl: 3600,
+            proxied: false,
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("\"type\":\"TXT\""));
+        assert!(json.contains("\"name\":\"selector._domainkey\""));
+        assert!(json.contains("\"content\":\"v=DKIM1; k=ed25519; p=ABC123\""));
+        assert!(json.contains("\"ttl\":3600"));
+        assert!(json.contains("\"proxied\":false"));
     }
 }
