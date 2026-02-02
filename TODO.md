@@ -356,23 +356,9 @@ No database changes needed - the account→pubkey linking already exists.
 - `api/src/notifications/telegram.rs`
 - `api/src/support_bot/llm.rs`
 
-### 3. Hex Decoding Without Validation in Auth
+### 3. ~~Hex Decoding Without Validation in Auth~~ ✅ FIXED
 
-**Issue:** `hex::decode().unwrap_or_default()` patterns in authorization code.
-
-**Locations:**
-- `api/src/openapi/invoices.rs:60-61`
-- `api/src/openapi/providers.rs:1869, 2147`
-
-**Example:**
-```rust
-let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
-// Empty vec on malformed hex - could affect auth checks!
-```
-
-**Impact:** If database contains malformed hex, authorization checks may behave unexpectedly. Should log warnings when hex decoding fails.
-
-**Recommended Fix:** Log a warning and return an error when hex decoding fails, rather than silently returning empty vec.
+**Status:** Fixed - all instances now use proper `match` error handling with logging and appropriate error responses. Verified no `hex::decode...unwrap_or_default` patterns remain in `api/src/openapi/`.
 
 ### 4. Commented-Out ICRC3 Modules
 
@@ -438,17 +424,15 @@ let requester_pk = hex::decode(&contract.requester_pubkey).unwrap_or_default();
 
 **Recommended Fix:** Move to `dcc-common` crate as shared module.
 
-### 9. CLI Commands with `todo!()` Stubs
+### 9. ~~CLI Commands with `todo!()` Stubs~~ ✅ FIXED (2026-02-02)
 
-**Issue:** Multiple user-facing CLI commands are completely non-functional.
+**Status:** Removed all non-functional CLI commands:
+- Deleted `cli/src/commands/contract.rs` and `cli/src/commands/offering.rs`
+- Removed `ProviderCommands::UpdateProfile` and `UpdateOffering` stubs
+- Removed `common/src/contract_refund_request.rs` (unused)
+- Cleaned up corresponding argparse definitions
 
-**Locations:**
-- `cli/src/commands/contract.rs:11-22` - ListOpen, SignRequest, SignReply all `todo!()`
-- `cli/src/commands/offering.rs:12` - Query returns `todo!()`
-- `cli/src/commands/provider.rs:128,136` - UpdateProfile, UpdateOffering return `todo!()`
-- `common/src/contract_refund_request.rs:42` - Refund processing returns `todo!()`
-
-**Impact:** Users attempting these commands get panic. Either implement or remove these commands.
+Users should use `api-cli` for contract/offering management instead.
 
 ### 10. Hardcoded Token Value ($1 USD)
 

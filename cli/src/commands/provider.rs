@@ -118,23 +118,6 @@ pub async fn handle_provider_command(
                 info!("Check-in success: {}", result);
             }
         }
-        ProviderCommands::UpdateProfile(_update_profile_args) => {
-            let identity = identity.ok_or_else(|| {
-                "Identity must be specified for this command. Use --identity <name>".to_string()
-            })?;
-
-            let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
-
-            todo!("Update the profile in the decent-cloud api server, and sign it with the local identity");
-        }
-        ProviderCommands::UpdateOffering(_update_offering_args) => {
-            let identity = identity.ok_or_else(|| {
-                "Identity must be specified for this command. Use --identity <name>".to_string()
-            })?;
-            let _dcc_id = DccIdentity::load_from_dir(&PathBuf::from(&identity))?;
-
-            todo!("Update the offering in the decent-cloud api server, and sign it with the local identity");
-        }
         ProviderCommands::PoolSuggestOfferings(args) => {
             let identity = identity.ok_or_else(|| {
                 "Identity must be specified for this command. Use --identity <name>".to_string()
