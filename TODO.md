@@ -190,6 +190,12 @@ Software that providers run to automatically provision services when contracts a
   - `credentials_expires_at_ns` field tracks expiration
   - Cleanup job in `CleanupService` removes expired credentials
 
+**Phase 7 Follow-ups (not blocking):**
+- [ ] **dc-agent: Set root_password in provisioners** - Proxmox/manual provisioners don't populate `Instance.root_password` yet. Encryption infra exists but won't trigger without this.
+- [ ] **Consider on-demand password reset** - Alternative approach: dc-agent SSHs into VM and runs `passwd` on user request. Eliminates storage, multi-device issues, and expiration complexity. Trade-off: requires dc-agent to be online.
+- [ ] **Add AAD binding** - Include contract_id in encryption context to prevent blob swapping attacks
+- [ ] **Multi-device limitation** - Current design: only the device/browser that created the contract can decrypt. Documented in UI warning. Consider account-level key derivation for cross-device access.
+
 ### Future Phases
 - Phase 8: Hetzner Cloud provisioner
 - Phase 9: Docker, DigitalOcean, Vultr provisioners
