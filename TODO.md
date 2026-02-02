@@ -79,7 +79,7 @@
 - `--skip-payment` flag with `set_payment_status_for_testing()` DB function
 
 ### Remaining Work
-- [ ] **Fix api-server build** - oauth2 crate compatibility issues blocking full test suite
+- [x] **Fix api-server build** - oauth2 crate compatibility issues ✓ (98d219c)
 - [ ] **Test contract create/wait/cancel** - Requires running provider with dc-agent
 - [ ] **Test gateway commands** - Requires active contracts with assigned gateways
 - [ ] **Test DNS commands** - Requires Cloudflare credentials in environment
@@ -151,10 +151,10 @@ Software that providers run to automatically provision services when contracts a
 - Agent pools with location-based routing and race condition prevention
 - Dashboard online/offline badges, pool management UI
 
-### Phase 6: Health & Reputation
+### Phase 6: Health & Reputation ✓
 - [x] **6.1 API:** `POST /contracts/{id}/health` endpoint + `contract_health_checks` table ✓ (b3b714a)
-- [ ] **6.2 API:** Uptime calculation per provider
-- [ ] **6.3 Dashboard:** Show uptime percentage on provider profile
+- [x] **6.2 API:** Uptime calculation per provider ✓ (`GET /providers/{pubkey}/health-summary` endpoint)
+- [x] **6.3 Dashboard:** Show uptime percentage on provider profile ✓ (TrustDashboard + reputation page)
 
 #### Phase 7: Credential Encryption
 - [ ] Encrypt VM passwords with requester's pubkey (Ed25519→X25519)
@@ -360,18 +360,14 @@ No database changes needed - the account→pubkey linking already exists.
 
 **Status:** Fixed - all instances now use proper `match` error handling with logging and appropriate error responses. Verified no `hex::decode...unwrap_or_default` patterns remain in `api/src/openapi/`.
 
-### 4. Commented-Out ICRC3 Modules
+### 4. ~~Commented-Out ICRC3 Modules~~ ✅ FIXED (2026-02-02)
 
-**Issue:** ICRC3 implementation is commented out but code still exists.
+**Status:** Removed dead ICRC3 code:
+- Deleted `ic-canister/src/canister_endpoints/icrc3.rs`
+- Deleted `ic-canister/src/canister_backend/icrc3.rs`
+- Removed commented module declarations from both mod.rs files
 
-**Locations:**
-- `ic-canister/src/canister_endpoints/mod.rs:5` - `// pub mod icrc3;`
-- `ic-canister/src/canister_backend/mod.rs:5` - `// pub mod icrc3;`
-- `ic-canister/src/canister_endpoints/pre_icrc3.rs:15-18` - commented `get_blocks()` endpoint
-
-**Impact:** Confusing dead code. Should either be completed or removed entirely.
-
-**Recommendation:** Decide whether ICRC3 is needed. If yes, complete the implementation. If no, remove all ICRC3 code.
+Note: `pre_icrc3.rs` is kept as it provides active `get_transactions` and `get_data_certificate` endpoints.
 
 ### 5. Hardcoded Localhost URLs as Defaults
 
@@ -412,17 +408,9 @@ No database changes needed - the account→pubkey linking already exists.
 
 **Recommendation:** Since `timestamp_nanos_opt()` only fails for dates beyond year ~2262, this is extremely unlikely. However, logging would make such an edge case visible.
 
-### 8. Geographic Region Mapping Duplicate (200+ lines)
+### 8. ~~Geographic Region Mapping Duplicate~~ ✅ FIXED
 
-**Issue:** Country-to-region mapping duplicated verbatim between api and dc-agent.
-
-**Locations:**
-- `api/src/regions.rs` (250 lines)
-- `dc-agent/src/geolocation.rs` (125 lines)
-
-**Impact:** 200+ lines of duplicate code. Geographic mapping changes must be synchronized manually.
-
-**Recommended Fix:** Move to `dcc-common` crate as shared module.
+**Status:** Moved to `common/src/regions.rs` in `dcc-common` crate. Both `api/src/regions.rs` and `dc-agent/src/geolocation.rs` now re-export from `dcc_common::regions`.
 
 ### 9. ~~CLI Commands with `todo!()` Stubs~~ ✅ FIXED (2026-02-02)
 
