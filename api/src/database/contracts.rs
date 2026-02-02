@@ -1,5 +1,6 @@
 use super::types::Database;
 use anyhow::Result;
+use dcc_common::ContractStatus;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -477,10 +478,14 @@ impl Database {
 
         // Calculate payment based on duration (monthly_price is per ~720 hours)
         // Self-rental is FREE - no payment required
+        // Use integer arithmetic to avoid floating-point precision issues:
+        // 1. Convert monthly_price to e9s (1 float multiply, unavoidable since price is f64)
+        // 2. Use i128 for the ratio calculation to avoid overflow
         let payment_amount_e9s = if is_self_rental {
             0
         } else {
-            ((offering.monthly_price * duration_hours as f64 / 720.0) * 1_000_000_000.0) as i64
+            let monthly_price_e9s = (offering.monthly_price * 1_000_000_000.0) as i128;
+            (monthly_price_e9s * duration_hours as i128 / 720) as i64
         };
 
         // Generate deterministic contract ID from SHA256 hash of request data
@@ -498,7 +503,7 @@ impl Database {
 
         // Insert contract request
         let original_duration_hours = duration_hours;
-        let requested_status = "requested";
+        let requested_status = ContractStatus::Requested.to_string();
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -556,7 +561,13 @@ impl Database {
         Ok(contract_id)
     }
 
-    /// Update contract status with authorization check
+    /// Update contract status with authorization check and state transition validation
+    ///
+    /// # Errors
+    /// - Contract not found
+    /// - Unauthorized (only provider can update)
+    /// - Invalid status string
+    /// - Invalid state transition (e.g. active -> requested)
     pub async fn update_contract_status(
         &self,
         contract_id: &[u8],
@@ -577,12 +588,39 @@ impl Database {
             ));
         }
 
+        // Parse and validate the new status
+        let target_status: ContractStatus = new_status.parse().map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        // Parse current status and validate transition
+        let current_status: ContractStatus = contract.status.parse().map_err(|e| {
+            anyhow::anyhow!(
+                "Contract {} has invalid status '{}' in database: {}",
+                hex::encode(contract_id),
+                contract.status,
+                e
+            )
+        })?;
+
+        // Validate state transition
+        if !current_status.can_transition_to(target_status) {
+            return Err(anyhow::anyhow!(
+                "Invalid status transition: {} -> {}. Valid transitions from '{}': {:?}",
+                current_status,
+                target_status,
+                current_status,
+                current_status.valid_transitions()
+            ));
+        }
+
+        // Convert target status to string for database storage
+        let new_status_str = target_status.to_string();
+
         // Update status and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
             "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
-            new_status,
+            new_status_str,
             updated_at_ns,
             updated_by_pubkey,
             contract_id
@@ -593,7 +631,7 @@ impl Database {
         sqlx::query!("INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
-            new_status,
+            new_status_str,
             updated_by_pubkey,
             updated_at_ns,
             change_memo
@@ -629,11 +667,13 @@ impl Database {
             ));
         }
 
-        // Can only reject contracts in requested/pending status
-        let status_lower = contract.status.to_lowercase();
-        if status_lower != "requested" && status_lower != "pending" {
+        // Can only reject contracts in valid states (those that can transition to rejected)
+        let current_status: ContractStatus = contract.status.parse().map_err(|e| {
+            anyhow::anyhow!("Contract has invalid status '{}': {}", contract.status, e)
+        })?;
+        if !current_status.can_transition_to(ContractStatus::Rejected) {
             return Err(anyhow::anyhow!(
-                "Contract cannot be rejected in '{}' status. Only requested/pending contracts can be rejected.",
+                "Contract cannot be rejected in '{}' status. Valid for: requested, pending, accepted",
                 contract.status
             ));
         }
@@ -713,12 +753,13 @@ impl Database {
 
         // Update status and refund info atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let rejected_status = ContractStatus::Rejected.to_string();
         let mut tx = self.pool.begin().await?;
 
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
-                "rejected",
+                rejected_status,
                 updated_at_ns,
                 rejected_by_pubkey,
                 "refunded",
@@ -733,7 +774,7 @@ impl Database {
         } else {
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
-                "rejected",
+                rejected_status,
                 updated_at_ns,
                 rejected_by_pubkey,
                 contract_id
@@ -747,7 +788,7 @@ impl Database {
             "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
-            "rejected",
+            rejected_status,
             rejected_by_pubkey,
             updated_at_ns,
             reject_memo
@@ -958,9 +999,12 @@ impl Database {
         }
 
         // Verify contract is in extendable status (active or provisioned)
-        if contract.status != "active" && contract.status != "provisioned" {
+        let status: ContractStatus = contract.status.parse().map_err(|e| {
+            anyhow::anyhow!("Contract has invalid status '{}': {}", contract.status, e)
+        })?;
+        if !status.is_operational() {
             return Err(anyhow::anyhow!(
-                "Contract cannot be extended in '{}' status",
+                "Contract cannot be extended in '{}' status (must be provisioned or active)",
                 contract.status
             ));
         }
@@ -980,8 +1024,9 @@ impl Database {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Offering not found"))?;
 
-        let extension_payment_e9s =
-            ((offering.monthly_price * extension_hours as f64 / 720.0) * 1_000_000_000.0) as i64;
+        // Use integer arithmetic to avoid floating-point precision issues
+        let monthly_price_e9s = (offering.monthly_price * 1_000_000_000.0) as i128;
+        let extension_payment_e9s = (monthly_price_e9s * extension_hours as i128 / 720) as i64;
 
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
@@ -1100,10 +1145,10 @@ impl Database {
 
     /// Check if a contract status is cancellable
     fn is_cancellable_status(status: &str) -> bool {
-        matches!(
-            status,
-            "requested" | "pending" | "accepted" | "provisioning" | "provisioned" | "active"
-        )
+        status
+            .parse::<ContractStatus>()
+            .map(|s| s.is_cancellable())
+            .unwrap_or(false)
     }
 
     /// Calculate prorated refund amount based on time used
@@ -1397,13 +1442,14 @@ impl Database {
 
         // Update status, refund info, and history atomically
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let cancelled_status = ContractStatus::Cancelled.to_string();
         let mut tx = self.pool.begin().await?;
 
         // Update contract status to cancelled with refund info
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
-                "cancelled",
+                cancelled_status,
                 updated_at_ns,
                 cancelled_by_pubkey,
                 "refunded",
@@ -1418,7 +1464,7 @@ impl Database {
         } else {
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
-                "cancelled",
+                cancelled_status,
                 updated_at_ns,
                 cancelled_by_pubkey,
                 contract_id
@@ -1432,7 +1478,7 @@ impl Database {
             "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
             contract_id,
             contract.status,
-            "cancelled",
+            cancelled_status,
             cancelled_by_pubkey,
             updated_at_ns,
             cancel_memo
@@ -1700,7 +1746,11 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
         // Only auto-accept contracts in "requested" status
-        if contract.status.to_lowercase() != "requested" {
+        let current_status: ContractStatus = match contract.status.parse() {
+            Ok(s) => s,
+            Err(_) => return Ok(false), // Invalid status, skip auto-accept
+        };
+        if current_status != ContractStatus::Requested {
             return Ok(false);
         }
 
@@ -1723,7 +1773,7 @@ impl Database {
 
         // Auto-accept the contract
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-        let new_status = "accepted";
+        let new_status = ContractStatus::Accepted.to_string();
         let change_memo = "Auto-accepted (provider has auto_accept_rentals enabled)";
 
         let mut tx = self.pool.begin().await?;
@@ -1811,19 +1861,32 @@ impl Database {
                     "Contract not found: {}",
                     hex::encode(contract_id)
                 )),
-                Some(c) if c.status != "accepted" && c.status != "provisioning" => {
-                    Err(anyhow::anyhow!(
-                        "Contract {} is not in lockable status (status: {})",
-                        hex::encode(contract_id),
-                        c.status
-                    ))
+                Some(c) => {
+                    let status: ContractStatus = c.status.parse().map_err(|_| {
+                        anyhow::anyhow!(
+                            "Contract {} has invalid status: {}",
+                            hex::encode(contract_id),
+                            c.status
+                        )
+                    })?;
+                    // Can only lock contracts that are accepted or provisioning
+                    if status != ContractStatus::Accepted && status != ContractStatus::Provisioning {
+                        return Err(anyhow::anyhow!(
+                            "Contract {} is not in lockable status (status: {})",
+                            hex::encode(contract_id),
+                            c.status
+                        ));
+                    }
+                    // Check payment status
+                    if c.payment_status != "succeeded" {
+                        return Err(anyhow::anyhow!(
+                            "Contract {} payment not succeeded (status: {})",
+                            hex::encode(contract_id),
+                            c.payment_status
+                        ));
+                    }
+                    Ok(false) // Already locked by another agent
                 }
-                Some(c) if c.payment_status != "succeeded" => Err(anyhow::anyhow!(
-                    "Contract {} payment not succeeded (status: {})",
-                    hex::encode(contract_id),
-                    c.payment_status
-                )),
-                _ => Ok(false), // Already locked by another agent
             }
         }
     }

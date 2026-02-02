@@ -79,12 +79,15 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 ---
 
-## Rental State Machine (Low Priority Issues)
+## Rental State Machine
 
-1. **"active" status never assigned** - Contracts stay "provisioned" forever
-2. **No centralized state transition validator** - Risk of invalid transitions
-3. **Float arithmetic for payment calculation** - Consider integer-only math
-4. **No contract archival** - Old contracts stay in DB indefinitely
+### Completed ✓
+- ✅ **ContractStatus enum** - Centralized state definitions with validation (`common/src/contract_status.rs`)
+- ✅ **State transition validation** - `can_transition_to()` method enforces valid transitions, invalid transitions fail fast with clear errors
+- ✅ **Integer-only payment calculation** - Removed float arithmetic, now uses i128 for precision
+
+### Remaining (Low Priority)
+- [ ] **Contract archival** - Old contracts stay in DB indefinitely
 
 ---
 
