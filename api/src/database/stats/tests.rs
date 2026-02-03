@@ -1918,3 +1918,312 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
     let velocity = metrics.abandonment_velocity.unwrap();
     assert!((velocity - 0.2).abs() < 0.01); // baseline_rate == 0, so returns recent_rate directly (0.2)
 }
+
+// ============================================================================
+// CONTRACT FEEDBACK TESTS
+// ============================================================================
+
+#[tokio::test]
+async fn test_submit_feedback_success() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a completed contract
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester_pubkey)
+    .bind(&provider_pubkey)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Submit feedback
+    let input = SubmitFeedbackInput {
+        service_matched_description: true,
+        would_rent_again: true,
+    };
+    let feedback = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+
+    assert_eq!(feedback.contract_id, hex::encode(&contract_id));
+    assert_eq!(feedback.provider_pubkey, hex::encode(&provider_pubkey));
+    assert!(feedback.service_matched_description);
+    assert!(feedback.would_rent_again);
+    assert!(feedback.created_at_ns > 0);
+}
+
+#[tokio::test]
+async fn test_submit_feedback_unauthorized_user() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let other_user_pubkey = vec![9u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a completed contract
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester_pubkey)
+    .bind(&provider_pubkey)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Try to submit feedback as a different user (not the requester)
+    let input = SubmitFeedbackInput {
+        service_matched_description: true,
+        would_rent_again: true,
+    };
+    let result = db.submit_contract_feedback(&contract_id, &other_user_pubkey, &input).await;
+    
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Only the contract requester"));
+}
+
+#[tokio::test]
+async fn test_submit_feedback_non_terminal_status() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a contract in non-terminal status (pending)
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'pending', $4, $5, $6, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester_pubkey)
+    .bind(&provider_pubkey)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Try to submit feedback for a pending contract
+    let input = SubmitFeedbackInput {
+        service_matched_description: true,
+        would_rent_again: true,
+    };
+    let result = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await;
+    
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Cannot submit feedback"));
+}
+
+#[tokio::test]
+async fn test_submit_feedback_duplicate() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a completed contract
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester_pubkey)
+    .bind(&provider_pubkey)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Submit feedback first time
+    let input = SubmitFeedbackInput {
+        service_matched_description: true,
+        would_rent_again: true,
+    };
+    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+
+    // Try to submit feedback again
+    let result = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await;
+    
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already submitted"));
+}
+
+#[tokio::test]
+async fn test_get_contract_feedback() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+    let requester_pubkey = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Create a completed contract
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester_pubkey)
+    .bind(&provider_pubkey)
+    .bind(payment_method)
+    .bind(stripe_payment_intent_id)
+    .bind(stripe_customer_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Initially no feedback
+    let feedback = db.get_contract_feedback(&contract_id).await.unwrap();
+    assert!(feedback.is_none());
+
+    // Submit feedback
+    let input = SubmitFeedbackInput {
+        service_matched_description: false,
+        would_rent_again: true,
+    };
+    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+
+    // Now should have feedback
+    let feedback = db.get_contract_feedback(&contract_id).await.unwrap().unwrap();
+    assert_eq!(feedback.contract_id, hex::encode(&contract_id));
+    assert!(!feedback.service_matched_description);
+    assert!(feedback.would_rent_again);
+}
+
+#[tokio::test]
+async fn test_get_provider_feedback_stats_empty() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+
+    let stats = db.get_provider_feedback_stats(&provider_pubkey).await.unwrap();
+    
+    assert_eq!(stats.total_responses, 0);
+    assert_eq!(stats.service_matched_yes, 0);
+    assert_eq!(stats.service_matched_no, 0);
+    assert_eq!(stats.would_rent_again_yes, 0);
+    assert_eq!(stats.would_rent_again_no, 0);
+    assert!((stats.service_match_rate_pct - 0.0).abs() < 0.01);
+    assert!((stats.would_rent_again_rate_pct - 0.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn test_get_provider_feedback_stats_aggregation() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![1u8; 32];
+
+    // Create provider profile
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+    )
+    .bind(&provider_pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Create 4 completed contracts with different feedback
+    for i in 0..4u8 {
+        let requester_pubkey = vec![10 + i; 32];
+        let contract_id = vec![20 + i; 32];
+
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester_pubkey)
+        .bind(&provider_pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Feedback: 3/4 service matched, 2/4 would rent again
+        let input = SubmitFeedbackInput {
+            service_matched_description: i != 3, // 3 yes, 1 no
+            would_rent_again: i < 2,             // 2 yes, 2 no
+        };
+        db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+    }
+
+    let stats = db.get_provider_feedback_stats(&provider_pubkey).await.unwrap();
+    
+    assert_eq!(stats.total_responses, 4);
+    assert_eq!(stats.service_matched_yes, 3);
+    assert_eq!(stats.service_matched_no, 1);
+    assert_eq!(stats.would_rent_again_yes, 2);
+    assert_eq!(stats.would_rent_again_no, 2);
+    assert!((stats.service_match_rate_pct - 75.0).abs() < 0.01);
+    assert!((stats.would_rent_again_rate_pct - 50.0).abs() < 0.01);
+}

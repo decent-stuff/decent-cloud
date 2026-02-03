@@ -40,9 +40,9 @@ Integrate with or scrape external sources for additional trust signals:
 - Automated health checks on provisioned services
 - Uptime monitoring and SLA compliance tracking
 
-### User Feedback System (Structured, Not Reviews)
-- Post-contract structured survey: "Did service match description?" Y/N
-- "Would you rent from this provider again?" Y/N
+### Future: Integrate Feedback into Trust Score
+- [x] **User Feedback System** - Implemented: POST/GET `/contracts/{id}/feedback`, GET `/providers/{pubkey}/feedback-stats`
+- [ ] **Trust score integration** - Optionally incorporate feedback percentages into trust score calculation
 
 ---
 

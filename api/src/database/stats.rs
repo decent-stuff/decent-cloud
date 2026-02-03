@@ -844,5 +844,209 @@ pub struct AccountSearchResult {
     pub offering_count: i64,
 }
 
+/// Contract feedback from renters (structured Y/N survey)
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct ContractFeedback {
+    /// Contract ID (hex-encoded)
+    pub contract_id: String,
+    /// Provider public key (hex-encoded)
+    pub provider_pubkey: String,
+    /// Did the service match its description?
+    pub service_matched_description: bool,
+    /// Would the renter rent from this provider again?
+    pub would_rent_again: bool,
+    /// When feedback was submitted (nanoseconds)
+    #[ts(type = "number")]
+    pub created_at_ns: i64,
+}
+
+/// Aggregated feedback stats for a provider
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct ProviderFeedbackStats {
+    /// Provider public key (hex-encoded)
+    pub provider_pubkey: String,
+    /// Total feedback responses received
+    #[ts(type = "number")]
+    pub total_responses: i64,
+    /// Count of "service matched description" = yes
+    #[ts(type = "number")]
+    pub service_matched_yes: i64,
+    /// Count of "service matched description" = no
+    #[ts(type = "number")]
+    pub service_matched_no: i64,
+    /// Count of "would rent again" = yes
+    #[ts(type = "number")]
+    pub would_rent_again_yes: i64,
+    /// Count of "would rent again" = no
+    #[ts(type = "number")]
+    pub would_rent_again_no: i64,
+    /// Percentage of "service matched" = yes (0-100)
+    pub service_match_rate_pct: f64,
+    /// Percentage of "would rent again" = yes (0-100)
+    pub would_rent_again_rate_pct: f64,
+}
+
+/// Input for submitting contract feedback
+#[derive(Debug, Clone, Deserialize, poem_openapi::Object)]
+pub struct SubmitFeedbackInput {
+    /// Did the service match its description?
+    pub service_matched_description: bool,
+    /// Would you rent from this provider again?
+    pub would_rent_again: bool,
+}
+
+impl Database {
+    /// Submit feedback for a completed contract.
+    /// Only the contract requester can submit feedback, and only once per contract.
+    /// Contract must be in a terminal state (completed/cancelled/terminated).
+    pub async fn submit_contract_feedback(
+        &self,
+        contract_id: &[u8],
+        requester_pubkey: &[u8],
+        input: &SubmitFeedbackInput,
+    ) -> Result<ContractFeedback> {
+        // Verify contract exists and requester is authorized
+        #[derive(sqlx::FromRow)]
+        struct ContractRow {
+            requester_pubkey: Vec<u8>,
+            provider_pubkey: Vec<u8>,
+            status: Option<String>,
+        }
+
+        let contract = sqlx::query_as::<_, ContractRow>(
+            r#"SELECT requester_pubkey, provider_pubkey, status FROM contract_sign_requests WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Verify the user is the contract requester
+        if contract.requester_pubkey != requester_pubkey {
+            anyhow::bail!("Only the contract requester can submit feedback");
+        }
+
+        // Verify contract is in a terminal state (feedback makes sense only for finished contracts)
+        let terminal_states = ["completed", "cancelled", "terminated", "expired"];
+        let status = contract.status.as_deref().unwrap_or("unknown");
+        if !terminal_states.contains(&status) {
+            anyhow::bail!(
+                "Cannot submit feedback for contract in '{}' status. Contract must be completed, cancelled, terminated, or expired.",
+                status
+            );
+        }
+
+        let now_ns = chrono::Utc::now()
+            .timestamp_nanos_opt()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get current timestamp"))?;
+
+        // Insert feedback (UNIQUE constraint on contract_id prevents duplicates)
+        sqlx::query(
+            r#"INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns)
+               VALUES ($1, $2, $3, $4, $5, $6)"#,
+        )
+        .bind(contract_id)
+        .bind(requester_pubkey)
+        .bind(&contract.provider_pubkey)
+        .bind(input.service_matched_description)
+        .bind(input.would_rent_again)
+        .bind(now_ns)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("unique") || e.to_string().contains("duplicate") {
+                anyhow::anyhow!("Feedback already submitted for this contract")
+            } else {
+                anyhow::anyhow!("Failed to submit feedback: {}", e)
+            }
+        })?;
+
+        Ok(ContractFeedback {
+            contract_id: hex::encode(contract_id),
+            provider_pubkey: hex::encode(&contract.provider_pubkey),
+            service_matched_description: input.service_matched_description,
+            would_rent_again: input.would_rent_again,
+            created_at_ns: now_ns,
+        })
+    }
+
+    /// Get feedback for a specific contract (if any)
+    pub async fn get_contract_feedback(&self, contract_id: &[u8]) -> Result<Option<ContractFeedback>> {
+        #[derive(sqlx::FromRow)]
+        struct FeedbackRow {
+            contract_id: Vec<u8>,
+            provider_pubkey: Vec<u8>,
+            service_matched_description: bool,
+            would_rent_again: bool,
+            created_at_ns: i64,
+        }
+
+        let row = sqlx::query_as::<_, FeedbackRow>(
+            r#"SELECT contract_id, provider_pubkey, service_matched_description, would_rent_again, created_at_ns
+               FROM contract_feedback WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| ContractFeedback {
+            contract_id: hex::encode(r.contract_id),
+            provider_pubkey: hex::encode(r.provider_pubkey),
+            service_matched_description: r.service_matched_description,
+            would_rent_again: r.would_rent_again,
+            created_at_ns: r.created_at_ns,
+        }))
+    }
+
+    /// Get aggregated feedback stats for a provider
+    pub async fn get_provider_feedback_stats(&self, provider_pubkey: &[u8]) -> Result<ProviderFeedbackStats> {
+        #[derive(sqlx::FromRow)]
+        struct StatsRow {
+            total_responses: i64,
+            service_matched_yes: i64,
+            would_rent_again_yes: i64,
+        }
+
+        let stats = sqlx::query_as::<_, StatsRow>(
+            r#"SELECT
+                COUNT(*)::BIGINT as total_responses,
+                COUNT(*) FILTER (WHERE service_matched_description = true)::BIGINT as service_matched_yes,
+                COUNT(*) FILTER (WHERE would_rent_again = true)::BIGINT as would_rent_again_yes
+               FROM contract_feedback WHERE provider_pubkey = $1"#,
+        )
+        .bind(provider_pubkey)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let service_matched_no = stats.total_responses - stats.service_matched_yes;
+        let would_rent_again_no = stats.total_responses - stats.would_rent_again_yes;
+
+        let service_match_rate_pct = if stats.total_responses > 0 {
+            (stats.service_matched_yes as f64 / stats.total_responses as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let would_rent_again_rate_pct = if stats.total_responses > 0 {
+            (stats.would_rent_again_yes as f64 / stats.total_responses as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(ProviderFeedbackStats {
+            provider_pubkey: hex::encode(provider_pubkey),
+            total_responses: stats.total_responses,
+            service_matched_yes: stats.service_matched_yes,
+            service_matched_no,
+            would_rent_again_yes: stats.would_rent_again_yes,
+            would_rent_again_no,
+            service_match_rate_pct,
+            would_rent_again_rate_pct,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests;

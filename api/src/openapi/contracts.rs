@@ -1039,4 +1039,116 @@ impl ContractsApi {
             }),
         }
     }
+
+    /// Submit feedback for a contract
+    ///
+    /// Submit structured Y/N feedback after a contract is completed/cancelled.
+    /// Only the contract requester (renter) can submit feedback, and only once per contract.
+    #[oai(
+        path = "/contracts/:id/feedback",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn submit_feedback(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<crate::database::stats::SubmitFeedbackInput>,
+    ) -> Json<ApiResponse<crate::database::stats::ContractFeedback>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        match db
+            .submit_contract_feedback(&contract_id, &auth.pubkey, &req.0)
+            .await
+        {
+            Ok(feedback) => Json(ApiResponse {
+                success: true,
+                data: Some(feedback),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get feedback for a contract
+    ///
+    /// Returns the feedback submitted for a specific contract, if any.
+    /// User must be the requester or provider.
+    #[oai(
+        path = "/contracts/:id/feedback",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn get_feedback(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<Option<crate::database::stats::ContractFeedback>>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".to_string()),
+            });
+        }
+
+        match db.get_contract_feedback(&contract_id).await {
+            Ok(feedback) => Json(ApiResponse {
+                success: true,
+                data: Some(feedback),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
 }

@@ -251,6 +251,46 @@ impl ProvidersApi {
         }
     }
 
+    /// Get provider feedback stats
+    ///
+    /// Returns aggregated user feedback statistics for a provider.
+    /// Shows the percentage of renters who said the service matched its description
+    /// and would rent from this provider again.
+    #[oai(
+        path = "/providers/:pubkey/feedback-stats",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_feedback_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<crate::database::stats::ProviderFeedbackStats>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.get_provider_feedback_stats(&pubkey_bytes).await {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get provider health summary
     ///
     /// Returns uptime metrics and health check statistics for a provider.
