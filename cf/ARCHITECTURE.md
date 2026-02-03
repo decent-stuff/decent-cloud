@@ -38,7 +38,6 @@ Validator (optional)
 - **Port**: 8080 (internal), 59001 (host dev) 59101 (host prod)
 - **Health**: `/api/v1/health` endpoint
 - **Deployment**: Docker container + Cloudflare Tunnel
-- **Endpoints**: `/api/v1/canister/*` - ICP canister proxy endpoints
 - **Services**:
   - `api-serve`: Serves HTTP API
   - `api-sync`: Syncs blockchain data periodically
@@ -95,12 +94,6 @@ The tunnel must be configured in Cloudflare dashboard with two ingress rules:
      - Service: `http://api:8080`
    - This will make API accessible at https://api.decent-cloud.org
 
-2. **Implement Full Canister Proxy Logic** (in `api/src/main.rs`)
-   - Add ICP agent integration
-   - Implement actual canister method calls
-   - Add proper error handling and retries
-   - Match all endpoints from `website/lib/cf-service.ts`
-
 ## Testing
 
 ### Website
@@ -121,11 +114,6 @@ curl http://localhost:59101/api/v1/health
 
 # Production (after tunnel configured)
 curl https://api.decent-cloud.org/api/v1/health
-
-# Test canister proxy endpoint
-curl -X POST http://localhost:59101/api/v1/canister/test_method \
-  -H "Content-Type: application/json" \
-  -d '{"args": []}'
 ```
 
 ## Notes

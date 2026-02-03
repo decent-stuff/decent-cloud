@@ -4,17 +4,6 @@
 
 **Goal:** Enable automated E2E testing of the full VM provisioning flow without the website frontend, for CI/CD pipelines and AI agent-assisted testing.
 
-### Completed ✓
-- Identity management (generate, import, list, show, delete) with storage at `~/.dc-test-keys/`
-- Ed25519ph signing client matching API authentication requirements
-- Account operations (create, get, update-email, add-ssh-key, list-ssh-keys)
-- Contract operations (list-offerings, create, get, wait, list, cancel)
-- Offering/Provider listing commands
-- Health checks for all external services (API, Stripe, Telegram, Cloudflare, MailChannels)
-- Gateway connectivity testing structure (ssh, tcp, contract)
-- E2E test scaffolding (provision, lifecycle, all)
-- `--skip-payment` flag with `set_payment_status_for_testing()` DB function
-
 ### Remaining Work
 - [ ] **Test contract create/wait/cancel** - Requires running provider with dc-agent
 - [ ] **Test gateway commands** - Requires active contracts with assigned gateways
@@ -81,11 +70,6 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 ## Rental State Machine
 
-### Completed ✓
-- ✅ **ContractStatus enum** - Centralized state definitions with validation (`common/src/contract_status.rs`)
-- ✅ **State transition validation** - `can_transition_to()` method enforces valid transitions, invalid transitions fail fast with clear errors
-- ✅ **Integer-only payment calculation** - Removed float arithmetic, now uses i128 for precision
-
 ### Remaining (Low Priority)
 - [ ] **Contract archival** - Old contracts stay in DB indefinitely
 
@@ -124,25 +108,6 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
 
-#### 12. Half-Implemented Canister Proxy
-
-**Issue:** ICP canister method proxy returns stub error.
-
-**Location:** `api/src/main.rs:214-227`
-
-### Fixed Issues
-
-- ✅ Issue 1: Duplicate API Response Types - Moved to `dcc-common` crate
-- ✅ Issue 2: Chatwoot Client Error Detail Loss - Proper error context added
-- ✅ Issue 3: Hex Decoding Without Validation - Match error handling added
-- ✅ Issue 4: Commented-Out ICRC3 Modules - Dead code removed
-- ✅ Issue 5: Hardcoded Localhost URLs - Doctor check + startup warning added
-- ✅ Issue 8: Geographic Region Mapping Duplicate - Moved to `dcc-common`
-- ✅ Issue 9: CLI Commands with `todo!()` Stubs - Non-functional commands removed
-- ✅ Issue 11: Hardcoded Secrets - Reviewed, not an issue
-- ✅ Issue 13: Missing `api-server doctor` Checks - All service checks added
-- ✅ Issue 14: Manual Setup Steps - Added `api-server setup stripe-webhooks` and `api-server setup dkim` commands
-
 ---
 
 ## Nice-to-Have Improvements
@@ -152,5 +117,3 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 **Priority:** LOW
 
 Add `GET /accounts/by-username/{username}` endpoint for cleaner URLs.
-
----
