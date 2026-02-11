@@ -197,7 +197,7 @@ fn test_provider_registration_and_check_in() {
     // prov_past now has 50 * 100 = 5000 tokens
     let amount: TokenAmountE9s = 5000u32 as TokenAmountE9s * DC_TOKEN_DECIMALS_DIV;
     assert_eq!(
-        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().unwrap().into()),
         amount
     );
 
@@ -205,7 +205,7 @@ fn test_provider_registration_and_check_in() {
     let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account oklaa-ptl4i-uqysq-lxgo4-ya4ki-7dt3a-53rry-f7s47-ovxl4-r3rnm-5qe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
     assert_eq!(
-        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().unwrap().into()),
         0u64
     );
 
@@ -217,19 +217,19 @@ fn test_provider_registration_and_check_in() {
     assert_eq!(test_get_id_reputation(&ctx, &prov1), 0);
     assert_eq!(test_get_id_reputation(&ctx, &prov2), 0);
 
-    let prov_past_acct = prov_past.as_icrc_compatible_account().into();
-    let prov2_acct = prov2.as_icrc_compatible_account().into();
+    let prov_past_acct = prov_past.as_icrc_compatible_account().unwrap().into();
+    let prov2_acct = prov2.as_icrc_compatible_account().unwrap().into();
     let amount_send = 10 * DC_TOKEN_DECIMALS_DIV;
     let response = ctx.transfer_funds(&prov_past_acct, &prov2_acct, amount_send);
 
     assert!(response.is_ok());
 
     assert_eq!(
-        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov_past.as_icrc_compatible_account().unwrap().into()),
         amount - amount_send - DC_TOKEN_TRANSFER_FEE_E9S
     );
     assert_eq!(
-        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().unwrap().into()),
         amount_send
     );
 
@@ -237,7 +237,7 @@ fn test_provider_registration_and_check_in() {
     let (prov1, reg1) = test_provider_register(&ctx, b"prov1", 0);
     assert_eq!(reg1.unwrap_err(), "InsufficientFunds: account oklaa-ptl4i-uqysq-lxgo4-ya4ki-7dt3a-53rry-f7s47-ovxl4-r3rnm-5qe has 0 e9s (0.0 DC tokens) and requested 500000000 e9s (0.500000000 DC tokens)".to_string());
     assert_eq!(
-        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().unwrap().into()),
         0u64
     );
 
@@ -248,18 +248,18 @@ fn test_provider_registration_and_check_in() {
         "Registration complete! Thank you. You have been charged 0.500000000 DC tokens".to_string()
     );
     assert_eq!(
-        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().unwrap().into()),
         9500000000u64
     );
 
     ctx.upgrade().expect("Canister upgrade failed");
     assert_eq!(
-        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().unwrap().into()),
         9500000000u64
     );
 
     assert_eq!(
-        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().unwrap().into()),
         0u64
     );
 
@@ -274,18 +274,18 @@ fn test_provider_registration_and_check_in() {
     // Now prov2 got a reward of 50 tokens distributed to it
     // The balance is 50 (reward) + 10 (prov_past transfer) - 0.5 (reg fee) - 0.5 (check in) = 59000000000 e9s
     assert_eq!(
-        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().unwrap().into()),
         59000000000u64
     );
 
     ctx.upgrade().expect("Canister upgrade failed");
     assert_eq!(
-        ctx.get_account_balance(&prov2.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov2.as_icrc_compatible_account().unwrap().into()),
         59000000000u64
     );
 
     assert_eq!(
-        ctx.get_account_balance(&prov1.as_icrc_compatible_account().into()),
+        ctx.get_account_balance(&prov1.as_icrc_compatible_account().unwrap().into()),
         0u64
     );
 

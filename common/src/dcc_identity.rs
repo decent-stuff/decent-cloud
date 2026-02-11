@@ -24,12 +24,9 @@ use crate::ED25519_SIGN_CONTEXT;
 const ED25519_OBJECT_IDENTIFIER: [u8; 3] = [43, 101, 112];
 const ED25519_PEM_SIGNING_KEY_TAG: &str = "PRIVATE KEY";
 
-#[allow(clippy::large_enum_variant)]
 #[repr(u8)]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum DccIdentity {
-    #[default]
-    Invalid,
     Ed25519(Option<SigningKey>, VerifyingKey),
 }
 
@@ -66,7 +63,7 @@ impl DccIdentity {
     }
 
     pub fn new_from_seed(seed: &[u8]) -> Result<Self, CryptoError> {
-        let signing_key = Self::generate_ed25519_signing_key_from_seed(seed);
+        let signing_key = Self::generate_ed25519_signing_key_from_seed(seed)?;
         DccIdentity::new_signing(&signing_key)
     }
 
@@ -80,98 +77,86 @@ impl DccIdentity {
     }
 
     pub fn verifying_key(&self) -> &VerifyingKey {
-        match self {
-            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
-            DccIdentity::Ed25519(_, verifying_key) => verifying_key,
-        }
+        let DccIdentity::Ed25519(_, vk) = self;
+        vk
     }
 
-    pub fn to_ic_principal(&self) -> candid::Principal {
-        match self {
-            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
-            DccIdentity::Ed25519(_, verifying_key) => {
-                let der = verifying_key
-                    .to_public_key_der()
-                    .expect("failed to encode public key to der");
-                candid::Principal::self_authenticating(der.as_bytes())
-            }
-        }
+    pub fn to_ic_principal(&self) -> Result<candid::Principal, CryptoError> {
+        let DccIdentity::Ed25519(_, vk) = self;
+        let der = vk.to_public_key_der()?;
+        Ok(candid::Principal::self_authenticating(der.as_bytes()))
     }
 
-    pub fn as_icrc_compatible_account(&self) -> IcrcCompatibleAccount {
-        IcrcCompatibleAccount::new(self.to_ic_principal(), None)
+    pub fn as_icrc_compatible_account(&self) -> Result<IcrcCompatibleAccount, CryptoError> {
+        Ok(IcrcCompatibleAccount::new(self.to_ic_principal()?, None))
     }
 
     /// Returns the public key as bytes.
     /// This is more universal than the IC principals, since an IC principal can be derived from the public key.
     pub fn to_bytes_verifying(&self) -> Vec<u8> {
-        match self {
-            DccIdentity::Invalid => vec![],
-            DccIdentity::Ed25519(_, verifying_key) => verifying_key.to_bytes().to_vec(),
-        }
+        let DccIdentity::Ed25519(_, vk) = self;
+        vk.to_bytes().to_vec()
     }
 
     /// Returns the public key in PEM format. This is more universal than the IC principals.
-    pub fn as_uid_string(&self) -> String {
-        self.verifying_key_as_pem_one_line().to_owned()
+    pub fn as_uid_string(&self) -> Result<String, CryptoError> {
+        self.verifying_key_as_pem_one_line()
     }
 
-    pub fn is_minting_account(&self) -> bool {
-        self.to_ic_principal() == MINTING_ACCOUNT_PRINCIPAL
+    pub fn is_minting_account(&self) -> Result<bool, CryptoError> {
+        Ok(self.to_ic_principal()? == MINTING_ACCOUNT_PRINCIPAL)
     }
 
-    pub fn to_der_signing(&self) -> Vec<u8> {
-        match self {
-            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
-            DccIdentity::Ed25519(Some(secret_key), _verifying_key) => {
-                // According to https://tools.ietf.org/html/rfc8410#section-10.3
-                let mut key_bytes = vec![];
-                let mut der = derp::Der::new(&mut key_bytes);
-                der.octet_string(&secret_key.to_bytes())
-                    .expect("failed to serialize the signing key");
+    pub fn to_der_signing(&self) -> Result<Vec<u8>, CryptoError> {
+        let DccIdentity::Ed25519(sk, _) = self;
+        let secret_key = sk
+            .as_ref()
+            .ok_or_else(|| CryptoError::Generic("no signing key available".to_string()))?;
+        // According to https://tools.ietf.org/html/rfc8410#section-10.3
+        let map_derp = |e: derp::Error| CryptoError::Generic(format!("DER encoding failed: {e}"));
+        let mut key_bytes = vec![];
+        let mut der = derp::Der::new(&mut key_bytes);
+        der.octet_string(&secret_key.to_bytes()).map_err(map_derp)?;
 
-                let mut encoded = vec![];
-                der = derp::Der::new(&mut encoded);
-                der.sequence(|der| {
-                    der.integer(&[0])?;
-                    der.sequence(|der| der.oid(&ED25519_OBJECT_IDENTIFIER))?;
-                    der.octet_string(&key_bytes)
-                })
-                .expect("failed to prepare der formatted signing key");
-                encoded
-            }
-            DccIdentity::Ed25519(None, _verifying_key) => {
-                panic!("Invalid DccIdentity: no signing key")
-            }
-        }
+        let mut encoded = vec![];
+        der = derp::Der::new(&mut encoded);
+        der.sequence(|der| {
+            der.integer(&[0])?;
+            der.sequence(|der| der.oid(&ED25519_OBJECT_IDENTIFIER))?;
+            der.octet_string(&key_bytes)
+        })
+        .map_err(map_derp)?;
+        Ok(encoded)
     }
 
-    pub fn generate_ed25519_signing_key_from_seed(seed: &[u8]) -> SigningKey {
-        let mut mac = Hmac::<Sha512>::new_from_slice(b"ed25519 seed").unwrap();
+    pub fn generate_ed25519_signing_key_from_seed(
+        seed: &[u8],
+    ) -> Result<SigningKey, CryptoError> {
+        let mut mac = Hmac::<Sha512>::new_from_slice(b"ed25519 seed")
+            .map_err(|e| CryptoError::Generic(format!("HMAC init failed: {e}")))?;
         mac.update(seed);
         let result = mac.finalize();
         let key_material = result.into_bytes();
 
         if key_material.len() < 32 {
-            panic!(
-                "Key material should be at least 32 bytes, got {}",
+            return Err(CryptoError::Generic(format!(
+                "key material too short: {} < 32 bytes",
                 key_material.len()
-            );
+            )));
         }
         let mut seed_bytes = [0u8; 32];
         seed_bytes.copy_from_slice(&key_material[0..32]);
-        SigningKey::from_bytes(&seed_bytes)
+        Ok(SigningKey::from_bytes(&seed_bytes))
     }
 
     pub fn sign(&self, data: &[u8]) -> Result<Signature, CryptoError> {
-        match self {
-            DccIdentity::Ed25519(Some(signing_key), _) => {
-                let mut prehashed = Sha512::new();
-                prehashed.update(data);
-                Ok(signing_key.sign_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT))?)
-            }
-            _ => panic!("Invalid type of DccIdentity"),
-        }
+        let DccIdentity::Ed25519(sk, _) = self;
+        let signing_key = sk
+            .as_ref()
+            .ok_or_else(|| CryptoError::Generic("no signing key available".to_string()))?;
+        let mut prehashed = Sha512::new();
+        prehashed.update(data);
+        Ok(signing_key.sign_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT))?)
     }
 
     pub fn verify_bytes(&self, data: &[u8], signature_bytes: &[u8]) -> Result<(), CryptoError> {
@@ -183,64 +168,54 @@ impl DccIdentity {
     }
 
     pub fn verify(&self, data: &[u8], signature: &Signature) -> Result<(), CryptoError> {
-        match self {
-            DccIdentity::Invalid => panic!("Invalid DccIdentity"),
-            DccIdentity::Ed25519(_, verifying_key) => {
-                let mut prehashed = Sha512::new();
-                prehashed.update(data);
-                Ok(verifying_key.verify_prehashed(
-                    prehashed,
-                    Some(ED25519_SIGN_CONTEXT),
-                    signature,
-                )?)
-            }
-        }
+        let DccIdentity::Ed25519(_, vk) = self;
+        let mut prehashed = Sha512::new();
+        prehashed.update(data);
+        Ok(vk.verify_prehashed(prehashed, Some(ED25519_SIGN_CONTEXT), signature)?)
     }
 
-    pub fn verifying_key_as_pem(&self) -> String {
-        match self {
-            DccIdentity::Invalid => "".to_string(),
-            DccIdentity::Ed25519(_, verifying_key) => verifying_key
-                .to_public_key_pem(LineEnding::LF)
-                .expect("pem encode failed"),
-        }
+    pub fn verifying_key_as_pem(&self) -> Result<String, CryptoError> {
+        let DccIdentity::Ed25519(_, vk) = self;
+        Ok(vk.to_public_key_pem(LineEnding::LF)?)
     }
 
-    pub fn verifying_key_as_pem_one_line(&self) -> String {
-        self.verifying_key_as_pem()
+    pub fn verifying_key_as_pem_one_line(&self) -> Result<String, CryptoError> {
+        let pem = self.verifying_key_as_pem()?;
+        let body = pem
             .trim()
             .strip_prefix("-----BEGIN PUBLIC KEY-----")
-            .expect("Strip prefix strip failed")
+            .ok_or_else(|| CryptoError::Generic("PEM missing BEGIN header".to_string()))?
             .strip_suffix("-----END PUBLIC KEY-----")
-            .expect("Strip suffix strip failed")
+            .ok_or_else(|| CryptoError::Generic("PEM missing END header".to_string()))?
             .trim()
-            .replace('\n', "")
+            .replace('\n', "");
+        Ok(body)
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn write_verifying_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
-        let pem_string = self.verifying_key_as_pem();
-
-        fs_err::create_dir_all(file_path.parent().expect("file_path has no parent"))?;
+        let pem_string = self.verifying_key_as_pem()?;
+        let parent = file_path.parent().ok_or_else(|| {
+            CryptoError::Generic(format!("file path has no parent: {}", file_path.display()))
+        })?;
+        fs_err::create_dir_all(parent)?;
         let mut file = fs_err::File::create(file_path)?;
         file.write_all(pem_string.as_bytes())?;
-
         Ok(())
     }
 
-    pub fn signing_key_as_ic_agent_pem_string(&self) -> Option<Zeroizing<String>> {
-        match self {
-            DccIdentity::Ed25519(Some(signing_key), _) => Some(
-                signing_key
-                    .to_pkcs8_pem(LineEnding::LF)
-                    .expect("pem encode failed"),
-            ),
-            _ => None,
-        }
+    pub fn signing_key_as_ic_agent_pem_string(
+        &self,
+    ) -> Result<Zeroizing<String>, CryptoError> {
+        let DccIdentity::Ed25519(sk, _) = self;
+        let signing_key = sk
+            .as_ref()
+            .ok_or_else(|| CryptoError::Generic("no signing key available".to_string()))?;
+        Ok(signing_key.to_pkcs8_pem(LineEnding::LF)?)
     }
 
     pub fn signing_key_as_pem_string(&self) -> Result<String, CryptoError> {
-        let contents = self.to_der_signing();
+        let contents = self.to_der_signing()?;
         let pem_obj = pem::Pem::new(ED25519_PEM_SIGNING_KEY_TAG, contents);
         Ok(pem::encode(&pem_obj))
     }
@@ -248,25 +223,25 @@ impl DccIdentity {
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn write_signing_key_to_pem_file(&self, file_path: &PathBuf) -> Result<(), CryptoError> {
         let pem_string = self.signing_key_as_pem_string()?;
-
-        fs_err::create_dir_all(file_path.parent().expect("file_path has no parent"))?;
+        let parent = file_path.parent().ok_or_else(|| {
+            CryptoError::Generic(format!("file path has no parent: {}", file_path.display()))
+        })?;
+        fs_err::create_dir_all(parent)?;
         let mut file = fs_err::File::create(file_path)?;
         file.write_all(pem_string.as_bytes())?;
-
         Ok(())
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-    pub fn identities_dir() -> PathBuf {
-        dirs::home_dir()
-            .expect("Failed to find home directory")
-            .join(".dcc")
-            .join("identity")
+    pub fn identities_dir() -> Result<PathBuf, CryptoError> {
+        let home = dirs::home_dir()
+            .ok_or_else(|| CryptoError::Generic("home directory not found".to_string()))?;
+        Ok(home.join(".dcc").join("identity"))
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn save_to_dir(&self, identity: &str) -> Result<(), CryptoError> {
-        let identity_dir = Self::identities_dir().join(identity);
+        let identity_dir = Self::identities_dir()?.join(identity);
 
         let public_pem_file_path = identity_dir.join("public.pem");
         if public_pem_file_path.exists() {
@@ -278,12 +253,9 @@ impl DccIdentity {
         }
         self.write_verifying_key_to_pem_file(&public_pem_file_path)?;
 
-        match self {
-            DccIdentity::Invalid => {}
-            DccIdentity::Ed25519(Some(_), _) => {
-                self.write_signing_key_to_pem_file(&identity_dir.join("private.pem"))?;
-            }
-            DccIdentity::Ed25519(None, _) => {}
+        let DccIdentity::Ed25519(sk, _) = self;
+        if sk.is_some() {
+            self.write_signing_key_to_pem_file(&identity_dir.join("private.pem"))?;
         }
 
         Ok(())
@@ -345,7 +317,7 @@ impl DccIdentity {
         let identity_dir = if identity_dir.is_absolute() {
             identity_dir.to_path_buf()
         } else {
-            Self::identities_dir().join(identity_dir)
+            Self::identities_dir()?.join(identity_dir)
         };
         let private_pem_file_path = identity_dir.join("private.pem");
         if private_pem_file_path.exists() {
@@ -361,24 +333,24 @@ impl DccIdentity {
     }
 
     pub fn display_type(&self) -> &str {
-        match self {
-            DccIdentity::Invalid => "[Invalid DccIdentity]",
-            DccIdentity::Ed25519(None, _) => "[Ed25519 verifying]",
-            DccIdentity::Ed25519(Some(_), _) => "[Ed25519 signing]",
+        let DccIdentity::Ed25519(sk, _) = self;
+        match sk {
+            Some(_) => "[Ed25519 signing]",
+            None => "[Ed25519 verifying]",
         }
     }
 
     pub fn display_verifying_key_as_ic_identity(&self) -> String {
-        match self {
-            DccIdentity::Invalid => "".to_string(),
-            DccIdentity::Ed25519(_, _) => self.to_ic_principal().to_string(),
+        match self.to_ic_principal() {
+            Ok(principal) => principal.to_string(),
+            Err(e) => format!("[crypto error: {e}]"),
         }
     }
 
     pub fn display_verifying_key_as_pem_one_line(&self) -> String {
-        match self {
-            DccIdentity::Invalid => "".to_string(),
-            DccIdentity::Ed25519(_, _) => self.verifying_key_as_pem_one_line(),
+        match self.verifying_key_as_pem_one_line() {
+            Ok(pem) => pem,
+            Err(e) => format!("[crypto error: {e}]"),
         }
     }
 
@@ -483,80 +455,68 @@ impl std::fmt::Display for DccIdentity {
 }
 
 pub fn slice_to_32_bytes_array(slice: &[u8]) -> Result<&[u8; 32], String> {
-    if slice.len() == 32 {
-        Ok(slice.try_into().expect("slice with incorrect length"))
-    } else {
-        Err(format!(
-            "slice length is {} instead of 32 bytes",
-            slice.len()
-        ))
-    }
+    slice
+        .try_into()
+        .map_err(|_| format!("slice length is {} instead of 32 bytes", slice.len()))
 }
 
 pub fn slice_to_64_bytes_array(slice: &[u8]) -> Result<&[u8; 64], String> {
-    if slice.len() == 64 {
-        Ok(slice.try_into().expect("slice with incorrect length"))
-    } else {
-        Err(format!(
-            "slice length is {} instead of 64 bytes",
-            slice.len()
-        ))
-    }
+    slice
+        .try_into()
+        .map_err(|_| format!("slice length is {} instead of 64 bytes", slice.len()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn test_signing_identity() -> DccIdentity {
+        let seed = [0u8; 32];
+        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed).unwrap();
+        DccIdentity::new_signing(&signing_key).unwrap()
+    }
+
+    fn test_verifying_identity() -> DccIdentity {
+        let seed = [0u8; 32];
+        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed).unwrap();
+        DccIdentity::new_verifying(&signing_key.verifying_key()).unwrap()
+    }
+
     #[test]
     fn test_new_signing() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        match dcc_identity {
-            DccIdentity::Ed25519(Some(_), _) => {}
-            _ => panic!("Invalid type of DccIdentity"),
-        }
+        let id = test_signing_identity();
+        let DccIdentity::Ed25519(sk, _) = &id;
+        assert!(sk.is_some());
     }
 
     #[test]
     fn test_new_verifying() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let verifying_key = signing_key.verifying_key();
-        let dcc_identity = DccIdentity::new_verifying(&verifying_key).unwrap();
-        match dcc_identity {
-            DccIdentity::Ed25519(None, _) => {}
-            _ => panic!("Invalid type of DccIdentity"),
-        }
+        let id = test_verifying_identity();
+        let DccIdentity::Ed25519(sk, _) = &id;
+        assert!(sk.is_none());
     }
 
     #[test]
     fn test_new_from_seed() {
-        let seed = [0u8; 32];
-        let dcc_identity = DccIdentity::new_from_seed(&seed).unwrap();
-        match dcc_identity {
-            DccIdentity::Ed25519(Some(_), _) => {}
-            _ => panic!("Invalid type of DccIdentity"),
-        }
+        let dcc_identity = DccIdentity::new_from_seed(&[0u8; 32]).unwrap();
+        let DccIdentity::Ed25519(sk, _) = &dcc_identity;
+        assert!(sk.is_some());
     }
 
     #[test]
     fn test_new_verifying_from_bytes() {
         let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
+        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed).unwrap();
         let verifying_key_bytes = signing_key.verifying_key().to_bytes();
-        let dcc_identity = DccIdentity::new_verifying_from_bytes(&verifying_key_bytes).unwrap();
-        match dcc_identity {
-            DccIdentity::Ed25519(None, _) => {}
-            _ => panic!("Invalid type of DccIdentity"),
-        }
+        let id = DccIdentity::new_verifying_from_bytes(&verifying_key_bytes).unwrap();
+        let DccIdentity::Ed25519(sk, _) = &id;
+        assert!(sk.is_none());
     }
 
     #[test]
     fn test_verifying_key() {
         let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
+        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed).unwrap();
         let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
         assert_eq!(
             dcc_identity.verifying_key().to_bytes(),
@@ -566,68 +526,90 @@ mod tests {
 
     #[test]
     fn test_to_ic_principal() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let principal = dcc_identity.to_ic_principal();
+        let id = test_signing_identity();
+        let principal = id.to_ic_principal().unwrap();
         assert!(!principal.to_text().is_empty());
     }
 
     #[test]
     fn test_to_account() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
+        let id = test_signing_identity();
         assert_eq!(
-            dcc_identity.as_icrc_compatible_account().owner.to_text(),
+            id.as_icrc_compatible_account().unwrap().owner.to_text(),
             "tuke6-qjtdo-jtp67-maudl-vlprb-szzw2-fvlmx-a5i3v-pqqbt-tmn3q-eae"
         );
     }
 
     #[test]
     fn test_to_bytes_verifying() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let verifying_bytes = dcc_identity.to_bytes_verifying();
-        assert_eq!(verifying_bytes.len(), 32);
+        let id = test_signing_identity();
+        assert_eq!(id.to_bytes_verifying().len(), 32);
     }
 
     #[test]
     fn test_sign_and_verify() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-
+        let id = test_signing_identity();
         let message: &[u8] = b"Test Message";
-        let signature = dcc_identity.sign(message).unwrap();
-        assert!(dcc_identity.verify(message, &signature).is_ok());
+        let signature = id.sign(message).unwrap();
+        assert!(id.verify(message, &signature).is_ok());
+    }
+
+    #[test]
+    fn test_sign_fails_without_signing_key() {
+        let id = test_verifying_identity();
+        let result = id.sign(b"data");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no signing key"));
+    }
+
+    #[test]
+    fn test_to_der_signing_fails_without_signing_key() {
+        let id = test_verifying_identity();
+        let result = id.to_der_signing();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no signing key"));
+    }
+
+    #[test]
+    fn test_signing_key_as_ic_agent_pem_fails_without_signing_key() {
+        let id = test_verifying_identity();
+        let result = id.signing_key_as_ic_agent_pem_string();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("no signing key"));
     }
 
     #[test]
     fn test_verifying_key_as_pem() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let pem = dcc_identity.verifying_key_as_pem();
+        let id = test_signing_identity();
+        let pem = id.verifying_key_as_pem().unwrap();
         assert!(pem.starts_with("-----BEGIN PUBLIC KEY-----"));
     }
 
     #[test]
     fn test_verifying_key_as_pem_one_line() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let pem_one_line = dcc_identity.verifying_key_as_pem_one_line();
+        let id = test_signing_identity();
+        let pem_one_line = id.verifying_key_as_pem_one_line().unwrap();
         assert!(!pem_one_line.contains('\n'));
     }
 
     #[test]
     fn test_signing_key_as_pem_string() {
-        let seed = [0u8; 32];
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(&seed);
-        let dcc_identity = DccIdentity::new_signing(&signing_key).unwrap();
-        let pem_string = dcc_identity.signing_key_as_pem_string();
+        let id = test_signing_identity();
+        let pem_string = id.signing_key_as_pem_string();
         assert!(pem_string.is_ok());
+    }
+
+    #[test]
+    fn test_slice_to_32_bytes_wrong_length() {
+        assert!(slice_to_32_bytes_array(&[0u8; 31]).is_err());
+        assert!(slice_to_32_bytes_array(&[0u8; 33]).is_err());
+        assert!(slice_to_32_bytes_array(&[0u8; 32]).is_ok());
+    }
+
+    #[test]
+    fn test_slice_to_64_bytes_wrong_length() {
+        assert!(slice_to_64_bytes_array(&[0u8; 63]).is_err());
+        assert!(slice_to_64_bytes_array(&[0u8; 65]).is_err());
+        assert!(slice_to_64_bytes_array(&[0u8; 64]).is_ok());
     }
 }

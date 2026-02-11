@@ -453,11 +453,11 @@ pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
             .iter(Some(LABEL_PROV_REGISTER))
             .map(|entry| {
                 let provider = String::from_utf8_lossy(entry.key());
-                let acct = get_account_from_pubkey(entry.value());
+                let acct = get_account_from_pubkey(entry.value())?;
                 let balance = account_balance_get(&acct);
-                format!("{} ==> {} (acct balance: {})", provider, acct, balance)
+                Ok(format!("{} ==> {} (acct balance: {})", provider, acct, balance))
             })
-            .collect::<Vec<String>>();
+            .collect::<Result<Vec<String>, String>>()?;
         Ok(provider_vec)
     })
 }

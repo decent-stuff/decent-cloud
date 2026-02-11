@@ -138,10 +138,12 @@ pub fn nat_to_balance(nat: &Nat) -> TokenAmountE9s {
         .unwrap_or(0) as TokenAmountE9s
 }
 
-pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> IcrcCompatibleAccount {
+pub fn get_account_from_pubkey(pubkey_bytes: &[u8]) -> Result<IcrcCompatibleAccount, String> {
     let dcc_ident = DccIdentity::new_verifying_from_bytes(pubkey_bytes)
-        .unwrap_or_else(|_| panic!("Failed to parse pubkey {}", hex::encode(pubkey_bytes)));
-    dcc_ident.as_icrc_compatible_account()
+        .map_err(|e| format!("Failed to parse pubkey {}: {e}", hex::encode(pubkey_bytes)))?;
+    dcc_ident
+        .as_icrc_compatible_account()
+        .map_err(|e| e.to_string())
 }
 
 pub mod serialize_to_string_or_base64 {

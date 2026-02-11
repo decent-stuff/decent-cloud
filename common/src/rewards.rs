@@ -195,7 +195,12 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         })?;
 
     for provider in eligible_providers {
-        let provider_acct = get_account_from_pubkey(provider.key());
+        let provider_acct = get_account_from_pubkey(provider.key()).map_err(|e| {
+            TransferError::GenericError {
+                error_code: 10087u64.into(),
+                message: e,
+            }
+        })?;
 
         let balance_to_after =
             account_balance_get(&provider_acct) + token_rewards_per_provider as TokenAmountE9s;
@@ -249,14 +254,15 @@ pub fn do_provider_check_in(
     // Verify the signature
     dcc_id.verify_bytes(&ledger.get_latest_block_hash(), &nonce_signature)?;
 
+    let principal = dcc_id.to_ic_principal()?;
     let fees = if ledger.get_blocks_count() > 0 {
         let amount = check_in_fee_e9s();
         info!(
             "Charging {} tokens {} for the check in",
             amount_as_string(amount as TokenAmountE9s),
-            dcc_id.to_ic_principal()
+            principal
         );
-        let dcc_id_text = dcc_id.to_ic_principal().to_text();
+        let dcc_id_text = principal.to_text();
         let dcc_id_short = dcc_id_text
             .split_once('-')
             .map(|(first, _)| first)
@@ -270,7 +276,7 @@ pub fn do_provider_check_in(
         fee_memo.truncate(TRANSFER_MEMO_BYTES_MAX);
         charge_fees_to_account_no_bump_reputation(
             ledger,
-            &dcc_id.as_icrc_compatible_account(),
+            &dcc_id.as_icrc_compatible_account()?,
             amount as TokenAmountE9s,
             &fee_memo,
         )?;

@@ -270,7 +270,7 @@ pub fn test_provider_register(
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
         ctx.mint_tokens_for_test(
-            &dcc_identity.as_icrc_compatible_account().into(),
+            &dcc_identity.as_icrc_compatible_account().unwrap().into(),
             initial_funds,
         );
     }
@@ -279,7 +279,7 @@ pub fn test_provider_register(
     let result = update_check_and_decode!(
         ctx.pic,
         ctx.canister_id,
-        dcc_identity.to_ic_principal(),
+        dcc_identity.to_ic_principal().unwrap(),
         "provider_register",
         Encode!(&pubkey_bytes, &pubkey_signature.to_bytes()).unwrap(),
         Result<String, String>
@@ -296,7 +296,7 @@ pub fn test_user_register(
     let dcc_identity = DccIdentity::new_from_seed(seed).unwrap();
     if initial_funds > 0 {
         ctx.mint_tokens_for_test(
-            &dcc_identity.as_icrc_compatible_account().into(),
+            &dcc_identity.as_icrc_compatible_account().unwrap().into(),
             initial_funds,
         );
     }
@@ -305,7 +305,7 @@ pub fn test_user_register(
     let result = update_check_and_decode!(
         ctx.pic,
         ctx.canister_id,
-        dcc_identity.to_ic_principal(),
+        dcc_identity.to_ic_principal().unwrap(),
         "user_register",
         Encode!(&pubkey_bytes, &pubkey_signature.to_bytes()).unwrap(),
         Result<String, String>
@@ -344,7 +344,7 @@ pub fn test_provider_check_in(
     update_check_and_decode!(
         ctx.pic,
         ctx.canister_id,
-        dcc_identity.to_ic_principal(),
+        dcc_identity.to_ic_principal().unwrap(),
         "provider_check_in",
         Encode!(
             &dcc_identity.to_bytes_verifying(),

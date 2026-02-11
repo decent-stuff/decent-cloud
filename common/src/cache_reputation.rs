@@ -48,7 +48,7 @@ pub fn ledger_add_reputation_change(
     dcc_identity: &DccIdentity,
     delta: i64,
 ) -> Result<(), ReputationError> {
-    if dcc_identity.is_minting_account() {
+    if dcc_identity.is_minting_account().map_err(|e| ReputationError::Generic(e.to_string()))? {
         warn!("Attempted to add reputation change to minting account");
     } else {
         let delta = delta.min(MAX_REPUTATION_INCREASE_PER_TX);

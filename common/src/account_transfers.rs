@@ -119,7 +119,7 @@ pub fn charge_fees_to_account_and_bump_reputation(
     if amount_e9s == 0 {
         return Ok(());
     }
-    let from_icrc1_account = dcc_id.as_icrc_compatible_account();
+    let from_icrc1_account = dcc_id.as_icrc_compatible_account()?;
     let balance_from_before = account_balance_get(&from_icrc1_account);
     match ledger_funds_transfer(
         ledger,
@@ -196,8 +196,8 @@ pub fn do_funds_transfer(
     memo: &[u8],
     increase_reputation: IncreaseReputation,
 ) -> Result<String, String> {
-    let from_icrc1_account = from_dcc_id.as_icrc_compatible_account();
-    let to_icrc1_account = to_dcc_id.as_icrc_compatible_account();
+    let from_icrc1_account = from_dcc_id.as_icrc_compatible_account()?;
+    let to_icrc1_account = to_dcc_id.as_icrc_compatible_account()?;
 
     if transfer_amount_e9s == 0 {
         return Ok("Nothing to transfer".to_string());

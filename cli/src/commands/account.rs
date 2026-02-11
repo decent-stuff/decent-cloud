@@ -28,7 +28,7 @@ pub async fn handle_account_command(
     println!("Account Principal ID: {}", dcc_id);
     println!(
         "Account balance: {} {}",
-        account_balance_get_as_string(&dcc_id.as_icrc_compatible_account()),
+        account_balance_get_as_string(&dcc_id.as_icrc_compatible_account()?),
         DC_TOKEN_SYMBOL
     );
 

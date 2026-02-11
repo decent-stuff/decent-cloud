@@ -11,7 +11,7 @@ pub enum ListIdentityType {
 }
 
 pub fn list_local_identities(include_balances: bool) -> Result<(), Box<dyn std::error::Error>> {
-    let identities_dir = DccIdentity::identities_dir();
+    let identities_dir = DccIdentity::identities_dir()?;
     println!("Available identities at {}:", identities_dir.display());
     let mut identities: Vec<_> = fs_err::read_dir(identities_dir)?
         .filter_map(|entry| match entry {
@@ -33,7 +33,7 @@ pub fn list_local_identities(include_balances: bool) -> Result<(), Box<dyn std::
             match DccIdentity::load_from_dir(&path) {
                 Ok(dcc_identity) => {
                     print!("{} => ", identity_name);
-                    println_identity(&dcc_identity, include_balances);
+                    println_identity(&dcc_identity, include_balances)?;
                 }
                 Err(e) => {
                     println!("{} => Error: {}", identity_name, e);
@@ -54,7 +54,7 @@ pub fn list_identities(
         for entry in ledger.iter(Some(LABEL_PROV_REGISTER)) {
             let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key())
                 .map_err(|e| format!("Failed to parse provider identity: {}", e))?;
-            println_identity(&dcc_id, show_balances);
+            println_identity(&dcc_id, show_balances)?;
         }
     }
     if identity_type == ListIdentityType::Users || identity_type == ListIdentityType::All {
@@ -62,7 +62,7 @@ pub fn list_identities(
         for entry in ledger.iter(Some(LABEL_USER_REGISTER)) {
             let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key())
                 .map_err(|e| format!("Failed to parse user identity: {}", e))?;
-            println_identity(&dcc_id, show_balances);
+            println_identity(&dcc_id, show_balances)?;
         }
     }
     Ok(())

@@ -81,19 +81,6 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 ### Open Issues
 
-#### 6. Inconsistent Error Handling Patterns
-
-**Issue:** Multiple error handling strategies used inconsistently.
-
-**Patterns found:**
-1. Custom error types: `TransferError`, `CryptoError`, `AuthError`, `LedgerError`
-2. `anyhow::Result<T>` with `.context()`
-3. `.ok()` to discard errors
-4. `.unwrap_or_default()` to silence failures
-5. `panic!()` in public APIs
-
-**Recommendation:** Establish project-wide error handling policy.
-
 #### 7. Timestamp Handling with `.unwrap_or(0)`
 
 **Issue:** `.timestamp_nanos_opt().unwrap_or(0)` silently uses epoch time on error.

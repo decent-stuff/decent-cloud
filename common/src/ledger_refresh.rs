@@ -89,15 +89,20 @@ pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
                     );
                 }
                 LABEL_PROV_REGISTER | LABEL_USER_REGISTER => {
-                    if let Ok(dcc_identity) =
-                        dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
+                    match dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
+                        .and_then(|id| id.to_ic_principal().map(|p| (id, p)))
                     {
-                        if entry.label() == LABEL_PROV_REGISTER {
-                            num_providers += 1;
-                        } else if entry.label() == LABEL_USER_REGISTER {
-                            num_users += 1;
+                        Ok((_, principal)) => {
+                            if entry.label() == LABEL_PROV_REGISTER {
+                                num_providers += 1;
+                            } else if entry.label() == LABEL_USER_REGISTER {
+                                num_users += 1;
+                            }
+                            principals.insert(principal, entry.key().to_vec());
                         }
-                        principals.insert(dcc_identity.to_ic_principal(), entry.key().to_vec());
+                        Err(e) => {
+                            debug!("Skipping entry with bad key during replay: {e}");
+                        }
                     }
                 }
                 _ => {}

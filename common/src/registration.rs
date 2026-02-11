@@ -69,32 +69,29 @@ pub fn do_account_register(
     pubkey_bytes: Vec<u8>,
     crypto_signature_bytes: Vec<u8>,
 ) -> Result<String, String> {
-    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes).unwrap();
+    let dcc_id = DccIdentity::new_verifying_from_bytes(&pubkey_bytes)?;
     dcc_id.verify_bytes(&pubkey_bytes, &crypto_signature_bytes)?;
     fn_info!("{}", dcc_id);
 
+    let principal = dcc_id.to_ic_principal()?;
     let fees = if ledger.get_blocks_count() > 0 {
         let amount = account_registration_fee_e9s();
         info!(
             "Charging {} tokens from {} for account {} registration",
             amount_as_string(amount),
-            dcc_id.to_ic_principal(),
+            principal,
             label
         );
+        let principal_short = principal
+            .to_string()
+            .split_once('-')
+            .map(|(first, _)| first.to_string())
+            .ok_or_else(|| format!("Invalid principal: {principal}"))?;
         charge_fees_to_account_no_bump_reputation(
             ledger,
-            &dcc_id.as_icrc_compatible_account(),
+            &dcc_id.as_icrc_compatible_account()?,
             amount as TokenAmountE9s,
-            format!(
-                "register-{}",
-                dcc_id
-                    .to_ic_principal()
-                    .to_string()
-                    .split_once('-')
-                    .expect("Invalid principal")
-                    .0
-            )
-            .as_str(),
+            &format!("register-{principal_short}"),
         )?;
         amount
     } else {
@@ -102,7 +99,7 @@ pub fn do_account_register(
     };
 
     // Update the cache of principal -> pubkey, for quick search
-    set_pubkey_for_principal(dcc_id.to_ic_principal(), pubkey_bytes.clone());
+    set_pubkey_for_principal(principal, pubkey_bytes.clone());
 
     if label == LABEL_USER_REGISTER {
         inc_num_users();
