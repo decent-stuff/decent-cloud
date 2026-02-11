@@ -76,8 +76,7 @@ RUN mkdir -p ~/.npm-global \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
-    && npm install -g happy-coder playwright \
-    && curl -fsSL https://claude.ai/install.sh | bash \
+    && npm install -g  @anthropic-ai/claude-code happy-coder playwright \
     && npx playwright install chromium
 
 # Configure git hooks
