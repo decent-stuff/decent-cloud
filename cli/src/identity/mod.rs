@@ -4,7 +4,10 @@ use ic_agent::identity::BasicIdentity;
 mod list;
 pub use list::{list_identities, list_local_identities, ListIdentityType};
 
-pub fn println_identity(dcc_id: &DccIdentity, show_balance: bool) -> Result<(), Box<dyn std::error::Error>> {
+pub fn println_identity(
+    dcc_id: &DccIdentity,
+    show_balance: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     if show_balance {
         println!(
             "{}, reputation {}, balance {}",

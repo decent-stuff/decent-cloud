@@ -28,7 +28,10 @@ impl<T> ApiResponse<T> {
         if self.success {
             self.data.context("API returned success but no data")
         } else {
-            anyhow::bail!("API error: {}", self.error.unwrap_or_else(|| "Unknown error".to_string()))
+            anyhow::bail!(
+                "API error: {}",
+                self.error.unwrap_or_else(|| "Unknown error".to_string())
+            )
         }
     }
 }
@@ -64,8 +67,14 @@ impl SignedClient {
 
     /// Sign a message using Ed25519ph with "decent-cloud" context
     /// Message format: timestamp + nonce + method + path + body
-    fn sign_request(&self, method: &str, path: &str, body: &[u8]) -> Result<(String, String, String)> {
-        let timestamp = chrono::Utc::now().timestamp_nanos_opt()
+    fn sign_request(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<(String, String, String)> {
+        let timestamp = chrono::Utc::now()
+            .timestamp_nanos_opt()
             .context("Failed to get timestamp")?
             .to_string();
         let nonce = uuid::Uuid::new_v4().to_string();
@@ -78,7 +87,9 @@ impl SignedClient {
         message.extend_from_slice(body);
 
         // Sign using DccIdentity (Ed25519ph with context "decent-cloud")
-        let signature = self.identity.sign(&message)
+        let signature = self
+            .identity
+            .sign(&message)
             .map_err(|e| anyhow::anyhow!("Failed to sign request: {}", e))?;
         let signature_hex = hex::encode(signature.to_bytes());
 
@@ -92,7 +103,8 @@ impl SignedClient {
 
         let (timestamp, nonce, signature) = self.sign_request("GET", &full_path, &[])?;
 
-        let response = self.http
+        let response = self
+            .http
             .get(&url)
             .header("X-Public-Key", &self.public_key_hex)
             .header("X-Signature", &signature)
@@ -127,7 +139,8 @@ impl SignedClient {
 
         let (timestamp, nonce, signature) = self.sign_request("POST", &full_path, &body_bytes)?;
 
-        let response = self.http
+        let response = self
+            .http
             .post(&url)
             .header("X-Public-Key", &self.public_key_hex)
             .header("X-Signature", &signature)
@@ -151,7 +164,11 @@ impl SignedClient {
     }
 
     /// Make a POST request and unwrap ApiResponse
-    pub async fn post_api<T: Serialize, R: DeserializeOwned>(&self, path: &str, body: &T) -> Result<R> {
+    pub async fn post_api<T: Serialize, R: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R> {
         let response: ApiResponse<R> = self.post(path, body).await?;
         response.into_result()
     }
@@ -164,7 +181,8 @@ impl SignedClient {
 
         let (timestamp, nonce, signature) = self.sign_request("PUT", &full_path, &body_bytes)?;
 
-        let response = self.http
+        let response = self
+            .http
             .put(&url)
             .header("X-Public-Key", &self.public_key_hex)
             .header("X-Signature", &signature)
@@ -188,7 +206,11 @@ impl SignedClient {
     }
 
     /// Make a PUT request and unwrap ApiResponse
-    pub async fn put_api<T: Serialize, R: DeserializeOwned>(&self, path: &str, body: &T) -> Result<R> {
+    pub async fn put_api<T: Serialize, R: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &T,
+    ) -> Result<R> {
         let response: ApiResponse<R> = self.put(path, body).await?;
         response.into_result()
     }
@@ -200,7 +222,8 @@ impl SignedClient {
 
         let (timestamp, nonce, signature) = self.sign_request("DELETE", &full_path, &[])?;
 
-        let response = self.http
+        let response = self
+            .http
             .delete(&url)
             .header("X-Public-Key", &self.public_key_hex)
             .header("X-Signature", &signature)
@@ -231,7 +254,8 @@ impl SignedClient {
     pub async fn get_public<R: DeserializeOwned>(&self, path: &str) -> Result<R> {
         let url = format!("{}/api/v1{}", self.base_url, path);
 
-        let response = self.http
+        let response = self
+            .http
             .get(&url)
             .send()
             .await

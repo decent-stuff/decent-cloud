@@ -113,12 +113,12 @@ mod tests {
         assert_eq!(region_display_name("na"), Some("North America"));
         assert_eq!(region_display_name("latam"), Some("Latin America"));
         assert_eq!(region_display_name("apac"), Some("Asia Pacific"));
-        assert_eq!(region_display_name("mena"), Some("Middle East & North Africa"));
-        assert_eq!(region_display_name("ssa"), Some("Sub-Saharan Africa"));
         assert_eq!(
-            region_display_name("cis"),
-            Some("CIS (Russia & neighbors)")
+            region_display_name("mena"),
+            Some("Middle East & North Africa")
         );
+        assert_eq!(region_display_name("ssa"), Some("Sub-Saharan Africa"));
+        assert_eq!(region_display_name("cis"), Some("CIS (Russia & neighbors)"));
         assert_eq!(region_display_name("invalid"), None);
     }
 

@@ -195,12 +195,11 @@ pub fn rewards_distribute(ledger: &mut LedgerMap) -> Result<String, TransferErro
         })?;
 
     for provider in eligible_providers {
-        let provider_acct = get_account_from_pubkey(provider.key()).map_err(|e| {
-            TransferError::GenericError {
+        let provider_acct =
+            get_account_from_pubkey(provider.key()).map_err(|e| TransferError::GenericError {
                 error_code: 10087u64.into(),
                 message: e,
-            }
-        })?;
+            })?;
 
         let balance_to_after =
             account_balance_get(&provider_acct) + token_rewards_per_provider as TokenAmountE9s;

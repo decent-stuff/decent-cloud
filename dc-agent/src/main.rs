@@ -195,8 +195,15 @@ async fn main() -> Result<()> {
                     test_gateway,
                     skip_dns,
                 } => {
-                    run_test_provision(config, ssh_pubkey, keep, contract_id, test_gateway, skip_dns)
-                        .await
+                    run_test_provision(
+                        config,
+                        ssh_pubkey,
+                        keep,
+                        contract_id,
+                        test_gateway,
+                        skip_dns,
+                    )
+                    .await
                 }
                 _ => unreachable!(),
             }
@@ -1127,11 +1134,19 @@ async fn run_test_provision(
             Some(gw_config) => {
                 // Create a minimal API client for gateway (DNS operations will be skipped in test mode)
                 let api_client = std::sync::Arc::new(
-                    ApiClient::new(&config.api).context("Failed to create API client for gateway")?,
+                    ApiClient::new(&config.api)
+                        .context("Failed to create API client for gateway")?,
                 );
                 match GatewayManager::new(gw_config.clone(), api_client) {
                     Ok(mut gm) => {
-                        println!("\nSetting up gateway{}...", if skip_dns { " (local only, no DNS)" } else { "" });
+                        println!(
+                            "\nSetting up gateway{}...",
+                            if skip_dns {
+                                " (local only, no DNS)"
+                            } else {
+                                ""
+                            }
+                        );
                         let gw_result = if skip_dns {
                             gm.setup_gateway_local(instance.clone(), &contract_id).await
                         } else {
@@ -1162,7 +1177,9 @@ async fn run_test_provision(
                             }
                             Err(e) => {
                                 println!("⚠ Gateway setup failed: {:#}", e);
-                                println!("  (VM provisioning succeeded, continuing without gateway)");
+                                println!(
+                                    "  (VM provisioning succeeded, continuing without gateway)"
+                                );
                                 None
                             }
                         }
@@ -1196,7 +1213,15 @@ async fn run_test_provision(
             if let Some(port) = instance.gateway_ssh_port {
                 println!("\nSSH via gateway:");
                 println!("  ssh -p {} ubuntu@{}", port, subdomain);
-                println!("  ssh -p {} ubuntu@{}", port, config.gateway.as_ref().map(|g| &g.public_ip).unwrap_or(&"<public_ip>".to_string()));
+                println!(
+                    "  ssh -p {} ubuntu@{}",
+                    port,
+                    config
+                        .gateway
+                        .as_ref()
+                        .map(|g| &g.public_ip)
+                        .unwrap_or(&"<public_ip>".to_string())
+                );
             }
         } else if let Some(ipv4) = &instance.ip_address {
             println!("\nYou can SSH into the VM (internal network only):");

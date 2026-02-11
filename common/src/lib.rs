@@ -2,9 +2,9 @@
 #[allow(unused_imports)]
 use ic_cdk::println;
 pub mod account_transfer_approvals;
-pub mod api_types;
 pub mod account_transfers;
 pub mod account_transfers_errors;
+pub mod api_types;
 pub mod cache_balances;
 pub mod cache_reputation;
 pub mod cache_transactions;
@@ -15,8 +15,8 @@ pub mod ledger_data_operations;
 pub mod ledger_refresh;
 pub mod next_block_sync;
 pub mod payment_method;
-pub mod registration;
 pub mod regions;
+pub mod registration;
 pub mod rewards;
 
 pub use account_transfer_approvals::*;

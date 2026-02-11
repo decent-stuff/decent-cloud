@@ -455,7 +455,10 @@ pub(crate) fn _provider_list_registered() -> Result<Vec<String>, String> {
                 let provider = String::from_utf8_lossy(entry.key());
                 let acct = get_account_from_pubkey(entry.value())?;
                 let balance = account_balance_get(&acct);
-                Ok(format!("{} ==> {} (acct balance: {})", provider, acct, balance))
+                Ok(format!(
+                    "{} ==> {} (acct balance: {})",
+                    provider, acct, balance
+                ))
             })
             .collect::<Result<Vec<String>, String>>()?;
         Ok(provider_vec)

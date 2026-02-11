@@ -589,7 +589,8 @@ impl Database {
         }
 
         // Parse and validate the new status
-        let target_status: ContractStatus = new_status.parse().map_err(|e| anyhow::anyhow!("{}", e))?;
+        let target_status: ContractStatus =
+            new_status.parse().map_err(|e| anyhow::anyhow!("{}", e))?;
 
         // Parse current status and validate transition
         let current_status: ContractStatus = contract.status.parse().map_err(|e| {
@@ -821,15 +822,14 @@ impl Database {
             root_password: Option<String>,
         }
 
-        let instance = serde_json::from_str::<InstanceFields>(instance_details).unwrap_or(
-            InstanceFields {
+        let instance =
+            serde_json::from_str::<InstanceFields>(instance_details).unwrap_or(InstanceFields {
                 gateway_slug: None,
                 gateway_ssh_port: None,
                 gateway_port_range_start: None,
                 gateway_port_range_end: None,
                 root_password: None,
-            },
-        );
+            });
 
         let gateway_ssh_port = instance.gateway_ssh_port.map(|p| p as i32);
         let gateway_port_range_start = instance.gateway_port_range_start.map(|p| p as i32);
@@ -1870,7 +1870,8 @@ impl Database {
                         )
                     })?;
                     // Can only lock contracts that are accepted or provisioning
-                    if status != ContractStatus::Accepted && status != ContractStatus::Provisioning {
+                    if status != ContractStatus::Accepted && status != ContractStatus::Provisioning
+                    {
                         return Err(anyhow::anyhow!(
                             "Contract {} is not in lockable status (status: {})",
                             hex::encode(contract_id),
@@ -2393,10 +2394,7 @@ impl Database {
         .await?;
 
         if result.rows_affected() == 0 {
-            anyhow::bail!(
-                "Contract not found: {}",
-                hex::encode(contract_id)
-            );
+            anyhow::bail!("Contract not found: {}", hex::encode(contract_id));
         }
 
         tracing::warn!(

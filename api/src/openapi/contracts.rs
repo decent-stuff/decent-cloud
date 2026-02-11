@@ -185,7 +185,9 @@ impl ContractsApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Unauthorized: only the contract requester can access credentials".to_string()),
+                error: Some(
+                    "Unauthorized: only the contract requester can access credentials".to_string(),
+                ),
             });
         }
 
@@ -411,37 +413,36 @@ impl ContractsApi {
             Ok(contract_id) => {
                 // Self-rental: no payment needed, skip Stripe checkout
                 // Also applies to ICPay which is pre-paid
-                let checkout_url =
-                    if is_self_rental || payment_method.to_lowercase() != "stripe" {
-                        // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
-                        if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
-                            tracing::warn!(
-                                "Auto-accept check failed for contract {}: {}",
-                                hex::encode(&contract_id),
-                                e
-                            );
+                let checkout_url = if is_self_rental || payment_method.to_lowercase() != "stripe" {
+                    // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
+                    if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
+                        tracing::warn!(
+                            "Auto-accept check failed for contract {}: {}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
+                    None
+                } else {
+                    // Stripe payment required
+                    match create_stripe_checkout_session(
+                        &db,
+                        &contract_id,
+                        &offering.currency,
+                        &offering.offer_name,
+                    )
+                    .await
+                    {
+                        Ok(url) => Some(url),
+                        Err(e) => {
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some(e),
+                            })
                         }
-                        None
-                    } else {
-                        // Stripe payment required
-                        match create_stripe_checkout_session(
-                            &db,
-                            &contract_id,
-                            &offering.currency,
-                            &offering.offer_name,
-                        )
-                        .await
-                        {
-                            Ok(url) => Some(url),
-                            Err(e) => {
-                                return Json(ApiResponse {
-                                    success: false,
-                                    data: None,
-                                    error: Some(e),
-                                })
-                            }
-                        }
-                    };
+                    }
+                };
 
                 let message = if is_self_rental {
                     "Self-rental created successfully (no payment required)".to_string()

@@ -129,9 +129,7 @@ impl DccIdentity {
         Ok(encoded)
     }
 
-    pub fn generate_ed25519_signing_key_from_seed(
-        seed: &[u8],
-    ) -> Result<SigningKey, CryptoError> {
+    pub fn generate_ed25519_signing_key_from_seed(seed: &[u8]) -> Result<SigningKey, CryptoError> {
         let mut mac = Hmac::<Sha512>::new_from_slice(b"ed25519 seed")
             .map_err(|e| CryptoError::Generic(format!("HMAC init failed: {e}")))?;
         mac.update(seed);
@@ -204,9 +202,7 @@ impl DccIdentity {
         Ok(())
     }
 
-    pub fn signing_key_as_ic_agent_pem_string(
-        &self,
-    ) -> Result<Zeroizing<String>, CryptoError> {
+    pub fn signing_key_as_ic_agent_pem_string(&self) -> Result<Zeroizing<String>, CryptoError> {
         let DccIdentity::Ed25519(sk, _) = self;
         let signing_key = sk
             .as_ref()

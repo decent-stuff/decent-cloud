@@ -973,7 +973,10 @@ impl Database {
     }
 
     /// Get feedback for a specific contract (if any)
-    pub async fn get_contract_feedback(&self, contract_id: &[u8]) -> Result<Option<ContractFeedback>> {
+    pub async fn get_contract_feedback(
+        &self,
+        contract_id: &[u8],
+    ) -> Result<Option<ContractFeedback>> {
         #[derive(sqlx::FromRow)]
         struct FeedbackRow {
             contract_id: Vec<u8>,
@@ -1001,7 +1004,10 @@ impl Database {
     }
 
     /// Get aggregated feedback stats for a provider
-    pub async fn get_provider_feedback_stats(&self, provider_pubkey: &[u8]) -> Result<ProviderFeedbackStats> {
+    pub async fn get_provider_feedback_stats(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<ProviderFeedbackStats> {
         #[derive(sqlx::FromRow)]
         struct StatsRow {
             total_responses: i64,

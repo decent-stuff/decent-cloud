@@ -206,7 +206,10 @@ pub fn encrypt_credentials(
 ///
 /// # Returns
 /// The decrypted plaintext credentials
-pub fn decrypt_credentials(encrypted: &EncryptedCredentials, ed25519_secret: &[u8]) -> Result<String> {
+pub fn decrypt_credentials(
+    encrypted: &EncryptedCredentials,
+    ed25519_secret: &[u8],
+) -> Result<String> {
     if encrypted.version != CREDENTIAL_ENCRYPTION_VERSION {
         anyhow::bail!(
             "Unsupported encryption version: {} (expected {})",
@@ -246,8 +249,8 @@ pub fn decrypt_credentials(encrypted: &EncryptedCredentials, ed25519_secret: &[u
     let decryption_key: [u8; 32] = key_material[..32].try_into().unwrap();
 
     // Decrypt
-    let cipher = XChaCha20Poly1305::new_from_slice(&decryption_key)
-        .context("Failed to create cipher")?;
+    let cipher =
+        XChaCha20Poly1305::new_from_slice(&decryption_key).context("Failed to create cipher")?;
     let nonce = XNonce::from(nonce_bytes);
     let plaintext = cipher
         .decrypt(&nonce, ciphertext.as_ref())
@@ -360,8 +363,8 @@ mod tests {
         let signing_key = SigningKey::generate(&mut OsRng);
         let verifying_key: VerifyingKey = (&signing_key).into();
 
-        let x25519_pubkey = ed25519_pubkey_to_x25519(verifying_key.as_bytes())
-            .expect("Conversion failed");
+        let x25519_pubkey =
+            ed25519_pubkey_to_x25519(verifying_key.as_bytes()).expect("Conversion failed");
 
         // X25519 public keys are 32 bytes
         assert_eq!(x25519_pubkey.len(), 32);

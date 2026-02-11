@@ -124,7 +124,8 @@ mod tests {
     fn test_key_pair_generation() {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
+        let signing_key =
+            DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
         let verifying_key = signing_key.verifying_key();
         assert!(!verifying_key.to_bytes().is_empty());
         assert!(!signing_key.to_bytes().is_empty());
@@ -134,7 +135,8 @@ mod tests {
     fn test_message_signing_and_verification() {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
+        let signing_key =
+            DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
         let verifying_key = signing_key.verifying_key();
 
         let message: &[u8] = b"Test Message";
@@ -146,7 +148,8 @@ mod tests {
     fn test_prehashed_signing_and_verification() {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
-        let signing_key = DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
+        let signing_key =
+            DccIdentity::generate_ed25519_signing_key_from_seed(seed.as_bytes()).unwrap();
         let verifying_key = signing_key.verifying_key();
 
         let message: &[u8] = b"Test Message";

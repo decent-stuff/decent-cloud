@@ -91,7 +91,8 @@ impl GatewayManager {
         instance: Instance,
         contract_id: &str,
     ) -> Result<Instance> {
-        self.setup_gateway_internal(instance, contract_id, false).await
+        self.setup_gateway_internal(instance, contract_id, false)
+            .await
     }
 
     /// Setup gateway for testing (skips DNS record creation).
@@ -101,7 +102,8 @@ impl GatewayManager {
         instance: Instance,
         contract_id: &str,
     ) -> Result<Instance> {
-        self.setup_gateway_internal(instance, contract_id, true).await
+        self.setup_gateway_internal(instance, contract_id, true)
+            .await
     }
 
     /// Internal gateway setup with optional DNS skip.

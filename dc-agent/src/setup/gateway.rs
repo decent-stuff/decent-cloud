@@ -183,7 +183,8 @@ impl GatewaySetup {
         let ip_forward_enabled = result.stdout.trim() == "1";
 
         // Check bridge netfilter state (required for iptables to work with bridged VMs)
-        let result = self.execute("sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || echo 0")?;
+        let result =
+            self.execute("sysctl -n net.bridge.bridge-nf-call-iptables 2>/dev/null || echo 0")?;
         let bridge_nf_enabled = result.stdout.trim() == "1";
 
         if ip_forward_enabled && bridge_nf_enabled {
@@ -225,7 +226,9 @@ net.bridge.bridge-nf-call-iptables = 1
         }
 
         // Ensure br_netfilter module loads on boot
-        let _ = self.execute("echo 'br_netfilter' >> /etc/modules-load.d/br_netfilter.conf 2>/dev/null || true");
+        let _ = self.execute(
+            "echo 'br_netfilter' >> /etc/modules-load.d/br_netfilter.conf 2>/dev/null || true",
+        );
 
         println!("  [ok] IP forwarding and bridge netfilter enabled");
         Ok(())

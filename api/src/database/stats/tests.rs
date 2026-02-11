@@ -1961,7 +1961,10 @@ async fn test_submit_feedback_success() {
         service_matched_description: true,
         would_rent_again: true,
     };
-    let feedback = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+    let feedback = db
+        .submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+        .await
+        .unwrap();
 
     assert_eq!(feedback.contract_id, hex::encode(&contract_id));
     assert_eq!(feedback.provider_pubkey, hex::encode(&provider_pubkey));
@@ -2009,10 +2012,15 @@ async fn test_submit_feedback_unauthorized_user() {
         service_matched_description: true,
         would_rent_again: true,
     };
-    let result = db.submit_contract_feedback(&contract_id, &other_user_pubkey, &input).await;
-    
+    let result = db
+        .submit_contract_feedback(&contract_id, &other_user_pubkey, &input)
+        .await;
+
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Only the contract requester"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Only the contract requester"));
 }
 
 #[tokio::test]
@@ -2053,10 +2061,15 @@ async fn test_submit_feedback_non_terminal_status() {
         service_matched_description: true,
         would_rent_again: true,
     };
-    let result = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await;
-    
+    let result = db
+        .submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+        .await;
+
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Cannot submit feedback"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Cannot submit feedback"));
 }
 
 #[tokio::test]
@@ -2097,13 +2110,20 @@ async fn test_submit_feedback_duplicate() {
         service_matched_description: true,
         would_rent_again: true,
     };
-    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+        .await
+        .unwrap();
 
     // Try to submit feedback again
-    let result = db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await;
-    
+    let result = db
+        .submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+        .await;
+
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("already submitted"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("already submitted"));
 }
 
 #[tokio::test]
@@ -2148,10 +2168,16 @@ async fn test_get_contract_feedback() {
         service_matched_description: false,
         would_rent_again: true,
     };
-    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+    db.submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+        .await
+        .unwrap();
 
     // Now should have feedback
-    let feedback = db.get_contract_feedback(&contract_id).await.unwrap().unwrap();
+    let feedback = db
+        .get_contract_feedback(&contract_id)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(feedback.contract_id, hex::encode(&contract_id));
     assert!(!feedback.service_matched_description);
     assert!(feedback.would_rent_again);
@@ -2162,8 +2188,11 @@ async fn test_get_provider_feedback_stats_empty() {
     let db = setup_test_db().await;
     let provider_pubkey = vec![1u8; 32];
 
-    let stats = db.get_provider_feedback_stats(&provider_pubkey).await.unwrap();
-    
+    let stats = db
+        .get_provider_feedback_stats(&provider_pubkey)
+        .await
+        .unwrap();
+
     assert_eq!(stats.total_responses, 0);
     assert_eq!(stats.service_matched_yes, 0);
     assert_eq!(stats.service_matched_no, 0);
@@ -2214,11 +2243,16 @@ async fn test_get_provider_feedback_stats_aggregation() {
             service_matched_description: i != 3, // 3 yes, 1 no
             would_rent_again: i < 2,             // 2 yes, 2 no
         };
-        db.submit_contract_feedback(&contract_id, &requester_pubkey, &input).await.unwrap();
+        db.submit_contract_feedback(&contract_id, &requester_pubkey, &input)
+            .await
+            .unwrap();
     }
 
-    let stats = db.get_provider_feedback_stats(&provider_pubkey).await.unwrap();
-    
+    let stats = db
+        .get_provider_feedback_stats(&provider_pubkey)
+        .await
+        .unwrap();
+
     assert_eq!(stats.total_responses, 4);
     assert_eq!(stats.service_matched_yes, 3);
     assert_eq!(stats.service_matched_no, 1);

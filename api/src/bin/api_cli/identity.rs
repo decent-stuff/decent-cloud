@@ -61,8 +61,7 @@ impl Identity {
                 .map_err(|e| anyhow::anyhow!("Failed to parse PEM key: {}", e))?
         } else {
             // Assume hex-encoded raw key
-            let key_bytes = hex::decode(key_data.trim())
-                .context("Failed to decode hex key")?;
+            let key_bytes = hex::decode(key_data.trim()).context("Failed to decode hex key")?;
             if key_bytes.len() != 32 {
                 anyhow::bail!("Secret key must be 32 bytes, got {}", key_bytes.len());
             }
@@ -91,7 +90,11 @@ impl Identity {
 
         let path = Self::path(&self.name)?;
         if path.exists() {
-            anyhow::bail!("Identity '{}' already exists at {}", self.name, path.display());
+            anyhow::bail!(
+                "Identity '{}' already exists at {}",
+                self.name,
+                path.display()
+            );
         }
 
         let json = serde_json::to_string_pretty(self)?;
@@ -104,8 +107,13 @@ impl Identity {
     /// Load an identity from disk
     pub fn load(name: &str) -> Result<Self> {
         let path = Self::path(name)?;
-        let json = fs::read_to_string(&path)
-            .with_context(|| format!("Failed to read identity '{}' from: {}", name, path.display()))?;
+        let json = fs::read_to_string(&path).with_context(|| {
+            format!(
+                "Failed to read identity '{}' from: {}",
+                name,
+                path.display()
+            )
+        })?;
         let identity: Identity = serde_json::from_str(&json)
             .with_context(|| format!("Failed to parse identity JSON: {}", path.display()))?;
         Ok(identity)
@@ -138,15 +146,22 @@ impl Identity {
     /// Delete an identity
     pub fn delete(name: &str) -> Result<()> {
         let path = Self::path(name)?;
-        fs::remove_file(&path)
-            .with_context(|| format!("Failed to delete identity '{}' at: {}", name, path.display()))?;
+        fs::remove_file(&path).with_context(|| {
+            format!(
+                "Failed to delete identity '{}' at: {}",
+                name,
+                path.display()
+            )
+        })?;
         Ok(())
     }
 
     /// Get the signing key bytes
     pub fn secret_key_bytes(&self) -> Result<[u8; 32]> {
         let bytes = hex::decode(&self.secret_key_hex)?;
-        bytes.try_into().map_err(|_| anyhow::anyhow!("Invalid secret key length"))
+        bytes
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Invalid secret key length"))
     }
 
     /// Get the public key bytes

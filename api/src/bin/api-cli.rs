@@ -520,11 +520,13 @@ async fn main() -> Result<()> {
     let api_url = match cli.env {
         Environment::Dev => {
             dotenv::from_filename("/code/api/.env").ok();
-            cli.api_url.unwrap_or_else(|| DEFAULT_DEV_API_URL.to_string())
+            cli.api_url
+                .unwrap_or_else(|| DEFAULT_DEV_API_URL.to_string())
         }
         Environment::Prod => {
             dotenv::from_filename("/code/cf/.env.prod").ok();
-            cli.api_url.unwrap_or_else(|| DEFAULT_PROD_API_URL.to_string())
+            cli.api_url
+                .unwrap_or_else(|| DEFAULT_PROD_API_URL.to_string())
         }
     };
 
@@ -580,7 +582,12 @@ async fn handle_identity_action(action: IdentityAction) -> Result<()> {
                 println!("{:<20} {:<66} {:<20}", "Name", "Public Key", "Created At");
                 println!("{}", "-".repeat(100));
                 for id in &identities {
-                    println!("{:<20} {:<66} {:<20}", id.name, id.public_key_hex, &id.created_at[..19]);
+                    println!(
+                        "{:<20} {:<66} {:<20}",
+                        id.name,
+                        id.public_key_hex,
+                        &id.created_at[..19]
+                    );
                 }
                 println!("{}", "=".repeat(100));
                 println!("Total: {} identity(ies)", identities.len());
@@ -643,7 +650,11 @@ struct AccountExternalKey {
 
 async fn handle_account_action(action: AccountAction, api_url: &str) -> Result<()> {
     match action {
-        AccountAction::Create { identity, username, email } => {
+        AccountAction::Create {
+            identity,
+            username,
+            email,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -656,7 +667,10 @@ async fn handle_account_action(action: AccountAction, api_url: &str) -> Result<(
             let account: AccountWithKeys = client.post_api("/accounts", &request).await?;
             println!("Account created:");
             println!("  Username: {}", account.username);
-            println!("  Email: {}", account.email.unwrap_or_else(|| "N/A".to_string()));
+            println!(
+                "  Email: {}",
+                account.email.unwrap_or_else(|| "N/A".to_string())
+            );
             println!("  Public Key: {}", id.public_key_hex);
         }
         AccountAction::Get { identity } => {
@@ -668,8 +682,14 @@ async fn handle_account_action(action: AccountAction, api_url: &str) -> Result<(
             let account: AccountWithKeys = client.get_api(&path).await?;
             println!("Account:");
             println!("  Username: {}", account.username);
-            println!("  Email: {}", account.email.unwrap_or_else(|| "N/A".to_string()));
-            println!("  Email verified: {}", account.email_verified.unwrap_or(false));
+            println!(
+                "  Email: {}",
+                account.email.unwrap_or_else(|| "N/A".to_string())
+            );
+            println!(
+                "  Email verified: {}",
+                account.email_verified.unwrap_or(false)
+            );
             if let Some(created) = account.created_at {
                 if let Some(dt) = chrono::DateTime::from_timestamp(created, 0) {
                     println!("  Created: {}", dt.format("%Y-%m-%d %H:%M:%S"));
@@ -684,12 +704,18 @@ async fn handle_account_action(action: AccountAction, api_url: &str) -> Result<(
             let path = format!("/accounts?publicKey={}", id.public_key_hex);
             let account: AccountWithKeys = client.get_api(&path).await?;
 
-            let request = UpdateAccountEmailRequest { email: email.clone() };
+            let request = UpdateAccountEmailRequest {
+                email: email.clone(),
+            };
             let path = format!("/accounts/{}/email", account.username);
             let _: AccountWithKeys = client.put_api(&path, &request).await?;
             println!("Email updated to: {}", email);
         }
-        AccountAction::AddSshKey { identity, key, label } => {
+        AccountAction::AddSshKey {
+            identity,
+            key,
+            label,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -727,7 +753,10 @@ async fn handle_account_action(action: AccountAction, api_url: &str) -> Result<(
                     if key.key_type == "ssh" {
                         println!("  ID: {}", key.id);
                         println!("  Label: {}", key.label.as_deref().unwrap_or("N/A"));
-                        println!("  Key: {}...", &key.key_data.chars().take(50).collect::<String>());
+                        println!(
+                            "  Key: {}...",
+                            &key.key_data.chars().take(50).collect::<String>()
+                        );
                         println!("{}", "-".repeat(80));
                     }
                 }
@@ -790,7 +819,12 @@ struct RentalRequestResponse {
 
 async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result<()> {
     match action {
-        ContractAction::ListOfferings { provider, product_type, in_stock_only, limit } => {
+        ContractAction::ListOfferings {
+            provider,
+            product_type,
+            in_stock_only,
+            limit,
+        } => {
             // Use a dummy identity just for public endpoint access
             let http = reqwest::Client::new();
             let mut url = format!("{}/api/v1/offerings?limit={}", api_url, limit);
@@ -806,7 +840,8 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
 
             let response = http.get(&url).send().await?;
             let text = response.text().await?;
-            let api_response: api_cli::client::ApiResponse<Vec<Offering>> = serde_json::from_str(&text)?;
+            let api_response: api_cli::client::ApiResponse<Vec<Offering>> =
+                serde_json::from_str(&text)?;
             let offerings = api_response.into_result()?;
 
             if offerings.is_empty() {
@@ -814,27 +849,45 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             } else {
                 println!("\nAvailable Offerings:");
                 println!("{}", "=".repeat(120));
-                println!("{:<8} {:<40} {:<15} {:<20} {:<10} {:<10}",
-                    "ID", "Name", "Type", "Provider", "Price/mo", "Stock");
+                println!(
+                    "{:<8} {:<40} {:<15} {:<20} {:<10} {:<10}",
+                    "ID", "Name", "Type", "Provider", "Price/mo", "Stock"
+                );
                 println!("{}", "-".repeat(120));
                 for o in &offerings {
                     let name = o.offer_name.as_deref().unwrap_or("N/A");
                     let ptype = o.product_type.as_deref().unwrap_or("N/A");
-                    let price = o.monthly_price.map(|p| format!("${:.2}", p)).unwrap_or_else(|| "N/A".to_string());
+                    let price = o
+                        .monthly_price
+                        .map(|p| format!("${:.2}", p))
+                        .unwrap_or_else(|| "N/A".to_string());
                     let stock = o.stock_status.as_deref().unwrap_or("N/A");
                     let provider_short = if o.pubkey.len() > 16 {
                         format!("{}...", &o.pubkey[..16])
                     } else {
                         o.pubkey.clone()
                     };
-                    println!("{:<8} {:<40} {:<15} {:<20} {:<10} {:<10}",
-                        o.id, &name[..name.len().min(38)], ptype, provider_short, price, stock);
+                    println!(
+                        "{:<8} {:<40} {:<15} {:<20} {:<10} {:<10}",
+                        o.id,
+                        &name[..name.len().min(38)],
+                        ptype,
+                        provider_short,
+                        price,
+                        stock
+                    );
                 }
                 println!("{}", "=".repeat(120));
                 println!("Total: {} offering(s)", offerings.len());
             }
         }
-        ContractAction::Create { identity, offering_id, ssh_pubkey, duration_hours, skip_payment } => {
+        ContractAction::Create {
+            identity,
+            offering_id,
+            ssh_pubkey,
+            duration_hours,
+            skip_payment,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -861,16 +914,24 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             }
             if skip_payment {
                 // Mark payment as succeeded directly in DB
-                println!("\nNote: --skip-payment was used. Setting payment_status to 'succeeded'...");
+                println!(
+                    "\nNote: --skip-payment was used. Setting payment_status to 'succeeded'..."
+                );
                 let db_url = env::var("DATABASE_URL")
                     .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
                 let db = Database::new(&db_url).await?;
-                let contract_id_bytes = uuid::Uuid::parse_str(&response.contract_id)?.as_bytes().to_vec();
-                db.set_payment_status_for_testing(&contract_id_bytes, "succeeded").await?;
+                let contract_id_bytes = uuid::Uuid::parse_str(&response.contract_id)?
+                    .as_bytes()
+                    .to_vec();
+                db.set_payment_status_for_testing(&contract_id_bytes, "succeeded")
+                    .await?;
                 println!("Payment status set to 'succeeded'.");
             }
         }
-        ContractAction::Get { contract_id, identity } => {
+        ContractAction::Get {
+            contract_id,
+            identity,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -885,14 +946,22 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             if let Some(port) = contract.gateway_ssh_port {
                 println!("  SSH port: {}", port);
             }
-            if let (Some(start), Some(end)) = (contract.gateway_port_range_start, contract.gateway_port_range_end) {
+            if let (Some(start), Some(end)) = (
+                contract.gateway_port_range_start,
+                contract.gateway_port_range_end,
+            ) {
                 println!("  Port range: {}-{}", start, end);
             }
             if let Some(details) = &contract.provisioning_instance_details {
                 println!("  Instance details: {}", details);
             }
         }
-        ContractAction::Wait { contract_id, state, timeout, identity } => {
+        ContractAction::Wait {
+            contract_id,
+            state,
+            timeout,
+            identity,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -900,26 +969,37 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             let timeout_duration = std::time::Duration::from_secs(timeout);
             let poll_interval = std::time::Duration::from_secs(10);
 
-            println!("Waiting for contract {} to reach state '{}'...", contract_id, state);
+            println!(
+                "Waiting for contract {} to reach state '{}'...",
+                contract_id, state
+            );
 
             loop {
                 let path = format!("/contracts/{}", contract_id);
                 let contract: Contract = client.get_api(&path).await?;
 
                 if contract.status == state {
-                    println!("Contract reached state '{}' after {:?}", state, start.elapsed());
+                    println!(
+                        "Contract reached state '{}' after {:?}",
+                        state,
+                        start.elapsed()
+                    );
                     return Ok(());
                 }
 
                 if start.elapsed() > timeout_duration {
                     anyhow::bail!(
                         "Timeout waiting for contract to reach state '{}'. Current state: '{}'",
-                        state, contract.status
+                        state,
+                        contract.status
                     );
                 }
 
-                println!("  Current state: '{}', waiting... ({:.0}s elapsed)",
-                    contract.status, start.elapsed().as_secs_f64());
+                println!(
+                    "  Current state: '{}', waiting... ({:.0}s elapsed)",
+                    contract.status,
+                    start.elapsed().as_secs_f64()
+                );
                 tokio::time::sleep(poll_interval).await;
             }
         }
@@ -935,20 +1015,31 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             } else {
                 println!("\nContracts:");
                 println!("{}", "=".repeat(100));
-                println!("{:<38} {:<15} {:<15} {:<20}", "Contract ID", "Status", "Payment", "Gateway");
+                println!(
+                    "{:<38} {:<15} {:<15} {:<20}",
+                    "Contract ID", "Status", "Payment", "Gateway"
+                );
                 println!("{}", "-".repeat(100));
                 for c in &contracts {
-                    let gateway = c.gateway_slug.as_ref()
+                    let gateway = c
+                        .gateway_slug
+                        .as_ref()
                         .map(|s| format!("{}.gw...", s))
                         .unwrap_or_else(|| "N/A".to_string());
-                    println!("{:<38} {:<15} {:<15} {:<20}",
-                        c.contract_id, c.status, c.payment_status, gateway);
+                    println!(
+                        "{:<38} {:<15} {:<15} {:<20}",
+                        c.contract_id, c.status, c.payment_status, gateway
+                    );
                 }
                 println!("{}", "=".repeat(100));
                 println!("Total: {} contract(s)", contracts.len());
             }
         }
-        ContractAction::Cancel { contract_id, identity, memo } => {
+        ContractAction::Cancel {
+            contract_id,
+            identity,
+            memo,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -977,7 +1068,8 @@ async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result
 
             let response = http.get(&url).send().await?;
             let text = response.text().await?;
-            let api_response: api_cli::client::ApiResponse<Vec<Offering>> = serde_json::from_str(&text)?;
+            let api_response: api_cli::client::ApiResponse<Vec<Offering>> =
+                serde_json::from_str(&text)?;
             let offerings = api_response.into_result()?;
 
             if offerings.is_empty() {
@@ -1003,10 +1095,19 @@ async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result
 
             println!("Offering: {}", offering.offering_id);
             println!("  ID: {}", offering.id);
-            println!("  Name: {}", offering.offer_name.as_deref().unwrap_or("N/A"));
-            println!("  Type: {}", offering.product_type.as_deref().unwrap_or("N/A"));
+            println!(
+                "  Name: {}",
+                offering.offer_name.as_deref().unwrap_or("N/A")
+            );
+            println!(
+                "  Type: {}",
+                offering.product_type.as_deref().unwrap_or("N/A")
+            );
             println!("  Price: ${:.2}/mo", offering.monthly_price.unwrap_or(0.0));
-            println!("  Stock: {}", offering.stock_status.as_deref().unwrap_or("N/A"));
+            println!(
+                "  Stock: {}",
+                offering.stock_status.as_deref().unwrap_or("N/A")
+            );
         }
     }
     Ok(())
@@ -1033,7 +1134,8 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
             let url = format!("{}/api/v1/providers?limit={}", api_url, limit);
             let response = http.get(&url).send().await?;
             let text = response.text().await?;
-            let api_response: api_cli::client::ApiResponse<Vec<ProviderProfile>> = serde_json::from_str(&text)?;
+            let api_response: api_cli::client::ApiResponse<Vec<ProviderProfile>> =
+                serde_json::from_str(&text)?;
             let providers = api_response.into_result()?;
 
             if providers.is_empty() {
@@ -1057,18 +1159,26 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
             let url = format!("{}/api/v1/providers/{}", api_url, pubkey);
             let response = http.get(&url).send().await?;
             let text = response.text().await?;
-            let api_response: api_cli::client::ApiResponse<ProviderProfile> = serde_json::from_str(&text)?;
+            let api_response: api_cli::client::ApiResponse<ProviderProfile> =
+                serde_json::from_str(&text)?;
             let provider = api_response.into_result()?;
 
-            println!("Provider: {}", provider.pubkey.as_deref().unwrap_or(&pubkey));
+            println!(
+                "Provider: {}",
+                provider.pubkey.as_deref().unwrap_or(&pubkey)
+            );
             println!("  Name: {}", provider.name.as_deref().unwrap_or("N/A"));
-            println!("  Website: {}", provider.website_url.as_deref().unwrap_or("N/A"));
+            println!(
+                "  Website: {}",
+                provider.website_url.as_deref().unwrap_or("N/A")
+            );
         }
         ProviderAction::Offerings { pubkey } => {
             let url = format!("{}/api/v1/providers/{}/offerings", api_url, pubkey);
             let response = http.get(&url).send().await?;
             let text = response.text().await?;
-            let api_response: api_cli::client::ApiResponse<Vec<Offering>> = serde_json::from_str(&text)?;
+            let api_response: api_cli::client::ApiResponse<Vec<Offering>> =
+                serde_json::from_str(&text)?;
             let offerings = api_response.into_result()?;
 
             if offerings.is_empty() {
@@ -1077,11 +1187,17 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
                 println!("\nProvider Offerings:");
                 println!("{}", "=".repeat(100));
                 for o in &offerings {
-                    println!("ID: {} - {}", o.id, o.offer_name.as_deref().unwrap_or("N/A"));
-                    println!("  Type: {}, Price: ${:.2}/mo, Stock: {}",
+                    println!(
+                        "ID: {} - {}",
+                        o.id,
+                        o.offer_name.as_deref().unwrap_or("N/A")
+                    );
+                    println!(
+                        "  Type: {}, Price: ${:.2}/mo, Stock: {}",
                         o.product_type.as_deref().unwrap_or("N/A"),
                         o.monthly_price.unwrap_or(0.0),
-                        o.stock_status.as_deref().unwrap_or("N/A"));
+                        o.stock_status.as_deref().unwrap_or("N/A")
+                    );
                     println!("{}", "-".repeat(100));
                 }
                 println!("Total: {} offering(s)", offerings.len());
@@ -1097,12 +1213,9 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
 
 async fn handle_notify_action(action: NotifyAction) -> Result<()> {
     match action {
-        NotifyAction::Email { to, with_dkim } => {
-            handle_test_email(&to, with_dkim).await
-        }
+        NotifyAction::Email { to, with_dkim } => handle_test_email(&to, with_dkim).await,
         NotifyAction::Telegram { chat_id, message } => {
-            let bot_token = env::var("TELEGRAM_BOT_TOKEN")
-                .context("TELEGRAM_BOT_TOKEN not set")?;
+            let bot_token = env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN not set")?;
 
             let http = reqwest::Client::new();
             let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
@@ -1112,10 +1225,7 @@ async fn handle_notify_action(action: NotifyAction) -> Result<()> {
                 "text": message,
             });
 
-            let response = http.post(&url)
-                .json(&params)
-                .send()
-                .await?;
+            let response = http.post(&url).json(&params).send().await?;
 
             if response.status().is_success() {
                 println!("Telegram message sent successfully to chat {}", chat_id);
@@ -1133,15 +1243,16 @@ async fn handle_notify_action(action: NotifyAction) -> Result<()> {
 // =============================================================================
 
 async fn handle_dns_action(action: DnsAction) -> Result<()> {
-    let api_token = env::var("CLOUDFLARE_API_TOKEN")
-        .context("CLOUDFLARE_API_TOKEN not set")?;
-    let zone_id = env::var("CLOUDFLARE_ZONE_ID")
-        .context("CLOUDFLARE_ZONE_ID not set")?;
+    let api_token = env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
+    let zone_id = env::var("CLOUDFLARE_ZONE_ID").context("CLOUDFLARE_ZONE_ID not set")?;
     let base_domain = env::var("CLOUDFLARE_BASE_DOMAIN")
         .unwrap_or_else(|_| "gateway.decent-cloud.org".to_string());
 
     let http = reqwest::Client::new();
-    let base_url = format!("https://api.cloudflare.com/client/v4/zones/{}/dns_records", zone_id);
+    let base_url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
+        zone_id
+    );
 
     match action {
         DnsAction::Create { subdomain, ip } => {
@@ -1154,7 +1265,8 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
                 "proxied": false,
             });
 
-            let response = http.post(&base_url)
+            let response = http
+                .post(&base_url)
                 .header("Authorization", format!("Bearer {}", api_token))
                 .json(&params)
                 .send()
@@ -1173,7 +1285,8 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
             let full_name = format!("{}.{}", subdomain, base_domain);
             let url = format!("{}?name={}", base_url, urlencoding::encode(&full_name));
 
-            let response = http.get(&url)
+            let response = http
+                .get(&url)
                 .header("Authorization", format!("Bearer {}", api_token))
                 .send()
                 .await?;
@@ -1200,7 +1313,8 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
             let url = format!("{}?name={}", base_url, urlencoding::encode(&full_name));
 
             // First, find the record ID
-            let response = http.get(&url)
+            let response = http
+                .get(&url)
                 .header("Authorization", format!("Bearer {}", api_token))
                 .send()
                 .await?;
@@ -1215,7 +1329,8 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
                     for record in records {
                         if let Some(id) = record["id"].as_str() {
                             let delete_url = format!("{}/{}", base_url, id);
-                            let response = http.delete(&delete_url)
+                            let response = http
+                                .delete(&delete_url)
                                 .header("Authorization", format!("Bearer {}", api_token))
                                 .send()
                                 .await?;
@@ -1232,7 +1347,8 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
             }
         }
         DnsAction::List => {
-            let response = http.get(&base_url)
+            let response = http
+                .get(&base_url)
                 .header("Authorization", format!("Bearer {}", api_token))
                 .send()
                 .await?;
@@ -1241,8 +1357,14 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
             let json: serde_json::Value = serde_json::from_str(&text)?;
 
             if let Some(records) = json["result"].as_array() {
-                let dc_records: Vec<_> = records.iter()
-                    .filter(|r| r["name"].as_str().map(|n| n.contains(&base_domain)).unwrap_or(false))
+                let dc_records: Vec<_> = records
+                    .iter()
+                    .filter(|r| {
+                        r["name"]
+                            .as_str()
+                            .map(|n| n.contains(&base_domain))
+                            .unwrap_or(false)
+                    })
                     .collect();
 
                 if dc_records.is_empty() {
@@ -1253,10 +1375,12 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
                     println!("{:<40} {:<10} {:<20}", "Name", "Type", "Content");
                     println!("{}", "-".repeat(80));
                     for record in &dc_records {
-                        println!("{:<40} {:<10} {:<20}",
+                        println!(
+                            "{:<40} {:<10} {:<20}",
                             record["name"].as_str().unwrap_or("N/A"),
                             record["type"].as_str().unwrap_or("N/A"),
-                            record["content"].as_str().unwrap_or("N/A"));
+                            record["content"].as_str().unwrap_or("N/A")
+                        );
                     }
                     println!("{}", "=".repeat(80));
                     println!("Total: {} record(s)", dc_records.len());
@@ -1273,18 +1397,27 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
 
 async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<()> {
     match action {
-        GatewayAction::Ssh { host, port, identity_file } => {
+        GatewayAction::Ssh {
+            host,
+            port,
+            identity_file,
+        } => {
             println!("Testing SSH connectivity to {}:{}", host, port);
 
             // Use ssh command to test connectivity
             let output = tokio::process::Command::new("ssh")
                 .args([
-                    "-o", "StrictHostKeyChecking=no",
-                    "-o", "ConnectTimeout=10",
-                    "-i", &identity_file,
-                    "-p", &port.to_string(),
+                    "-o",
+                    "StrictHostKeyChecking=no",
+                    "-o",
+                    "ConnectTimeout=10",
+                    "-i",
+                    &identity_file,
+                    "-p",
+                    &port.to_string(),
                     &format!("root@{}", host),
-                    "echo", "SSH_CONNECTION_OK",
+                    "echo",
+                    "SSH_CONNECTION_OK",
                 ])
                 .output()
                 .await?;
@@ -1301,14 +1434,19 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
                 anyhow::bail!("SSH connection failed: {}", stderr);
             }
         }
-        GatewayAction::Tcp { host, external_port, expect_response } => {
+        GatewayAction::Tcp {
+            host,
+            external_port,
+            expect_response,
+        } => {
             println!("Testing TCP connectivity to {}:{}", host, external_port);
 
-            use tokio::net::TcpStream;
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            use tokio::net::TcpStream;
 
             let addr = format!("{}:{}", host, external_port);
-            let mut stream = TcpStream::connect(&addr).await
+            let mut stream = TcpStream::connect(&addr)
+                .await
                 .with_context(|| format!("Failed to connect to {}", addr))?;
 
             println!("TCP connection established.");
@@ -1320,21 +1458,29 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
                 let mut buffer = [0u8; 1024];
                 let n = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    stream.read(&mut buffer)
-                ).await
+                    stream.read(&mut buffer),
+                )
+                .await
                 .context("Timeout waiting for response")??;
 
                 let response = String::from_utf8_lossy(&buffer[..n]);
                 if response.contains(&expected) {
                     println!("Expected response received: {}", response.trim());
                 } else {
-                    anyhow::bail!("Unexpected response: expected '{}', got '{}'", expected, response.trim());
+                    anyhow::bail!(
+                        "Unexpected response: expected '{}', got '{}'",
+                        expected,
+                        response.trim()
+                    );
                 }
             } else {
                 println!("TCP connectivity OK (no response check requested).");
             }
         }
-        GatewayAction::Contract { contract_id, identity } => {
+        GatewayAction::Contract {
+            contract_id,
+            identity,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -1343,7 +1489,8 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
 
             println!("Testing gateway connectivity for contract: {}", contract_id);
 
-            let gateway_slug = contract.gateway_slug
+            let gateway_slug = contract
+                .gateway_slug
                 .context("Contract has no gateway configured")?;
             let gateway_host = format!("{}.gateway.decent-cloud.org", gateway_slug);
 
@@ -1358,15 +1505,21 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
                 }
             }
 
-            if let (Some(start), Some(end)) = (contract.gateway_port_range_start, contract.gateway_port_range_end) {
+            if let (Some(start), Some(end)) = (
+                contract.gateway_port_range_start,
+                contract.gateway_port_range_end,
+            ) {
                 println!("\nTesting port range {}-{}...", start, end);
                 use tokio::net::TcpStream;
-                for port in start..=end.min(start + 5) { // Test first 5 ports max
+                for port in start..=end.min(start + 5) {
+                    // Test first 5 ports max
                     let addr = format!("{}:{}", gateway_host, port);
                     match tokio::time::timeout(
                         std::time::Duration::from_secs(2),
-                        TcpStream::connect(&addr)
-                    ).await {
+                        TcpStream::connect(&addr),
+                    )
+                    .await
+                    {
                         Ok(Ok(_)) => println!("  Port {} is reachable", port),
                         Ok(Err(e)) => println!("  Port {} not reachable: {}", port, e),
                         Err(_) => println!("  Port {} connection timeout", port),
@@ -1401,7 +1554,10 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             let result = http.get(&url).send().await;
             match result {
                 Ok(resp) if resp.status().is_success() => {
-                    println!("API Server: ✓ healthy ({:.0}ms)", start.elapsed().as_millis());
+                    println!(
+                        "API Server: ✓ healthy ({:.0}ms)",
+                        start.elapsed().as_millis()
+                    );
                 }
                 Ok(resp) => {
                     println!("API Server: ✗ unhealthy - status {}", resp.status());
@@ -1418,7 +1574,10 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             // API
             let start = std::time::Instant::now();
             let url = format!("{}/api/v1/offerings?limit=1", api_url);
-            let api_result = http.get(&url).send().await
+            let api_result = http
+                .get(&url)
+                .send()
+                .await
                 .map(|_| format!("{:.0}ms", start.elapsed().as_millis()))
                 .map_err(|e| anyhow::anyhow!("{}", e));
             check_health("API Server", api_result).await;
@@ -1426,7 +1585,10 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             // Database (via API health)
             let start = std::time::Instant::now();
             let url = format!("{}/api/v1/providers?limit=1", api_url);
-            let db_result = http.get(&url).send().await
+            let db_result = http
+                .get(&url)
+                .send()
+                .await
                 .map(|_| format!("{:.0}ms", start.elapsed().as_millis()))
                 .map_err(|e| anyhow::anyhow!("{}", e));
             check_health("Database", db_result).await;
@@ -1434,9 +1596,14 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             // Cloudflare
             if env::var("CLOUDFLARE_API_TOKEN").is_ok() {
                 let start = std::time::Instant::now();
-                let cf_result = http.get("https://api.cloudflare.com/client/v4/user/tokens/verify")
-                    .header("Authorization", format!("Bearer {}", env::var("CLOUDFLARE_API_TOKEN").unwrap()))
-                    .send().await
+                let cf_result = http
+                    .get("https://api.cloudflare.com/client/v4/user/tokens/verify")
+                    .header(
+                        "Authorization",
+                        format!("Bearer {}", env::var("CLOUDFLARE_API_TOKEN").unwrap()),
+                    )
+                    .send()
+                    .await
                     .map(|_| format!("{:.0}ms", start.elapsed().as_millis()))
                     .map_err(|e| anyhow::anyhow!("{}", e));
                 check_health("Cloudflare DNS", cf_result).await;
@@ -1447,9 +1614,14 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             // Stripe
             if env::var("STRIPE_SECRET_KEY").is_ok() {
                 let start = std::time::Instant::now();
-                let stripe_result = http.get("https://api.stripe.com/v1/balance")
-                    .header("Authorization", format!("Bearer {}", env::var("STRIPE_SECRET_KEY").unwrap()))
-                    .send().await
+                let stripe_result = http
+                    .get("https://api.stripe.com/v1/balance")
+                    .header(
+                        "Authorization",
+                        format!("Bearer {}", env::var("STRIPE_SECRET_KEY").unwrap()),
+                    )
+                    .send()
+                    .await
                     .map(|_| format!("{:.0}ms", start.elapsed().as_millis()))
                     .map_err(|e| anyhow::anyhow!("{}", e));
                 check_health("Stripe", stripe_result).await;
@@ -1468,7 +1640,10 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             if let Ok(token) = env::var("TELEGRAM_BOT_TOKEN") {
                 let start = std::time::Instant::now();
                 let url = format!("https://api.telegram.org/bot{}/getMe", token);
-                let tg_result = http.get(&url).send().await
+                let tg_result = http
+                    .get(&url)
+                    .send()
+                    .await
                     .map(|_| format!("{:.0}ms", start.elapsed().as_millis()))
                     .map_err(|e| anyhow::anyhow!("{}", e));
                 check_health("Telegram Bot", tg_result).await;
@@ -1479,26 +1654,31 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             println!("{}", "=".repeat(60));
         }
         HealthAction::Cloudflare => {
-            let token = env::var("CLOUDFLARE_API_TOKEN")
-                .context("CLOUDFLARE_API_TOKEN not set")?;
+            let token = env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
             let start = std::time::Instant::now();
-            let response = http.get("https://api.cloudflare.com/client/v4/user/tokens/verify")
+            let response = http
+                .get("https://api.cloudflare.com/client/v4/user/tokens/verify")
                 .header("Authorization", format!("Bearer {}", token))
-                .send().await?;
+                .send()
+                .await?;
             if response.status().is_success() {
-                println!("Cloudflare DNS: ✓ healthy ({:.0}ms)", start.elapsed().as_millis());
+                println!(
+                    "Cloudflare DNS: ✓ healthy ({:.0}ms)",
+                    start.elapsed().as_millis()
+                );
             } else {
                 let text = response.text().await?;
                 println!("Cloudflare DNS: ✗ unhealthy - {}", text);
             }
         }
         HealthAction::Stripe => {
-            let key = env::var("STRIPE_SECRET_KEY")
-                .context("STRIPE_SECRET_KEY not set")?;
+            let key = env::var("STRIPE_SECRET_KEY").context("STRIPE_SECRET_KEY not set")?;
             let start = std::time::Instant::now();
-            let response = http.get("https://api.stripe.com/v1/balance")
+            let response = http
+                .get("https://api.stripe.com/v1/balance")
                 .header("Authorization", format!("Bearer {}", key))
-                .send().await?;
+                .send()
+                .await?;
             if response.status().is_success() {
                 println!("Stripe: ✓ healthy ({:.0}ms)", start.elapsed().as_millis());
             } else {
@@ -1514,13 +1694,15 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             }
         }
         HealthAction::Telegram => {
-            let token = env::var("TELEGRAM_BOT_TOKEN")
-                .context("TELEGRAM_BOT_TOKEN not set")?;
+            let token = env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN not set")?;
             let start = std::time::Instant::now();
             let url = format!("https://api.telegram.org/bot{}/getMe", token);
             let response = http.get(&url).send().await?;
             if response.status().is_success() {
-                println!("Telegram Bot: ✓ healthy ({:.0}ms)", start.elapsed().as_millis());
+                println!(
+                    "Telegram Bot: ✓ healthy ({:.0}ms)",
+                    start.elapsed().as_millis()
+                );
             } else {
                 let text = response.text().await?;
                 println!("Telegram Bot: ✗ unhealthy - {}", text);
@@ -1536,7 +1718,13 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
 
 async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
     match action {
-        E2eAction::Provision { identity, offering_id, ssh_pubkey, verify_ssh, cleanup } => {
+        E2eAction::Provision {
+            identity,
+            offering_id,
+            ssh_pubkey,
+            verify_ssh,
+            cleanup,
+        } => {
             println!("\n========================================");
             println!("  E2E Provisioning Test");
             println!("========================================\n");
@@ -1561,7 +1749,8 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
             let db = Database::new(&db_url).await?;
             let contract_id_bytes = uuid::Uuid::parse_str(&contract_id)?.as_bytes().to_vec();
-            db.set_payment_status_for_testing(&contract_id_bytes, "succeeded").await?;
+            db.set_payment_status_for_testing(&contract_id_bytes, "succeeded")
+                .await?;
             println!("  Payment status set to 'succeeded'");
 
             // Step 2: Wait for provisioning
@@ -1584,10 +1773,17 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 }
 
                 if start.elapsed() > timeout {
-                    anyhow::bail!("Timeout waiting for provisioning. Current status: {}", contract.status);
+                    anyhow::bail!(
+                        "Timeout waiting for provisioning. Current status: {}",
+                        contract.status
+                    );
                 }
 
-                println!("  Status: '{}', waiting... ({:.0}s)", contract.status, start.elapsed().as_secs_f64());
+                println!(
+                    "  Status: '{}', waiting... ({:.0}s)",
+                    contract.status,
+                    start.elapsed().as_secs_f64()
+                );
                 tokio::time::sleep(poll_interval).await;
             }
 
@@ -1610,8 +1806,10 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 let addr = format!("{}:{}", gateway_host, ssh_port);
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(10),
-                    TcpStream::connect(&addr)
-                ).await {
+                    TcpStream::connect(&addr),
+                )
+                .await
+                {
                     Ok(Ok(_)) => println!("  SSH port reachable!"),
                     Ok(Err(e)) => println!("  Warning: SSH port not reachable: {}", e),
                     Err(_) => println!("  Warning: SSH connection timeout"),
@@ -1621,7 +1819,9 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             // Step 5: Cleanup (optional)
             if cleanup {
                 println!("\nStep 5: Cleaning up (cancelling contract)...");
-                let request = CancelContractRequest { memo: Some("E2E test cleanup".to_string()) };
+                let request = CancelContractRequest {
+                    memo: Some("E2E test cleanup".to_string()),
+                };
                 let path = format!("/contracts/{}/cancel", contract_id);
                 let _: String = client.put_api(&path, &request).await?;
                 println!("  Contract cancelled");
@@ -1631,7 +1831,10 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             println!("  E2E Provisioning Test: SUCCESS");
             println!("========================================\n");
         }
-        E2eAction::Lifecycle { identity, skip_payment } => {
+        E2eAction::Lifecycle {
+            identity,
+            skip_payment,
+        } => {
             println!("\n========================================");
             println!("  E2E Contract Lifecycle Test");
             println!("========================================\n");
@@ -1666,7 +1869,10 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             println!("  - A provider with dc-agent running");
 
             println!("\nRun individual tests with:");
-            println!("  api-cli e2e provision --identity {} --offering-id <id> --ssh-pubkey '<key>'", identity);
+            println!(
+                "  api-cli e2e provision --identity {} --offering-id <id> --ssh-pubkey '<key>'",
+                identity
+            );
         }
     }
     Ok(())
@@ -1727,8 +1933,7 @@ async fn handle_test_email(to: &str, with_dkim: bool) -> Result<()> {
         anyhow::bail!("Invalid email address: {}", e);
     }
 
-    let api_key = env::var("MAILCHANNELS_API_KEY")
-        .context("MAILCHANNELS_API_KEY not set")?;
+    let api_key = env::var("MAILCHANNELS_API_KEY").context("MAILCHANNELS_API_KEY not set")?;
 
     if api_key.is_empty() {
         anyhow::bail!("MAILCHANNELS_API_KEY is empty");
@@ -1779,7 +1984,9 @@ async fn handle_test_email(to: &str, with_dkim: bool) -> Result<()> {
     println!("  From: {}", from_addr);
     println!("  To: {}", to);
 
-    email_service.send_email(from_addr, to, subject, &body, false).await?;
+    email_service
+        .send_email(from_addr, to, subject, &body, false)
+        .await?;
     println!("\n✓ SUCCESS! Test email sent.");
     println!("Please check your inbox at: {}", to);
     Ok(())
@@ -1841,7 +2048,12 @@ async fn handle_seed_provider(
     println!("\n========================================");
     println!("  Import Summary");
     println!("========================================");
-    println!("Total: {}, Success: {}, Errors: {}", line_count, success_count, errors.len());
+    println!(
+        "Total: {}, Success: {}, Errors: {}",
+        line_count,
+        success_count,
+        errors.len()
+    );
 
     if !errors.is_empty() {
         println!("\nErrors:");
@@ -1854,7 +2066,10 @@ async fn handle_seed_provider(
     }
 
     if success_count > 0 {
-        println!("\n✓ Successfully seeded {} offerings for {}", success_count, name);
+        println!(
+            "\n✓ Successfully seeded {} offerings for {}",
+            success_count, name
+        );
     }
 
     Ok(())

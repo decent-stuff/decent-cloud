@@ -75,7 +75,12 @@ impl PortAllocator {
     }
 
     /// Allocate a port range for a VM.
-    pub fn allocate(&mut self, slug: &str, contract_id: &str, internal_ip: &str) -> Result<PortAllocation> {
+    pub fn allocate(
+        &mut self,
+        slug: &str,
+        contract_id: &str,
+        internal_ip: &str,
+    ) -> Result<PortAllocation> {
         // Check if already allocated (idempotent)
         if let Some(existing) = self.allocations.allocations.get(slug) {
             return Ok(existing.clone());
@@ -177,7 +182,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut allocator = create_allocator(&temp_dir);
 
-        let alloc = allocator.allocate("abc123", "contract-1", "10.0.0.1").unwrap();
+        let alloc = allocator
+            .allocate("abc123", "contract-1", "10.0.0.1")
+            .unwrap();
         assert_eq!(alloc.base, 20000);
         assert_eq!(alloc.count, 10);
         assert_eq!(alloc.contract_id, "contract-1");
@@ -189,9 +196,15 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut allocator = create_allocator(&temp_dir);
 
-        let alloc1 = allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-        let alloc2 = allocator.allocate("slug2", "contract-2", "10.0.0.2").unwrap();
-        let alloc3 = allocator.allocate("slug3", "contract-3", "10.0.0.3").unwrap();
+        let alloc1 = allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
+        let alloc2 = allocator
+            .allocate("slug2", "contract-2", "10.0.0.2")
+            .unwrap();
+        let alloc3 = allocator
+            .allocate("slug3", "contract-3", "10.0.0.3")
+            .unwrap();
 
         assert_eq!(alloc1.base, 20000);
         assert_eq!(alloc2.base, 20010);
@@ -203,8 +216,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut allocator = create_allocator(&temp_dir);
 
-        let alloc1 = allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-        let alloc2 = allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
+        let alloc1 = allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
+        let alloc2 = allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
 
         assert_eq!(alloc1.base, alloc2.base);
         assert_eq!(alloc1.count, alloc2.count);
@@ -215,13 +232,19 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut allocator = create_allocator(&temp_dir);
 
-        let alloc1 = allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-        allocator.allocate("slug2", "contract-2", "10.0.0.2").unwrap();
+        let alloc1 = allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
+        allocator
+            .allocate("slug2", "contract-2", "10.0.0.2")
+            .unwrap();
 
         allocator.free("slug1").unwrap();
 
         // New allocation should reuse freed slot
-        let alloc3 = allocator.allocate("slug3", "contract-3", "10.0.0.3").unwrap();
+        let alloc3 = allocator
+            .allocate("slug3", "contract-3", "10.0.0.3")
+            .unwrap();
         assert_eq!(alloc3.base, alloc1.base);
     }
 
@@ -233,8 +256,12 @@ mod tests {
         {
             let mut allocator =
                 PortAllocator::new(path.to_str().unwrap(), 20000, 20100, 10).unwrap();
-            allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-            allocator.allocate("slug2", "contract-2", "10.0.0.2").unwrap();
+            allocator
+                .allocate("slug1", "contract-1", "10.0.0.1")
+                .unwrap();
+            allocator
+                .allocate("slug2", "contract-2", "10.0.0.2")
+                .unwrap();
         }
 
         // Reload and verify
@@ -243,7 +270,10 @@ mod tests {
         assert!(allocator.get("slug2").is_some());
         assert_eq!(allocator.get("slug1").unwrap().base, 20000);
         assert_eq!(allocator.get("slug2").unwrap().base, 20010);
-        assert_eq!(allocator.get("slug1").unwrap().internal_ip, Some("10.0.0.1".to_string()));
+        assert_eq!(
+            allocator.get("slug1").unwrap().internal_ip,
+            Some("10.0.0.1".to_string())
+        );
     }
 
     #[test]
@@ -253,8 +283,12 @@ mod tests {
         // Only room for 2 allocations (20 ports, 10 per VM)
         let mut allocator = PortAllocator::new(path.to_str().unwrap(), 20000, 20020, 10).unwrap();
 
-        allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-        allocator.allocate("slug2", "contract-2", "10.0.0.2").unwrap();
+        allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
+        allocator
+            .allocate("slug2", "contract-2", "10.0.0.2")
+            .unwrap();
 
         let result = allocator.allocate("slug3", "contract-3", "10.0.0.3");
         assert!(result.is_err());
@@ -266,8 +300,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let mut allocator = create_allocator(&temp_dir);
 
-        allocator.allocate("slug1", "contract-1", "10.0.0.1").unwrap();
-        allocator.allocate("slug2", "contract-2", "10.0.0.2").unwrap();
+        allocator
+            .allocate("slug1", "contract-1", "10.0.0.1")
+            .unwrap();
+        allocator
+            .allocate("slug2", "contract-2", "10.0.0.2")
+            .unwrap();
 
         assert_eq!(
             allocator.find_slug_by_contract("contract-1"),

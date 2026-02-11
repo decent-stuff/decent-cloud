@@ -45,8 +45,7 @@ use poem::{
     get, handler,
     listener::TcpListener,
     middleware::{CookieJarManager, Cors},
-    post,
-    EndpointExt, Route, Server,
+    post, EndpointExt, Route, Server,
 };
 use poem_openapi::OpenApiService;
 use std::env;
@@ -317,9 +316,11 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
     })?;
 
     // Find existing webhook with matching URL
-    let existing_webhook = list_body["data"]
-        .as_array()
-        .and_then(|webhooks| webhooks.iter().find(|wh| wh["url"].as_str() == Some(&webhook_url)));
+    let existing_webhook = list_body["data"].as_array().and_then(|webhooks| {
+        webhooks
+            .iter()
+            .find(|wh| wh["url"].as_str() == Some(&webhook_url))
+    });
 
     if let Some(webhook) = existing_webhook {
         let webhook_id = webhook["id"].as_str().unwrap_or("");
@@ -353,7 +354,9 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
         println!("[OK]");
         println!("\n=== Webhook Updated Successfully ===");
         println!("\nNote: The webhook signing secret remains unchanged.");
-        println!("If you need the secret, delete and recreate the webhook in the Stripe dashboard.");
+        println!(
+            "If you need the secret, delete and recreate the webhook in the Stripe dashboard."
+        );
     } else {
         println!("[OK] none found");
 
@@ -405,7 +408,10 @@ async fn setup_dkim(selector: &str) -> Result<(), std::io::Error> {
     println!("=== DKIM Setup ===\n");
 
     // Validate selector
-    if selector.is_empty() || selector.len() > 63 || !selector.chars().all(|c| c.is_alphanumeric() || c == '-') {
+    if selector.is_empty()
+        || selector.len() > 63
+        || !selector.chars().all(|c| c.is_alphanumeric() || c == '-')
+    {
         return Err(std::io::Error::other(
             "Invalid selector: must be 1-63 alphanumeric characters or hyphens",
         ));
@@ -441,8 +447,12 @@ async fn setup_dkim(selector: &str) -> Result<(), std::io::Error> {
     // Encode keys
     let private_key_bytes = signing_key.to_bytes();
     let public_key_bytes = verifying_key.to_bytes();
-    let private_key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key_bytes);
-    let public_key_base64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_key_bytes);
+    let private_key_base64 = base64::Engine::encode(
+        &base64::engine::general_purpose::STANDARD,
+        private_key_bytes,
+    );
+    let public_key_base64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_key_bytes);
 
     // Build DKIM TXT record value
     // Format: v=DKIM1; k=ed25519; p=<base64_public_key>
@@ -761,8 +771,7 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     );
 
     // Test OAuth configuration if set
-    if env::var("GOOGLE_OAUTH_CLIENT_ID").is_ok()
-        && env::var("GOOGLE_OAUTH_CLIENT_SECRET").is_ok()
+    if env::var("GOOGLE_OAUTH_CLIENT_ID").is_ok() && env::var("GOOGLE_OAUTH_CLIENT_SECRET").is_ok()
     {
         print!("  Checking OAuth client configuration... ");
         // Verify the redirect URL is parseable
@@ -790,11 +799,7 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     // === ICPay Integration ===
     println!("\nICPay (ICP Payments):");
     check_env!("ICPAY_SECRET_KEY", optional, "ICP payments disabled");
-    check_env!(
-        "ICPAY_WEBHOOK_SECRET",
-        optional,
-        "ICPay webhooks disabled"
-    );
+    check_env!("ICPAY_WEBHOOK_SECRET", optional, "ICPay webhooks disabled");
 
     // Test ICPay connectivity if configured
     if env::var("ICPAY_SECRET_KEY").is_ok() {
@@ -826,7 +831,9 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
         Err(_) => {
             println!("  [WARN] FRONTEND_URL - NOT SET (defaults to localhost:59010)");
-            println!("         This will break emails, OAuth, and payment callbacks in production!");
+            println!(
+                "         This will break emails, OAuth, and payment callbacks in production!"
+            );
             println!("         Set FRONTEND_URL to your production domain (e.g., https://decent-cloud.org)");
             warnings += 1;
         }
