@@ -3,7 +3,7 @@ resolver = "2"
 members = ["api", "api/email-utils", "cli", "common", "dc-agent", "ic-canister", "ledger-map"]
 
 [workspace.package]
-version = "0.4.9"
+version = "0.4.17"
 edition = "2021"
 
 [workspace.dependencies]
