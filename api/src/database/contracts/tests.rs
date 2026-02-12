@@ -692,6 +692,10 @@ async fn test_add_provisioning_details_extracts_gateway_fields() {
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.gateway_slug.as_deref(), Some("k7m2p4"));
+    assert_eq!(
+        contract.gateway_subdomain.as_deref(),
+        Some("k7m2p4.dc-lk.decent-cloud.org")
+    );
     assert_eq!(contract.gateway_ssh_port, Some(20000));
     assert_eq!(contract.gateway_port_range_start, Some(20000));
     assert_eq!(contract.gateway_port_range_end, Some(20009));
@@ -724,6 +728,7 @@ async fn test_add_provisioning_details_handles_missing_gateway_fields() {
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.gateway_slug, None);
+    assert_eq!(contract.gateway_subdomain, None);
     assert_eq!(contract.gateway_ssh_port, None);
     assert_eq!(contract.gateway_port_range_start, None);
     assert_eq!(contract.gateway_port_range_end, None);

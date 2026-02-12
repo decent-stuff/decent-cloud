@@ -776,6 +776,7 @@ export interface Contract {
 	cancel_at_period_end?: boolean;
 	// Gateway fields
 	gateway_slug?: string;
+	gateway_subdomain?: string;
 	gateway_ssh_port?: number;
 	gateway_port_range_start?: number;
 	gateway_port_range_end?: number;

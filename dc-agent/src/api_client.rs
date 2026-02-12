@@ -559,17 +559,18 @@ impl ApiClient {
 
     /// Create a gateway DNS record via the central API.
     /// The API handles Cloudflare credentials securely.
+    /// Returns the full subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org").
     pub async fn create_dns_record(
         &self,
         slug: &str,
-        datacenter: &str,
+        dc_id: &str,
         public_ip: &str,
     ) -> Result<String> {
         let path = "/api/v1/agents/dns";
         let request = serde_json::json!({
             "action": "create",
             "slug": slug,
-            "datacenter": datacenter,
+            "dcId": dc_id,
             "publicIp": public_ip
         });
         let body = serde_json::to_vec(&request)?;
@@ -580,12 +581,12 @@ impl ApiClient {
     }
 
     /// Delete a gateway DNS record via the central API.
-    pub async fn delete_dns_record(&self, slug: &str, datacenter: &str) -> Result<String> {
+    pub async fn delete_dns_record(&self, slug: &str, dc_id: &str) -> Result<String> {
         let path = "/api/v1/agents/dns";
         let request = serde_json::json!({
             "action": "delete",
             "slug": slug,
-            "datacenter": datacenter
+            "dcId": dc_id
         });
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<DnsResponse> =

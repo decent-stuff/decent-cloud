@@ -739,12 +739,17 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     check_env!("CF_API_TOKEN", optional, "gateway DNS disabled");
     check_env!("CF_ZONE_ID", optional, "gateway DNS disabled");
     check_env!("CF_DOMAIN", optional, "uses default decent-cloud.org");
+    check_env!("CF_GW_PREFIX", optional, "uses default 'gw' (prod)");
 
     // Test Cloudflare configuration if set
     if env::var("CF_API_TOKEN").is_ok() && env::var("CF_ZONE_ID").is_ok() {
         print!("  Checking Cloudflare configuration... ");
         match crate::cloudflare_dns::CloudflareDns::from_env() {
-            Some(client) => println!("[OK] domain = {}", client.domain()),
+            Some(client) => println!(
+                "[OK] domain = {}, gw_prefix = {}",
+                client.domain(),
+                client.gw_prefix()
+            ),
             None => {
                 println!("[ERROR] failed to create client");
                 errors += 1;

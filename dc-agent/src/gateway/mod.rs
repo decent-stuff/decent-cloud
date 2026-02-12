@@ -79,11 +79,6 @@ impl GatewayManager {
             .collect()
     }
 
-    /// Build the full subdomain from a slug.
-    pub fn build_subdomain(&self, slug: &str) -> String {
-        format!("{}.{}.{}", slug, self.config.datacenter, self.config.domain)
-    }
-
     /// Setup gateway for a newly provisioned VM.
     /// Returns the updated instance with gateway fields populated.
     pub async fn setup_gateway(
@@ -115,7 +110,6 @@ impl GatewayManager {
     ) -> Result<Instance> {
         // Generate slug
         let slug = Self::generate_slug();
-        let subdomain = self.build_subdomain(&slug);
 
         // Get internal IP (required for Caddy routing and iptables)
         let internal_ip = instance
@@ -131,14 +125,16 @@ impl GatewayManager {
 
         // Create DNS record FIRST via central API (unless skipped for testing)
         // Must exist before Caddy config so HTTP-01 challenge can succeed
-        if skip_dns {
+        // The API returns the full subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org")
+        let subdomain = if skip_dns {
             tracing::info!("Skipping DNS record creation (--skip-dns specified)");
+            format!("{}.{}.local", slug, self.config.dc_id)
         } else {
             self.api_client
-                .create_dns_record(&slug, &self.config.datacenter, &self.config.public_ip)
+                .create_dns_record(&slug, &self.config.dc_id, &self.config.public_ip)
                 .await
-                .context("Failed to create DNS record")?;
-        }
+                .context("Failed to create DNS record")?
+        };
 
         // Setup iptables DNAT for TCP/UDP port forwarding
         IptablesNat::setup_forwarding(&slug, internal_ip, &allocation)
@@ -193,7 +189,7 @@ impl GatewayManager {
         // Delete DNS record via central API
         if let Err(e) = self
             .api_client
-            .delete_dns_record(slug, &self.config.datacenter)
+            .delete_dns_record(slug, &self.config.dc_id)
             .await
         {
             tracing::warn!("Failed to delete DNS record for {}: {}", slug, e);

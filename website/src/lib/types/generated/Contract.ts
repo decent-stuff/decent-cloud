@@ -18,6 +18,10 @@ receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, stri
  */
 gateway_slug: string | null, 
 /**
+ * Full gateway subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org")
+ */
+gateway_subdomain: string | null, 
+/**
  * SSH port accessible via gateway (0-65535)
  */
 gateway_ssh_port: number | undefined, 

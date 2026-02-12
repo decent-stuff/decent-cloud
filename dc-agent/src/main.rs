@@ -135,17 +135,14 @@ enum SetupProvisioner {
         non_interactive: bool,
 
         // === Optional: Gateway setup (Caddy reverse proxy) ===
-        /// Datacenter identifier for gateway (e.g., dc-lk). Enables gateway setup.
+        /// Datacenter ID for gateway (2-20 chars [a-z0-9-]). Enables gateway setup.
+        /// Generate with: openssl rand -hex 4
         #[arg(long)]
-        gateway_datacenter: Option<String>,
+        gateway_dc_id: Option<String>,
 
         /// Host's public IPv4 address (auto-detected if not provided)
         #[arg(long)]
         gateway_public_ip: Option<String>,
-
-        /// Base domain for gateway (default: decent-cloud.org)
-        #[arg(long, default_value = "decent-cloud.org")]
-        gateway_domain: String,
 
         /// Start of port range for VM allocation (default: 20000)
         #[arg(long, default_value = "20000")]
@@ -165,7 +162,7 @@ enum SetupProvisioner {
         install_service: Option<bool>,
     },
     // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
-    // Use: dc-agent setup token --gateway-datacenter <DC> (public IP auto-detected)
+    // Use: dc-agent setup token --gateway-dc-id <DC_ID> (public IP auto-detected)
 }
 
 #[tokio::main]
@@ -230,9 +227,8 @@ async fn run_setup_token(
     proxmox_templates: &str,
     non_interactive: bool,
     // Gateway parameters
-    gateway_datacenter: Option<String>,
+    gateway_dc_id: Option<String>,
     gateway_public_ip: Option<String>,
-    gateway_domain: &str,
     gateway_port_start: u16,
     gateway_port_end: u16,
     gateway_ports_per_vm: u16,
@@ -325,9 +321,9 @@ async fn run_setup_token(
         None
     };
 
-    // Step 5b: Auto-derive gateway datacenter from pool_id if not provided
-    // Pool ID format: "sl-8eba3c90" -> datacenter "dc-sl"
-    let gateway_datacenter = gateway_datacenter.or_else(|| {
+    // Step 5b: Auto-derive gateway dc_id from pool_id if not provided
+    // Pool ID format: "sl-8eba3c90" -> dc_id "dc-sl"
+    let gateway_dc_id = gateway_dc_id.or_else(|| {
         // Check each condition and explain why auto-enable is skipped
         if !is_proxmox_host() {
             println!();
@@ -347,18 +343,18 @@ async fn run_setup_token(
 
         // Validate pool_id format: expected "<dc_code>-<uuid>" like "sl-8eba3c90"
         match parse_datacenter_from_pool_id(&response.pool_id) {
-            Some(datacenter) => {
+            Some(dc_id) => {
                 println!();
                 println!(
-                    "[auto] Gateway enabled: {} (derived from pool {})",
-                    datacenter, response.pool_id
+                    "[auto] Gateway enabled: dc_id={} (derived from pool {})",
+                    dc_id, response.pool_id
                 );
-                Some(datacenter)
+                Some(dc_id)
             }
             None => {
                 println!();
                 println!(
-                    "[warn] Cannot derive gateway datacenter: pool_id '{}' has invalid format (expected 'code-uuid')",
+                    "[warn] Cannot derive gateway dc_id: pool_id '{}' has invalid format (expected 'code-uuid')",
                     response.pool_id
                 );
                 None
@@ -462,9 +458,8 @@ type = "{provisioner_type}"
     // Step 7: Run gateway setup if parameters provided
     // Gateway setup runs locally on the host (same as Proxmox setup)
     let gateway_configured = run_gateway_setup_if_requested(
-        gateway_datacenter,
+        gateway_dc_id,
         gateway_public_ip,
-        gateway_domain,
         gateway_port_start,
         gateway_port_end,
         gateway_ports_per_vm,
@@ -532,7 +527,7 @@ type = "{provisioner_type}"
         if !gateway_configured {
             println!();
             println!("Note: Gateway not configured. VMs will need public IPs.");
-            println!("  To enable gateway, re-run setup with --gateway-datacenter <DC>");
+            println!("  To enable gateway, re-run setup with --gateway-dc-id <DC>");
         }
     } else if setup_complete {
         // Setup complete but service not installed
@@ -551,7 +546,7 @@ type = "{provisioner_type}"
         if !gateway_configured {
             println!();
             println!("Note: Gateway not configured. VMs will need public IPs.");
-            println!("  To enable gateway, re-run setup with --gateway-datacenter <DC>");
+            println!("  To enable gateway, re-run setup with --gateway-dc-id <DC>");
         }
     } else {
         // Proxmox not configured - show appropriate instructions
@@ -941,9 +936,8 @@ async fn run_proxmox_setup_if_requested(
 /// Runs locally on the Proxmox host - no SSH required.
 /// Returns true if gateway was configured, false otherwise.
 async fn run_gateway_setup_if_requested(
-    datacenter: Option<String>,
+    dc_id: Option<String>,
     public_ip: Option<String>,
-    domain: &str,
     port_start: u16,
     port_end: u16,
     ports_per_vm: u16,
@@ -952,8 +946,8 @@ async fn run_gateway_setup_if_requested(
     use std::io::Write;
 
     // Check if gateway setup was requested
-    let datacenter = match datacenter {
-        Some(dc) => dc,
+    let dc_id = match dc_id {
+        Some(id) => id,
         None => {
             // Gateway not requested
             return Ok(false);
@@ -976,8 +970,7 @@ async fn run_gateway_setup_if_requested(
 
     println!();
     println!("Setting up Gateway (Caddy reverse proxy) locally...");
-    println!("  Datacenter: {}", datacenter);
-    println!("  Domain: {}", domain);
+    println!("  DC ID: {}", dc_id);
     println!("  Public IP: {}", public_ip);
     println!(
         "  Port range: {}-{} ({} per VM)",
@@ -987,8 +980,7 @@ async fn run_gateway_setup_if_requested(
     println!();
 
     let setup = GatewaySetup {
-        datacenter: datacenter.clone(),
-        domain: domain.to_string(),
+        dc_id: dc_id.clone(),
         public_ip: public_ip.clone(),
         port_range_start: port_start,
         port_range_end: port_end,
@@ -1025,9 +1017,8 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             proxmox_storage,
             proxmox_templates,
             non_interactive,
-            gateway_datacenter,
+            gateway_dc_id,
             gateway_public_ip,
-            gateway_domain,
             gateway_port_start,
             gateway_port_end,
             gateway_ports_per_vm,
@@ -1044,9 +1035,8 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 &proxmox_templates,
                 non_interactive,
                 // Gateway parameters
-                gateway_datacenter,
+                gateway_dc_id,
                 gateway_public_ip,
-                &gateway_domain,
                 gateway_port_start,
                 gateway_port_end,
                 gateway_ports_per_vm,
@@ -1281,8 +1271,7 @@ async fn run_agent(config: Config) -> Result<()> {
         Some(gw_config) => match GatewayManager::new(gw_config.clone(), api_client.clone()) {
             Ok(gm) => {
                 info!(
-                    datacenter = %gw_config.datacenter,
-                    domain = %gw_config.domain,
+                    dc_id = %gw_config.dc_id,
                     public_ip = %gw_config.public_ip,
                     port_range = %format!("{}-{}", gw_config.port_range_start, gw_config.port_range_end),
                     "Gateway manager initialized"
@@ -2261,8 +2250,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     match &config.gateway {
         Some(gw) => {
             println!("Gateway:");
-            println!("  Datacenter: {}", gw.datacenter);
-            println!("  Domain: {}", gw.domain);
+            println!("  DC ID: {}", gw.dc_id);
             println!("  Public IP: {}", gw.public_ip);
             println!(
                 "  Port range: {}-{} ({} ports/VM)",
@@ -2281,7 +2269,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                     "  [WARN] Caddy sites directory does not exist: {}",
                     gw.caddy_sites_dir
                 );
-                println!("       Re-run setup with --gateway-datacenter to configure gateway");
+                println!("       Re-run setup with --gateway-dc-id to configure gateway");
             }
 
             // Check if Caddy is running
@@ -2357,7 +2345,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
         None => {
             println!("Gateway: Not configured");
             println!("  VMs will not get public subdomains");
-            println!("  To enable: re-run setup with --gateway-datacenter <DC>");
+            println!("  To enable: re-run setup with --gateway-dc-id <DC>");
         }
     }
     println!();

@@ -90,8 +90,8 @@ pub struct GatewayDnsRequest {
     pub action: String,
     /// Gateway slug (6 alphanumeric chars)
     pub slug: String,
-    /// Datacenter identifier (e.g., "dc-lk")
-    pub datacenter: String,
+    /// Datacenter identifier (2-20 chars [a-z0-9-], no leading/trailing hyphen)
+    pub dc_id: String,
     /// Public IP address (required for create, ignored for delete)
     #[oai(skip_serializing_if_is_none)]
     pub public_ip: Option<String>,
@@ -703,16 +703,16 @@ impl AgentsApi {
             });
         }
 
-        // Validate datacenter
-        if req.datacenter.is_empty() || req.datacenter.len() > 20 {
+        // Validate dc_id
+        if let Err(e) = CloudflareDns::validate_dc_id(&req.dc_id) {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Invalid datacenter: must be 1-20 characters".to_string()),
+                error: Some(format!("Invalid dc_id: {}", e)),
             });
         }
 
-        let subdomain = format!("{}.{}.{}", req.slug, req.datacenter, cf.domain());
+        let subdomain = cf.gateway_fqdn(&req.slug, &req.dc_id);
 
         match req.action.as_str() {
             "create" => {
@@ -728,7 +728,7 @@ impl AgentsApi {
                 };
 
                 match cf
-                    .create_gateway_record(&req.slug, &req.datacenter, public_ip)
+                    .create_gateway_record(&req.slug, &req.dc_id, public_ip)
                     .await
                 {
                     Ok(()) => Json(ApiResponse {
@@ -743,7 +743,7 @@ impl AgentsApi {
                     }),
                 }
             }
-            "delete" => match cf.delete_gateway_record(&req.slug, &req.datacenter).await {
+            "delete" => match cf.delete_gateway_record(&req.slug, &req.dc_id).await {
                 Ok(()) => Json(ApiResponse {
                     success: true,
                     data: Some(GatewayDnsResponse { subdomain }),
@@ -773,14 +773,14 @@ mod tests {
         let json = r#"{
             "action": "create",
             "slug": "k7m2p4",
-            "datacenter": "dc-lk",
+            "dcId": "a3x9f2b1",
             "publicIp": "203.0.113.1"
         }"#;
 
         let request: GatewayDnsRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.action, "create");
         assert_eq!(request.slug, "k7m2p4");
-        assert_eq!(request.datacenter, "dc-lk");
+        assert_eq!(request.dc_id, "a3x9f2b1");
         assert_eq!(request.public_ip, Some("203.0.113.1".to_string()));
     }
 
@@ -789,7 +789,7 @@ mod tests {
         let json = r#"{
             "action": "delete",
             "slug": "k7m2p4",
-            "datacenter": "dc-lk"
+            "dcId": "a3x9f2b1"
         }"#;
 
         let request: GatewayDnsRequest = serde_json::from_str(json).unwrap();
@@ -800,11 +800,11 @@ mod tests {
     #[test]
     fn test_gateway_dns_response_serialization() {
         let response = GatewayDnsResponse {
-            subdomain: "k7m2p4.dc-lk.decent-cloud.org".to_string(),
+            subdomain: "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org".to_string(),
         };
 
         let json = serde_json::to_string(&response).unwrap();
-        assert!(json.contains("k7m2p4.dc-lk.decent-cloud.org"));
+        assert!(json.contains("k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org"));
     }
 
     #[test]

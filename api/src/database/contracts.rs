@@ -118,6 +118,9 @@ pub struct Contract {
     /// Gateway slug (6-char alphanumeric) for subdomain routing
     #[oai(skip_serializing_if_is_none)]
     pub gateway_slug: Option<String>,
+    /// Full gateway subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org")
+    #[oai(skip_serializing_if_is_none)]
+    pub gateway_subdomain: Option<String>,
     /// SSH port accessible via gateway (0-65535)
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
@@ -243,7 +246,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE requester_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -264,7 +267,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -285,7 +288,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
         )
@@ -355,7 +358,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE contract_id = $1"#,
             contract_id
         )
@@ -376,7 +379,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT $1 OFFSET $2"#,
             limit,
             offset
@@ -816,6 +819,7 @@ impl Database {
         #[derive(serde::Deserialize)]
         struct InstanceFields {
             gateway_slug: Option<String>,
+            gateway_subdomain: Option<String>,
             gateway_ssh_port: Option<u16>,
             gateway_port_range_start: Option<u16>,
             gateway_port_range_end: Option<u16>,
@@ -825,6 +829,7 @@ impl Database {
         let instance =
             serde_json::from_str::<InstanceFields>(instance_details).unwrap_or(InstanceFields {
                 gateway_slug: None,
+                gateway_subdomain: None,
                 gateway_ssh_port: None,
                 gateway_port_range_start: None,
                 gateway_port_range_end: None,
@@ -895,13 +900,15 @@ impl Database {
                SET provisioning_instance_details = $1,
                    provisioning_completed_at_ns = $2,
                    gateway_slug = $3,
-                   gateway_ssh_port = $4,
-                   gateway_port_range_start = $5,
-                   gateway_port_range_end = $6
-               WHERE contract_id = $7"#,
+                   gateway_subdomain = $4,
+                   gateway_ssh_port = $5,
+                   gateway_port_range_start = $6,
+                   gateway_port_range_end = $7
+               WHERE contract_id = $8"#,
             instance_details,
             provisioned_at_ns,
             instance.gateway_slug,
+            instance.gateway_subdomain,
             gateway_ssh_port,
             gateway_port_range_start,
             gateway_port_range_end,
@@ -1501,7 +1508,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
                AND payment_status = 'succeeded'

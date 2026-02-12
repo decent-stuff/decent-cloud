@@ -477,20 +477,35 @@ enum E2eAction {
         #[arg(long)]
         cleanup: bool,
     },
-    /// Run contract lifecycle E2E test
+    /// Run contract lifecycle E2E test (create → verify → cancel → verify cancelled)
     Lifecycle {
         /// Identity to use for signing
         #[arg(long)]
         identity: String,
-        /// Skip payment (testing only)
+        /// Offering ID (auto-discovered if not provided)
         #[arg(long)]
-        skip_payment: bool,
+        offering_id: Option<i64>,
+        /// SSH public key (dummy value used if not provided)
+        #[arg(long)]
+        ssh_pubkey: Option<String>,
     },
     /// Run all E2E tests
     All {
         /// Identity to use for signing
         #[arg(long)]
         identity: String,
+        /// Offering ID (auto-discovered if not provided)
+        #[arg(long)]
+        offering_id: Option<i64>,
+        /// SSH public key (required for provision test)
+        #[arg(long)]
+        ssh_pubkey: Option<String>,
+        /// Skip provisioning test (slow, needs dc-agent)
+        #[arg(long)]
+        skip_provision: bool,
+        /// Skip DNS test (needs Cloudflare credentials)
+        #[arg(long)]
+        skip_dns: bool,
     },
 }
 
@@ -803,6 +818,7 @@ struct Contract {
     status: String,
     payment_status: String,
     gateway_slug: Option<String>,
+    gateway_subdomain: Option<String>,
     gateway_ssh_port: Option<i32>,
     gateway_port_range_start: Option<i32>,
     gateway_port_range_end: Option<i32>,
@@ -913,13 +929,10 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
                 println!("  Checkout URL: {}", url);
             }
             if skip_payment {
-                // Mark payment as succeeded directly in DB
                 println!(
                     "\nNote: --skip-payment was used. Setting payment_status to 'succeeded'..."
                 );
-                let db_url = env::var("DATABASE_URL")
-                    .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
-                let db = Database::new(&db_url).await?;
+                let db = connect_db().await?;
                 let contract_id_bytes = uuid::Uuid::parse_str(&response.contract_id)?
                     .as_bytes()
                     .to_vec();
@@ -940,8 +953,10 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             println!("Contract: {}", contract.contract_id);
             println!("  Status: {}", contract.status);
             println!("  Payment status: {}", contract.payment_status);
-            if let Some(slug) = &contract.gateway_slug {
-                println!("  Gateway: {}.gateway.decent-cloud.org", slug);
+            if let Some(subdomain) = &contract.gateway_subdomain {
+                println!("  Gateway: {}", subdomain);
+            } else if let Some(slug) = &contract.gateway_slug {
+                println!("  Gateway slug: {} (no subdomain stored)", slug);
             }
             if let Some(port) = contract.gateway_ssh_port {
                 println!("  SSH port: {}", port);
@@ -964,44 +979,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
         } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
-
-            let start = std::time::Instant::now();
-            let timeout_duration = std::time::Duration::from_secs(timeout);
-            let poll_interval = std::time::Duration::from_secs(10);
-
-            println!(
-                "Waiting for contract {} to reach state '{}'...",
-                contract_id, state
-            );
-
-            loop {
-                let path = format!("/contracts/{}", contract_id);
-                let contract: Contract = client.get_api(&path).await?;
-
-                if contract.status == state {
-                    println!(
-                        "Contract reached state '{}' after {:?}",
-                        state,
-                        start.elapsed()
-                    );
-                    return Ok(());
-                }
-
-                if start.elapsed() > timeout_duration {
-                    anyhow::bail!(
-                        "Timeout waiting for contract to reach state '{}'. Current state: '{}'",
-                        state,
-                        contract.status
-                    );
-                }
-
-                println!(
-                    "  Current state: '{}', waiting... ({:.0}s elapsed)",
-                    contract.status,
-                    start.elapsed().as_secs_f64()
-                );
-                tokio::time::sleep(poll_interval).await;
-            }
+            wait_for_contract_status(&client, &contract_id, &state, timeout).await?;
         }
         ContractAction::List { identity } => {
             let id = Identity::load(&identity)?;
@@ -1042,10 +1020,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
         } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
-
-            let request = CancelContractRequest { memo };
-            let path = format!("/contracts/{}/cancel", contract_id);
-            let _: String = client.put_api(&path, &request).await?;
+            cancel_contract(&client, &contract_id, memo.as_deref()).await?;
             println!("Contract {} cancelled.", contract_id);
         }
     }
@@ -1245,8 +1220,9 @@ async fn handle_notify_action(action: NotifyAction) -> Result<()> {
 async fn handle_dns_action(action: DnsAction) -> Result<()> {
     let api_token = env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
     let zone_id = env::var("CLOUDFLARE_ZONE_ID").context("CLOUDFLARE_ZONE_ID not set")?;
-    let base_domain = env::var("CLOUDFLARE_BASE_DOMAIN")
-        .unwrap_or_else(|_| "gateway.decent-cloud.org".to_string());
+    let gw_prefix = env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
+    let domain = env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
+    let base_domain = format!("{}.{}", gw_prefix, domain);
 
     let http = reqwest::Client::new();
     let base_url = format!(
@@ -1489,10 +1465,9 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
 
             println!("Testing gateway connectivity for contract: {}", contract_id);
 
-            let gateway_slug = contract
-                .gateway_slug
-                .context("Contract has no gateway configured")?;
-            let gateway_host = format!("{}.gateway.decent-cloud.org", gateway_slug);
+            let gateway_host = contract
+                .gateway_subdomain
+                .context("Contract has no gateway subdomain")?;
 
             if let Some(ssh_port) = contract.gateway_ssh_port {
                 println!("\nTesting SSH on port {}...", ssh_port);
@@ -1713,6 +1688,207 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
 }
 
 // =============================================================================
+// Shared helpers (used across multiple handlers)
+// =============================================================================
+
+async fn connect_db() -> Result<Database> {
+    let db_url =
+        env::var("DATABASE_URL").unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
+    Database::new(&db_url).await
+}
+
+async fn fetch_offerings(api_url: &str) -> Result<Vec<Offering>> {
+    let http = reqwest::Client::new();
+    let url = format!("{}/api/v1/offerings?limit=50&in_stock_only=true", api_url);
+    let response = http.get(&url).send().await?;
+    let text = response.text().await?;
+    let api_response: api_cli::client::ApiResponse<Vec<Offering>> = serde_json::from_str(&text)?;
+    api_response.into_result()
+}
+
+async fn wait_for_contract_status(
+    client: &SignedClient,
+    contract_id: &str,
+    target: &str,
+    timeout_secs: u64,
+) -> Result<Contract> {
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(timeout_secs);
+    let poll_interval = std::time::Duration::from_secs(10);
+
+    println!(
+        "Waiting for contract {} to reach state '{}'...",
+        contract_id, target
+    );
+
+    loop {
+        let path = format!("/contracts/{}", contract_id);
+        let contract: Contract = client.get_api(&path).await?;
+
+        if contract.status == target {
+            println!(
+                "Contract reached state '{}' after {:?}",
+                target,
+                start.elapsed()
+            );
+            return Ok(contract);
+        }
+
+        // Bail on unexpected terminal states (but not if we're waiting for that state)
+        let terminal_states = ["cancelled", "rejected", "failed"];
+        if terminal_states.contains(&contract.status.as_str()) && contract.status != target {
+            anyhow::bail!(
+                "Contract reached terminal state '{}' while waiting for '{}'",
+                contract.status,
+                target
+            );
+        }
+
+        if start.elapsed() > timeout {
+            anyhow::bail!(
+                "Timeout waiting for contract to reach state '{}'. Current state: '{}'",
+                target,
+                contract.status
+            );
+        }
+
+        println!(
+            "  Current state: '{}', waiting... ({:.0}s elapsed)",
+            contract.status,
+            start.elapsed().as_secs_f64()
+        );
+        tokio::time::sleep(poll_interval).await;
+    }
+}
+
+async fn cancel_contract(
+    client: &SignedClient,
+    contract_id: &str,
+    memo: Option<&str>,
+) -> Result<()> {
+    let request = CancelContractRequest {
+        memo: memo.map(|m| m.to_string()),
+    };
+    let path = format!("/contracts/{}/cancel", contract_id);
+    let _: String = client.put_api(&path, &request).await?;
+    Ok(())
+}
+
+async fn create_contract_for_testing(
+    client: &SignedClient,
+    offering_id: i64,
+    ssh_pubkey: &str,
+) -> Result<String> {
+    let request = CreateContractRequest {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some(ssh_pubkey.to_string()),
+        duration_hours: Some(1),
+        payment_method: Some("icpay".to_string()),
+    };
+    let response: RentalRequestResponse = client.post_api("/contracts", &request).await?;
+    Ok(response.contract_id)
+}
+
+async fn run_dns_e2e_test() -> Result<()> {
+    let api_token =
+        env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
+    let zone_id =
+        env::var("CLOUDFLARE_ZONE_ID").context("CLOUDFLARE_ZONE_ID not set")?;
+    let gw_prefix = env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
+    let domain = env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
+    let base_domain = format!("{}.{}", gw_prefix, domain);
+
+    let http = reqwest::Client::new();
+    let base_url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
+        zone_id
+    );
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    let subdomain = format!("e2e-test-{}", timestamp);
+    let full_name = format!("{}.{}", subdomain, base_domain);
+    let test_ip = "127.0.0.1";
+    let lookup_url = format!("{}?name={}", base_url, urlencoding::encode(&full_name));
+
+    // Create test A record
+    println!("  Creating DNS record: {} -> {}", full_name, test_ip);
+    let params = serde_json::json!({
+        "type": "A",
+        "name": full_name,
+        "content": test_ip,
+        "ttl": 300,
+        "proxied": false,
+    });
+    let response = http
+        .post(&base_url)
+        .header("Authorization", format!("Bearer {}", api_token))
+        .json(&params)
+        .send()
+        .await?;
+    let text = response.text().await?;
+    let json: serde_json::Value = serde_json::from_str(&text)?;
+    anyhow::ensure!(
+        json["success"].as_bool().unwrap_or(false),
+        "Failed to create DNS record: {}",
+        text
+    );
+    let record_id = json["result"]["id"]
+        .as_str()
+        .context("No record ID in create response")?
+        .to_string();
+    println!("  Created record: {}", record_id);
+
+    // Verify record exists
+    println!("  Verifying record exists...");
+    let response = http
+        .get(&lookup_url)
+        .header("Authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    let text = response.text().await?;
+    let json: serde_json::Value = serde_json::from_str(&text)?;
+    let records = json["result"]
+        .as_array()
+        .context("No result array in response")?;
+    anyhow::ensure!(!records.is_empty(), "Record not found after creation");
+    println!("  Record verified");
+
+    // Delete record
+    println!("  Deleting record...");
+    let delete_url = format!("{}/{}", base_url, record_id);
+    let response = http
+        .delete(&delete_url)
+        .header("Authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    anyhow::ensure!(
+        response.status().is_success(),
+        "Failed to delete DNS record: {}",
+        response.status()
+    );
+    println!("  Record deleted");
+
+    // Verify deletion
+    println!("  Verifying deletion...");
+    let response = http
+        .get(&lookup_url)
+        .header("Authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    let text = response.text().await?;
+    let json: serde_json::Value = serde_json::from_str(&text)?;
+    let records = json["result"]
+        .as_array()
+        .context("No result array in response")?;
+    anyhow::ensure!(records.is_empty(), "Record still exists after deletion");
+    println!("  Deletion verified");
+
+    Ok(())
+}
+
+// =============================================================================
 // E2E handlers
 // =============================================================================
 
@@ -1732,22 +1908,14 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
-            // Step 1: Create contract with skip-payment (icpay auto-succeeds without checkout)
+            // Step 1: Create contract (icpay auto-succeeds payment)
             println!("Step 1: Creating contract...");
-            let request = CreateContractRequest {
-                offering_db_id: offering_id,
-                ssh_pubkey: Some(ssh_pubkey.clone()),
-                duration_hours: Some(1),
-                payment_method: Some("icpay".to_string()),
-            };
-            let response: RentalRequestResponse = client.post_api("/contracts", &request).await?;
-            let contract_id = response.contract_id.clone();
+            let contract_id =
+                create_contract_for_testing(&client, offering_id, &ssh_pubkey).await?;
             println!("  Contract created: {}", contract_id);
 
-            // Mark payment as succeeded
-            let db_url = env::var("DATABASE_URL")
-                .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
-            let db = Database::new(&db_url).await?;
+            // Safety net: ensure payment status via DB
+            let db = connect_db().await?;
             let contract_id_bytes = uuid::Uuid::parse_str(&contract_id)?.as_bytes().to_vec();
             db.set_payment_status_for_testing(&contract_id_bytes, "succeeded")
                 .await?;
@@ -1755,45 +1923,14 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
 
             // Step 2: Wait for provisioning
             println!("\nStep 2: Waiting for provisioning...");
-            let start = std::time::Instant::now();
-            let timeout = std::time::Duration::from_secs(300);
-            let poll_interval = std::time::Duration::from_secs(10);
-
-            loop {
-                let path = format!("/contracts/{}", contract_id);
-                let contract: Contract = client.get_api(&path).await?;
-
-                if contract.status == "provisioned" {
-                    println!("  Contract provisioned after {:?}", start.elapsed());
-                    break;
-                }
-
-                if contract.status == "cancelled" || contract.status == "rejected" {
-                    anyhow::bail!("Contract was {} during provisioning", contract.status);
-                }
-
-                if start.elapsed() > timeout {
-                    anyhow::bail!(
-                        "Timeout waiting for provisioning. Current status: {}",
-                        contract.status
-                    );
-                }
-
-                println!(
-                    "  Status: '{}', waiting... ({:.0}s)",
-                    contract.status,
-                    start.elapsed().as_secs_f64()
-                );
-                tokio::time::sleep(poll_interval).await;
-            }
+            let contract =
+                wait_for_contract_status(&client, &contract_id, "provisioned", 300).await?;
 
             // Step 3: Get gateway info
             println!("\nStep 3: Getting gateway information...");
-            let path = format!("/contracts/{}", contract_id);
-            let contract: Contract = client.get_api(&path).await?;
-
-            let gateway_slug = contract.gateway_slug.context("No gateway assigned")?;
-            let gateway_host = format!("{}.gateway.decent-cloud.org", gateway_slug);
+            let gateway_host = contract
+                .gateway_subdomain
+                .context("No gateway subdomain assigned")?;
             let ssh_port = contract.gateway_ssh_port.context("No SSH port assigned")?;
 
             println!("  Gateway: {}", gateway_host);
@@ -1819,11 +1956,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             // Step 5: Cleanup (optional)
             if cleanup {
                 println!("\nStep 5: Cleaning up (cancelling contract)...");
-                let request = CancelContractRequest {
-                    memo: Some("E2E test cleanup".to_string()),
-                };
-                let path = format!("/contracts/{}/cancel", contract_id);
-                let _: String = client.put_api(&path, &request).await?;
+                cancel_contract(&client, &contract_id, Some("E2E test cleanup")).await?;
                 println!("  Contract cancelled");
             }
 
@@ -1833,46 +1966,265 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
         }
         E2eAction::Lifecycle {
             identity,
-            skip_payment,
+            offering_id,
+            ssh_pubkey,
         } => {
             println!("\n========================================");
             println!("  E2E Contract Lifecycle Test");
             println!("========================================\n");
 
-            println!("This test requires an available offering and will:");
-            println!("  1. Create a contract");
-            println!("  2. Verify it reaches 'pending' state");
-            println!("  3. Cancel the contract");
-            println!("  4. Verify it reaches 'cancelled' state");
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
 
-            let _id = Identity::load(&identity)?;
+            // Step 1: Discover offering
+            let offering_id = match offering_id {
+                Some(oid) => {
+                    println!("Step 1: Using specified offering ID: {}", oid);
+                    oid
+                }
+                None => {
+                    println!("Step 1: Auto-discovering available offering...");
+                    let offerings = fetch_offerings(api_url).await?;
+                    anyhow::ensure!(
+                        !offerings.is_empty(),
+                        "No offerings available for lifecycle test"
+                    );
+                    let offering = &offerings[0];
+                    println!(
+                        "  Found offering: {} (ID: {})",
+                        offering.offer_name.as_deref().unwrap_or("N/A"),
+                        offering.id
+                    );
+                    offering.id
+                }
+            };
 
-            if !skip_payment {
-                println!("\nNote: Without --skip-payment, this test will not complete.");
-                println!("Use --skip-payment for testing purposes.");
-            }
+            // Step 2: Create contract (icpay auto-succeeds payment)
+            let ssh_key = ssh_pubkey.unwrap_or_else(|| {
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-lifecycle-test".to_string()
+            });
+            println!("\nStep 2: Creating contract...");
+            let contract_id =
+                create_contract_for_testing(&client, offering_id, &ssh_key).await?;
+            println!("  Contract created: {}", contract_id);
 
-            println!("\nLifecycle test placeholder - implement with actual offering ID.");
+            // Step 3: Verify contract exists with expected status
+            println!("\nStep 3: Verifying contract...");
+            let path = format!("/contracts/{}", contract_id);
+            let contract: Contract = client.get_api(&path).await?;
+            println!(
+                "  Status: {}, Payment: {}",
+                contract.status, contract.payment_status
+            );
+            anyhow::ensure!(
+                contract.status == "requested" || contract.status == "accepted",
+                "Unexpected contract status: '{}' (expected 'requested' or 'accepted')",
+                contract.status
+            );
+
+            // Step 4: Cancel contract
+            println!("\nStep 4: Cancelling contract...");
+            cancel_contract(&client, &contract_id, Some("E2E lifecycle test")).await?;
+            println!("  Cancel request sent");
+
+            // Step 5: Verify cancelled
+            println!("\nStep 5: Verifying cancellation...");
+            wait_for_contract_status(&client, &contract_id, "cancelled", 30).await?;
+
+            println!("\n========================================");
+            println!("  E2E Contract Lifecycle Test: SUCCESS");
+            println!("========================================\n");
         }
-        E2eAction::All { identity } => {
+        E2eAction::All {
+            identity,
+            offering_id,
+            ssh_pubkey,
+            skip_provision,
+            skip_dns,
+        } => {
             println!("\n========================================");
             println!("  Running All E2E Tests");
             println!("========================================\n");
 
-            // Verify identity exists
-            let _id = Identity::load(&identity)?;
+            let id = Identity::load(&identity)?;
             println!("Using identity: {}", identity);
 
-            println!("\nNote: Full E2E tests require:");
-            println!("  - A running API server");
-            println!("  - At least one available offering");
-            println!("  - A provider with dc-agent running");
+            let mut passed = 0u32;
+            let mut failed = 0u32;
+            let mut skipped = 0u32;
 
-            println!("\nRun individual tests with:");
-            println!(
-                "  api-cli e2e provision --identity {} --offering-id <id> --ssh-pubkey '<key>'",
-                identity
-            );
+            // Test 1: Health check
+            println!("\n--- Test 1: Health Check ---");
+            let http = reqwest::Client::new();
+            let url = format!("{}/api/v1/offerings?limit=1", api_url);
+            match http.get(&url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    println!("  PASSED");
+                    passed += 1;
+                }
+                Ok(resp) => {
+                    println!("  FAILED: API returned status {}", resp.status());
+                    anyhow::bail!("API health check failed, aborting E2E suite");
+                }
+                Err(e) => {
+                    println!("  FAILED: {}", e);
+                    anyhow::bail!("API health check failed, aborting E2E suite");
+                }
+            }
+
+            // Test 2: Contract lifecycle
+            println!("\n--- Test 2: Contract Lifecycle ---");
+            let client = SignedClient::new(&id, api_url)?;
+            let discovered_offering_id = match offering_id {
+                Some(oid) => Some(oid),
+                None => match fetch_offerings(api_url).await {
+                    Ok(offerings) if !offerings.is_empty() => {
+                        println!(
+                            "  Auto-discovered offering: {} (ID: {})",
+                            offerings[0].offer_name.as_deref().unwrap_or("N/A"),
+                            offerings[0].id
+                        );
+                        Some(offerings[0].id)
+                    }
+                    Ok(_) => {
+                        println!("  SKIPPED: No offerings available");
+                        skipped += 1;
+                        None
+                    }
+                    Err(e) => {
+                        println!("  FAILED: Could not fetch offerings: {}", e);
+                        failed += 1;
+                        None
+                    }
+                },
+            };
+
+            if let Some(oid) = discovered_offering_id {
+                let ssh_key = ssh_pubkey
+                    .as_deref()
+                    .unwrap_or("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-all-test");
+                match async {
+                    let cid = create_contract_for_testing(&client, oid, ssh_key).await?;
+                    println!("  Contract created: {}", cid);
+                    let path = format!("/contracts/{}", cid);
+                    let contract: Contract = client.get_api(&path).await?;
+                    anyhow::ensure!(
+                        contract.status == "requested" || contract.status == "accepted",
+                        "Unexpected status: '{}'",
+                        contract.status
+                    );
+                    cancel_contract(&client, &cid, Some("E2E all test")).await?;
+                    wait_for_contract_status(&client, &cid, "cancelled", 30).await?;
+                    Ok::<(), anyhow::Error>(())
+                }
+                .await
+                {
+                    Ok(()) => {
+                        println!("  PASSED");
+                        passed += 1;
+                    }
+                    Err(e) => {
+                        println!("  FAILED: {}", e);
+                        failed += 1;
+                    }
+                }
+            }
+
+            // Test 3: Provisioning
+            println!("\n--- Test 3: Provisioning ---");
+            if skip_provision {
+                println!("  SKIPPED: --skip-provision flag set");
+                skipped += 1;
+            } else if ssh_pubkey.is_none() {
+                println!("  SKIPPED: --ssh-pubkey not provided (required for provision test)");
+                skipped += 1;
+            } else if let Some(oid) = discovered_offering_id {
+                let ssh_key = ssh_pubkey.as_deref().unwrap();
+                match async {
+                    let cid = create_contract_for_testing(&client, oid, ssh_key).await?;
+                    println!("  Contract created: {}", cid);
+
+                    // Safety net: ensure payment status via DB
+                    let db = connect_db().await?;
+                    let cid_bytes = uuid::Uuid::parse_str(&cid)?.as_bytes().to_vec();
+                    db.set_payment_status_for_testing(&cid_bytes, "succeeded")
+                        .await?;
+
+                    let contract =
+                        wait_for_contract_status(&client, &cid, "provisioned", 300).await?;
+                    let gateway_host = contract
+                        .gateway_subdomain
+                        .context("No gateway subdomain assigned")?;
+                    let port = contract.gateway_ssh_port.context("No SSH port assigned")?;
+                    println!("  Gateway: {}:{}", gateway_host, port);
+
+                    // Verify SSH port reachable
+                    use tokio::net::TcpStream;
+                    let addr = format!("{}:{}", gateway_host, port);
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(10),
+                        TcpStream::connect(&addr),
+                    )
+                    .await
+                    {
+                        Ok(Ok(_)) => println!("  SSH port reachable"),
+                        Ok(Err(e)) => println!("  Warning: SSH port not reachable: {}", e),
+                        Err(_) => println!("  Warning: SSH connection timeout"),
+                    }
+
+                    // Cleanup
+                    cancel_contract(&client, &cid, Some("E2E all provision cleanup")).await?;
+                    Ok::<(), anyhow::Error>(())
+                }
+                .await
+                {
+                    Ok(()) => {
+                        println!("  PASSED");
+                        passed += 1;
+                    }
+                    Err(e) => {
+                        println!("  FAILED: {}", e);
+                        failed += 1;
+                    }
+                }
+            } else {
+                println!("  SKIPPED: No offering available");
+                skipped += 1;
+            }
+
+            // Test 4: DNS
+            println!("\n--- Test 4: DNS ---");
+            if skip_dns {
+                println!("  SKIPPED: --skip-dns flag set");
+                skipped += 1;
+            } else if env::var("CLOUDFLARE_API_TOKEN").is_err()
+                || env::var("CLOUDFLARE_ZONE_ID").is_err()
+            {
+                println!("  SKIPPED: CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set");
+                skipped += 1;
+            } else {
+                match run_dns_e2e_test().await {
+                    Ok(()) => {
+                        println!("  PASSED");
+                        passed += 1;
+                    }
+                    Err(e) => {
+                        println!("  FAILED: {}", e);
+                        failed += 1;
+                    }
+                }
+            }
+
+            // Summary
+            println!("\n========================================");
+            println!("  E2E Test Summary");
+            println!("========================================");
+            println!("  Passed:  {}", passed);
+            println!("  Failed:  {}", failed);
+            println!("  Skipped: {}", skipped);
+            println!("========================================\n");
+
+            anyhow::ensure!(failed == 0, "{} E2E test(s) failed", failed);
         }
     }
     Ok(())
@@ -1883,9 +2235,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
 // =============================================================================
 
 async fn handle_admin_action(action: AdminAction) -> Result<()> {
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
-    let db = Database::new(&database_url).await?;
+    let db = connect_db().await?;
 
     match action {
         AdminAction::Grant { username } => {
@@ -2007,9 +2357,7 @@ async fn handle_seed_provider(
     println!("  Seed External Provider");
     println!("========================================\n");
 
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
-    let db = Database::new(&database_url).await?;
+    let db = connect_db().await?;
 
     let mut hasher = Sha256::new();
     hasher.update(b"external-provider:");

@@ -617,21 +617,19 @@
 				<div class="bg-green-500/10 border border-green-500/30  p-4">
 					<div class="text-green-400 font-semibold mb-3">Connection Details</div>
 
-					{#if contract.gateway_slug && contract.gateway_ssh_port}
+					{#if contract.gateway_subdomain && contract.gateway_ssh_port}
 						<!-- Gateway-accessible VM -->
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
 								<div class="text-neutral-500 text-xs mb-1">SSH Command</div>
 								<code class="text-green-300 text-sm font-mono break-all select-all">
-									ssh -p {contract.gateway_ssh_port} root@{instanceDetails?.gateway_subdomain || `${contract.gateway_slug}.decent-cloud.org`}
+									ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}
 								</code>
 							</div>
-							{#if instanceDetails?.gateway_subdomain}
-								<div class="bg-black/20  p-3">
-									<div class="text-neutral-500 text-xs mb-1">Host</div>
-									<code class="text-white text-sm font-mono select-all">{instanceDetails.gateway_subdomain}</code>
-								</div>
-							{/if}
+							<div class="bg-black/20  p-3">
+								<div class="text-neutral-500 text-xs mb-1">Host</div>
+								<code class="text-white text-sm font-mono select-all">{contract.gateway_subdomain}</code>
+							</div>
 							{#if contract.gateway_ssh_port && contract.gateway_port_range_start && contract.gateway_port_range_end}
 								<div class="bg-black/20  p-3">
 									<div class="text-neutral-500 text-xs mb-1">Port Forwarding</div>

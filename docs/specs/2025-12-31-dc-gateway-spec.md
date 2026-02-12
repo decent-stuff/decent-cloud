@@ -114,15 +114,17 @@ x9f3a2.dc-lk    A    203.0.113.2    ; VM on host 2
 
 ### Subdomain Format
 
-**Pattern:** `{slug}.{dc}.decent-cloud.org`
+**Pattern:** `{slug}.{dc_id}.{gw_prefix}.{domain}`
 
-| Component | Format | Example |
-|-----------|--------|---------|
-| slug | 6-char alphanumeric, lowercase | `k7m2p4` |
-| dc | datacenter identifier | `dc-lk` (Sri Lanka) |
-| domain | base domain | `decent-cloud.org` |
+| Component | Format | Example | Source |
+|-----------|--------|---------|--------|
+| slug | 6-char [a-z0-9] random | `k7m2p4` | Generated per contract by dc-agent |
+| dc_id | 2-20 char [a-z0-9-], no leading/trailing hyphen | `a3x9f2b1` | Required in dc-agent config |
+| gw_prefix | `gw` (prod) or `dev-gw` (dev) | `dev-gw` | `CF_GW_PREFIX` env var on API server |
+| domain | base zone domain | `decent-cloud.org` | `CF_DOMAIN` env var on API server |
 
-**Full example:** `k7m2p4.dc-lk.decent-cloud.org`
+**Full example (dev):** `k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org`
+**Full example (prod):** `k7m2p4.a3x9f2b1.gw.decent-cloud.org`
 
 **Slug generation:**
 - Generated at VM provisioning time

@@ -13,6 +13,8 @@ pub struct CloudflareDns {
     api_token: String,
     zone_id: String,
     domain: String,
+    /// Gateway DNS prefix: "gw" for prod, "dev-gw" for dev (from CF_GW_PREFIX env var)
+    gw_prefix: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,12 +57,15 @@ impl CloudflareDns {
         let api_token = std::env::var("CF_API_TOKEN").ok()?;
         let zone_id = std::env::var("CF_ZONE_ID").ok()?;
         let domain = std::env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
+        let gw_prefix =
+            std::env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
 
         Some(Arc::new(Self {
             client: Client::new(),
             api_token,
             zone_id,
             domain,
+            gw_prefix,
         }))
     }
 
@@ -69,12 +74,39 @@ impl CloudflareDns {
         &self.domain
     }
 
+    /// Get the gateway prefix (e.g., "gw" or "dev-gw")
+    pub fn gw_prefix(&self) -> &str {
+        &self.gw_prefix
+    }
+
+    /// Build the full gateway FQDN: {slug}.{dc_id}.{gw_prefix}.{domain}
+    pub fn gateway_fqdn(&self, slug: &str, dc_id: &str) -> String {
+        format!("{}.{}.{}.{}", slug, dc_id, self.gw_prefix, self.domain)
+    }
+
+    /// Validate dc_id: 2-20 chars, [a-z0-9-], no leading/trailing hyphen.
+    pub fn validate_dc_id(dc_id: &str) -> Result<()> {
+        if dc_id.len() < 2 || dc_id.len() > 20 {
+            bail!("Invalid dc_id: must be 2-20 characters, got {}", dc_id.len());
+        }
+        if !dc_id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            bail!("Invalid dc_id: must contain only [a-z0-9-]");
+        }
+        if dc_id.starts_with('-') || dc_id.ends_with('-') {
+            bail!("Invalid dc_id: must not start or end with a hyphen");
+        }
+        Ok(())
+    }
+
     /// Create an A record for a gateway slug.
-    /// Record name format: {slug}.{datacenter}.{domain}
+    /// Record name format: {slug}.{dc_id}.{gw_prefix} (Cloudflare appends zone domain)
     pub async fn create_gateway_record(
         &self,
         slug: &str,
-        datacenter: &str,
+        dc_id: &str,
         public_ip: &str,
     ) -> Result<()> {
         // Validate inputs
@@ -86,13 +118,11 @@ impl CloudflareDns {
             bail!("Invalid slug format: must be 6 lowercase alphanumeric characters");
         }
 
-        if datacenter.is_empty() || datacenter.len() > 20 {
-            bail!("Invalid datacenter: must be 1-20 characters");
-        }
+        Self::validate_dc_id(dc_id)?;
 
         // Build the subdomain record name (without domain suffix)
-        // e.g., "k7m2p4.dc-lk" (Cloudflare appends the zone domain)
-        let record_name = format!("{}.{}", slug, datacenter);
+        // e.g., "k7m2p4.a3x9f2b1.dev-gw" (Cloudflare appends the zone domain)
+        let record_name = format!("{}.{}.{}", slug, dc_id, self.gw_prefix);
 
         let url = format!(
             "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
@@ -149,8 +179,8 @@ impl CloudflareDns {
     }
 
     /// Delete an A record for a gateway slug.
-    pub async fn delete_gateway_record(&self, slug: &str, datacenter: &str) -> Result<()> {
-        let full_name = format!("{}.{}.{}", slug, datacenter, self.domain);
+    pub async fn delete_gateway_record(&self, slug: &str, dc_id: &str) -> Result<()> {
+        let full_name = self.gateway_fqdn(slug, dc_id);
 
         // First, find the record ID
         let record_id = self.find_record_id(&full_name, "A").await?;
@@ -326,18 +356,11 @@ impl CloudflareDns {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_from_env_missing_vars() {
-        // When env vars are not set, should return None
-        let client = super::CloudflareDns::from_env();
-        // In test environment, env vars are typically not set
-        // This just verifies the function handles missing vars gracefully
-        assert!(client.is_none() || client.is_some());
-    }
+    use super::*;
 
     #[test]
     fn test_create_dns_record_serialization() {
-        let record = super::CreateDnsRecord {
+        let record = CreateDnsRecord {
             record_type: "TXT".to_string(),
             name: "selector._domainkey".to_string(),
             content: "v=DKIM1; k=ed25519; p=ABC123".to_string(),
@@ -351,5 +374,77 @@ mod tests {
         assert!(json.contains("\"content\":\"v=DKIM1; k=ed25519; p=ABC123\""));
         assert!(json.contains("\"ttl\":3600"));
         assert!(json.contains("\"proxied\":false"));
+    }
+
+    #[test]
+    fn test_gateway_fqdn() {
+        let dns = CloudflareDns {
+            client: Client::new(),
+            api_token: String::new(),
+            zone_id: String::new(),
+            domain: "decent-cloud.org".to_string(),
+            gw_prefix: "dev-gw".to_string(),
+        };
+        assert_eq!(
+            dns.gateway_fqdn("k7m2p4", "a3x9f2b1"),
+            "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org"
+        );
+
+        let dns_prod = CloudflareDns {
+            client: Client::new(),
+            api_token: String::new(),
+            zone_id: String::new(),
+            domain: "decent-cloud.org".to_string(),
+            gw_prefix: "gw".to_string(),
+        };
+        assert_eq!(
+            dns_prod.gateway_fqdn("k7m2p4", "a3x9f2b1"),
+            "k7m2p4.a3x9f2b1.gw.decent-cloud.org"
+        );
+    }
+
+    #[test]
+    fn test_validate_dc_id_valid() {
+        assert!(CloudflareDns::validate_dc_id("ab").is_ok());
+        assert!(CloudflareDns::validate_dc_id("a3x9f2b1").is_ok());
+        assert!(CloudflareDns::validate_dc_id("dc-lk").is_ok());
+        assert!(CloudflareDns::validate_dc_id("us-east-1").is_ok());
+        assert!(CloudflareDns::validate_dc_id("a1234567890123456789").is_ok()); // 20 chars
+    }
+
+    #[test]
+    fn test_validate_dc_id_too_short() {
+        let err = CloudflareDns::validate_dc_id("a").unwrap_err();
+        assert!(err.to_string().contains("2-20 characters"));
+    }
+
+    #[test]
+    fn test_validate_dc_id_too_long() {
+        let err = CloudflareDns::validate_dc_id("a12345678901234567890").unwrap_err(); // 21 chars
+        assert!(err.to_string().contains("2-20 characters"));
+    }
+
+    #[test]
+    fn test_validate_dc_id_leading_hyphen() {
+        let err = CloudflareDns::validate_dc_id("-abc").unwrap_err();
+        assert!(err.to_string().contains("hyphen"));
+    }
+
+    #[test]
+    fn test_validate_dc_id_trailing_hyphen() {
+        let err = CloudflareDns::validate_dc_id("abc-").unwrap_err();
+        assert!(err.to_string().contains("hyphen"));
+    }
+
+    #[test]
+    fn test_validate_dc_id_uppercase_rejected() {
+        let err = CloudflareDns::validate_dc_id("DC-LK").unwrap_err();
+        assert!(err.to_string().contains("[a-z0-9-]"));
+    }
+
+    #[test]
+    fn test_validate_dc_id_underscore_rejected() {
+        let err = CloudflareDns::validate_dc_id("dc_lk").unwrap_err();
+        assert!(err.to_string().contains("[a-z0-9-]"));
     }
 }

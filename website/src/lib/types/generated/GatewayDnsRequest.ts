@@ -13,9 +13,9 @@ action: string,
  */
 slug: string, 
 /**
- * Datacenter identifier (e.g., "dc-lk")
+ * Datacenter identifier (2-20 chars [a-z0-9-], no leading/trailing hyphen)
  */
-datacenter: string, 
+dcId: string, 
 /**
  * Public IP address (required for create, ignored for delete)
  */

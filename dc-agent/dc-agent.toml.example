@@ -78,3 +78,19 @@ verify_ssl = false
 # [provisioner.manual]
 # # Optional: Webhook URL for notifications (e.g., Slack)
 # notification_webhook = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+
+
+# Gateway Configuration (optional - for DC-level reverse proxy)
+# Enables per-VM subdomain routing via Caddy, DNS management, and port forwarding
+# [gateway]
+# # Unique datacenter identifier (2-20 chars [a-z0-9-], no leading/trailing hyphen)
+# # Generate with: openssl rand -hex 4
+# dc_id = "a3x9f2b1"
+#
+# # This host's public IPv4 address (where DNS records will point)
+# public_ip = "203.0.113.1"
+#
+# # Optional: customize port range for VM TCP/UDP forwarding
+# # port_range_start = 20000
+# # port_range_end = 59999
+# # ports_per_vm = 10

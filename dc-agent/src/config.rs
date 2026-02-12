@@ -20,10 +20,9 @@ pub struct Config {
 /// Gateway configuration for per-host reverse proxy (Caddy)
 #[derive(Debug, Clone, Deserialize)]
 pub struct GatewayConfig {
-    /// Datacenter identifier (e.g., "dc-lk" for Sri Lanka)
-    pub datacenter: String,
-    /// Base domain (e.g., "decent-cloud.org")
-    pub domain: String,
+    /// Unique datacenter identifier (2-20 chars [a-z0-9-], e.g., "a3x9f2b1")
+    /// Generate with: openssl rand -hex 4
+    pub dc_id: String,
     /// This host's public IPv4 address
     pub public_ip: String,
     /// Start of port range for TCP/UDP mapping (default: 20000)
@@ -339,6 +338,29 @@ impl Config {
                 anyhow::bail!(
                     "Config uses deprecated 'traefik_dynamic_dir'. Rename to 'caddy_sites_dir'. \
                      Traefik is no longer supported - the gateway now uses Caddy."
+                );
+            }
+            // Validate dc_id format
+            let dc_id = &gw.dc_id;
+            if dc_id.len() < 2 || dc_id.len() > 20 {
+                anyhow::bail!(
+                    "Invalid gateway.dc_id '{}': must be 2-20 characters",
+                    dc_id
+                );
+            }
+            if !dc_id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
+                anyhow::bail!(
+                    "Invalid gateway.dc_id '{}': must contain only [a-z0-9-]",
+                    dc_id
+                );
+            }
+            if dc_id.starts_with('-') || dc_id.ends_with('-') {
+                anyhow::bail!(
+                    "Invalid gateway.dc_id '{}': must not start or end with a hyphen",
+                    dc_id
                 );
             }
         }
@@ -1166,8 +1188,7 @@ provider_secret_key = "ed25519_secret_hex"
 type = "manual"
 
 [gateway]
-datacenter = "dc-lk"
-domain = "decent-cloud.org"
+dc_id = "a3x9f2b1"
 public_ip = "203.0.113.1"
 "#;
 
@@ -1176,8 +1197,7 @@ public_ip = "203.0.113.1"
         let config = Config::load(&config_path).unwrap();
 
         let gateway = config.gateway.expect("Gateway should be configured");
-        assert_eq!(gateway.datacenter, "dc-lk");
-        assert_eq!(gateway.domain, "decent-cloud.org");
+        assert_eq!(gateway.dc_id, "a3x9f2b1");
         assert_eq!(gateway.public_ip, "203.0.113.1");
         assert_eq!(gateway.port_range_start, 20000);
         assert_eq!(gateway.port_range_end, 59999);
@@ -1206,8 +1226,7 @@ provider_secret_key = "ed25519_secret_hex"
 type = "manual"
 
 [gateway]
-datacenter = "dc-us"
-domain = "example.org"
+dc_id = "dc-us"
 public_ip = "10.0.0.1"
 port_range_start = 30000
 port_range_end = 40000
@@ -1221,7 +1240,7 @@ port_allocations_path = "/custom/allocations.json"
         let config = Config::load(&config_path).unwrap();
 
         let gateway = config.gateway.expect("Gateway should be configured");
-        assert_eq!(gateway.datacenter, "dc-us");
+        assert_eq!(gateway.dc_id, "dc-us");
         assert_eq!(gateway.port_range_start, 30000);
         assert_eq!(gateway.port_range_end, 40000);
         assert_eq!(gateway.ports_per_vm, 5);
@@ -1246,8 +1265,7 @@ provider_secret_key = "ed25519_secret_hex"
 type = "manual"
 
 [gateway]
-datacenter = "dc-us"
-domain = "example.org"
+dc_id = "dc-us"
 public_ip = "10.0.0.1"
 traefik_dynamic_dir = "/old/traefik/path"
 "#;
@@ -1262,6 +1280,90 @@ traefik_dynamic_dir = "/old/traefik/path"
             "Error should mention both old and new field names: {}",
             err_msg
         );
+    }
+
+    #[test]
+    fn test_gateway_dc_id_validation_too_short() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+dc_id = "a"
+public_ip = "10.0.0.1"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("2-20 characters"));
+    }
+
+    #[test]
+    fn test_gateway_dc_id_validation_leading_hyphen() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+dc_id = "-abc"
+public_ip = "10.0.0.1"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("hyphen"));
+    }
+
+    #[test]
+    fn test_gateway_dc_id_validation_uppercase_rejected() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+dc_id = "DC-LK"
+public_ip = "10.0.0.1"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("[a-z0-9-]"));
     }
 
     #[test]
