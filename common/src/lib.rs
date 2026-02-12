@@ -4,6 +4,7 @@ use ic_cdk::println;
 pub mod account_transfer_approvals;
 pub mod account_transfers;
 pub mod account_transfers_errors;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod api_types;
 pub mod cache_balances;
 pub mod cache_reputation;

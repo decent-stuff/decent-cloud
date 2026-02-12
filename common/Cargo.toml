@@ -11,16 +11,15 @@ ic-cdk.workspace = true
 
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
 fs-err.workspace = true
+# API type derives (shared between api-server and dc-agent, not for WASM)
+poem-openapi = "5"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+ts-rs.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# API type derives (shared between api-server and dc-agent)
-poem-openapi = "5"
-ts-rs.workspace = true
-
 ahash.workspace = true
 anyhow.workspace = true
 base32.workspace = true
