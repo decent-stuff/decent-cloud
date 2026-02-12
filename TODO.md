@@ -17,7 +17,7 @@
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
 **Status:** MVP complete through Phase 7 (Credential Encryption)
 
-### Phase 7 Follow-ups (Low Priority)
+### Phase 7 Follow-ups
 - [ ] **Consider on-demand password reset** - dc-agent SSHs into VM and runs `passwd` on user request
 - [ ] **Add AAD binding** - Include contract_id in encryption context
 - [ ] **Multi-device limitation** - Consider account-level key derivation for cross-device access
@@ -39,10 +39,6 @@ Integrate with or scrape external sources for additional trust signals:
 ### Service Quality Verification
 - Automated health checks on provisioned services
 - Uptime monitoring and SLA compliance tracking
-
-### Future: Integrate Feedback into Trust Score
-- [x] **User Feedback System** - Implemented: POST/GET `/contracts/{id}/feedback`, GET `/providers/{pubkey}/feedback-stats`
-- [x] **Trust score integration** - Feedback stats (service match rate, would-rent-again rate) integrated into trust score with penalties (<50%), bonus (>80% with 5+ reviews), and minimum 3 responses threshold
 
 ---
 
@@ -77,30 +73,10 @@ To automate payouts, implement direct ICRC-1 transfers from platform wallet usin
 
 ## Architectural Issues Requiring Review
 
-**Priority:** MEDIUM - Technical debt
-
 ### Open Issues
-
-#### 7. Timestamp Handling with `.unwrap_or(0)`
-
-**Issue:** `.timestamp_nanos_opt().unwrap_or(0)` silently uses epoch time on error.
-
-**Locations:** `api/src/database/agent_delegations.rs:264, 362, 410`
-
-**Note:** Only fails for dates beyond ~2262, so extremely unlikely.
 
 #### 10. Hardcoded Token Value ($1 USD)
 
 **Issue:** Token USD value hardcoded instead of fetched from exchanges.
 
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
-
----
-
-## Nice-to-Have Improvements
-
-### Cosmetic: Username-Based URLs
-
-**Priority:** LOW
-
-Add `GET /accounts/by-username/{username}` endpoint for cleaner URLs.
