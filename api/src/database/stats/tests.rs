@@ -455,6 +455,7 @@ fn test_trust_score_perfect_provider() {
         15,        // 15 repeat customers (bonus!)
         98.0,      // 98% completion rate (bonus!)
         true,      // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 + 5 (repeat customers) + 5 (completion rate) + 5 (fast response) = 115, clamped to 100
@@ -477,6 +478,7 @@ fn test_trust_score_high_early_cancellation() {
         0,
         50.0,
         true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 25 (early cancellation penalty) = 75
@@ -500,6 +502,7 @@ fn test_trust_score_provisioning_failure() {
         0,
         50.0,
         true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 20 (provisioning failure penalty) = 80
@@ -523,6 +526,7 @@ fn test_trust_score_slow_response() {
         0,
         50.0,
         true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 15 (slow response penalty) = 85
@@ -535,9 +539,10 @@ fn test_trust_score_slow_response() {
 #[test]
 fn test_trust_score_ghost_risk() {
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
-        None, None, None, None, 0, 0, 14,   // 14 days since last check-in
+        None, None, None, None, 0, 0, 14, // 14 days since last check-in
         true, // HAS active contracts
         0, 50.0, true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 10 (ghost risk penalty) = 90
@@ -552,9 +557,10 @@ fn test_trust_score_ghost_risk() {
 fn test_trust_score_ghost_risk_never_checked_in() {
     // -1 means provider never checked in
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
-        None, None, None, None, 0, 0, -1,   // never checked in
+        None, None, None, None, 0, 0, -1, // never checked in
         true, // HAS active contracts
         0, 50.0, true,
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 10 (ghost risk penalty) = 90
@@ -570,6 +576,7 @@ fn test_trust_score_negative_reputation() {
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
         None, None, None, None, -75, // -75 reputation points in 90 days (<-50 threshold)
         0, 1, false, 0, 50.0, true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 15 (negative reputation penalty) = 85
@@ -592,13 +599,14 @@ fn test_trust_score_multiple_flags() {
         true,               // with active contracts (ghost risk)
         0,
         30.0,
-        false, // no contact info (adds 8th flag)
+        false,        // no contact info
+        5, 30.0, 20.0, // bad feedback (both below 50%)
     );
 
-    // All penalties: -25 -20 -15 -15 -15 -10 -10 -10 = -120, clamped to 0
+    // All penalties: -25 -20 -15 -15 -15 -10 -10 -10 -15 -10 = -145, clamped to 0
     assert_eq!(score, 0);
     assert!(has_flags);
-    assert_eq!(flags.len(), 8); // All 8 flags triggered (including no contact)
+    assert_eq!(flags.len(), 10); // 8 original + 2 feedback flags
 }
 
 #[test]
@@ -615,6 +623,7 @@ fn test_trust_score_bonuses() {
         20,   // lots of repeat customers (bonus!)
         99.0, // high completion rate (bonus!)
         true, // has contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 + 5 + 5 + 5 = 115, clamped to 100
@@ -627,6 +636,7 @@ fn test_trust_score_bonuses() {
 fn test_trust_score_no_contact_info() {
     let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
         None, None, None, None, 0, 0, 1, false, 0, 50.0, false, // no contact info
+        0, 0.0, 0.0, // no feedback
     );
 
     // Base 100 - 10 (no contact info penalty) = 90
@@ -634,6 +644,118 @@ fn test_trust_score_no_contact_info() {
     assert!(has_flags);
     assert_eq!(flags.len(), 1);
     assert!(flags[0].contains("No contact info"));
+}
+
+#[test]
+fn test_trust_score_feedback_low_satisfaction_penalty() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        4,    // 4 reviews (above 3 minimum)
+        60.0, // service match ok
+        40.0, // would rent again below 50%
+    );
+
+    // Base 100 - 15 (low would_rent_again) = 85
+    assert_eq!(score, 85);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Low renter satisfaction"));
+    assert!(flags[0].contains("40%"));
+}
+
+#[test]
+fn test_trust_score_feedback_service_mismatch_penalty() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        3,    // minimum threshold
+        30.0, // service match below 50%
+        70.0, // would rent again ok
+    );
+
+    // Base 100 - 10 (service mismatch) = 90
+    assert_eq!(score, 90);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 1);
+    assert!(flags[0].contains("Service mismatch"));
+    assert!(flags[0].contains("30%"));
+}
+
+#[test]
+fn test_trust_score_feedback_both_penalties() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        10,   // many reviews
+        20.0, // terrible service match
+        10.0, // terrible satisfaction
+    );
+
+    // Base 100 - 15 (low satisfaction) - 10 (service mismatch) = 75
+    assert_eq!(score, 75);
+    assert!(has_flags);
+    assert_eq!(flags.len(), 2);
+}
+
+#[test]
+fn test_trust_score_feedback_ignored_below_minimum() {
+    // With only 2 reviews, feedback should be ignored entirely
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        2,    // below 3 minimum
+        0.0,  // terrible service match - should be ignored
+        0.0,  // terrible satisfaction - should be ignored
+    );
+
+    // Base 100, no penalties applied
+    assert_eq!(score, 100);
+    assert!(!has_flags);
+    assert!(flags.is_empty());
+}
+
+#[test]
+fn test_trust_score_feedback_high_satisfaction_bonus() {
+    let (score, has_flags, flags) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        5,     // 5 reviews (minimum for bonus)
+        90.0,  // great service match
+        85.0,  // would rent again >80%
+    );
+
+    // Base 100 + 5 (feedback bonus) = 105, clamped to 100
+    assert_eq!(score, 100);
+    assert!(!has_flags);
+    assert!(flags.is_empty());
+}
+
+#[test]
+fn test_trust_score_feedback_bonus_requires_5_reviews() {
+    // 4 reviews with great stats should NOT get the bonus (need 5)
+    let (score_4, _, _) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        4, 90.0, 85.0,
+    );
+
+    let (score_5, _, _) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 1, false, 0, 50.0, true,
+        5, 90.0, 85.0,
+    );
+
+    // score_4 has no bonus, score_5 does (but both clamp to 100)
+    // Introduce a small penalty to make the difference visible
+    let (score_4_with_penalty, _, _) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 14, true, // ghost risk: -10
+        0, 50.0, true,
+        4, 90.0, 85.0,
+    );
+    let (score_5_with_penalty, _, _) = Database::calculate_trust_score_and_flags(
+        None, None, None, None, 0, 0, 14, true, // ghost risk: -10
+        0, 50.0, true,
+        5, 90.0, 85.0,
+    );
+
+    assert_eq!(score_4, 100); // no bonus but clamped
+    assert_eq!(score_5, 100); // bonus but clamped
+    assert_eq!(score_4_with_penalty, 90);  // 100 - 10 = 90, no feedback bonus
+    assert_eq!(score_5_with_penalty, 95);  // 100 - 10 + 5 = 95, feedback bonus applied
 }
 
 #[tokio::test]

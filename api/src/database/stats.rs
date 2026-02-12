@@ -358,6 +358,9 @@ impl Database {
         .await?;
         let has_contact_info = contact_count > 0;
 
+        // Fetch feedback stats for trust score integration
+        let feedback_stats = self.get_provider_feedback_stats(pubkey).await?;
+
         // Tier 3 Contextual Metrics
 
         // Provider tenure classification based on completed contracts
@@ -494,6 +497,9 @@ impl Database {
                 repeat_customer_count,
                 completion_rate_pct,
                 has_contact_info,
+                feedback_stats.total_responses,
+                feedback_stats.service_match_rate_pct,
+                feedback_stats.would_rent_again_rate_pct,
             );
 
         // Update cached trust score in provider_profiles
@@ -530,10 +536,22 @@ impl Database {
             avg_contract_duration_ratio,
             no_response_rate_pct,
             abandonment_velocity,
+            feedback_count: feedback_stats.total_responses,
+            feedback_service_match_rate_pct: if feedback_stats.total_responses > 0 {
+                Some(feedback_stats.service_match_rate_pct)
+            } else {
+                None
+            },
+            feedback_would_rent_again_rate_pct: if feedback_stats.total_responses > 0 {
+                Some(feedback_stats.would_rent_again_rate_pct)
+            } else {
+                None
+            },
         })
     }
 
-    /// Calculate trust score (0-100) and identify critical flags
+    /// Calculate trust score (0-100) and identify critical flags.
+    /// Feedback params are only applied when `feedback_count` >= 3 (minimum for statistical relevance).
     #[allow(clippy::too_many_arguments)]
     fn calculate_trust_score_and_flags(
         early_cancellation_rate_pct: Option<f64>,
@@ -547,6 +565,9 @@ impl Database {
         repeat_customer_count: i64,
         completion_rate_pct: f64,
         has_contact_info: bool,
+        feedback_count: i64,
+        feedback_service_match_rate_pct: f64,
+        feedback_would_rent_again_rate_pct: f64,
     ) -> (i64, bool, Vec<String>) {
         let mut score: i64 = 100;
         let mut flags: Vec<String> = Vec::new();
@@ -633,6 +654,24 @@ impl Database {
             flags.push("No contact info: provider has no public contact methods".to_string());
         }
 
+        // Feedback-based scoring (only with >= 3 responses for statistical relevance)
+        if feedback_count >= 3 {
+            if feedback_would_rent_again_rate_pct < 50.0 {
+                score -= 15;
+                flags.push(format!(
+                    "Low renter satisfaction: only {:.0}% would rent again ({} reviews)",
+                    feedback_would_rent_again_rate_pct, feedback_count
+                ));
+            }
+            if feedback_service_match_rate_pct < 50.0 {
+                score -= 10;
+                flags.push(format!(
+                    "Service mismatch: only {:.0}% say service matched description ({} reviews)",
+                    feedback_service_match_rate_pct, feedback_count
+                ));
+            }
+        }
+
         // Bonuses
         if repeat_customer_count > 10 {
             score += 5;
@@ -646,6 +685,10 @@ impl Database {
             if hours < 4.0 {
                 score += 5;
             }
+        }
+
+        if feedback_count >= 5 && feedback_would_rent_again_rate_pct > 80.0 {
+            score += 5;
         }
 
         // Clamp to 0-100
@@ -826,6 +869,19 @@ pub struct ProviderTrustMetrics {
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub abandonment_velocity: Option<f64>,
+
+    // Renter feedback metrics
+    /// Number of feedback responses received
+    #[ts(type = "number")]
+    pub feedback_count: i64,
+    /// Percentage of renters who said service matched description (0-100). None if no feedback.
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub feedback_service_match_rate_pct: Option<f64>,
+    /// Percentage of renters who would rent again (0-100). None if no feedback.
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub feedback_would_rent_again_rate_pct: Option<f64>,
 }
 
 /// Account search result with reputation and activity stats

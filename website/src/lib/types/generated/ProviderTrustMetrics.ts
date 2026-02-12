@@ -92,4 +92,16 @@ no_response_rate_pct: number | undefined,
  * Abandonment velocity: ratio of recent (30d) to baseline (31-90d) cancellation rates.
  * >1.5 = concerning, >2.0 = critical. None if insufficient baseline data.
  */
-abandonment_velocity: number | undefined, };
+abandonment_velocity: number | undefined, 
+/**
+ * Number of feedback responses received
+ */
+feedback_count: number, 
+/**
+ * Percentage of renters who said service matched description (0-100). None if no feedback.
+ */
+feedback_service_match_rate_pct: number | undefined, 
+/**
+ * Percentage of renters who would rent again (0-100). None if no feedback.
+ */
+feedback_would_rent_again_rate_pct: number | undefined, };

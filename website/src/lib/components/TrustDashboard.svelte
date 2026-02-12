@@ -180,6 +180,27 @@
 		{/if}
 	</div>
 
+	<!-- Renter Feedback -->
+	{#if metrics.feedback_count > 0}
+		<div class="border-t border-neutral-800 pt-4 mt-4">
+			<h4 class="text-sm font-semibold mb-3">Renter Feedback ({metrics.feedback_count} reviews)</h4>
+			<div class="grid grid-cols-2 gap-3">
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Service Matched Description</div>
+					<div class="text-lg font-semibold {(metrics.feedback_service_match_rate_pct ?? 0) >= 80 ? 'text-green-400' : (metrics.feedback_service_match_rate_pct ?? 0) >= 50 ? 'text-yellow-400' : 'text-red-400'}">
+						{metrics.feedback_service_match_rate_pct?.toFixed(0) ?? 0}%
+					</div>
+				</div>
+				<div class="bg-surface-elevated p-3">
+					<div class="text-xs text-neutral-500 mb-1">Would Rent Again</div>
+					<div class="text-lg font-semibold {(metrics.feedback_would_rent_again_rate_pct ?? 0) >= 80 ? 'text-green-400' : (metrics.feedback_would_rent_again_rate_pct ?? 0) >= 50 ? 'text-yellow-400' : 'text-red-400'}">
+						{metrics.feedback_would_rent_again_rate_pct?.toFixed(0) ?? 0}%
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Uptime Metrics Section -->
 	{#if healthSummary}
 		<div class="border-t border-neutral-800 pt-4 mt-4">

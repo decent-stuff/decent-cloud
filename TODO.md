@@ -42,7 +42,7 @@ Integrate with or scrape external sources for additional trust signals:
 
 ### Future: Integrate Feedback into Trust Score
 - [x] **User Feedback System** - Implemented: POST/GET `/contracts/{id}/feedback`, GET `/providers/{pubkey}/feedback-stats`
-- [ ] **Trust score integration** - Optionally incorporate feedback percentages into trust score calculation
+- [x] **Trust score integration** - Feedback stats (service match rate, would-rent-again rate) integrated into trust score with penalties (<50%), bonus (>80% with 5+ reviews), and minimum 3 responses threshold
 
 ---
 
