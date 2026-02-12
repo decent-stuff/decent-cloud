@@ -42,8 +42,8 @@ dc-agent manages Caddy config and iptables rules as part of VM provisioning life
    └──────────┘         └──────────┘         └──────────┘
 
 DNS (dynamic, per-VM):
-  k7m2p4.dc-lk.decent-cloud.org → 203.0.113.1
-  x9f3a2.dc-lk.decent-cloud.org → 203.0.113.2
+  k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org → 203.0.113.1
+  x9f3a2.a3x9f2b1.dev-gw.decent-cloud.org → 203.0.113.2
 ```
 
 ## Requirements
@@ -78,7 +78,7 @@ DNS (dynamic, per-VM):
 ```
 User HTTPS request
     │
-    ▼ DNS: k7m2p4.dc-lk.decent-cloud.org → 203.0.113.1
+    ▼ DNS: k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org → 203.0.113.1
 ┌─────────────────────────────────────────────────────┐
 │ Proxmox Host (203.0.113.1)                          │
 │                                                     │
@@ -103,8 +103,8 @@ User HTTPS request
 
 **Dynamic records (created per-VM by dc-agent via central API):**
 ```
-k7m2p4.dc-lk    A    203.0.113.1    ; VM on host 1
-x9f3a2.dc-lk    A    203.0.113.2    ; VM on host 2
+k7m2p4.a3x9f2b1.dev-gw    A    203.0.113.1    ; VM on host 1
+x9f3a2.a3x9f2b1.dev-gw    A    203.0.113.2    ; VM on host 2
 ```
 
 **TLS certificates:**
@@ -193,7 +193,7 @@ import /etc/caddy/sites/*.caddy
 # HTTPS: TLS terminated at gateway, proxied to VM:80 (plain HTTP)
 # TCP/UDP ports 20000-20009: iptables DNAT
 
-k7m2p4.dc-lk.decent-cloud.org {
+k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org {
     reverse_proxy 10.0.1.5:80
 }
 ```
@@ -234,8 +234,7 @@ iptables -t nat -A DC_GATEWAY -p udp --dport 20005 -j DNAT --to-destination 10.0
 
 ```toml
 [gateway]
-datacenter = "dc-lk"
-domain = "decent-cloud.org"
+dc_id = "a3x9f2b1"  # Unique datacenter identifier (2-20 chars [a-z0-9-])
 public_ip = "203.0.113.1"  # This host's public IP
 
 # Port allocation
@@ -269,7 +268,7 @@ port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
 3. Report to API
    └── Include in provisioned response:
        - gateway_slug: k7m2p4
-       - gateway_subdomain: k7m2p4.dc-lk.decent-cloud.org
+       - gateway_subdomain: k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
        - ssh_port: 20000
        - port_range: 20000-20009
 ```
@@ -299,7 +298,7 @@ dc-agent                         Central API                      Cloudflare
    │ POST /api/v1/agents/dns         │                                │
    │ { action: "create",             │                                │
    │   slug: "k7m2p4",               │                                │
-   │   datacenter: "dc-lk",          │                                │
+   │   dcId: "a3x9f2b1",             │                                │
    │   publicIp: "203.0.113.1" }     │                                │
    │ ──────────────────────────────▶ │                                │
    │                                 │ POST /zones/{zone}/dns_records │
@@ -307,14 +306,15 @@ dc-agent                         Central API                      Cloudflare
    │                                 │                                │
    │                                 │ ◀────────────────────────────── │
    │ ◀────────────────────────────── │                                │
-   │ { subdomain: "k7m2p4.dc-lk..." }│                                │
+   │ { subdomain: "k7m2p4.a3x9..." } │                                │
 ```
 
 **API server config (environment variables):**
 ```bash
 CF_API_TOKEN=...     # Cloudflare API token with Zone.DNS edit permission
 CF_ZONE_ID=...       # Zone ID for decent-cloud.org
-CF_DOMAIN=decent-cloud.org
+CF_DOMAIN=decent-cloud.org       # Base zone domain (default: decent-cloud.org)
+CF_GW_PREFIX=dev-gw              # Gateway DNS prefix: "gw" (prod) or "dev-gw" (dev)
 ```
 
 **Security benefits:**
@@ -399,7 +399,7 @@ pub struct ProvisionedInstance {
 
     // Gateway fields
     pub gateway_slug: Option<String>,           // "k7m2p4"
-    pub gateway_subdomain: Option<String>,      // "k7m2p4.dc-lk.decent-cloud.org"
+    pub gateway_subdomain: Option<String>,      // "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org"
     pub gateway_ssh_port: Option<u16>,          // 20000
     pub gateway_port_range_start: Option<u16>,  // 20000
     pub gateway_port_range_end: Option<u16>,    // 20009
@@ -410,6 +410,7 @@ pub struct ProvisionedInstance {
 
 ```sql
 ALTER TABLE contract_sign_requests ADD COLUMN gateway_slug TEXT;
+ALTER TABLE contract_sign_requests ADD COLUMN gateway_subdomain TEXT;
 ALTER TABLE contract_sign_requests ADD COLUMN gateway_ssh_port INTEGER;
 ALTER TABLE contract_sign_requests ADD COLUMN gateway_port_range_start INTEGER;
 ALTER TABLE contract_sign_requests ADD COLUMN gateway_port_range_end INTEGER;
@@ -425,8 +426,8 @@ CREATE UNIQUE INDEX idx_gateway_slug ON contract_sign_requests(gateway_slug)
 ```
 Connection Details
 ──────────────────
-Web Access:    https://k7m2p4.dc-lk.decent-cloud.org
-SSH Access:    ssh user@k7m2p4.dc-lk.decent-cloud.org -p 20000
+Web Access:    https://k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
+SSH Access:    ssh user@k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org -p 20000
 
 Additional Ports: 20001-20009 available for your services
 ```
@@ -434,7 +435,7 @@ Additional Ports: 20001-20009 available for your services
 **SSH config suggestion:**
 ```
 Host myvm
-    HostName k7m2p4.dc-lk.decent-cloud.org
+    HostName k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
     Port 20000
     User root
 ```
@@ -469,7 +470,7 @@ Host myvm
 dc-agent setup token \
   --token <AGENT_TOKEN> \
   --proxmox-host <HOST_IP> \
-  --gateway-datacenter dc-lk \
+  --gateway-dc-id <DC_ID> \
   --gateway-public-ip <PUBLIC_IP>
 ```
 

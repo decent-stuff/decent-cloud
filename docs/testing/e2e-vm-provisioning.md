@@ -53,7 +53,7 @@ Look for offerings where `provider_online: true`.
    ```
 8. Once provisioned, SSH via gateway:
    ```bash
-   ssh -p <gateway-port> ubuntu@<gateway-subdomain>.dc-<datacenter>.decent-cloud.org
+   ssh -p <gateway-port> ubuntu@<gateway-subdomain>
    ```
 
 ### Method 2: Via dc-agent test-provision (Local Testing)
@@ -129,7 +129,7 @@ ssh root@<proxmox-ip> 'cat /var/lib/dc-agent/port-allocations.json'
 ssh -p <gateway-port> ubuntu@<proxmox-ip>
 
 # Via subdomain (requires DNS to be set up)
-ssh -p <gateway-port> ubuntu@<slug>.dc-<datacenter>.decent-cloud.org
+ssh -p <gateway-port> ubuntu@<gateway-subdomain>
 ```
 
 ### Test TCP Port Forwarding

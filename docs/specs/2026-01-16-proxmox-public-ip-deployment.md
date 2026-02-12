@@ -55,7 +55,7 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 - **TLS termination at Caddy**: Caddy obtains per-subdomain certs via HTTP-01 challenge
 - **VMs serve plain HTTP**: No TLS config needed on VMs - users get HTTPS automatically
 - **No Cloudflare credentials on host**: DNS managed via central API, HTTP-01 for certs
-- **DNS managed centrally**: `{slug}.{datacenter}.{domain}` records created via central API
+- **DNS managed centrally**: `{slug}.{dc_id}.{gw_prefix}.{domain}` records created via central API
 
 ## Current State
 
@@ -173,7 +173,7 @@ curl -k https://203.0.113.1:8006
 dc-agent setup token \
   --token <AGENT_TOKEN> \
   --proxmox-host <PROXMOX_HOST> \
-  --gateway-datacenter dc-lk \
+  --gateway-dc-id <DC_ID> \
   --gateway-public-ip 203.0.113.1
 ```
 
@@ -189,8 +189,7 @@ Add to `dc-agent.toml`:
 
 ```toml
 [gateway]
-datacenter = "dc-lk"
-domain = "decent-cloud.org"
+dc_id = "a3x9f2b1"  # Unique datacenter identifier (2-20 chars [a-z0-9-])
 public_ip = "203.0.113.1"
 port_range_start = 20000
 port_range_end = 59999
@@ -223,29 +222,29 @@ Note: HTTPS verification requires a provisioned VM. Caddy obtains certificates o
 dc-agent provision --contract-id test-123
 
 # 2. Verify DNS record exists
-dig k7m2p4.dc-lk.decent-cloud.org
+dig k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
 
 # 3. Start a simple HTTP server on the VM
 # On VM: python3 -m http.server 80
 
 # 4. Verify HTTPS works (Caddy will auto-obtain cert)
-curl https://k7m2p4.dc-lk.decent-cloud.org
+curl https://k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
 
 # 5. Verify SSH works
-ssh -p 20000 root@k7m2p4.dc-lk.decent-cloud.org
+ssh -p 20000 root@k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
 
 # 6. Verify port forwarding works
 # Start listener on VM port 10001
 nc -l 10001  # on VM
 
 # Connect from external
-nc k7m2p4.dc-lk.decent-cloud.org 20001
+nc k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org 20001
 
 # 7. Terminate VM
 dc-agent terminate --contract-id test-123
 
 # 8. Verify cleanup
-dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
+dig k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org  # Should return NXDOMAIN
 ```
 
 ## Task Checklist
@@ -270,7 +269,7 @@ dig k7m2p4.dc-lk.decent-cloud.org  # Should return NXDOMAIN
 dc-agent setup token \
   --token <AGENT_TOKEN> \
   --proxmox-host <PROXMOX_HOST> \
-  --gateway-datacenter <DC_ID> \
+  --gateway-dc-id <DC_ID> \
   --gateway-public-ip <PUBLIC_IP>
 ```
 
