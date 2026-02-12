@@ -97,12 +97,12 @@ args = ["build", "--workspace"]
 [tasks.build-api]
 dependencies = ["postgres-start", "sqlx-prepare"]
 command = "cargo"
-args = ["build", "-p", "api", "-p", "dc-agent", "-p", "decent-cloud"]
+args = ["build", "-p", "api", "-p", "dc-agent"]
 
 [tasks.clippy-api]
 dependencies = ["postgres-start", "sqlx-prepare"]
 command = "cargo"
-args = ["clippy", "-p", "api", "-p", "dc-agent", "-p", "decent-cloud", "--tests"]
+args = ["clippy", "-p", "api", "-p", "dc-agent", "--tests"]
 
 [tasks.test-api]
 clear = true
@@ -112,7 +112,7 @@ script = '''
 set -eEuo pipefail
 source scripts/detect-postgres.sh
 export TEST_DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
-cargo nextest run -p api -p dc-agent -p decent-cloud
+cargo nextest run -p api -p dc-agent
 '''
 
 [tasks.setup-python]
@@ -223,7 +223,7 @@ fi
 
 # Prepare sqlx data
 echo "Preparing sqlx data..."
-if ! cargo sqlx prepare --workspace -- --tests; then
+if ! cargo sqlx prepare --workspace -- -p api --tests; then
     echo "✗ sqlx prepare failed" >&2
     exit 1
 fi
