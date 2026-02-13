@@ -265,6 +265,7 @@ services:
       - CF_API_TOKEN=${CF_API_TOKEN:-}
       - CF_ZONE_ID=${CF_ZONE_ID:-}
       - CF_DOMAIN=${CF_DOMAIN:-decent-cloud.org}
+      - CF_GW_PREFIX=${CF_GW_PREFIX:-gw}
     volumes:
       - ../data/api-data-prod:/data
     ports:
