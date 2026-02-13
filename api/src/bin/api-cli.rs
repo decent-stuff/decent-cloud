@@ -810,6 +810,8 @@ struct Offering {
     #[serde(alias = "price_monthly_usd")]
     monthly_price: Option<f64>,
     stock_status: Option<String>,
+    #[serde(default)]
+    is_example: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1985,11 +1987,12 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 None => {
                     println!("Step 1: Auto-discovering available offering...");
                     let offerings = fetch_offerings(api_url).await?;
-                    anyhow::ensure!(
-                        !offerings.is_empty(),
-                        "No offerings available for lifecycle test"
-                    );
-                    let offering = &offerings[0];
+                    // Prefer non-example offerings (example offerings have fake pubkeys)
+                    let offering = offerings
+                        .iter()
+                        .find(|o| !o.is_example)
+                        .or(offerings.first())
+                        .context("No offerings available for lifecycle test")?;
                     println!(
                         "  Found offering: {} (ID: {})",
                         offering.offer_name.as_deref().unwrap_or("N/A"),
@@ -2079,12 +2082,17 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 Some(oid) => Some(oid),
                 None => match fetch_offerings(api_url).await {
                     Ok(offerings) if !offerings.is_empty() => {
+                        // Prefer non-example offerings (example offerings have fake pubkeys)
+                        let offering = offerings
+                            .iter()
+                            .find(|o| !o.is_example)
+                            .unwrap_or(&offerings[0]);
                         println!(
                             "  Auto-discovered offering: {} (ID: {})",
-                            offerings[0].offer_name.as_deref().unwrap_or("N/A"),
-                            offerings[0].id
+                            offering.offer_name.as_deref().unwrap_or("N/A"),
+                            offering.id
                         );
-                        Some(offerings[0].id)
+                        Some(offering.id)
                     }
                     Ok(_) => {
                         println!("  SKIPPED: No offerings available");
