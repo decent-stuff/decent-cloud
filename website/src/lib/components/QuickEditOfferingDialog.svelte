@@ -592,7 +592,7 @@
 						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
 						placeholder="#!/bin/bash&#10;# Script to run after VM is provisioned&#10;apt-get update && apt-get install -y docker.io"
 						disabled={saving}
-					/>
+					></textarea>
 					<p class="text-neutral-500 text-sm mt-2">
 						Script to execute via SSH after VM provisioning. Include a shebang (e.g., <code class="text-primary-400">#!/bin/bash</code>, <code class="text-primary-400">#!/usr/bin/env python3</code>) to specify the interpreter.
 					</p>
