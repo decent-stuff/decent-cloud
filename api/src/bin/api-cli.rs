@@ -931,16 +931,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
                 println!("  Checkout URL: {}", url);
             }
             if skip_payment {
-                println!(
-                    "\nNote: --skip-payment was used. Setting payment_status to 'succeeded'..."
-                );
-                let db = connect_db().await?;
-                let contract_id_bytes = uuid::Uuid::parse_str(&response.contract_id)?
-                    .as_bytes()
-                    .to_vec();
-                db.set_payment_status_for_testing(&contract_id_bytes, "succeeded")
-                    .await?;
-                println!("Payment status set to 'succeeded'.");
+                println!("\nNote: --skip-payment used icpay method (payment auto-succeeds).");
             }
         }
         ContractAction::Get {
@@ -1696,7 +1687,7 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
 async fn connect_db() -> Result<Database> {
     let db_url =
         env::var("DATABASE_URL").unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
-    Database::new(&db_url).await
+    Database::connect(&db_url).await
 }
 
 async fn fetch_offerings(api_url: &str) -> Result<Vec<Offering>> {
@@ -1910,18 +1901,11 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
-            // Step 1: Create contract (icpay auto-succeeds payment)
+            // Step 1: Create contract (icpay payment auto-succeeds and auto-accepts)
             println!("Step 1: Creating contract...");
             let contract_id =
                 create_contract_for_testing(&client, offering_id, &ssh_pubkey).await?;
             println!("  Contract created: {}", contract_id);
-
-            // Safety net: ensure payment status via DB
-            let db = connect_db().await?;
-            let contract_id_bytes = uuid::Uuid::parse_str(&contract_id)?.as_bytes().to_vec();
-            db.set_payment_status_for_testing(&contract_id_bytes, "succeeded")
-                .await?;
-            println!("  Payment status set to 'succeeded'");
 
             // Step 2: Wait for provisioning
             println!("\nStep 2: Waiting for provisioning...");
@@ -2151,12 +2135,6 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 match async {
                     let cid = create_contract_for_testing(&client, oid, ssh_key).await?;
                     println!("  Contract created: {}", cid);
-
-                    // Safety net: ensure payment status via DB
-                    let db = connect_db().await?;
-                    let cid_bytes = uuid::Uuid::parse_str(&cid)?.as_bytes().to_vec();
-                    db.set_payment_status_for_testing(&cid_bytes, "succeeded")
-                        .await?;
 
                     let contract =
                         wait_for_contract_status(&client, &cid, "provisioned", 300).await?;

@@ -2368,50 +2368,6 @@ impl Database {
         })
     }
 
-    /// Set payment status for testing purposes only.
-    /// This bypasses the normal payment flow and should only be used in dev/testing.
-    ///
-    /// WARNING: This function is intended for CLI testing and E2E tests only.
-    /// Never expose this through a public API endpoint.
-    #[allow(dead_code)] // Used by api-cli binary for E2E testing
-    pub async fn set_payment_status_for_testing(
-        &self,
-        contract_id: &[u8],
-        status: &str,
-    ) -> Result<()> {
-        let valid_statuses = ["pending", "succeeded", "failed", "refunded"];
-        if !valid_statuses.contains(&status) {
-            anyhow::bail!(
-                "Invalid payment status '{}'. Valid statuses: {:?}",
-                status,
-                valid_statuses
-            );
-        }
-
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-
-        // Use unchecked query to avoid SQLX cache requirements for this testing function
-        let result = sqlx::query(
-            "UPDATE contract_sign_requests SET payment_status = $1, status_updated_at_ns = $2 WHERE contract_id = $3"
-        )
-        .bind(status)
-        .bind(updated_at_ns)
-        .bind(contract_id)
-        .execute(&self.pool)
-        .await?;
-
-        if result.rows_affected() == 0 {
-            anyhow::bail!("Contract not found: {}", hex::encode(contract_id));
-        }
-
-        tracing::warn!(
-            "TEST MODE: Payment status for contract {} set to '{}' via testing API",
-            hex::encode(contract_id),
-            status
-        );
-
-        Ok(())
-    }
 }
 
 /// Contract usage tracking for billing periods

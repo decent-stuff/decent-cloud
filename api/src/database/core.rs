@@ -16,6 +16,13 @@ impl Database {
         Ok(Self { pool })
     }
 
+    /// Connect to database without running migrations.
+    /// Use this for CLI tools that should not modify the database schema.
+    pub async fn connect(database_url: &str) -> Result<Self> {
+        let pool = PgPool::connect(database_url).await?;
+        Ok(Self { pool })
+    }
+
     pub async fn get_last_sync_position(&self) -> Result<u64> {
         let position: i64 =
             sqlx::query_scalar!("SELECT last_position FROM sync_state WHERE id = 1")
