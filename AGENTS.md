@@ -122,3 +122,241 @@ When running background tasks (builds, tests, long commands), poll for completio
 # MCP servers that you should use in the project
 - Use context7 mcp server if you would like to obtain additional information for a library or API
 - Use web-search-prime if you need to perform a web search
+
+---
+
+# Testing & Deployment Guide
+
+## Architecture
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
+│   api-cli    │────▶│  API Server   │◀────│    dc-agent       │
+│ (test client)│     │ (central API) │     │ (on Proxmox host) │
+└──────────────┘     └──────────────┘     └──────────────────┘
+                            │                      │
+                     ┌──────┴──────┐        ┌──────┴──────┐
+                     │ Cloudflare  │        │   Caddy     │
+                     │ DNS API     │        │ (TLS proxy) │
+                     └─────────────┘        └─────────────┘
+```
+
+- **api-cli** — CLI client for the Decent Cloud API. Used for identity management, contract lifecycle, E2E testing, DNS operations, and health checks. Binary in `api` crate (`api/src/bin/api-cli.rs`).
+- **dc-agent** — Runs on each Proxmox host. Polls the API for contracts, provisions/terminates VMs, manages gateway routing (Caddy + iptables). Binary in `dc-agent` crate.
+- **API Server** — Central REST API (`api-server`). Manages contracts, providers, offerings, DNS records. Binary in `api` crate (`api/src/bin/api-server.rs`).
+
+## Building
+
+```bash
+cargo build -p api --bin api-cli    # test client
+cargo build -p api --bin api-server # central API
+cargo build -p dc-agent             # provisioning agent
+```
+
+## Identity Management
+
+All authenticated api-cli commands require an identity (Ed25519 keypair stored in `~/.dc-test-keys/`).
+
+```bash
+api-cli identity generate --name e2e-test   # create keypair
+api-cli identity list                       # list all
+api-cli identity show e2e-test              # show public key
+```
+
+## Environment Selection
+
+```bash
+api-cli contract list --identity test                                          # dev (localhost:3000)
+api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test  # dev server
+api-cli --env prod contract list --identity test                                 # production
+```
+
+## Contract Lifecycle
+
+States: `requested → pending → accepted → provisioning → provisioned → active`
+Terminal: `cancelled`, `rejected`, `failed`
+
+```bash
+# Discover offerings
+api-cli --api-url https://dev-api.decent-cloud.org contract list-offerings --in-stock-only
+
+# Create contract (--skip-payment for testing)
+api-cli --api-url https://dev-api.decent-cloud.org contract create \
+  --identity e2e-test --offering-id 11 \
+  --ssh-pubkey "ssh-ed25519 AAAA..." --skip-payment
+
+# Wait for provisioning
+api-cli --api-url https://dev-api.decent-cloud.org contract wait <ID> \
+  --state active --timeout 120 --identity e2e-test
+
+# Get details (gateway_subdomain, gateway_ssh_port, port range)
+api-cli --api-url https://dev-api.decent-cloud.org contract get <ID> --identity e2e-test
+
+# Cancel (triggers VM termination + full cleanup)
+api-cli --api-url https://dev-api.decent-cloud.org contract cancel <ID> --identity e2e-test
+
+# List all contracts
+api-cli --api-url https://dev-api.decent-cloud.org contract list --identity e2e-test
+```
+
+## E2E Testing
+
+### Quick Lifecycle Test (no VM)
+
+```bash
+api-cli --api-url https://dev-api.decent-cloud.org e2e lifecycle --identity e2e-test
+```
+
+### Full Provisioning Test (requires running dc-agent)
+
+```bash
+api-cli --api-url https://dev-api.decent-cloud.org e2e provision \
+  --identity e2e-test --offering-id 11 \
+  --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)" \
+  --verify-ssh --cleanup
+```
+
+### Full Suite (health + lifecycle + provisioning + DNS)
+
+```bash
+export CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ZONE_ID=<zone_id>
+export CF_GW_PREFIX=dev-gw CF_DOMAIN=decent-cloud.org
+
+api-cli --api-url https://dev-api.decent-cloud.org e2e all \
+  --identity e2e-test \
+  --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)"
+```
+
+Options: `--skip-provision` to skip VM test, `--skip-dns` to skip DNS test.
+
+## Gateway Testing
+
+```bash
+# SSH through gateway
+api-cli gateway ssh --host <SUBDOMAIN> --port 20000 --identity-file ~/.ssh/id_ed25519
+
+# TCP port forwarding
+api-cli gateway tcp --host <SUBDOMAIN> --external-port 20001
+
+# All ports from contract
+api-cli gateway contract <CONTRACT_ID> --identity e2e-test
+```
+
+## DNS Operations
+
+Requires: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`. Optional: `CF_GW_PREFIX` (default: `gw`), `CF_DOMAIN` (default: `decent-cloud.org`).
+
+```bash
+api-cli dns create --subdomain test-slug --ip 203.0.113.1
+api-cli dns get --subdomain test-slug
+api-cli dns list
+api-cli dns delete --subdomain test-slug
+```
+
+## dc-agent Setup (on Proxmox host)
+
+```bash
+dc-agent setup token \
+  --token <AGENT_TOKEN> \
+  --setup-proxmox \
+  --gateway-dc-id my-dc-01 \
+  --gateway-public-ip 203.0.113.1 \
+  --gateway-cf-api-token <CF_TOKEN>
+```
+
+This single command: registers agent, generates keypair, creates Proxmox API token + OS templates, installs Caddy with Cloudflare plugin, configures networking (IP forwarding, NAT, firewall), writes wildcard TLS config (`*.{gw_prefix}.{domain}` via DNS-01), writes config, installs systemd services.
+
+Additional flags:
+- `--gateway-domain <DOMAIN>` (default: `decent-cloud.org`)
+- `--gateway-gw-prefix <PREFIX>` (default: `gw`, use `dev-gw` for dev)
+- `--gateway-port-start/end` (default: `20000`/`59999`)
+- `--gateway-ports-per-vm` (default: `10`)
+- `--non-interactive`, `--force`
+
+## dc-agent Diagnostics
+
+```bash
+dc-agent doctor                     # full check
+dc-agent doctor --no-verify-api     # skip API auth
+dc-agent doctor --no-test-provision # skip VM test
+```
+
+Checks: config, provisioner connectivity, gateway status (Caddy running, ports 80/443 open), API authentication, optional provision/terminate cycle.
+
+## dc-agent Test Provisioning
+
+```bash
+dc-agent test-provision                                      # provision + terminate
+dc-agent test-provision --keep --ssh-pubkey "ssh-ed25519 ..."  # keep VM running
+dc-agent test-provision --test-gateway                        # include gateway routing
+dc-agent test-provision --test-gateway --skip-dns             # gateway without DNS
+```
+
+## Subdomain Format
+
+All gateway subdomains: `{slug}-{dc_id}.{gw_prefix}.{domain}`
+
+Examples: `k7m2p4-dc-lk.dev-gw.decent-cloud.org` (dev), `k7m2p4-a3x9f2b1.gw.decent-cloud.org` (prod).
+
+Single wildcard cert `*.{gw_prefix}.{domain}` via DNS-01 with Cloudflare covers all VMs.
+
+## Typical Agent Workflow: End-to-End Verification
+
+```bash
+# 1. Setup
+api-cli identity generate --name test
+
+# 2. Health check
+api-cli --api-url https://dev-api.decent-cloud.org health api
+
+# 3. Find offering
+api-cli --api-url https://dev-api.decent-cloud.org contract list-offerings --in-stock-only
+
+# 4. Create contract
+api-cli --api-url https://dev-api.decent-cloud.org contract create \
+  --identity test --offering-id <ID> \
+  --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)" --skip-payment
+
+# 5. Wait for active
+api-cli --api-url https://dev-api.decent-cloud.org contract wait <CONTRACT_ID> \
+  --state active --timeout 300 --identity test
+
+# 6. Get connection details
+api-cli --api-url https://dev-api.decent-cloud.org contract get <CONTRACT_ID> --identity test
+
+# 7. SSH into VM
+ssh -o StrictHostKeyChecking=no -p <GATEWAY_SSH_PORT> root@<GATEWAY_SUBDOMAIN>
+
+# 8. Cleanup
+api-cli --api-url https://dev-api.decent-cloud.org contract cancel <CONTRACT_ID> --identity test
+```
+
+## Deploying dc-agent Changes to Proxmox Host
+
+```bash
+cargo build -p dc-agent --release
+scp target/release/dc-agent root@proxmox-host:/usr/local/bin/
+ssh root@proxmox-host systemctl restart dc-agent
+ssh root@proxmox-host journalctl -u dc-agent -f
+ssh root@proxmox-host dc-agent doctor --no-test-provision
+```
+
+## Environment Variables Reference
+
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `CLOUDFLARE_API_TOKEN` | api-cli dns/e2e | Cloudflare DNS management |
+| `CLOUDFLARE_ZONE_ID` | api-cli dns/e2e | Cloudflare zone identifier |
+| `CF_GW_PREFIX` | api-cli, api-server | Gateway DNS prefix (`gw` or `dev-gw`) |
+| `CF_DOMAIN` | api-cli, api-server | Base domain (`decent-cloud.org`) |
+| `CF_API_TOKEN` | api-server | Server-side Cloudflare token |
+| `CF_ZONE_ID` | api-server | Server-side zone ID |
+| `DATABASE_URL` | api-server, api-cli | PostgreSQL connection string |
+| `STRIPE_SECRET_KEY` | api-cli health | Stripe verification |
+| `TELEGRAM_BOT_TOKEN` | api-cli health | Telegram bot verification |
+| `MAILCHANNELS_API_KEY` | api-cli health | Email service verification |
+
+## Known Issues
+
+- **DNS propagation delay:** After creating a DNS record, Let's Encrypt resolvers may not see it immediately. Caddy retries cert acquisition automatically after 60s.
+- **First VM on new host:** Wildcard cert obtained on Caddy startup. If Cloudflare token is invalid or DNS zone is wrong, check `journalctl -u caddy` for TLS errors.
