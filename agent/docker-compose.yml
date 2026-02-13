@@ -42,6 +42,9 @@ services:
       - rustup-cache:/usr/local/rustup
       - cargo-cache:/home/ubuntu/.cargo
       - home-cache:/home/ubuntu/.cache
+      # SSH key for agent access to remote nodes
+      - ${HOME}/.ssh/claude-code:/tmp/claude-ssh/claude-code:ro
+      - ${HOME}/.ssh/claude-code.pub:/tmp/claude-ssh/claude-code.pub:ro
       # Docker socket for running docker commands inside the container
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /code

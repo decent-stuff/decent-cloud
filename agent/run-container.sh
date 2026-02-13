@@ -27,6 +27,23 @@ find_repo_root() {
     exit 1
 }
 
+# SSH key management for agent containers
+SSH_KEY_PATH="${HOME}/.ssh/claude-code"
+
+ensure_ssh_key() {
+    if [[ -f "$SSH_KEY_PATH" ]]; then
+        log_info "Reusing existing SSH key: $SSH_KEY_PATH"
+    else
+        log_info "Generating new SSH key: $SSH_KEY_PATH"
+        mkdir -p "$(dirname "$SSH_KEY_PATH")"
+        ssh-keygen -t ed25519 -f "$SSH_KEY_PATH" -N "" -C "claude-code-agent"
+        log_success "SSH key generated. Public key:"
+        cat "${SSH_KEY_PATH}.pub"
+        echo ""
+        log_warning "Add this public key to target nodes to enable SSH access."
+    fi
+}
+
 # Default values
 REPO_ROOT="$(find_repo_root)"
 COMPOSE_FILE="$REPO_ROOT/agent/docker-compose.yml"
@@ -256,6 +273,7 @@ trap cleanup EXIT INT TERM
 # Main execution
 main() {
     check_requirements
+    ensure_ssh_key
     build_image
     run_tool
 }
