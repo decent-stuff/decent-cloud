@@ -554,7 +554,8 @@ net.bridge.bridge-nf-call-iptables = 1
 
 {
     # Global options
-    admin off
+    # Admin API on localhost only (required for `caddy reload` to work)
+    admin localhost:2019
     persist_config off
 
     # Data directory for certificates
@@ -720,8 +721,8 @@ mod tests {
         assert!(config.contains("TLS termination at gateway"));
         assert!(config.contains("HTTP-01 certificates"));
 
-        // Global options
-        assert!(config.contains("admin off"));
+        // Global options - admin API on localhost for caddy reload support
+        assert!(config.contains("admin localhost:2019"));
         assert!(config.contains("storage file_system /var/lib/caddy"));
 
         // Should import VM-specific configs

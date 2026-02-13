@@ -52,10 +52,10 @@ struct CreateDnsRecord {
 
 impl CloudflareDns {
     /// Create a new Cloudflare DNS client from environment variables.
-    /// Returns None if required environment variables are not set.
+    /// Returns None if required environment variables are not set or empty.
     pub fn from_env() -> Option<Arc<Self>> {
-        let api_token = std::env::var("CF_API_TOKEN").ok()?;
-        let zone_id = std::env::var("CF_ZONE_ID").ok()?;
+        let api_token = std::env::var("CF_API_TOKEN").ok().filter(|s| !s.is_empty())?;
+        let zone_id = std::env::var("CF_ZONE_ID").ok().filter(|s| !s.is_empty())?;
         let domain = std::env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
         let gw_prefix =
             std::env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
