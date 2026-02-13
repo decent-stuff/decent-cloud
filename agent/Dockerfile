@@ -1,5 +1,5 @@
 # Dockerfile for Decent Cloud + Containerized development environment
-# Based on .github/container/Dockerfile with additions for Claude Code and Happy Coder
+# Based on .github/container/Dockerfile with additions for Claude Code, Happy Coder, and OpenCode
 
 FROM rust:1.91
 
@@ -78,6 +78,11 @@ RUN mkdir -p ~/.npm-global \
     && export PATH=~/.npm-global/bin:$PATH \
     && npm install -g  @anthropic-ai/claude-code happy-coder playwright \
     && npx playwright install chromium
+
+# Install OpenCode
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && echo 'export PATH=~/.opencode/bin:$PATH' >> ~/.bashrc \
+    && echo 'export PATH=~/.opencode/bin:$PATH' >> ~/.profile
 
 # Configure git hooks
 COPY --chown=ubuntu:ubuntu .git-hooks/ $HOME/.git-hooks/

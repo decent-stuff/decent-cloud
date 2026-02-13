@@ -12,13 +12,13 @@ services:
     build:
       context: ..
       dockerfile: agent/Dockerfile
-    image: decent-cloud-claude:latest
+    image: decent-cloud-agent:latest
     depends_on:
       - postgres
     # Run with docker group to access the socket
     group_add:
       - ${DOCKER_GID:-999}
-    user: "0:0"  # Start as root to fix volume permissions
+    user: "0:0" # Start as root to fix volume permissions
     entrypoint: ["/tini", "--", "/home/ubuntu/entrypoint.sh"]
     environment:
       # Development environment variables
@@ -38,6 +38,7 @@ services:
       - ${HOME}/.claude.json:/home/ubuntu/.claude.json
       - ${HOME}/.claude:/home/ubuntu/.claude
       - ${HOME}/.happy:/home/ubuntu/.happy
+      - ${HOME}/.opencode:/home/ubuntu/.opencode
       # Cache volumes for rust tooling and dependencies (controlled by ubuntu user)
       - rustup-cache:/usr/local/rustup
       - cargo-cache:/home/ubuntu/.cargo
