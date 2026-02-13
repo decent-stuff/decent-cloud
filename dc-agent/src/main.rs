@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use dc_agent::{
-    api_client::{setup_agent, ApiClient, ReconcileResponse},
+    api_client::{register_gateway, setup_agent, ApiClient, ReconcileResponse},
     config::{Config, ProvisionerConfig},
     gateway::GatewayManager,
     orphan_tracker::OrphanTracker,
@@ -134,7 +134,7 @@ enum SetupProvisioner {
         #[arg(long, default_value = "false")]
         non_interactive: bool,
 
-        // === Optional: Gateway setup (Caddy reverse proxy) ===
+        // === Optional: Gateway setup (Caddy reverse proxy with DNS-01 wildcard TLS) ===
         /// Datacenter ID for gateway (2-20 chars [a-z0-9-]). Enables gateway setup.
         /// Generate with: openssl rand -hex 4
         #[arg(long)]
@@ -143,6 +143,14 @@ enum SetupProvisioner {
         /// Host's public IPv4 address (auto-detected if not provided)
         #[arg(long)]
         gateway_public_ip: Option<String>,
+
+        /// Base domain for gateway subdomains (default: decent-cloud.org)
+        #[arg(long, default_value = "decent-cloud.org")]
+        gateway_domain: String,
+
+        /// Gateway DNS prefix (default: gw, use dev-gw for dev)
+        #[arg(long, default_value = "gw")]
+        gateway_gw_prefix: String,
 
         /// Start of port range for VM allocation (default: 20000)
         #[arg(long, default_value = "20000")]
@@ -162,7 +170,8 @@ enum SetupProvisioner {
         install_service: Option<bool>,
     },
     // Note: Gateway setup is integrated into the Token command via --gateway-* flags.
-    // Use: dc-agent setup token --gateway-dc-id <DC_ID> (public IP auto-detected)
+    // Use: dc-agent setup token --gateway-dc-id <DC_ID>
+    // acme-dns credentials are obtained automatically from the central API.
 }
 
 #[tokio::main]
@@ -229,6 +238,8 @@ async fn run_setup_token(
     // Gateway parameters
     gateway_dc_id: Option<String>,
     gateway_public_ip: Option<String>,
+    gateway_domain: &str,
+    gateway_gw_prefix: &str,
     gateway_port_start: u16,
     gateway_port_end: u16,
     gateway_ports_per_vm: u16,
@@ -455,11 +466,38 @@ type = "{provisioner_type}"
     println!();
     println!("Configuration written to: {}", output.display());
 
-    // Step 7: Run gateway setup if parameters provided
-    // Gateway setup runs locally on the host (same as Proxmox setup)
+    // Step 7: Register gateway with central API for acme-dns credentials
+    let gw_registration = if gateway_dc_id.is_some() {
+        let dc_id = gateway_dc_id.as_deref().unwrap();
+        println!();
+        println!("Registering gateway with central API for TLS credentials...");
+        match register_gateway(api_url, &key_path.to_string_lossy(), dc_id)
+        .await
+        {
+            Ok(reg) => {
+                println!("[ok] Gateway registered with acme-dns");
+                println!("  acme-dns subdomain: {}", reg.acme_dns_subdomain);
+                Some(reg)
+            }
+            Err(e) => {
+                anyhow::bail!(
+                    "Gateway registration failed: {:#}\n\
+                     Ensure the API server has ACME_DNS_SERVER_URL configured.",
+                    e
+                );
+            }
+        }
+    } else {
+        None
+    };
+
+    // Step 8: Run gateway setup locally on the host
     let gateway_configured = run_gateway_setup_if_requested(
         gateway_dc_id,
         gateway_public_ip,
+        gw_registration,
+        gateway_domain,
+        gateway_gw_prefix,
         gateway_port_start,
         gateway_port_end,
         gateway_ports_per_vm,
@@ -467,7 +505,7 @@ type = "{provisioner_type}"
     )
     .await?;
 
-    // Step 8: Install systemd service
+    // Step 9: Install systemd service
     // Default: install/update service when on Proxmox host with successful Proxmox setup
     // OR when service already exists (to update config path and restart)
     let should_install_service = install_service.unwrap_or_else(|| {
@@ -935,9 +973,13 @@ async fn run_proxmox_setup_if_requested(
 /// Optionally run gateway setup based on CLI args.
 /// Runs locally on the Proxmox host - no SSH required.
 /// Returns true if gateway was configured, false otherwise.
+#[allow(clippy::too_many_arguments)]
 async fn run_gateway_setup_if_requested(
     dc_id: Option<String>,
     public_ip: Option<String>,
+    acme_dns: Option<dc_agent::api_client::GatewayRegistration>,
+    domain: &str,
+    gw_prefix: &str,
     port_start: u16,
     port_end: u16,
     ports_per_vm: u16,
@@ -953,6 +995,9 @@ async fn run_gateway_setup_if_requested(
             return Ok(false);
         }
     };
+
+    let acme_dns = acme_dns
+        .context("acme-dns credentials required for gateway setup but registration failed")?;
 
     // Auto-detect public IP if not provided
     let public_ip = match public_ip {
@@ -972,16 +1017,23 @@ async fn run_gateway_setup_if_requested(
     println!("Setting up Gateway (Caddy reverse proxy) locally...");
     println!("  DC ID: {}", dc_id);
     println!("  Public IP: {}", public_ip);
+    println!("  Wildcard: *.{}.{}.{}", dc_id, gw_prefix, domain);
     println!(
         "  Port range: {}-{} ({} per VM)",
         port_start, port_end, ports_per_vm
     );
-    println!("  TLS: Automatic via Let's Encrypt HTTP-01 challenge");
+    println!("  TLS: Per-provider wildcard cert via DNS-01 (acme-dns)");
     println!();
 
     let setup = GatewaySetup {
         dc_id: dc_id.clone(),
         public_ip: public_ip.clone(),
+        domain: domain.to_string(),
+        gw_prefix: gw_prefix.to_string(),
+        acme_dns_server_url: acme_dns.acme_dns_server_url,
+        acme_dns_username: acme_dns.acme_dns_username,
+        acme_dns_password: acme_dns.acme_dns_password,
+        acme_dns_subdomain: acme_dns.acme_dns_subdomain,
         port_range_start: port_start,
         port_range_end: port_end,
         ports_per_vm,
@@ -999,7 +1051,7 @@ async fn run_gateway_setup_if_requested(
     file.write_all(gateway_config.as_bytes())?;
 
     println!();
-    println!("✓ Gateway configured successfully!");
+    println!("Gateway configured successfully!");
     println!("  Gateway config appended to: {}", config_path.display());
 
     Ok(true)
@@ -1019,6 +1071,8 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
             non_interactive,
             gateway_dc_id,
             gateway_public_ip,
+            gateway_domain,
+            gateway_gw_prefix,
             gateway_port_start,
             gateway_port_end,
             gateway_ports_per_vm,
@@ -1037,6 +1091,8 @@ async fn run_setup(provisioner: SetupProvisioner) -> Result<()> {
                 // Gateway parameters
                 gateway_dc_id,
                 gateway_public_ip,
+                &gateway_domain,
+                &gateway_gw_prefix,
                 gateway_port_start,
                 gateway_port_end,
                 gateway_ports_per_vm,
@@ -2265,7 +2321,11 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             println!("  Caddy sites dir: {}", gw.caddy_sites_dir);
             println!("  Port allocations: {}", gw.port_allocations_path);
             println!("  DNS management: via central API");
-            println!("  TLS: Automatic via Let's Encrypt HTTP-01");
+            println!(
+                "  Wildcard: *.{}.{}.{}",
+                gw.dc_id, gw.gw_prefix, gw.domain
+            );
+            println!("  TLS: Per-provider wildcard cert via DNS-01 (acme-dns)");
 
             // Verify paths exist
             if std::path::Path::new(&gw.caddy_sites_dir).exists() {

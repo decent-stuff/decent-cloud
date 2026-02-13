@@ -2,7 +2,7 @@
 
 **Status:** Complete
 **Created:** 2026-01-16
-**Updated:** 2026-01-18
+**Updated:** 2026-02-13
 **Depends On:** [DC Gateway Spec](./2025-12-31-dc-gateway-spec.md)
 
 ## Problem Statement
@@ -31,7 +31,7 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 │  │                                                                 │   │
 │  │  HTTP (80)  → Automatic redirect to HTTPS                       │   │
 │  │  HTTPS (443) → TLS termination → HTTP proxy to VM:80            │   │
-│  │               (per-subdomain Let's Encrypt certs via HTTP-01)   │   │
+│  │               (per-provider wildcard cert via DNS-01 with acme-dns) │   │
 │  └─────────────────────────────────────────────────────────────────┘   │
 │                                                                         │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
@@ -52,9 +52,9 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 ```
 
 **Key design decisions:**
-- **TLS termination at Caddy**: Caddy obtains per-subdomain certs via HTTP-01 challenge
+- **TLS termination at Caddy**: Per-provider wildcard cert `*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 challenge with acme-dns
 - **VMs serve plain HTTP**: No TLS config needed on VMs - users get HTTPS automatically
-- **No Cloudflare credentials on host**: DNS managed via central API, HTTP-01 for certs
+- **acme-dns credentials on host**: Obtained from central API during gateway registration (scoped to provider's subdomain)
 - **DNS managed centrally**: `{slug}.{dc_id}.{gw_prefix}.{domain}` records created via central API
 
 ## Current State
@@ -80,12 +80,12 @@ The gateway architecture is designed (see DC Gateway Spec) and fully integrated 
 - Firewall rules (80, 443, 20000-59999 for VMs)
 - FORWARD chain rules for all private ranges
 - iptables persistence via `iptables-persistent`
-- Caddy installation (automatic TLS via HTTP-01)
+- Caddy installation with acmedns plugin (per-provider wildcard TLS via DNS-01)
 
 ### Requires Manual Setup (Pre-requisites)
 - Public IP must be assigned to host interface
 - SSH access to host with root privileges
-- Port 80 must be reachable from internet (for HTTP-01 challenge)
+- Central API must have ACME_DNS_SERVER_URL configured (for acme-dns registration during gateway setup)
 
 ## Scope
 
@@ -97,8 +97,7 @@ Before starting:
 - [ ] Public IP assigned to Proxmox node (e.g., `203.0.113.1`)
 - [ ] Proxmox host accessible via SSH
 - [ ] `dc-agent` binary available
-- [ ] Port 80 reachable from internet (for Let's Encrypt HTTP-01 challenge)
-- [ ] Central API server running and accessible
+- [ ] Central API server running with ACME_DNS_SERVER_URL configured
 
 ## Implementation Plan
 
@@ -178,9 +177,10 @@ dc-agent setup token \
 ```
 
 This command:
-- Downloads Caddy binary
-- Creates systemd service
-- Configures automatic TLS via HTTP-01 (no Cloudflare credentials needed)
+- Registers with central API for acme-dns credentials
+- Downloads Caddy binary with acmedns plugin
+- Creates systemd service with EnvironmentFile for acme-dns credentials
+- Configures per-provider wildcard TLS via DNS-01 with acme-dns
 - Creates required directories
 
 #### 2.2 Configure dc-agent
@@ -211,7 +211,7 @@ sudo journalctl -u caddy -f
 ss -tlnp | grep caddy
 ```
 
-Note: HTTPS verification requires a provisioned VM. Caddy obtains certificates on first request via HTTP-01 challenge.
+Note: Caddy obtains a wildcard certificate via DNS-01 challenge on startup. All VM subdomains are covered by this single cert.
 
 ### Phase 3: Testing
 
@@ -227,7 +227,7 @@ dig k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
 # 3. Start a simple HTTP server on the VM
 # On VM: python3 -m http.server 80
 
-# 4. Verify HTTPS works (Caddy will auto-obtain cert)
+# 4. Verify HTTPS works (wildcard cert already covers subdomain)
 curl https://k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org
 
 # 5. Verify SSH works
@@ -252,7 +252,7 @@ dig k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org  # Should return NXDOMAIN
 ### Pre-requisites (Per Deployment)
 - [ ] Assign public IP to Proxmox host interface
 - [ ] Ensure SSH access to host with root privileges
-- [ ] Ensure port 80 is reachable from internet
+- [ ] Ensure central API has ACME_DNS_SERVER_URL configured
 
 ### Infrastructure (Automated by `dc-agent setup gateway`)
 - [x] Enable IP forwarding (`net.ipv4.ip_forward=1`)
@@ -261,7 +261,7 @@ dig k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org  # Should return NXDOMAIN
 - [x] Configure FORWARD rules for all private ranges
 - [x] Persist iptables rules
 - [x] Install Caddy binary
-- [x] Configure Caddy for automatic TLS (HTTP-01)
+- [x] Configure Caddy for per-provider wildcard TLS (DNS-01 with acme-dns)
 - [x] Start Caddy systemd service
 
 ### To Deploy
@@ -277,7 +277,7 @@ dc-agent setup token \
 - [x] Wire `GatewayManager::setup_gateway()` into provisioning
 - [x] Wire `GatewayManager::cleanup_gateway()` into termination
 - [x] Implement `POST /api/v1/agents/dns` endpoint in api-server
-- [x] Implement Cloudflare client for DNS record management
+- [x] Implement Cloudflare client for DNS record management (central API only)
 - [x] Add database migration for gateway columns
 - [x] Update `Contract` API response
 - [x] Update frontend to display connection details
@@ -291,7 +291,7 @@ dc-agent setup token \
 ## Security Considerations
 
 1. **Firewall before gateway**: Ensure host firewall is configured before exposing gateway ports
-2. **Cloudflare token centralized**: Only the central API has Cloudflare credentials
+2. **acme-dns credentials on host**: Scoped to provider's subdomain; stored in `/etc/caddy/env` with mode 600
 3. **Agent authentication**: DNS endpoint requires agent auth with DnsManage permission
 4. **Rate limiting**: Consider rate limiting DNS operations to prevent abuse
 5. **Audit logging**: Log all DNS changes for security review
@@ -325,4 +325,6 @@ If issues arise:
 
 - [DC Gateway Spec](./2025-12-31-dc-gateway-spec.md) - Architecture details
 - [Caddy Documentation](https://caddyserver.com/docs/)
-- [Let's Encrypt HTTP-01](https://letsencrypt.org/docs/challenge-types/#http-01-challenge)
+- [Let's Encrypt DNS-01](https://letsencrypt.org/docs/challenge-types/#dns-01-challenge)
+- [Caddy acmedns Plugin](https://github.com/caddy-dns/acmedns)
+- [acme-dns](https://github.com/joohoi/acme-dns)

@@ -558,7 +558,7 @@ impl ApiClient {
     }
 
     /// Create a gateway DNS record via the central API.
-    /// The API handles Cloudflare credentials securely.
+    /// DNS record management is centralized — agents never get Cloudflare credentials.
     /// Returns the full subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org").
     pub async fn create_dns_record(
         &self,
@@ -665,6 +665,101 @@ pub async fn setup_agent(
     api_response
         .data
         .ok_or_else(|| anyhow::anyhow!("Setup response missing data"))
+}
+
+/// acme-dns credentials returned from gateway registration.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayRegistration {
+    pub acme_dns_server_url: String,
+    pub acme_dns_username: String,
+    pub acme_dns_password: String,
+    pub acme_dns_subdomain: String,
+}
+
+/// Register gateway for per-provider TLS via acme-dns.
+///
+/// Standalone function (like `setup_agent`) because we don't have a full `ApiConfig` during setup.
+/// Uses agent key for authentication.
+pub async fn register_gateway(
+    api_endpoint: &str,
+    agent_key_path: &str,
+    dc_id: &str,
+) -> Result<GatewayRegistration> {
+    let identity = ApiClient::load_identity(agent_key_path)?;
+    let agent_pubkey = hex::encode(identity.to_bytes_verifying());
+
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("Failed to build HTTP client")?;
+
+    let path = "/api/v1/agents/gateway/register";
+    let body = serde_json::json!({ "dcId": dc_id });
+    let body_bytes = serde_json::to_vec(&body)?;
+
+    // Build auth headers (same signing as ApiClient::build_auth_headers)
+    let timestamp = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
+    let nonce = Uuid::new_v4();
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut sign_message = Vec::new();
+    sign_message.extend_from_slice(timestamp_str.as_bytes());
+    sign_message.extend_from_slice(nonce_str.as_bytes());
+    sign_message.extend_from_slice(b"POST");
+    sign_message.extend_from_slice(path.as_bytes());
+    sign_message.extend_from_slice(&body_bytes);
+
+    let signature = identity
+        .sign(&sign_message)
+        .map_err(|e| anyhow::anyhow!("Failed to sign gateway register request: {}", e))?;
+    let signature_hex = hex::encode(signature.to_bytes());
+
+    let url = format!("{}{}", api_endpoint, path);
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("X-Timestamp", &timestamp_str)
+        .header("X-Nonce", &nonce_str)
+        .header("X-Signature", &signature_hex)
+        .header("X-Agent-Pubkey", &agent_pubkey)
+        .body(body_bytes)
+        .send()
+        .await
+        .context("Failed to send gateway register request")?;
+
+    let status = response.status();
+    let response_body = response
+        .text()
+        .await
+        .context("Failed to read gateway register response")?;
+
+    if !status.is_success() {
+        bail!(
+            "Gateway registration failed (HTTP {}): {}",
+            status,
+            response_body
+        );
+    }
+
+    let api_response: ApiResponse<GatewayRegistration> = serde_json::from_str(&response_body)
+        .context("Failed to parse gateway register response")?;
+
+    if !api_response.success {
+        bail!(
+            "Gateway registration failed: {}",
+            api_response
+                .error
+                .unwrap_or_else(|| "Unknown error".to_string())
+        );
+    }
+
+    api_response
+        .data
+        .ok_or_else(|| anyhow::anyhow!("Gateway register response missing data"))
 }
 
 #[cfg(test)]
@@ -932,6 +1027,28 @@ mod tests {
         assert_eq!(super::parse_size_to_gb(None), None);
         assert_eq!(super::parse_size_to_gb(Some("")), None);
         assert_eq!(super::parse_size_to_gb(Some("invalid")), None);
+    }
+
+    #[test]
+    fn test_gateway_registration_deserialization() {
+        let json = r#"{
+            "acmeDnsServerUrl": "https://acme.decent-cloud.org",
+            "acmeDnsUsername": "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0",
+            "acmeDnsPassword": "htB9mR9DYgcu9bX_afHF62erPKmRNc",
+            "acmeDnsSubdomain": "d420c923.acme.decent-cloud.org"
+        }"#;
+
+        let reg: GatewayRegistration = serde_json::from_str(json).unwrap();
+        assert_eq!(reg.acme_dns_server_url, "https://acme.decent-cloud.org");
+        assert_eq!(
+            reg.acme_dns_username,
+            "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0"
+        );
+        assert_eq!(reg.acme_dns_password, "htB9mR9DYgcu9bX_afHF62erPKmRNc");
+        assert_eq!(
+            reg.acme_dns_subdomain,
+            "d420c923.acme.decent-cloud.org"
+        );
     }
 
     #[test]

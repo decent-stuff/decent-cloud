@@ -54,11 +54,12 @@ impl CloudflareDns {
     /// Create a new Cloudflare DNS client from environment variables.
     /// Returns None if required environment variables are not set or empty.
     pub fn from_env() -> Option<Arc<Self>> {
-        let api_token = std::env::var("CF_API_TOKEN").ok().filter(|s| !s.is_empty())?;
+        let api_token = std::env::var("CF_API_TOKEN")
+            .ok()
+            .filter(|s| !s.is_empty())?;
         let zone_id = std::env::var("CF_ZONE_ID").ok().filter(|s| !s.is_empty())?;
         let domain = std::env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
-        let gw_prefix =
-            std::env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
+        let gw_prefix = std::env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
 
         Some(Arc::new(Self {
             client: Client::new(),
@@ -87,7 +88,10 @@ impl CloudflareDns {
     /// Validate dc_id: 2-20 chars, [a-z0-9-], no leading/trailing hyphen.
     pub fn validate_dc_id(dc_id: &str) -> Result<()> {
         if dc_id.len() < 2 || dc_id.len() > 20 {
-            bail!("Invalid dc_id: must be 2-20 characters, got {}", dc_id.len());
+            bail!(
+                "Invalid dc_id: must be 2-20 characters, got {}",
+                dc_id.len()
+            );
         }
         if !dc_id
             .chars()
@@ -261,6 +265,20 @@ impl CloudflareDns {
     /// Create or update a TXT record.
     /// Record name should be the full subdomain (e.g., "selector._domainkey" for DKIM).
     pub async fn create_txt_record(&self, name: &str, content: &str) -> Result<()> {
+        self.upsert_txt_record(name, content, 3600).await
+    }
+
+    /// Create or update the ACME challenge TXT record for a provider's dc_id.
+    /// Record name: `_acme-challenge.{dc_id}.{gw_prefix}` (Cloudflare appends zone domain).
+    /// Uses short TTL (60s) for fast propagation during ACME challenges.
+    pub async fn upsert_acme_challenge_txt(&self, dc_id: &str, txt_value: &str) -> Result<()> {
+        Self::validate_dc_id(dc_id)?;
+        let record_name = format!("_acme-challenge.{}.{}", dc_id, self.gw_prefix);
+        self.upsert_txt_record(&record_name, txt_value, 60).await
+    }
+
+    /// Internal: create or update a TXT record with the given TTL.
+    async fn upsert_txt_record(&self, name: &str, content: &str, ttl: u32) -> Result<()> {
         let full_name = format!("{}.{}", name, self.domain);
 
         // Check if record already exists
@@ -275,7 +293,7 @@ impl CloudflareDns {
                 record_type: "TXT".to_string(),
                 name: name.to_string(),
                 content: content.to_string(),
-                ttl: 3600,
+                ttl,
                 proxied: false,
             };
 
@@ -313,7 +331,7 @@ impl CloudflareDns {
             record_type: "TXT".to_string(),
             name: name.to_string(),
             content: content.to_string(),
-            ttl: 3600,
+            ttl,
             proxied: false,
         };
 
@@ -440,6 +458,23 @@ mod tests {
     fn test_validate_dc_id_uppercase_rejected() {
         let err = CloudflareDns::validate_dc_id("DC-LK").unwrap_err();
         assert!(err.to_string().contains("[a-z0-9-]"));
+    }
+
+    #[test]
+    fn test_acme_challenge_txt_record_name_format() {
+        // The TXT record name format: _acme-challenge.{dc_id}.{gw_prefix}
+        let dc_id = "dc-lk";
+        let gw_prefix = "dev-gw";
+        let record_name = format!("_acme-challenge.{}.{}", dc_id, gw_prefix);
+        assert_eq!(record_name, "_acme-challenge.dc-lk.dev-gw");
+
+        // Full name with domain
+        let domain = "decent-cloud.org";
+        let full_name = format!("{}.{}", record_name, domain);
+        assert_eq!(
+            full_name,
+            "_acme-challenge.dc-lk.dev-gw.decent-cloud.org"
+        );
     }
 
     #[test]

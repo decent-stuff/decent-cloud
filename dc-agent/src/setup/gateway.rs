@@ -1,8 +1,9 @@
 //! Gateway setup - automates Caddy installation and configuration on Proxmox hosts.
 //!
 //! This setup runs LOCALLY on the Proxmox host where dc-agent is installed.
-//! Caddy provides automatic HTTPS via Let's Encrypt HTTP-01 challenge.
-//! No Cloudflare token needed - certs are obtained automatically.
+//! Caddy provides HTTPS via a per-provider wildcard cert (*.{dc_id}.{gw_prefix}.{domain})
+//! using DNS-01 challenge with acme-dns. Credentials are obtained from the central API
+//! during gateway registration.
 
 use super::{execute_command, CommandOutput};
 use anyhow::{bail, Result};
@@ -49,6 +50,12 @@ pub fn detect_public_ip() -> Result<String> {
 pub struct GatewaySetup {
     pub dc_id: String,
     pub public_ip: String,
+    pub domain: String,
+    pub gw_prefix: String,
+    pub acme_dns_server_url: String,
+    pub acme_dns_username: String,
+    pub acme_dns_password: String,
+    pub acme_dns_subdomain: String,
     pub port_range_start: u16,
     pub port_range_end: u16,
     pub ports_per_vm: u16,
@@ -89,15 +96,19 @@ impl GatewaySetup {
         println!("\nWriting Caddy configuration...");
         self.write_caddy_config()?;
 
-        // Step 5: Write systemd service
+        // Step 5: Write acme-dns credentials env file
+        println!("\nWriting Caddy environment file...");
+        self.write_caddy_env()?;
+
+        // Step 6: Write systemd service
         println!("\nCreating systemd service...");
         self.write_systemd_service()?;
 
-        // Step 6: Enable and start Caddy
+        // Step 7: Enable and start Caddy
         println!("\nStarting Caddy service...");
         self.start_caddy()?;
 
-        // Step 7: Verify Caddy is running
+        // Step 8: Verify Caddy is running
         println!("\nVerifying Caddy...");
         self.verify_caddy()?;
 
@@ -451,14 +462,25 @@ net.bridge.bridge-nf-call-iptables = 1
     }
 
     fn install_caddy(&self) -> Result<()> {
-        // Check if already installed with correct version
+        // Check if already installed with correct version AND acmedns module
         let check = self.execute("caddy version 2>/dev/null || true")?;
         if check.stdout.contains(CADDY_VERSION) {
-            println!("  Caddy {} already installed", CADDY_VERSION);
-            return Ok(());
+            let modules =
+                self.execute("caddy list-modules 2>/dev/null | grep acmedns || true")?;
+            if modules.stdout.contains("acmedns") {
+                println!(
+                    "  Caddy {} with acmedns plugin already installed",
+                    CADDY_VERSION
+                );
+                return Ok(());
+            }
+            println!(
+                "  Caddy {} found but missing acmedns plugin, reinstalling...",
+                CADDY_VERSION
+            );
         }
 
-        // Download and install
+        // Download custom Caddy binary with acmedns DNS plugin
         let arch_result = self.execute("uname -m")?;
         let arch = match arch_result.stdout.trim() {
             "x86_64" => "amd64",
@@ -466,18 +488,16 @@ net.bridge.bridge-nf-call-iptables = 1
             other => bail!("Unsupported architecture: {}", other),
         };
 
+        // Caddy download API returns a raw binary (not a tarball) with the requested plugins
         let download_url = format!(
-            "https://github.com/caddyserver/caddy/releases/download/v{}/caddy_{}_linux_{}.tar.gz",
-            CADDY_VERSION, CADDY_VERSION, arch
+            "https://caddyserver.com/api/download?os=linux&arch={}&p=github.com/caddy-dns/acmedns&version=v{}",
+            arch, CADDY_VERSION
         );
 
         let cmd = format!(
-            "cd /tmp && \
-             curl -sSL '{}' -o caddy.tar.gz && \
-             tar xzf caddy.tar.gz caddy && \
-             mv caddy /usr/local/bin/caddy && \
-             chmod +x /usr/local/bin/caddy && \
-             rm caddy.tar.gz",
+            "curl -sSL '{}' -o /tmp/caddy && \
+             mv /tmp/caddy /usr/local/bin/caddy && \
+             chmod +x /usr/local/bin/caddy",
             download_url
         );
 
@@ -489,10 +509,26 @@ net.bridge.bridge-nf-call-iptables = 1
         // Verify installation
         let verify = self.execute("caddy version")?;
         if !verify.stdout.contains(CADDY_VERSION) {
-            bail!("Caddy installation verification failed");
+            bail!(
+                "Caddy installation verification failed: expected {}, got: {}",
+                CADDY_VERSION,
+                verify.stdout.trim()
+            );
         }
 
-        println!("  [ok] Caddy {} installed", CADDY_VERSION);
+        // Verify acmedns module is present
+        let modules = self.execute("caddy list-modules 2>/dev/null | grep acmedns || true")?;
+        if !modules.stdout.contains("acmedns") {
+            bail!(
+                "Caddy acmedns plugin not found after installation. Modules: {}",
+                modules.stdout.trim()
+            );
+        }
+
+        println!(
+            "  [ok] Caddy {} with acmedns plugin installed",
+            CADDY_VERSION
+        );
         Ok(())
     }
 
@@ -541,33 +577,62 @@ net.bridge.bridge-nf-call-iptables = 1
     }
 
     fn generate_caddyfile(&self) -> String {
-        r#"# Caddy configuration for DC Gateway
+        format!(
+            r#"# Caddy configuration for DC Gateway
 # Generated by dc-agent setup gateway
 #
-# Architecture: TLS termination at gateway with automatic HTTP-01 certificates
-# - HTTP (80): Automatic redirect to HTTPS + ACME challenge
-# - HTTPS (443): TLS terminated here, proxies to VMs
+# Architecture: per-provider wildcard cert via DNS-01 with acme-dns
+# - Cert covers *.{dc_id}.{gw_prefix}.{domain} (scoped to this provider)
+# - VM-specific handle blocks imported from /etc/caddy/sites/*.caddy
 #
-# VM-specific configs are imported from /etc/caddy/sites/*.caddy
-#
-# Logs: stdout → journald (view with: journalctl -u caddy)
+# Logs: stdout -> journald (view with: journalctl -u caddy)
 
-{
-    # Global options
-    # Admin API on localhost only (required for `caddy reload` to work)
+{{
     admin localhost:2019
     persist_config off
-
-    # Data directory for certificates
     storage file_system /var/lib/caddy
-}
+}}
 
-# HTTP to HTTPS redirect is automatic in Caddy
+*.{dc_id}.{gw_prefix}.{domain} {{
+    tls {{
+        dns acmedns {{
+            server_url {{env.ACME_DNS_SERVER_URL}}
+            username {{env.ACME_DNS_USERNAME}}
+            password {{env.ACME_DNS_PASSWORD}}
+            subdomain {{env.ACME_DNS_SUBDOMAIN}}
+        }}
+    }}
+    import /etc/caddy/sites/*.caddy
+}}
+"#,
+            dc_id = self.dc_id,
+            gw_prefix = self.gw_prefix,
+            domain = self.domain,
+        )
+    }
 
-# Import all VM-specific site configurations
-import /etc/caddy/sites/*.caddy
-"#
-        .to_string()
+    fn write_caddy_env(&self) -> Result<()> {
+        let env_content = format!(
+            "ACME_DNS_SERVER_URL={}\nACME_DNS_USERNAME={}\nACME_DNS_PASSWORD={}\nACME_DNS_SUBDOMAIN={}\n",
+            self.acme_dns_server_url,
+            self.acme_dns_username,
+            self.acme_dns_password,
+            self.acme_dns_subdomain,
+        );
+
+        let cmd = format!(
+            "printf '%s' '{}' > /etc/caddy/env && \
+             chmod 600 /etc/caddy/env && \
+             chown caddy:caddy /etc/caddy/env",
+            env_content
+        );
+        let result = self.execute(&cmd)?;
+        if result.exit_status != 0 {
+            bail!("Failed to write Caddy env file: {}", result.stdout);
+        }
+
+        println!("  [ok] /etc/caddy/env (acme-dns credentials)");
+        Ok(())
     }
 
     fn write_systemd_service(&self) -> Result<()> {
@@ -578,6 +643,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=/etc/caddy/env
 ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile
 ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile
 Restart=always
@@ -681,16 +747,19 @@ WantedBy=multi-user.target
 [gateway]
 dc_id = "{dc_id}"
 public_ip = "{public_ip}"
+domain = "{domain}"
+gw_prefix = "{gw_prefix}"
 port_range_start = {port_start}
 port_range_end = {port_end}
 ports_per_vm = {ports_per_vm}
 caddy_sites_dir = "/etc/caddy/sites"
 port_allocations_path = "/var/lib/dc-agent/port-allocations.json"
-# DNS management is handled via the central API (no Cloudflare credentials needed)
-# TLS certificates are managed automatically by Caddy via HTTP-01 challenge
+# DNS: per-VM A records via central API; TLS: per-provider wildcard cert via DNS-01 (acme-dns)
 "#,
             dc_id = self.dc_id,
             public_ip = self.public_ip,
+            domain = self.domain,
+            gw_prefix = self.gw_prefix,
             port_start = self.port_range_start,
             port_end = self.port_range_end,
             ports_per_vm = self.ports_per_vm,
@@ -706,6 +775,12 @@ mod tests {
         GatewaySetup {
             dc_id: "dc-lk".into(),
             public_ip: "203.0.113.1".into(),
+            domain: "decent-cloud.org".into(),
+            gw_prefix: "dev-gw".into(),
+            acme_dns_server_url: "https://acme.decent-cloud.org".into(),
+            acme_dns_username: "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0".into(),
+            acme_dns_password: "htB9mR9DYgcu9bX_afHF62erPKmRNc".into(),
+            acme_dns_subdomain: "d420c923.acme.decent-cloud.org".into(),
             port_range_start: 20000,
             port_range_end: 59999,
             ports_per_vm: 10,
@@ -717,19 +792,25 @@ mod tests {
         let setup = test_setup();
         let config = setup.generate_caddyfile();
 
-        // TLS termination architecture
-        assert!(config.contains("TLS termination at gateway"));
-        assert!(config.contains("HTTP-01 certificates"));
+        // Per-provider wildcard with acme-dns
+        assert!(config.contains("per-provider wildcard cert via DNS-01 with acme-dns"));
+        assert!(config.contains("*.dc-lk.dev-gw.decent-cloud.org"));
+        assert!(config.contains("dns acmedns"));
+        assert!(config.contains("{env.ACME_DNS_SERVER_URL}"));
+        assert!(config.contains("{env.ACME_DNS_USERNAME}"));
+        assert!(config.contains("{env.ACME_DNS_PASSWORD}"));
+        assert!(config.contains("{env.ACME_DNS_SUBDOMAIN}"));
 
-        // Global options - admin API on localhost for caddy reload support
+        // Global options
         assert!(config.contains("admin localhost:2019"));
         assert!(config.contains("storage file_system /var/lib/caddy"));
 
-        // Should import VM-specific configs
+        // VM-specific configs imported inside wildcard block
         assert!(config.contains("import /etc/caddy/sites/*.caddy"));
 
-        // Should NOT have cloudflare references
+        // Must NOT have cloudflare or CF_API_TOKEN references
         assert!(!config.contains("cloudflare"));
+        assert!(!config.contains("CF_API_TOKEN"));
     }
 
     #[test]
@@ -738,10 +819,10 @@ mod tests {
         let config = setup.generate_gateway_config();
         assert!(config.contains("dc_id = \"dc-lk\""));
         assert!(config.contains("public_ip = \"203.0.113.1\""));
+        assert!(config.contains("domain = \"decent-cloud.org\""));
+        assert!(config.contains("gw_prefix = \"dev-gw\""));
         assert!(config.contains("caddy_sites_dir = \"/etc/caddy/sites\""));
-        // No Cloudflare credentials needed
-        assert!(!config.contains("cloudflare_zone_id"));
-        assert!(!config.contains("cloudflare_api_token"));
+        assert!(config.contains("acme-dns"));
     }
 
     #[test]

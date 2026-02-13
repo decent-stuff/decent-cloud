@@ -323,6 +323,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/008_post_provision_script.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/009_contract_feedback.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/010_gateway_subdomain.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/011_acme_dns_accounts.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -520,6 +521,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "010_gateway_subdomain.sql",
                     include_str!("../../migrations_pg/010_gateway_subdomain.sql"),
+                ),
+                (
+                    "011_acme_dns_accounts.sql",
+                    include_str!("../../migrations_pg/011_acme_dns_accounts.sql"),
                 ),
             ];
 

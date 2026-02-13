@@ -2367,7 +2367,6 @@ impl Database {
             period_end_ns: now_ns,
         })
     }
-
 }
 
 /// Contract usage tracking for billing periods

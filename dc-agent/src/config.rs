@@ -25,6 +25,12 @@ pub struct GatewayConfig {
     pub dc_id: String,
     /// This host's public IPv4 address
     pub public_ip: String,
+    /// Base domain for gateway subdomains (default: "decent-cloud.org")
+    #[serde(default = "default_domain")]
+    pub domain: String,
+    /// Gateway DNS prefix (default: "gw", use "dev-gw" for dev)
+    #[serde(default = "default_gw_prefix")]
+    pub gw_prefix: String,
     /// Start of port range for TCP/UDP mapping (default: 20000)
     #[serde(default = "default_port_range_start")]
     pub port_range_start: u16,
@@ -45,7 +51,15 @@ pub struct GatewayConfig {
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
     // Note: DNS is managed via the central API (/api/v1/agents/dns)
-    // TLS certificates are managed automatically by Caddy via HTTP-01 challenge.
+    // TLS: per-provider wildcard cert via DNS-01 with acme-dns (*.{dc_id}.{gw_prefix}.{domain})
+}
+
+fn default_domain() -> String {
+    "decent-cloud.org".to_string()
+}
+
+fn default_gw_prefix() -> String {
+    "gw".to_string()
 }
 
 fn default_port_range_start() -> u16 {
@@ -1199,6 +1213,8 @@ public_ip = "203.0.113.1"
         let gateway = config.gateway.expect("Gateway should be configured");
         assert_eq!(gateway.dc_id, "a3x9f2b1");
         assert_eq!(gateway.public_ip, "203.0.113.1");
+        assert_eq!(gateway.domain, "decent-cloud.org");
+        assert_eq!(gateway.gw_prefix, "gw");
         assert_eq!(gateway.port_range_start, 20000);
         assert_eq!(gateway.port_range_end, 59999);
         assert_eq!(gateway.ports_per_vm, 10);

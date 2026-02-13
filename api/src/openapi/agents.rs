@@ -107,6 +107,32 @@ pub struct GatewayDnsResponse {
     pub subdomain: String,
 }
 
+/// Request to register a gateway for acme-dns TLS
+#[derive(Debug, Deserialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayRegisterRequest {
+    /// Datacenter identifier (2-20 chars [a-z0-9-])
+    pub dc_id: String,
+}
+
+/// Response from gateway registration with acme-dns credentials
+#[derive(Debug, Serialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayRegisterResponse {
+    /// acme-dns server URL
+    pub acme_dns_server_url: String,
+    /// acme-dns username (scoped to this provider's subdomain)
+    pub acme_dns_username: String,
+    /// acme-dns password
+    pub acme_dns_password: String,
+    /// acme-dns subdomain for TXT record updates
+    pub acme_dns_subdomain: String,
+}
+
 /// API Tags for agent operations
 #[derive(poem_openapi::Tags)]
 enum ApiTags {
@@ -762,6 +788,94 @@ impl AgentsApi {
             }),
         }
     }
+
+    /// Register gateway for per-provider TLS
+    ///
+    /// Generates acme-dns credentials for the provider's dc_id and stores them
+    /// in the database. The Caddy acmedns plugin will POST TXT record updates
+    /// to our `/api/v1/acme-dns/update` endpoint, which proxies them to Cloudflare.
+    /// Requires agent authentication with DnsManage permission.
+    #[oai(
+        path = "/agents/gateway/register",
+        method = "post",
+        tag = "ApiTags::Agents"
+    )]
+    async fn register_gateway(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        req: Json<GatewayRegisterRequest>,
+    ) -> Json<ApiResponse<GatewayRegisterResponse>> {
+        // Check permission
+        if let Err(e) = auth.require_permission(AgentPermission::DnsManage) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        // Validate dc_id
+        if let Err(e) = CloudflareDns::validate_dc_id(&req.dc_id) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Invalid dc_id: {}", e)),
+            });
+        }
+
+        // Determine API public URL for acme-dns server_url
+        let api_public_url = match std::env::var("API_PUBLIC_URL") {
+            Ok(url) => url,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(
+                        "API_PUBLIC_URL not set - required for gateway registration".to_string(),
+                    ),
+                });
+            }
+        };
+
+        // Generate credentials
+        let (username, password) = crate::acme_dns::generate_credentials();
+        let password_hash = crate::acme_dns::hash_password(&password);
+
+        // Store in DB (upsert: re-registration replaces old credentials)
+        if let Err(e) = db
+            .upsert_acme_dns_account(username, &password_hash, &req.dc_id)
+            .await
+        {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to store acme-dns credentials: {}", e)),
+            });
+        }
+
+        let acme_dns_server_url = format!(
+            "{}/api/v1/acme-dns",
+            api_public_url.trim_end_matches('/')
+        );
+
+        tracing::info!(
+            dc_id = %req.dc_id,
+            username = %username,
+            "Gateway registered for TLS"
+        );
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(GatewayRegisterResponse {
+                acme_dns_server_url,
+                acme_dns_username: username.to_string(),
+                acme_dns_password: password,
+                acme_dns_subdomain: username.to_string(),
+            }),
+            error: None,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -805,6 +919,30 @@ mod tests {
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org"));
+    }
+
+    #[test]
+    fn test_gateway_register_request_deserialization() {
+        let json = r#"{"dcId": "dc-lk"}"#;
+        let request: GatewayRegisterRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.dc_id, "dc-lk");
+    }
+
+    #[test]
+    fn test_gateway_register_response_serialization() {
+        let response = GatewayRegisterResponse {
+            acme_dns_server_url: "https://api.decent-cloud.org/api/v1/acme-dns".to_string(),
+            acme_dns_username: "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0".to_string(),
+            acme_dns_password: "htB9mR9DYgcu9bX_afHF62erPKmRNc".to_string(),
+            acme_dns_subdomain: "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0".to_string(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("acmeDnsServerUrl"));
+        assert!(json.contains("acmeDnsUsername"));
+        assert!(json.contains("acmeDnsPassword"));
+        assert!(json.contains("acmeDnsSubdomain"));
+        assert!(json.contains("/api/v1/acme-dns"));
     }
 
     #[test]

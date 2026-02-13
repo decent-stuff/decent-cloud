@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests\n               SET provisioning_instance_details = $1,\n                   provisioning_completed_at_ns = $2,\n                   gateway_slug = $3,\n                   gateway_subdomain = $4,\n                   gateway_ssh_port = $5,\n                   gateway_port_range_start = $6,\n                   gateway_port_range_end = $7\n               WHERE contract_id = $8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "77edb7dd3f91ba8e0997015a835c061568ac7b044bd152aa63761a2607c9052d"
+}

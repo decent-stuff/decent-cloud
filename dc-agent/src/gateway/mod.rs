@@ -2,7 +2,7 @@
 //!
 //! This module handles:
 //! - Port allocation tracking
-//! - Caddy for HTTP/HTTPS routing (TLS termination with automatic HTTP-01 certs)
+//! - Caddy for HTTP/HTTPS routing (per-provider wildcard TLS via DNS-01 with acme-dns)
 //! - iptables DNAT for TCP/UDP port forwarding (SSH, databases, game servers)
 //! - DNS record management (via central API)
 //! - Gateway slug generation
@@ -124,7 +124,7 @@ impl GatewayManager {
             .context("Failed to allocate ports for gateway")?;
 
         // Create DNS record FIRST via central API (unless skipped for testing)
-        // Must exist before Caddy config so HTTP-01 challenge can succeed
+        // Must exist before traffic routing can work
         // The API returns the full subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org")
         let subdomain = if skip_dns {
             tracing::info!("Skipping DNS record creation (--skip-dns specified)");

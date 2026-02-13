@@ -1,6 +1,7 @@
 /// Default database URL for local development (docker-compose)
 pub const DEFAULT_DATABASE_URL: &str = "postgres://test:test@localhost:5432/test";
 
+pub mod acme_dns;
 pub mod accounts;
 pub mod agent_delegations;
 pub mod agent_pools;

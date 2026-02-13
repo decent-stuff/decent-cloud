@@ -1,3 +1,4 @@
+mod acme_dns;
 mod auth;
 mod chatwoot;
 mod cleanup_service;
@@ -40,12 +41,12 @@ use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use payment_release_service::PaymentReleaseService;
-use poem::web::Redirect;
+use poem::web::{Data, Redirect};
 use poem::{
     get, handler,
     listener::TcpListener,
     middleware::{CookieJarManager, Cors},
-    post, EndpointExt, Route, Server,
+    post, EndpointExt, Request, Route, Server,
 };
 use poem_openapi::OpenApiService;
 use std::env;
@@ -203,6 +204,107 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
 #[handler]
 fn root_redirect() -> Redirect {
     Redirect::temporary("/api/v1/swagger")
+}
+
+/// acme-dns `/update` endpoint handler.
+///
+/// Implements the acme-dns protocol: validates X-Api-User/X-Api-Key headers,
+/// looks up the provider's dc_id, and proxies the TXT record to Cloudflare.
+#[handler]
+async fn acme_dns_update(
+    req: &Request,
+    db: Data<&Arc<Database>>,
+    cloudflare: Data<&Option<Arc<cloudflare_dns::CloudflareDns>>>,
+    body: poem::web::Json<serde_json::Value>,
+) -> poem::Response {
+    use poem::http::StatusCode;
+
+    // Extract acme-dns auth headers
+    let username_str = match req.header("X-Api-User") {
+        Some(u) => u,
+        None => {
+            return poem::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(r#"{"error":"missing X-Api-User header"}"#);
+        }
+    };
+    let api_key = match req.header("X-Api-Key") {
+        Some(k) => k,
+        None => {
+            return poem::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(r#"{"error":"missing X-Api-Key header"}"#);
+        }
+    };
+
+    // Parse username as UUID
+    let username: uuid::Uuid = match username_str.parse() {
+        Ok(u) => u,
+        Err(_) => {
+            return poem::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(r#"{"error":"invalid X-Api-User: must be UUID"}"#);
+        }
+    };
+
+    // Look up account in DB
+    let (password_hash, dc_id) = match db.get_acme_dns_account(username).await {
+        Ok(Some(row)) => row,
+        Ok(None) => {
+            return poem::Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(r#"{"error":"unknown username"}"#);
+        }
+        Err(e) => {
+            tracing::error!("acme-dns account lookup failed: {:#}", e);
+            return poem::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(r#"{"error":"internal error"}"#);
+        }
+    };
+
+    // Verify password
+    if !acme_dns::verify_password(api_key, &password_hash) {
+        return poem::Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .body(r#"{"error":"invalid credentials"}"#);
+    }
+
+    // Extract TXT value from body
+    let txt_value = match body.0.get("txt").and_then(|v| v.as_str()) {
+        Some(txt) => txt.to_string(),
+        None => {
+            return poem::Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body(r#"{"error":"missing 'txt' field in body"}"#);
+        }
+    };
+
+    // Verify Cloudflare is configured
+    let cf = match cloudflare.as_ref() {
+        Some(cf) => cf,
+        None => {
+            tracing::error!("acme-dns update: Cloudflare DNS not configured");
+            return poem::Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(r#"{"error":"DNS not configured on server"}"#);
+        }
+    };
+
+    // Create/update TXT record in Cloudflare
+    if let Err(e) = cf.upsert_acme_challenge_txt(&dc_id, &txt_value).await {
+        tracing::error!(dc_id = %dc_id, error = %e, "acme-dns TXT update failed");
+        return poem::Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(format!(r#"{{"error":"TXT update failed: {}"}}"#, e));
+    }
+
+    tracing::info!(dc_id = %dc_id, "acme-dns TXT record updated");
+
+    poem::Response::builder()
+        .status(StatusCode::OK)
+        .content_type("application/json")
+        .body(format!(r#"{{"txt":"{}"}}"#, txt_value))
 }
 
 #[tokio::main]
@@ -757,6 +859,25 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
+    // === Gateway TLS (acme-dns via API) ===
+    println!("\nGateway TLS (acme-dns via API):");
+    if env::var("CF_API_TOKEN").is_ok() && env::var("CF_ZONE_ID").is_ok() {
+        match env::var("API_PUBLIC_URL") {
+            Ok(url) => println!(
+                "  [OK] API_PUBLIC_URL = {} (acme-dns endpoint: {}/api/v1/acme-dns/update)",
+                &url[..url.len().min(40)],
+                url.trim_end_matches('/')
+            ),
+            Err(_) => {
+                println!("  [WARN] API_PUBLIC_URL not set - gateway registration will NOT work!");
+                println!("         Agents need this URL to reach the acme-dns update endpoint.");
+                warnings += 1;
+            }
+        }
+    } else {
+        println!("  [INFO] Cloudflare DNS not configured - gateway TLS not available");
+    }
+
     // === Google OAuth ===
     println!("\nGoogle OAuth:");
     check_env!(
@@ -1048,6 +1169,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/webhooks/telegram",
             post(openapi::webhooks::telegram_webhook),
         )
+        // acme-dns protocol endpoint (used by Caddy acmedns plugin)
+        .at("/api/v1/acme-dns/update", post(acme_dns_update))
         // NOTE: CSV operations are now included in OpenAPI schema above
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())

@@ -260,11 +260,10 @@ dc-agent setup token \
   --token <AGENT_TOKEN> \
   --setup-proxmox \
   --gateway-dc-id my-dc-01 \
-  --gateway-public-ip 203.0.113.1 \
-  --gateway-cf-api-token <CF_TOKEN>
+  --gateway-public-ip 203.0.113.1
 ```
 
-This single command: registers agent, generates keypair, creates Proxmox API token + OS templates, installs Caddy with Cloudflare plugin, configures networking (IP forwarding, NAT, firewall), writes wildcard TLS config (`*.{gw_prefix}.{domain}` via DNS-01), writes config, installs systemd services.
+This single command: registers agent, generates keypair, creates Proxmox API token + OS templates, registers gateway with central API for acme-dns credentials, installs Caddy with acmedns plugin, configures networking (IP forwarding, NAT, firewall), writes per-provider wildcard TLS config (`*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns), writes config, installs systemd services.
 
 Additional flags:
 - `--gateway-domain <DOMAIN>` (default: `decent-cloud.org`)
@@ -294,11 +293,11 @@ dc-agent test-provision --test-gateway --skip-dns             # gateway without 
 
 ## Subdomain Format
 
-All gateway subdomains: `{slug}-{dc_id}.{gw_prefix}.{domain}`
+All gateway subdomains: `{slug}.{dc_id}.{gw_prefix}.{domain}`
 
-Examples: `k7m2p4-dc-lk.dev-gw.decent-cloud.org` (dev), `k7m2p4-a3x9f2b1.gw.decent-cloud.org` (prod).
+Examples: `k7m2p4.dc-lk.dev-gw.decent-cloud.org` (dev), `k7m2p4.a3x9f2b1.gw.decent-cloud.org` (prod).
 
-Single wildcard cert `*.{gw_prefix}.{domain}` via DNS-01 with Cloudflare covers all VMs.
+Per-provider wildcard cert `*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns (scoped to each provider).
 
 ## Typical Agent Workflow: End-to-End Verification
 
