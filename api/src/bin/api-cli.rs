@@ -1699,6 +1699,21 @@ async fn fetch_offerings(api_url: &str) -> Result<Vec<Offering>> {
     api_response.into_result()
 }
 
+/// Status progression order for matching "at least" semantics.
+/// A contract waiting for "provisioned" should also succeed if it reaches "active".
+const STATUS_PROGRESSION: &[&str] = &[
+    "requested",
+    "pending",
+    "accepted",
+    "provisioning",
+    "provisioned",
+    "active",
+];
+
+fn status_rank(status: &str) -> Option<usize> {
+    STATUS_PROGRESSION.iter().position(|&s| s == status)
+}
+
 async fn wait_for_contract_status(
     client: &SignedClient,
     contract_id: &str,
@@ -1708,6 +1723,7 @@ async fn wait_for_contract_status(
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_secs(timeout_secs);
     let poll_interval = std::time::Duration::from_secs(10);
+    let target_rank = status_rank(target);
 
     println!(
         "Waiting for contract {} to reach state '{}'...",
@@ -1718,6 +1734,7 @@ async fn wait_for_contract_status(
         let path = format!("/contracts/{}", contract_id);
         let contract: Contract = client.get_api(&path).await?;
 
+        // Exact match always succeeds
         if contract.status == target {
             println!(
                 "Contract reached state '{}' after {:?}",
@@ -1727,7 +1744,22 @@ async fn wait_for_contract_status(
             return Ok(contract);
         }
 
-        // Bail on unexpected terminal states (but not if we're waiting for that state)
+        // If the contract has progressed past the target state, also succeed
+        if let (Some(current_rank), Some(target_r)) =
+            (status_rank(&contract.status), target_rank)
+        {
+            if current_rank > target_r {
+                println!(
+                    "Contract reached state '{}' (past target '{}') after {:?}",
+                    contract.status,
+                    target,
+                    start.elapsed()
+                );
+                return Ok(contract);
+            }
+        }
+
+        // Bail on terminal states (unless we're waiting for that state)
         let terminal_states = ["cancelled", "rejected", "failed"];
         if terminal_states.contains(&contract.status.as_str()) && contract.status != target {
             anyhow::bail!(
@@ -1765,6 +1797,69 @@ async fn cancel_contract(
     let path = format!("/contracts/{}/cancel", contract_id);
     let _: String = client.put_api(&path, &request).await?;
     Ok(())
+}
+
+/// Verify SSH port is reachable via gateway hostname.
+/// Retries with 10s intervals to allow DNS propagation.
+/// Fails loudly with diagnostic information if unreachable.
+async fn verify_ssh_reachable(gateway_host: &str, port: i32) -> Result<()> {
+    use tokio::net::TcpStream;
+
+    let addr = format!("{}:{}", gateway_host, port);
+    let max_attempts = 6; // 60s total (enough for DNS propagation)
+    let retry_interval = std::time::Duration::from_secs(10);
+
+    for attempt in 1..=max_attempts {
+        match tokio::time::timeout(std::time::Duration::from_secs(5), TcpStream::connect(&addr))
+            .await
+        {
+            Ok(Ok(_)) => {
+                println!("  SSH port reachable at {}", addr);
+                return Ok(());
+            }
+            Ok(Err(e)) if attempt < max_attempts => {
+                println!(
+                    "  Attempt {}/{}: {} (retrying in {}s...)",
+                    attempt,
+                    max_attempts,
+                    e,
+                    retry_interval.as_secs()
+                );
+                tokio::time::sleep(retry_interval).await;
+            }
+            Ok(Err(e)) => {
+                anyhow::bail!(
+                    "SSH not reachable at {} after {} attempts: {}\n\
+                     Troubleshooting:\n\
+                     - Check DNS: dig {} A\n\
+                     - Check gateway iptables: ssh <provider> iptables -t nat -L DC_GATEWAY -n\n\
+                     - Check dc-agent logs: ssh <provider> journalctl -u dc-agent --since '5 min ago'\n\
+                     - Check Caddy config: ssh <provider> ls /etc/caddy/sites/",
+                    addr, max_attempts, e, gateway_host
+                );
+            }
+            Err(_) if attempt < max_attempts => {
+                println!(
+                    "  Attempt {}/{}: connection timeout (retrying in {}s...)",
+                    attempt,
+                    max_attempts,
+                    retry_interval.as_secs()
+                );
+                tokio::time::sleep(retry_interval).await;
+            }
+            Err(_) => {
+                anyhow::bail!(
+                    "SSH connection to {} timed out after {} attempts\n\
+                     Troubleshooting:\n\
+                     - Check DNS: dig {} A\n\
+                     - Verify port {} is open on the gateway\n\
+                     - Check dc-agent logs: ssh <provider> journalctl -u dc-agent --since '5 min ago'",
+                    addr, max_attempts, gateway_host, port
+                );
+            }
+        }
+    }
+    unreachable!()
 }
 
 async fn create_contract_for_testing(
@@ -1925,18 +2020,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             // Step 4: Verify SSH (optional)
             if verify_ssh {
                 println!("\nStep 4: Testing SSH connectivity...");
-                use tokio::net::TcpStream;
-                let addr = format!("{}:{}", gateway_host, ssh_port);
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(10),
-                    TcpStream::connect(&addr),
-                )
-                .await
-                {
-                    Ok(Ok(_)) => println!("  SSH port reachable!"),
-                    Ok(Err(e)) => println!("  Warning: SSH port not reachable: {}", e),
-                    Err(_) => println!("  Warning: SSH connection timeout"),
-                }
+                verify_ssh_reachable(&gateway_host, ssh_port).await?;
             }
 
             // Step 5: Cleanup (optional)
@@ -2144,19 +2228,8 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                     let port = contract.gateway_ssh_port.context("No SSH port assigned")?;
                     println!("  Gateway: {}:{}", gateway_host, port);
 
-                    // Verify SSH port reachable
-                    use tokio::net::TcpStream;
-                    let addr = format!("{}:{}", gateway_host, port);
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        TcpStream::connect(&addr),
-                    )
-                    .await
-                    {
-                        Ok(Ok(_)) => println!("  SSH port reachable"),
-                        Ok(Err(e)) => println!("  Warning: SSH port not reachable: {}", e),
-                        Err(_) => println!("  Warning: SSH connection timeout"),
-                    }
+                    // Verify SSH port reachable via gateway hostname (with DNS propagation retries)
+                    verify_ssh_reachable(&gateway_host, port).await?;
 
                     // Cleanup
                     cancel_contract(&client, &cid, Some("E2E all provision cleanup")).await?;

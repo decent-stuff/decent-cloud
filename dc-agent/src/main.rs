@@ -1521,8 +1521,6 @@ async fn poll_and_provision(
     consecutive_failures: &mut u32,
     gateway_manager: OptionalGatewayManager,
 ) -> i64 {
-    let mut active_count: i64 = 0;
-
     // Fetch pending contracts for provisioning
     match api_client.get_pending_contracts().await {
         Ok(contracts) => {
@@ -1817,7 +1815,6 @@ async fn poll_and_provision(
                         }
                     }
                 }
-                active_count = contracts.len() as i64;
             }
         }
         Err(e) => {
@@ -1841,7 +1838,8 @@ async fn poll_and_provision(
     }
 
     // Reconcile running instances - handles expired, cancelled, and orphan VMs
-    reconcile_instances(
+    // Returns the count of running instances (accurate active contract count)
+    let running_count = reconcile_instances(
         api_client,
         provisioners,
         orphan_grace_period_seconds,
@@ -1850,19 +1848,20 @@ async fn poll_and_provision(
     )
     .await;
 
-    active_count
+    running_count
 }
 
 /// Reconcile running instances with the API.
 /// Reports running VMs, terminates expired/cancelled contracts, and prunes orphans after grace period.
 /// Collects instances from ALL provisioners and tries to terminate via the appropriate one.
+/// Returns the number of running instances (for heartbeat active_contracts count).
 async fn reconcile_instances(
     api_client: &ApiClient,
     provisioners: &ProvisionerMap,
     orphan_grace_period_seconds: u64,
     orphan_tracker: &mut OrphanTracker,
     gateway_manager: OptionalGatewayManager,
-) {
+) -> i64 {
     // Collect running instances from ALL provisioners
     let mut all_running_instances = Vec::new();
     for (ptype, provisioner) in provisioners {
@@ -1887,8 +1886,10 @@ async fn reconcile_instances(
         }
     }
 
+    let running_count = all_running_instances.len() as i64;
+
     if all_running_instances.is_empty() {
-        return;
+        return 0;
     }
 
     // Call reconcile API
@@ -1896,7 +1897,7 @@ async fn reconcile_instances(
         Ok(r) => r,
         Err(e) => {
             warn!(error = ?e, "Failed to reconcile with API");
-            return;
+            return running_count;
         }
     };
 
@@ -2071,6 +2072,9 @@ async fn reconcile_instances(
     if let Err(e) = orphan_tracker.save() {
         error!(error = ?e, "Failed to save orphan tracker - state may be lost on restart");
     }
+
+    // Return count minus terminated VMs (post-reconciliation active count)
+    running_count - response.terminate.len() as i64
 }
 
 /// Create a single provisioner from config

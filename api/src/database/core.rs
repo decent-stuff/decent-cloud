@@ -17,7 +17,8 @@ impl Database {
     }
 
     /// Connect to database without running migrations.
-    /// Use this for CLI tools that should not modify the database schema.
+    /// Used by api-cli binary for operations that should not modify schema.
+    #[allow(dead_code)] // Used by api-cli binary, not api-server
     pub async fn connect(database_url: &str) -> Result<Self> {
         let pool = PgPool::connect(database_url).await?;
         Ok(Self { pool })
