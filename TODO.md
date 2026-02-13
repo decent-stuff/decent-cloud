@@ -1,5 +1,27 @@
 # TODO
 
+## HIGHEST PRIORITY: Deploy Gateway TLS Isolation
+
+**Spec:** [2026-02-13-gateway-tls-isolation-spec.md](docs/specs/2026-02-13-gateway-tls-isolation-spec.md)
+**Status:** Code complete, needs deployment and end-to-end verification
+
+### Deploy to Dev
+- [ ] **Set `API_PUBLIC_URL`** in dev API docker-compose/env (`https://dev-api.decent-cloud.org`)
+- [ ] **Deploy api-server** to dev with migration 011 (acme_dns_accounts table)
+- [ ] **Verify endpoint** — `POST /api/v1/acme-dns/update` responds 401 without credentials
+
+### End-to-End Verification
+- [ ] **Test gateway registration** — `POST /api/v1/agents/gateway/register` returns credentials with server_url pointing to our API
+- [ ] **Test TXT proxying** — Call `POST /api/v1/acme-dns/update` with returned credentials, verify TXT record appears in Cloudflare at `_acme-challenge.{dc_id}.{gw_prefix}.decent-cloud.org`
+- [ ] **Deploy dc-agent** — Build and deploy to Proxmox host, run `dc-agent setup token --gateway-dc-id <id>` against dev API
+- [ ] **Verify Caddy cert** — Confirm Caddy obtains wildcard cert `*.{dc_id}.dev-gw.decent-cloud.org` via the new flow
+
+### Cleanup After Verification
+- [ ] **Remove old CNAME records** — Delete any `_acme-challenge.*.dev-gw` CNAME records from Cloudflare (replaced by TXT)
+- [ ] **Verify no `ACME_DNS_SERVER_URL`** references remain in deployment configs
+
+---
+
 ## Provider Provisioning Agent
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
