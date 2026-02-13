@@ -1220,11 +1220,13 @@ async fn run_test_provision(
     } else {
         // Cleanup gateway first if it was set up
         if let Some(mut gm) = gateway_manager {
-            println!("\nCleaning up gateway...");
-            if let Err(e) = gm.cleanup_gateway(&contract_id).await {
-                println!("⚠ Gateway cleanup warning: {:#}", e);
-            } else {
-                println!("✓ Gateway cleaned up");
+            if let Some(slug) = &instance.gateway_slug {
+                println!("\nCleaning up gateway (slug: {})...", slug);
+                if let Err(e) = gm.cleanup_gateway(slug).await {
+                    println!("⚠ Gateway cleanup warning: {:#}", e);
+                } else {
+                    println!("✓ Gateway cleaned up");
+                }
             }
         }
 
