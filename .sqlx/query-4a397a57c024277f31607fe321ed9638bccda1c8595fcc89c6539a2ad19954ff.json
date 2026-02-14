@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 as found FROM acme_dns_accounts WHERE dc_id = $1 AND provider_pubkey = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "found",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4a397a57c024277f31607fe321ed9638bccda1c8595fcc89c6539a2ad19954ff"
+}

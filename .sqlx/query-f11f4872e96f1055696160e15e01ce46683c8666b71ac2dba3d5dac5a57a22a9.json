@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, start_timestamp_ns = $4, end_timestamp_ns = $5 WHERE contract_id = $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f11f4872e96f1055696160e15e01ce46683c8666b71ac2dba3d5dac5a57a22a9"
+}
