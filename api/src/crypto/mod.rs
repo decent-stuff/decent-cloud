@@ -6,7 +6,6 @@
 mod credential_encryption;
 
 // Re-export public functions for credential encryption
-pub use credential_encryption::encrypt_credentials;
 pub use credential_encryption::encrypt_credentials_with_aad;
 
 // These are used by frontend decryption (documented in API)

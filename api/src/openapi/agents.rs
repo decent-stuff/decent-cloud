@@ -740,7 +740,10 @@ impl AgentsApi {
         }
 
         // Verify this provider owns the dc_id (registered via gateway/register)
-        match db.verify_dc_id_owner(&req.dc_id, &auth.provider_pubkey).await {
+        match db
+            .verify_dc_id_owner(&req.dc_id, &auth.provider_pubkey)
+            .await
+        {
             Ok(true) => {}
             Ok(false) => {
                 return Json(ApiResponse {
@@ -895,10 +898,8 @@ impl AgentsApi {
             Ok(true) => {}
         }
 
-        let acme_dns_server_url = format!(
-            "{}/api/v1/acme-dns",
-            api_public_url.trim_end_matches('/')
-        );
+        let acme_dns_server_url =
+            format!("{}/api/v1/acme-dns", api_public_url.trim_end_matches('/'));
 
         tracing::info!(
             dc_id = %req.dc_id,

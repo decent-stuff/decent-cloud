@@ -33,10 +33,7 @@ impl Database {
 
     /// Look up acme-dns account by username UUID.
     /// Returns (password_hash, dc_id) if found.
-    pub async fn get_acme_dns_account(
-        &self,
-        username: Uuid,
-    ) -> Result<Option<(String, String)>> {
+    pub async fn get_acme_dns_account(&self, username: Uuid) -> Result<Option<(String, String)>> {
         let row = sqlx::query!(
             "SELECT password_hash, dc_id FROM acme_dns_accounts WHERE username = $1",
             username,
@@ -49,11 +46,7 @@ impl Database {
 
     /// Verify that a dc_id is owned by the given provider.
     /// Returns true if the dc_id exists and belongs to this provider.
-    pub async fn verify_dc_id_owner(
-        &self,
-        dc_id: &str,
-        provider_pubkey: &[u8],
-    ) -> Result<bool> {
+    pub async fn verify_dc_id_owner(&self, dc_id: &str, provider_pubkey: &[u8]) -> Result<bool> {
         let row = sqlx::query!(
             "SELECT 1 as found FROM acme_dns_accounts WHERE dc_id = $1 AND provider_pubkey = $2",
             dc_id,
@@ -172,15 +165,9 @@ mod tests {
         assert!(db.verify_dc_id_owner("dc-sg", provider).await.unwrap());
 
         // Wrong owner
-        assert!(!db
-            .verify_dc_id_owner("dc-sg", b"attacker")
-            .await
-            .unwrap());
+        assert!(!db.verify_dc_id_owner("dc-sg", b"attacker").await.unwrap());
 
         // Nonexistent dc_id
-        assert!(!db
-            .verify_dc_id_owner("dc-xx", provider)
-            .await
-            .unwrap());
+        assert!(!db.verify_dc_id_owner("dc-xx", provider).await.unwrap());
     }
 }

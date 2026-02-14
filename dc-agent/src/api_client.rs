@@ -522,10 +522,7 @@ impl ApiClient {
         contract_id: &str,
         new_password: &str,
     ) -> Result<()> {
-        let path = format!(
-            "/api/v1/provider/rental-requests/{}/password",
-            contract_id
-        );
+        let path = format!("/api/v1/provider/rental-requests/{}/password", contract_id);
         let request = serde_json::json!({ "newPassword": new_password });
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> =
@@ -1080,10 +1077,7 @@ mod tests {
             "ebbcf5ce-4c3a-4f5a-b85e-0d2e2a68e8b0"
         );
         assert_eq!(reg.acme_dns_password, "htB9mR9DYgcu9bX_afHF62erPKmRNc");
-        assert_eq!(
-            reg.acme_dns_subdomain,
-            "d420c923.acme.decent-cloud.org"
-        );
+        assert_eq!(reg.acme_dns_subdomain, "d420c923.acme.decent-cloud.org");
     }
 
     #[test]

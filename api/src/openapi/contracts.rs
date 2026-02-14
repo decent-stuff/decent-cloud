@@ -286,7 +286,10 @@ impl ContractsApi {
         match db.request_password_reset(&contract_id).await {
             Ok(_) => Json(ApiResponse {
                 success: true,
-                data: Some("Password reset requested. The provider will reset the password shortly.".to_string()),
+                data: Some(
+                    "Password reset requested. The provider will reset the password shortly."
+                        .to_string(),
+                ),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

@@ -471,10 +471,7 @@ mod tests {
         // Full name with domain
         let domain = "decent-cloud.org";
         let full_name = format!("{}.{}", record_name, domain);
-        assert_eq!(
-            full_name,
-            "_acme-challenge.dc-lk.dev-gw.decent-cloud.org"
-        );
+        assert_eq!(full_name, "_acme-challenge.dc-lk.dev-gw.decent-cloud.org");
     }
 
     #[test]

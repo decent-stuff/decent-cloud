@@ -465,8 +465,7 @@ net.bridge.bridge-nf-call-iptables = 1
         // Check if already installed with correct version AND acmedns module
         let check = self.execute("caddy version 2>/dev/null || true")?;
         if check.stdout.contains(CADDY_VERSION) {
-            let modules =
-                self.execute("caddy list-modules 2>/dev/null | grep acmedns || true")?;
+            let modules = self.execute("caddy list-modules 2>/dev/null | grep acmedns || true")?;
             if modules.stdout.contains("acmedns") {
                 println!(
                     "  Caddy {} with acmedns plugin already installed",

@@ -488,9 +488,7 @@ type = "{provisioner_type}"
         let dc_id = gateway_dc_id.as_deref().unwrap();
         println!();
         println!("Registering gateway with central API for TLS credentials...");
-        match register_gateway(api_url, &key_path.to_string_lossy(), dc_id)
-        .await
-        {
+        match register_gateway(api_url, &key_path.to_string_lossy(), dc_id).await {
             Ok(reg) => {
                 println!("[ok] Gateway registered with acme-dns");
                 println!("  acme-dns subdomain: {}", reg.acme_dns_subdomain);
@@ -2047,7 +2045,10 @@ async fn reconcile_instances(
     match api_client.get_pending_password_resets().await {
         Ok(reset_requests) => {
             if !reset_requests.is_empty() {
-                info!(count = reset_requests.len(), "Processing password reset requests");
+                info!(
+                    count = reset_requests.len(),
+                    "Processing password reset requests"
+                );
 
                 for reset_req in &reset_requests {
                     let contract_id = &reset_req.contract_id;
@@ -2061,7 +2062,10 @@ async fn reconcile_instances(
                             Ok(Some(instance)) => {
                                 if let Some(ref ip) = instance.ip_address {
                                     let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
-                                    let new_password = dc_agent::provisioner::proxmox::generate_secure_password(24);
+                                    let new_password =
+                                        dc_agent::provisioner::proxmox::generate_secure_password(
+                                            24,
+                                        );
 
                                     match dc_agent::post_provision::reset_password_via_ssh(
                                         ip,
@@ -2070,7 +2074,9 @@ async fn reconcile_instances(
                                         true,
                                         &new_password,
                                         contract_id,
-                                    ).await {
+                                    )
+                                    .await
+                                    {
                                         Ok(()) => {
                                             info!(
                                                 contract_id = %contract_id,
@@ -2080,7 +2086,10 @@ async fn reconcile_instances(
 
                                             // Report new password to API
                                             if let Err(e) = api_client
-                                                .update_contract_password(contract_id, &new_password)
+                                                .update_contract_password(
+                                                    contract_id,
+                                                    &new_password,
+                                                )
                                                 .await
                                             {
                                                 error!(
@@ -2429,10 +2438,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             println!("  Caddy sites dir: {}", gw.caddy_sites_dir);
             println!("  Port allocations: {}", gw.port_allocations_path);
             println!("  DNS management: via central API");
-            println!(
-                "  Wildcard: *.{}.{}.{}",
-                gw.dc_id, gw.gw_prefix, gw.domain
-            );
+            println!("  Wildcard: *.{}.{}.{}", gw.dc_id, gw.gw_prefix, gw.domain);
             println!("  TLS: Per-provider wildcard cert via DNS-01 (acme-dns)");
 
             // Verify paths exist
@@ -2683,8 +2689,8 @@ async fn run_reset_password(
         &contract_id[..16.min(contract_id.len())]
     );
 
-    let _contract_bytes = hex::decode(contract_id)
-        .with_context(|| "Invalid contract ID format (expected hex)")?;
+    let _contract_bytes =
+        hex::decode(contract_id).with_context(|| "Invalid contract ID format (expected hex)")?;
 
     // Try to get VM info from the provisioner
     let external_id = format!("dc-{}", contract_id);
@@ -2708,8 +2714,15 @@ async fn run_reset_password(
     // Reset password via SSH
     println!("Resetting password via SSH...");
     // Use ubuntu user with sudo since cloud-init sets SSH keys for the default user
-    reset_password_via_ssh(&ip_address, ssh_port, "ubuntu", true, &new_password, contract_id)
-        .await?;
+    reset_password_via_ssh(
+        &ip_address,
+        ssh_port,
+        "ubuntu",
+        true,
+        &new_password,
+        contract_id,
+    )
+    .await?;
 
     println!("[ok] Password reset on VM");
 

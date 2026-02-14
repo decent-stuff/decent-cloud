@@ -7,7 +7,8 @@ use super::common::{
     OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
     ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
-    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest, UpdatePoolRequest,
+    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest,
+    UpdatePoolRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};

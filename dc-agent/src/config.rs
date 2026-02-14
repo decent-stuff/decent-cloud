@@ -357,10 +357,7 @@ impl Config {
             // Validate dc_id format
             let dc_id = &gw.dc_id;
             if dc_id.len() < 2 || dc_id.len() > 20 {
-                anyhow::bail!(
-                    "Invalid gateway.dc_id '{}': must be 2-20 characters",
-                    dc_id
-                );
+                anyhow::bail!("Invalid gateway.dc_id '{}': must be 2-20 characters", dc_id);
             }
             if !dc_id
                 .chars()

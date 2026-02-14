@@ -324,6 +324,8 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/009_contract_feedback.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/010_gateway_subdomain.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/011_acme_dns_accounts.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/012_acme_dns_provider_ownership.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/013_password_reset.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -525,6 +527,14 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "011_acme_dns_accounts.sql",
                     include_str!("../../migrations_pg/011_acme_dns_accounts.sql"),
+                ),
+                (
+                    "012_acme_dns_provider_ownership.sql",
+                    include_str!("../../migrations_pg/012_acme_dns_provider_ownership.sql"),
+                ),
+                (
+                    "013_password_reset.sql",
+                    include_str!("../../migrations_pg/013_password_reset.sql"),
                 ),
             ];
 

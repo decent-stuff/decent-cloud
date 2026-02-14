@@ -138,6 +138,7 @@ fn x25519_dh(my_secret: &[u8; 32], their_pubkey: &[u8; 32]) -> [u8; 32] {
 ///
 /// # Returns
 /// Encrypted credentials that can only be decrypted with the requester's private key
+#[allow(dead_code)]
 pub fn encrypt_credentials(
     credentials: &str,
     requester_ed25519_pubkey: &[u8],

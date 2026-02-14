@@ -1002,9 +1002,8 @@ impl Database {
         .await?
         .flatten();
 
-        let requester_pubkey = requester_pubkey.ok_or_else(|| {
-            anyhow::anyhow!("Contract not found or has no requester pubkey")
-        })?;
+        let requester_pubkey = requester_pubkey
+            .ok_or_else(|| anyhow::anyhow!("Contract not found or has no requester pubkey"))?;
 
         if requester_pubkey.len() != 32 {
             anyhow::bail!(
@@ -1029,7 +1028,7 @@ impl Database {
                    credentials_expires_at_ns = $2
                WHERE contract_id = $3"#,
         )
-        .bind(&encrypted.to_json())
+        .bind(encrypted.to_json())
         .bind(expires_at_ns)
         .bind(contract_id)
         .execute(&self.pool)

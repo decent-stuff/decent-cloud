@@ -1685,8 +1685,8 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
 // =============================================================================
 
 async fn connect_db() -> Result<Database> {
-    let db_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
+    let db_url = env::var("DATABASE_URL")
+        .unwrap_or_else(|_| api::database::DEFAULT_DATABASE_URL.to_string());
     Database::connect(&db_url).await
 }
 
@@ -1745,9 +1745,7 @@ async fn wait_for_contract_status(
         }
 
         // If the contract has progressed past the target state, also succeed
-        if let (Some(current_rank), Some(target_r)) =
-            (status_rank(&contract.status), target_rank)
-        {
+        if let (Some(current_rank), Some(target_r)) = (status_rank(&contract.status), target_rank) {
             if current_rank > target_r {
                 println!(
                     "Contract reached state '{}' (past target '{}') after {:?}",
@@ -1878,10 +1876,8 @@ async fn create_contract_for_testing(
 }
 
 async fn run_dns_e2e_test() -> Result<()> {
-    let api_token =
-        env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
-    let zone_id =
-        env::var("CLOUDFLARE_ZONE_ID").context("CLOUDFLARE_ZONE_ID not set")?;
+    let api_token = env::var("CLOUDFLARE_API_TOKEN").context("CLOUDFLARE_API_TOKEN not set")?;
+    let zone_id = env::var("CLOUDFLARE_ZONE_ID").context("CLOUDFLARE_ZONE_ID not set")?;
     let gw_prefix = env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
     let domain = env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
     let base_domain = format!("{}.{}", gw_prefix, domain);
@@ -2075,8 +2071,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-lifecycle-test".to_string()
             });
             println!("\nStep 2: Creating contract...");
-            let contract_id =
-                create_contract_for_testing(&client, offering_id, &ssh_key).await?;
+            let contract_id = create_contract_for_testing(&client, offering_id, &ssh_key).await?;
             println!("  Contract created: {}", contract_id);
 
             // Step 3: Verify contract exists with expected status
