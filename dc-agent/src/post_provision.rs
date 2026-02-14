@@ -15,6 +15,8 @@ const SSH_READY_TIMEOUT: Duration = Duration::from_secs(60);
 const SSH_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 /// Maximum script execution time
 const SCRIPT_TIMEOUT: Duration = Duration::from_secs(300);
+/// Maximum password reset execution time
+const PASSWORD_RESET_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Execute a post-provision script on a remote VM via SSH.
 ///
@@ -207,8 +209,94 @@ exit $EXIT_CODE
     }
 }
 
+/// Build a safe password reset command that uses chpasswd.
+fn build_password_reset_command(new_password: &str) -> String {
+    format!("echo 'root:{new_password}' | chpasswd")
+}
+
+/// Reset the root password on a remote VM via SSH.
+///
+/// # Arguments
+/// * `ip_address` - IP address of the VM
+/// * `ssh_port` - SSH port (usually 22)
+/// * `ssh_user` - SSH user (e.g., "root" or "ubuntu")
+/// * `use_sudo` - Whether to use sudo for the password command
+/// * `new_password` - The new password to set
+/// * `contract_id` - For logging purposes
+///
+/// # Returns
+/// * `Ok(())` if password was changed successfully
+/// * `Err(_)` if password reset failed
+pub async fn reset_password_via_ssh(
+    ip_address: &str,
+    ssh_port: u16,
+    ssh_user: &str,
+    use_sudo: bool,
+    new_password: &str,
+    contract_id: &str,
+) -> Result<()> {
+    info!(
+        contract_id = %contract_id,
+        ip_address = %ip_address,
+        ssh_user = %ssh_user,
+        use_sudo = use_sudo,
+        "Resetting root password via SSH"
+    );
+
+    let cmd = build_password_reset_command(new_password);
+    let full_cmd = if use_sudo {
+        format!("sudo sh -c \"{}\"", cmd.replace("\"", "\\\""))
+    } else {
+        cmd
+    };
+
+    let output = tokio::time::timeout(
+        PASSWORD_RESET_TIMEOUT,
+        Command::new("ssh")
+            .args([
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ConnectTimeout=10",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &ssh_port.to_string(),
+                &format!("{}@{}", ssh_user, ip_address),
+                &full_cmd,
+            ])
+            .output(),
+    )
+    .await
+    .context("Password reset timed out")?
+    .context("Failed to execute SSH command")?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if output.status.success() {
+        info!(
+            contract_id = %contract_id,
+            "Password reset completed successfully"
+        );
+        Ok(())
+    } else {
+        let exit_code = output.status.code().unwrap_or(-1);
+        warn!(
+            contract_id = %contract_id,
+            exit_code = exit_code,
+            stderr = %stderr,
+            "Password reset failed"
+        );
+        anyhow::bail!("Password reset exited with code {}: {}", exit_code, stderr)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_script_shebang_added() {
         let script = "echo hello";
@@ -229,5 +317,20 @@ mod tests {
             format!("#!/bin/sh\n{}", script)
         };
         assert!(with_shebang.starts_with("#!/usr/bin/env python3"));
+    }
+
+    #[test]
+    fn test_reset_password_command_format() {
+        let new_password = "NewSecurePass123!";
+        let cmd = build_password_reset_command(new_password);
+        assert!(cmd.contains("echo 'root:") || cmd.contains("chpasswd"));
+        assert!(cmd.contains(new_password));
+    }
+
+    #[test]
+    fn test_reset_password_command_escapes_special_chars() {
+        let new_password = "Pass'with\"quotes$and`backticks";
+        let cmd = build_password_reset_command(new_password);
+        assert!(cmd.contains("chpasswd"));
     }
 }

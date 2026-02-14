@@ -7,7 +7,7 @@ use super::common::{
     OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
     ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
-    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePoolRequest,
+    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest, UpdatePoolRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
@@ -1621,6 +1621,81 @@ impl ProvidersApi {
                     error: None,
                 })
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Update VM password
+    ///
+    /// Updates the root password for a provisioned VM. Called by the agent after
+    /// successfully resetting the password via SSH. The password is encrypted with
+    /// the requester's public key before storage.
+    /// Accepts either provider authentication (X-Public-Key) or agent authentication (X-Agent-Pubkey).
+    #[oai(
+        path = "/provider/rental-requests/:id/password",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn update_contract_password(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ProviderOrAgentAuth,
+        id: Path<String>,
+        req: Json<UpdatePasswordRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Verify contract exists and belongs to this provider
+        match db.get_contract(&contract_id).await {
+            Ok(Some(contract)) => {
+                if contract.provider_pubkey != hex::encode(&auth.provider_pubkey) {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(
+                            "Unauthorized: you are not the provider for this contract".to_string(),
+                        ),
+                    });
+                }
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        }
+
+        match db
+            .update_encrypted_credentials(&contract_id, &req.new_password)
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Password updated successfully".to_string()),
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

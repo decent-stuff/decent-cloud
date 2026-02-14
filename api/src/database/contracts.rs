@@ -1,5 +1,5 @@
 use super::types::Database;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dcc_common::ContractStatus;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
@@ -983,6 +983,66 @@ impl Database {
         .await?;
 
         Ok(credentials)
+    }
+
+    /// Update encrypted credentials for a contract (for password reset).
+    /// Encrypts the new password with the requester's public key and updates the expiration.
+    pub async fn update_encrypted_credentials(
+        &self,
+        contract_id: &[u8],
+        new_password: &str,
+    ) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let requester_pubkey: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT requester_pubkey FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(contract_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+
+        let requester_pubkey = requester_pubkey.ok_or_else(|| {
+            anyhow::anyhow!("Contract not found or has no requester pubkey")
+        })?;
+
+        if requester_pubkey.len() != 32 {
+            anyhow::bail!(
+                "Invalid requester pubkey length: {} bytes",
+                requester_pubkey.len()
+            );
+        }
+
+        let encrypted = crate::crypto::encrypt_credentials_with_aad(
+            new_password,
+            &requester_pubkey,
+            contract_id,
+        )
+        .context("Failed to encrypt credentials")?;
+
+        let expires_at_ns =
+            now_ns + (Self::CREDENTIALS_EXPIRATION_DAYS * 24 * 60 * 60 * 1_000_000_000);
+
+        let result = sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET instance_credentials = $1,
+                   credentials_expires_at_ns = $2
+               WHERE contract_id = $3"#,
+        )
+        .bind(&encrypted.to_json())
+        .bind(expires_at_ns)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!(
+                "No provisioning details found for contract {}",
+                hex::encode(contract_id)
+            );
+        }
+
+        Ok(())
     }
 
     /// Extend contract duration

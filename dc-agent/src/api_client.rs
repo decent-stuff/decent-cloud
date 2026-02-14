@@ -498,6 +498,23 @@ impl ApiClient {
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
+    /// Update contract password after resetting via SSH.
+    pub async fn update_contract_password(
+        &self,
+        contract_id: &str,
+        new_password: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "/api/v1/provider/rental-requests/{}/password",
+            contract_id
+        );
+        let request = serde_json::json!({ "newPassword": new_password });
+        let body = serde_json::to_vec(&request)?;
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, Some(&body)).await?;
+        Self::unwrap_response(response, "Failed to update password").map(|_| ())
+    }
+
     /// Reconcile running instances with API.
     /// Returns which VMs to keep, terminate, or are unknown (orphans).
     pub async fn reconcile(

@@ -53,7 +53,7 @@ pub(crate) fn fnv1a_hash(data: &[u8]) -> u64 {
 
 /// Generate a cryptographically secure random password.
 /// Uses alphanumeric characters for compatibility with various systems.
-pub(crate) fn generate_secure_password(length: usize) -> String {
+pub fn generate_secure_password(length: usize) -> String {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::thread_rng();
 

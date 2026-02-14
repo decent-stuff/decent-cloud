@@ -91,6 +91,16 @@ enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// Reset the root password on a provisioned VM
+    ResetPassword {
+        /// Contract ID (hex-encoded)
+        #[arg(long)]
+        contract_id: String,
+
+        /// New password (if not provided, a secure random password will be generated)
+        #[arg(long)]
+        password: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -220,6 +230,13 @@ async fn main() -> Result<()> {
             yes,
             force,
         } => dc_agent::upgrade::run_upgrade(check_only, yes, force).await,
+        Commands::ResetPassword {
+            contract_id,
+            password,
+        } => {
+            let config = Config::load(&cli.config)?;
+            run_reset_password(config, &contract_id, password).await
+        }
     }
 }
 
@@ -2549,6 +2566,73 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     println!();
 
     println!("Doctor check complete!");
+    Ok(())
+}
+
+/// Reset the root password on a provisioned VM.
+async fn run_reset_password(
+    config: Config,
+    contract_id: &str,
+    password: Option<String>,
+) -> Result<()> {
+    use dc_agent::post_provision::reset_password_via_ssh;
+    use dc_agent::provisioner::proxmox::generate_secure_password;
+
+    println!("dc-agent reset-password");
+    println!("=======================\n");
+
+    let api_client = ApiClient::new(&config.api)?;
+
+    // Get the provisioner
+    let provisioner = create_provisioner_from_config(&config.provisioner)?;
+
+    // Get contract details from provisioner (need external_id and IP)
+    println!(
+        "Looking up contract {}...",
+        &contract_id[..16.min(contract_id.len())]
+    );
+
+    let _contract_bytes = hex::decode(contract_id)
+        .with_context(|| "Invalid contract ID format (expected hex)")?;
+
+    // Try to get VM info from the provisioner
+    let external_id = format!("dc-{}", contract_id);
+    let instance = provisioner
+        .get_instance(&external_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("VM not found for contract {}", contract_id))?;
+
+    let ip_address = instance
+        .ip_address
+        .ok_or_else(|| anyhow::anyhow!("VM has no IP address assigned"))?;
+
+    let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
+
+    println!("Found VM at {} (port {})", ip_address, ssh_port);
+
+    // Generate or use provided password
+    let new_password = password.unwrap_or_else(|| generate_secure_password(24));
+    println!("Generated new password ({} chars)", new_password.len());
+
+    // Reset password via SSH
+    println!("Resetting password via SSH...");
+    // Use ubuntu user with sudo since cloud-init sets SSH keys for the default user
+    reset_password_via_ssh(&ip_address, ssh_port, "ubuntu", true, &new_password, contract_id)
+        .await?;
+
+    println!("[ok] Password reset on VM");
+
+    // Report new password to API (encrypted)
+    println!("Updating credentials in API...");
+    api_client
+        .update_contract_password(contract_id, &new_password)
+        .await?;
+
+    println!("[ok] Credentials updated in API");
+    println!();
+    println!("Password reset complete. The user can now retrieve the new password.");
+    println!("New password: {}", new_password);
+
     Ok(())
 }
 
