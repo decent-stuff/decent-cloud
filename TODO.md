@@ -1,17 +1,5 @@
 # TODO
 
-## Gateway TLS Isolation — Deployed
-
-**Spec:** [2026-02-13-gateway-tls-isolation-spec.md](docs/specs/2026-02-13-gateway-tls-isolation-spec.md)
-**Status:** Deployed to dev and verified end-to-end (2026-02-14)
-
-- [x] API server deployed with migration 011 (acme_dns_accounts table)
-- [x] `POST /api/v1/acme-dns/update` returns 401 without credentials
-- [x] Gateway registration returns acme-dns credentials with server_url pointing to our API
-- [x] TXT record proxying works — Cloudflare TXT record created at `_acme-challenge.dc-sl.dev-gw.decent-cloud.org`
-- [x] dc-agent deployed to Proxmox with `--gateway-dc-id dc-sl --gateway-gw-prefix dev-gw`
-- [x] Caddy obtains wildcard cert `*.dc-sl.dev-gw.decent-cloud.org` via DNS-01 (acme-dns) — issued by Let's Encrypt E7
-
 ---
 
 ## Provider Provisioning Agent
@@ -19,24 +7,17 @@
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
 **Status:** MVP complete through Phase 7 (Credential Encryption)
 
-### Phase 7 Follow-ups
+### Phase 7 Follow
 - [ ] **Consider on-demand password reset** - dc-agent SSHs into VM and runs `passwd` on user request
 - [ ] **Add AAD binding** - Include contract_id in encryption context
 - [ ] **Multi-device limitation** - Consider account-level key derivation for cross-device access
 
-### Future Phases
 - Phase 8: Hetzner Cloud provisioner
 - Phase 9: Docker, DigitalOcean, Vultr provisioners
 
 ---
 
 ## Provider Trust & Reliability System
-
-### External Benchmarking Integration
-Integrate with or scrape external sources for additional trust signals:
-- https://serververify.com/ - Server verification and uptime data
-- https://www.vpsbenchmarks.com/ - VPS performance benchmarks
-- Price comparison vs market average
 
 ### Service Quality Verification
 - Automated health checks on provisioned services
