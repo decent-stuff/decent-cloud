@@ -327,8 +327,7 @@ impl Database {
         let rows_affected = sqlx::query(
             r#"
             UPDATE cloud_resources cr
-            SET status = 'deleted',
-                terminated_at = NOW(),
+            SET status = 'deleting',
                 updated_at = NOW()
             FROM cloud_accounts ca
             WHERE cr.cloud_account_id = ca.id
@@ -344,6 +343,52 @@ impl Database {
         .rows_affected();
 
         Ok(rows_affected > 0)
+    }
+
+    pub async fn mark_cloud_resource_terminated(&self, id: &Uuid) -> Result<()> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources
+            SET status = 'deleted',
+                terminated_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $1
+            "#
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(anyhow!("Cloud resource not found"));
+        }
+
+        Ok(())
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<(Uuid, String, String, String)>> {
+        let rows = sqlx::query_as::<_, (Uuid, String, String, String)>(
+            r#"
+            SELECT 
+                cr.id, cr.external_id,
+                ca.backend_type, ca.credentials_encrypted
+            FROM cloud_resources cr
+            JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
+            WHERE cr.status = 'deleting'
+              AND ca.is_valid = true
+              AND (cr.provisioning_locked_at IS NULL 
+                   OR cr.provisioning_locked_at < NOW() - INTERVAL '10 minutes')
+            ORDER BY cr.updated_at ASC
+            LIMIT $1
+            "#
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
     }
 
     #[allow(clippy::type_complexity)]

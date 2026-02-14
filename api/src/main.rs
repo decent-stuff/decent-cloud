@@ -2,6 +2,7 @@ mod acme_dns;
 mod auth;
 mod chatwoot;
 mod cleanup_service;
+mod cloud_provisioning_service;
 mod cloudflare_dns;
 mod crypto;
 mod database;
@@ -34,6 +35,7 @@ mod vies;
 use candid::Principal;
 use clap::{Parser, Subcommand};
 use cleanup_service::CleanupService;
+use cloud_provisioning_service::CloudProvisioningService;
 use database::Database;
 use email_processor::EmailProcessor;
 use email_service::EmailService;
@@ -1257,6 +1259,27 @@ async fn serve_command() -> Result<(), std::io::Error> {
             release_interval_hours
         );
         payment_release_service.run().await;
+    });
+
+    // Start cloud provisioning service in background
+    let cloud_provisioning_interval_secs = env::var("CLOUD_PROVISIONING_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
+    let cloud_termination_interval_secs = env::var("CLOUD_TERMINATION_INTERVAL_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60);
+
+    let db_for_cloud = ctx.database.clone();
+    let cloud_provisioning_task = tokio::spawn(async move {
+        let cloud_provisioning_service = CloudProvisioningService::new(
+            db_for_cloud,
+            cloud_provisioning_interval_secs,
+            cloud_termination_interval_secs,
+        );
+        cloud_provisioning_service.run().await;
     });
 
     let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
