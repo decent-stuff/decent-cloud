@@ -9,7 +9,7 @@
 
 ### Phase 7 Follow
 - [ ] **Consider on-demand password reset** - dc-agent SSHs into VM and runs `passwd` on user request
-- [ ] **Add AAD binding** - Include contract_id in encryption context
+- [x] **Add AAD binding** - Include contract_id in encryption context
 - [ ] **Multi-device limitation** - Consider account-level key derivation for cross-device access
 
 - Phase 8: Hetzner Cloud provisioner

@@ -31,7 +31,7 @@
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chacha20poly1305::{
-    aead::{Aead, KeyInit, OsRng},
+    aead::{Aead, KeyInit, OsRng, Payload},
     XChaCha20Poly1305, XNonce,
 };
 use curve25519_dalek::{edwards::CompressedEdwardsY, montgomery::MontgomeryPoint, scalar::Scalar};
@@ -41,6 +41,9 @@ use sha2::{Digest, Sha512};
 
 /// Current encryption version for future-proofing
 pub const CREDENTIAL_ENCRYPTION_VERSION: u8 = 1;
+
+/// Version with AAD (Additional Authenticated Data) binding
+pub const CREDENTIAL_ENCRYPTION_VERSION_AAD: u8 = 2;
 
 /// Encrypted credentials structure for serialization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +56,9 @@ pub struct EncryptedCredentials {
     pub nonce: String,
     /// Encrypted and authenticated ciphertext (base64)
     pub ciphertext: String,
+    /// Additional Authenticated Data (base64, only for version 2+)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aad: Option<String>,
 }
 
 impl EncryptedCredentials {
@@ -195,6 +201,7 @@ pub fn encrypt_credentials(
         ephemeral_pubkey: BASE64.encode(ephemeral_pubkey),
         nonce: BASE64.encode(nonce_bytes),
         ciphertext: BASE64.encode(ciphertext),
+        aad: None,
     })
 }
 
@@ -255,6 +262,149 @@ pub fn decrypt_credentials(
     let plaintext = cipher
         .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|e| anyhow::anyhow!("Decryption failed: {} (wrong key or tampered data)", e))?;
+
+    String::from_utf8(plaintext).context("Decrypted credentials are not valid UTF-8")
+}
+
+/// Encrypt credentials for a specific requester with Additional Authenticated Data (AAD)
+///
+/// AAD binds the ciphertext to specific context (e.g., contract_id), preventing
+/// credential replay attacks across different contracts.
+///
+/// # Arguments
+/// * `credentials` - The plaintext credentials (e.g., root password)
+/// * `requester_ed25519_pubkey` - The requester's Ed25519 public key (32 bytes)
+/// * `aad` - Additional Authenticated Data (e.g., contract_id) - will be authenticated but not encrypted
+///
+/// # Returns
+/// Encrypted credentials that can only be decrypted with the requester's private key
+/// and the same AAD value.
+pub fn encrypt_credentials_with_aad(
+    credentials: &str,
+    requester_ed25519_pubkey: &[u8],
+    aad: &[u8],
+) -> Result<EncryptedCredentials> {
+    if requester_ed25519_pubkey.len() != 32 {
+        anyhow::bail!(
+            "Invalid Ed25519 public key length: {} (expected 32)",
+            requester_ed25519_pubkey.len()
+        );
+    }
+
+    let mut pubkey_array = [0u8; 32];
+    pubkey_array.copy_from_slice(requester_ed25519_pubkey);
+
+    let x25519_pubkey = ed25519_pubkey_to_x25519(&pubkey_array)
+        .context("Failed to convert Ed25519 public key to X25519")?;
+
+    let mut ephemeral_secret = [0u8; 32];
+    OsRng.fill_bytes(&mut ephemeral_secret);
+    ephemeral_secret[0] &= 248;
+    ephemeral_secret[31] &= 127;
+    ephemeral_secret[31] |= 64;
+
+    let ephemeral_scalar = Scalar::from_bytes_mod_order(ephemeral_secret);
+    let basepoint = MontgomeryPoint([
+        0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00,
+    ]);
+    let ephemeral_pubkey = (ephemeral_scalar * basepoint).0;
+
+    let shared_secret = x25519_dh(&ephemeral_secret, &x25519_pubkey);
+
+    let mut hasher = Sha512::new();
+    hasher.update(b"credential-encryption-v2-aad");
+    hasher.update(shared_secret);
+    let key_material = hasher.finalize();
+    let encryption_key: [u8; 32] = key_material[..32].try_into().unwrap();
+
+    let mut nonce_bytes = [0u8; 24];
+    OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = XNonce::from(nonce_bytes);
+
+    let cipher =
+        XChaCha20Poly1305::new_from_slice(&encryption_key).context("Failed to create cipher")?;
+
+    let payload = Payload {
+        msg: credentials.as_bytes(),
+        aad,
+    };
+    let ciphertext = cipher
+        .encrypt(&nonce, payload)
+        .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
+
+    Ok(EncryptedCredentials {
+        version: CREDENTIAL_ENCRYPTION_VERSION_AAD,
+        ephemeral_pubkey: BASE64.encode(ephemeral_pubkey),
+        nonce: BASE64.encode(nonce_bytes),
+        ciphertext: BASE64.encode(ciphertext),
+        aad: Some(BASE64.encode(aad)),
+    })
+}
+
+/// Decrypt credentials with AAD using the requester's Ed25519 private key
+///
+/// # Arguments
+/// * `encrypted` - The encrypted credentials (must be version 2 with AAD)
+/// * `ed25519_secret` - The requester's Ed25519 secret key (32 or 64 bytes)
+/// * `aad` - The same AAD value used during encryption
+///
+/// # Returns
+/// The decrypted plaintext credentials
+pub fn decrypt_credentials_with_aad(
+    encrypted: &EncryptedCredentials,
+    ed25519_secret: &[u8],
+    aad: &[u8],
+) -> Result<String> {
+    if encrypted.version != CREDENTIAL_ENCRYPTION_VERSION_AAD {
+        anyhow::bail!(
+            "Unsupported encryption version: {} (expected {} for AAD)",
+            encrypted.version,
+            CREDENTIAL_ENCRYPTION_VERSION_AAD
+        );
+    }
+
+    let ephemeral_pubkey: [u8; 32] = BASE64
+        .decode(&encrypted.ephemeral_pubkey)
+        .context("Invalid ephemeral pubkey base64")?
+        .try_into()
+        .map_err(|v: Vec<u8>| anyhow::anyhow!("Invalid ephemeral pubkey length: {}", v.len()))?;
+
+    let nonce_bytes: [u8; 24] = BASE64
+        .decode(&encrypted.nonce)
+        .context("Invalid nonce base64")?
+        .try_into()
+        .map_err(|v: Vec<u8>| anyhow::anyhow!("Invalid nonce length: {}", v.len()))?;
+
+    let ciphertext = BASE64
+        .decode(&encrypted.ciphertext)
+        .context("Invalid ciphertext base64")?;
+
+    let x25519_secret = ed25519_secret_to_x25519(ed25519_secret)?;
+
+    let shared_secret = x25519_dh(&x25519_secret, &ephemeral_pubkey);
+
+    let mut hasher = Sha512::new();
+    hasher.update(b"credential-encryption-v2-aad");
+    hasher.update(shared_secret);
+    let key_material = hasher.finalize();
+    let decryption_key: [u8; 32] = key_material[..32].try_into().unwrap();
+
+    let cipher =
+        XChaCha20Poly1305::new_from_slice(&decryption_key).context("Failed to create cipher")?;
+    let nonce = XNonce::from(nonce_bytes);
+
+    let payload = Payload {
+        msg: ciphertext.as_ref(),
+        aad,
+    };
+    let plaintext = cipher.decrypt(&nonce, payload).map_err(|e| {
+        anyhow::anyhow!(
+            "Decryption failed: {} (wrong key, wrong AAD, or tampered data)",
+            e
+        )
+    })?;
 
     String::from_utf8(plaintext).context("Decrypted credentials are not valid UTF-8")
 }
@@ -368,5 +518,61 @@ mod tests {
 
         // X25519 public keys are 32 bytes
         assert_eq!(x25519_pubkey.len(), 32);
+    }
+
+    #[test]
+    fn test_aad_encrypt_decrypt_roundtrip() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key: VerifyingKey = (&signing_key).into();
+
+        let credentials = "root_password_123";
+        let contract_id = b"contract-abc123";
+
+        let encrypted =
+            encrypt_credentials_with_aad(credentials, verifying_key.as_bytes(), contract_id)
+                .expect("Encryption with AAD failed");
+
+        let decrypted =
+            decrypt_credentials_with_aad(&encrypted, &signing_key.to_bytes(), contract_id)
+                .expect("Decryption with AAD failed");
+
+        assert_eq!(decrypted, credentials);
+    }
+
+    #[test]
+    fn test_aad_wrong_aad_fails() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key: VerifyingKey = (&signing_key).into();
+
+        let credentials = "root_password_123";
+        let contract_id = b"contract-abc123";
+        let wrong_contract_id = b"contract-xyz789";
+
+        let encrypted =
+            encrypt_credentials_with_aad(credentials, verifying_key.as_bytes(), contract_id)
+                .expect("Encryption with AAD failed");
+
+        let result =
+            decrypt_credentials_with_aad(&encrypted, &signing_key.to_bytes(), wrong_contract_id);
+        assert!(result.is_err(), "Decryption with wrong AAD should fail");
+    }
+
+    #[test]
+    fn test_aad_missing_on_decrypt_fails() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let verifying_key: VerifyingKey = (&signing_key).into();
+
+        let credentials = "root_password_123";
+        let contract_id = b"contract-abc123";
+
+        let encrypted =
+            encrypt_credentials_with_aad(credentials, verifying_key.as_bytes(), contract_id)
+                .expect("Encryption with AAD failed");
+
+        let result = decrypt_credentials_with_aad(&encrypted, &signing_key.to_bytes(), b"");
+        assert!(
+            result.is_err(),
+            "Decryption with empty AAD should fail when encrypted with AAD"
+        );
     }
 }

@@ -853,7 +853,11 @@ impl Database {
 
                 match requester_pubkey {
                     Some(pubkey) if pubkey.len() == 32 => {
-                        match crate::crypto::encrypt_credentials(password, &pubkey) {
+                        match crate::crypto::encrypt_credentials_with_aad(
+                            password,
+                            &pubkey,
+                            contract_id,
+                        ) {
                             Ok(encrypted) => {
                                 let expires_at = provisioned_at_ns
                                     + (Self::CREDENTIALS_EXPIRATION_DAYS

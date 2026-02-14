@@ -7,9 +7,11 @@ mod credential_encryption;
 
 // Re-export public functions for credential encryption
 pub use credential_encryption::encrypt_credentials;
+pub use credential_encryption::encrypt_credentials_with_aad;
 
 // These are used by frontend decryption (documented in API)
 #[allow(unused_imports)]
 pub use credential_encryption::{
-    decrypt_credentials, EncryptedCredentials, CREDENTIAL_ENCRYPTION_VERSION,
+    decrypt_credentials, decrypt_credentials_with_aad, EncryptedCredentials,
+    CREDENTIAL_ENCRYPTION_VERSION, CREDENTIAL_ENCRYPTION_VERSION_AAD,
 };
