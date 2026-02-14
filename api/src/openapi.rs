@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod admin;
 pub mod agents;
 pub mod chatwoot;
+pub mod cloud;
 pub mod common;
 pub mod contracts;
 pub mod invoices;
@@ -21,6 +22,7 @@ pub use accounts::AccountsApi;
 pub use admin::AdminApi;
 pub use agents::AgentsApi;
 pub use chatwoot::ChatwootApi;
+pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
 pub use invoices::InvoicesApi;
 pub use offerings::OfferingsApi;
@@ -44,6 +46,7 @@ pub fn create_combined_api() -> impl OpenApi {
         AdminApi,
         AgentsApi,
         ChatwootApi,
+        CloudApi,
         ProvidersApi,
         ValidatorsApi,
         OfferingsApi,

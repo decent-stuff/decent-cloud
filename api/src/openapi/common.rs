@@ -688,4 +688,6 @@ pub enum ApiTags {
     Pools,
     /// Subscription management endpoints
     Subscriptions,
+    /// Cloud self-provisioning endpoints
+    Cloud,
 }

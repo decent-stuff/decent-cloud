@@ -7,6 +7,8 @@ pub mod agent_delegations;
 pub mod agent_pools;
 pub mod bandwidth;
 pub mod chatwoot;
+pub mod cloud_accounts;
+pub mod cloud_resources;
 pub mod contracts;
 pub mod core;
 pub mod email;
@@ -29,6 +31,8 @@ pub mod visibility_allowlist;
 // Re-export main types
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
 pub use agent_pools::{AgentPool, AgentPoolWithStats, SetupToken};
+pub use cloud_accounts::{CloudAccount, CloudAccountWithCatalog, CreateCloudAccountInput};
+pub use cloud_resources::{CloudResource, CloudResourceWithDetails, CreateCloudResourceInput};
 pub use notification_config::UserNotificationConfig;
 pub use subscriptions::{AccountSubscription, SubscriptionEventInput, SubscriptionPlan};
 pub use types::{Database, LedgerEntryData};

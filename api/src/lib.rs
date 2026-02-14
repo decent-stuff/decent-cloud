@@ -1,4 +1,5 @@
 pub mod chatwoot;
+pub mod cloud;
 pub mod crypto;
 pub mod database;
 pub mod helpcenter;
