@@ -1,24 +1,16 @@
 # TODO
 
-## HIGHEST PRIORITY: Deploy Gateway TLS Isolation
+## Gateway TLS Isolation — Deployed
 
 **Spec:** [2026-02-13-gateway-tls-isolation-spec.md](docs/specs/2026-02-13-gateway-tls-isolation-spec.md)
-**Status:** Code complete, needs deployment and end-to-end verification
+**Status:** Deployed to dev and verified end-to-end (2026-02-14)
 
-### Deploy to Dev
-- [ ] **Set `API_PUBLIC_URL`** in dev API docker-compose/env (`https://dev-api.decent-cloud.org`)
-- [ ] **Deploy api-server** to dev with migration 011 (acme_dns_accounts table)
-- [ ] **Verify endpoint** — `POST /api/v1/acme-dns/update` responds 401 without credentials
-
-### End-to-End Verification
-- [ ] **Test gateway registration** — `POST /api/v1/agents/gateway/register` returns credentials with server_url pointing to our API
-- [ ] **Test TXT proxying** — Call `POST /api/v1/acme-dns/update` with returned credentials, verify TXT record appears in Cloudflare at `_acme-challenge.{dc_id}.{gw_prefix}.decent-cloud.org`
-- [ ] **Deploy dc-agent** — Build and deploy to Proxmox host, run `dc-agent setup token --gateway-dc-id <id>` against dev API
-- [ ] **Verify Caddy cert** — Confirm Caddy obtains wildcard cert `*.{dc_id}.dev-gw.decent-cloud.org` via the new flow
-
-### Cleanup After Verification
-- [ ] **Remove old CNAME records** — Delete any `_acme-challenge.*.dev-gw` CNAME records from Cloudflare (replaced by TXT)
-- [ ] **Verify no `ACME_DNS_SERVER_URL`** references remain in deployment configs
+- [x] API server deployed with migration 011 (acme_dns_accounts table)
+- [x] `POST /api/v1/acme-dns/update` returns 401 without credentials
+- [x] Gateway registration returns acme-dns credentials with server_url pointing to our API
+- [x] TXT record proxying works — Cloudflare TXT record created at `_acme-challenge.dc-sl.dev-gw.decent-cloud.org`
+- [x] dc-agent deployed to Proxmox with `--gateway-dc-id dc-sl --gateway-gw-prefix dev-gw`
+- [x] Caddy obtains wildcard cert `*.dc-sl.dev-gw.decent-cloud.org` via DNS-01 (acme-dns) — issued by Let's Encrypt E7
 
 ---
 

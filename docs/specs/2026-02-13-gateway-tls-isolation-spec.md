@@ -95,10 +95,10 @@ The official [`caddy-dns/acmedns`](https://github.com/caddy-dns/acmedns) plugin 
 *.{dc_id}.{gw_prefix}.{domain} {
     tls {
         dns acmedns {
-            server_url {env.ACME_DNS_SERVER_URL}
-            username {env.ACME_DNS_USERNAME}
-            password {env.ACME_DNS_PASSWORD}
-            subdomain {env.ACME_DNS_SUBDOMAIN}
+            server_url {$ACME_DNS_SERVER_URL}
+            username {$ACME_DNS_USERNAME}
+            password {$ACME_DNS_PASSWORD}
+            subdomain {$ACME_DNS_SUBDOMAIN}
         }
     }
     import /etc/caddy/sites/*.caddy

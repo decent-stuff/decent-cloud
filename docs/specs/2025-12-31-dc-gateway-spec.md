@@ -183,10 +183,10 @@ TCP/UDP port forwarding is handled by iptables DNAT (see below).
 *.{dc_id}.dev-gw.decent-cloud.org {
     tls {
         dns acmedns {
-            server_url {env.ACME_DNS_SERVER_URL}
-            username {env.ACME_DNS_USERNAME}
-            password {env.ACME_DNS_PASSWORD}
-            subdomain {env.ACME_DNS_SUBDOMAIN}
+            server_url {$ACME_DNS_SERVER_URL}
+            username {$ACME_DNS_USERNAME}
+            password {$ACME_DNS_PASSWORD}
+            subdomain {$ACME_DNS_SUBDOMAIN}
         }
     }
     import /etc/caddy/sites/*.caddy
