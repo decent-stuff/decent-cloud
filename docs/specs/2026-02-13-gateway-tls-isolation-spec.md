@@ -163,12 +163,16 @@ CREATE TABLE acme_dns_accounts (
     username UUID PRIMARY KEY,
     password_hash TEXT NOT NULL,
     dc_id TEXT NOT NULL,
+    provider_pubkey BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX idx_acme_dns_dc_id ON acme_dns_accounts(dc_id);
 ```
 
-One set of credentials per provider. Re-registration (same dc_id) overwrites.
+One set of credentials per provider. Re-registration (same dc_id, same provider) overwrites.
+A different provider attempting to register an existing dc_id is rejected.
+The `provider_pubkey` binds dc_id ownership — prevents one provider from hijacking another's
+dc_id, acme-dns credentials, and wildcard TLS cert.
 
 ## Rate Limits
 

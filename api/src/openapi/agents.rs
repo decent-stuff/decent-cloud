@@ -688,6 +688,7 @@ impl AgentsApi {
     #[oai(path = "/agents/dns", method = "post", tag = "ApiTags::Agents")]
     async fn manage_gateway_dns(
         &self,
+        db: Data<&Arc<Database>>,
         cloudflare: Data<&Option<Arc<CloudflareDns>>>,
         auth: AgentAuthenticatedUser,
         req: Json<GatewayDnsRequest>,
@@ -736,6 +737,28 @@ impl AgentsApi {
                 data: None,
                 error: Some(format!("Invalid dc_id: {}", e)),
             });
+        }
+
+        // Verify this provider owns the dc_id (registered via gateway/register)
+        match db.verify_dc_id_owner(&req.dc_id, &auth.provider_pubkey).await {
+            Ok(true) => {}
+            Ok(false) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!(
+                        "dc_id '{}' is not registered to this provider",
+                        req.dc_id
+                    )),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to verify dc_id ownership: {}", e)),
+                });
+            }
         }
 
         let subdomain = cf.gateway_fqdn(&req.slug, &req.dc_id);
@@ -842,16 +865,34 @@ impl AgentsApi {
         let (username, password) = crate::acme_dns::generate_credentials();
         let password_hash = crate::acme_dns::hash_password(&password);
 
-        // Store in DB (upsert: re-registration replaces old credentials)
-        if let Err(e) = db
-            .upsert_acme_dns_account(username, &password_hash, &req.dc_id)
+        // Store in DB (upsert: re-registration replaces credentials only if same provider)
+        match db
+            .upsert_acme_dns_account(username, &password_hash, &req.dc_id, &auth.provider_pubkey)
             .await
         {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(format!("Failed to store acme-dns credentials: {}", e)),
-            });
+            Ok(false) => {
+                tracing::warn!(
+                    dc_id = %req.dc_id,
+                    provider = %hex::encode(&auth.provider_pubkey),
+                    "Gateway registration rejected: dc_id owned by different provider"
+                );
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!(
+                        "dc_id '{}' is already registered to a different provider",
+                        req.dc_id
+                    )),
+                });
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to store acme-dns credentials: {}", e)),
+                });
+            }
+            Ok(true) => {}
         }
 
         let acme_dns_server_url = format!(
