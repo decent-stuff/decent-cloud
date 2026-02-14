@@ -7,16 +7,6 @@
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
 **Status:** MVP complete through Phase 7 (Credential Encryption)
 
-### Phase 7 Follow
-- [x] **On-demand password reset (provider-initiated)** - dc-agent CLI: `reset-password --contract-id <ID>`
-  - API: `PUT /provider/rental-requests/:id/password` for agent to report new password
-  - Credentials encrypted with requester's pubkey before storage
-- [x] **User-requested password reset** - UI button to request reset, agent picks up and executes
-  - API: `POST /contracts/:id/reset-password` for user to request
-  - API: `GET /providers/:pubkey/contracts/pending-password-reset` for agent to poll
-  - UI: "Request Password Reset" button on contract details page
-- [ ] **Multi-device limitation** - Consider account-level key derivation for cross-device access
-
 - Phase 8: Hetzner Cloud provisioner
 - Phase 9: Docker, DigitalOcean, Vultr provisioners
 
