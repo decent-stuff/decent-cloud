@@ -589,6 +589,58 @@ impl ProvidersApi {
         }
     }
 
+    /// Get contracts pending password reset
+    ///
+    /// Returns active contracts where the user has requested a password reset.
+    /// The agent should reset the password via SSH and call the password update endpoint.
+    /// Requires agent authentication - agent can only access their delegated provider's contracts.
+    #[oai(
+        path = "/providers/:pubkey/contracts/pending-password-reset",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_pending_password_reset_contracts(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: agent can only access contracts for their delegated provider
+        if auth.provider_pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
+                ),
+            });
+        }
+
+        match db.get_pending_password_resets(&pubkey_bytes).await {
+            Ok(contracts) => Json(ApiResponse {
+                success: true,
+                data: Some(contracts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Mark a contract as terminated
     ///
     /// Called by dc-agent after successfully terminating a VM for a cancelled contract.
@@ -1691,11 +1743,15 @@ impl ProvidersApi {
             .update_encrypted_credentials(&contract_id, &req.new_password)
             .await
         {
-            Ok(_) => Json(ApiResponse {
-                success: true,
-                data: Some("Password updated successfully".to_string()),
-                error: None,
-            }),
+            Ok(_) => {
+                // Clear any pending password reset request
+                let _ = db.clear_password_reset_request(&contract_id).await;
+                Json(ApiResponse {
+                    success: true,
+                    data: Some("Password updated successfully".to_string()),
+                    error: None,
+                })
+            }
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

@@ -211,6 +211,92 @@ impl ContractsApi {
         }
     }
 
+    /// Request password reset for a contract
+    ///
+    /// Requests a password reset for a provisioned VM. The provider's agent
+    /// will pick up the request and execute the reset via SSH.
+    /// Only the contract requester can request a reset.
+    #[oai(
+        path = "/contracts/:id/reset-password",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn request_password_reset(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Get contract to verify authorization and status
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        // Only the requester can request password reset
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: only the contract requester can request password reset"
+                        .to_string(),
+                ),
+            });
+        }
+
+        // Verify contract is in operational status
+        let status = contract.status.to_lowercase();
+        if status != "provisioned" && status != "active" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Password reset can only be requested for provisioned or active contracts"
+                        .to_string(),
+                ),
+            });
+        }
+
+        match db.request_password_reset(&contract_id).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Password reset requested. The provider will reset the password shortly.".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get user contracts
     ///
     /// Returns contracts for a specific user (as requester).

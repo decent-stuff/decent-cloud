@@ -9,6 +9,7 @@
 		downloadContractInvoice,
 		getContractUsage,
 		getContractCredentials,
+		requestPasswordReset,
 		type Contract,
 		type ContractUsage,
 		hexEncode,
@@ -39,6 +40,11 @@
 	let credentialsLoading = $state(false);
 	let credentialsError = $state<string | null>(null);
 	let showPassword = $state(false);
+
+	// Password reset state
+	let passwordResetLoading = $state(false);
+	let passwordResetSuccess = $state(false);
+	let passwordResetError = $state<string | null>(null);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -241,6 +247,36 @@
 			// Don't show error - credentials may not be set for all contracts
 		} finally {
 			credentialsLoading = false;
+		}
+	}
+
+	async function handleRequestPasswordReset() {
+		if (!contract) return;
+
+		try {
+			passwordResetLoading = true;
+			passwordResetSuccess = false;
+			passwordResetError = null;
+
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				passwordResetError = "You must be authenticated";
+				return;
+			}
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"POST",
+				`/api/v1/contracts/${contractId}/reset-password`,
+			);
+
+			await requestPasswordReset(contractId, headers);
+			passwordResetSuccess = true;
+			decryptedPassword = null; // Clear cached password
+		} catch (e) {
+			passwordResetError = e instanceof Error ? e.message : String(e);
+		} finally {
+			passwordResetLoading = false;
 		}
 	}
 
@@ -694,6 +730,35 @@
 						</div>
 					{:else if credentialsLoading}
 						<div class="text-neutral-500 text-xs mt-3">Loading credentials...</div>
+					{/if}
+
+					<!-- Password reset request button -->
+					{#if contract.status.toLowerCase() === 'provisioned' || contract.status.toLowerCase() === 'active'}
+						<div class="mt-4 pt-3 border-t border-surface-elevated">
+							{#if passwordResetSuccess}
+								<div class="text-green-400 text-sm">
+									Password reset requested. The provider will reset it shortly. Check back in a few minutes.
+								</div>
+							{:else}
+								<button
+									onclick={handleRequestPasswordReset}
+									disabled={passwordResetLoading}
+									class="px-3 py-1.5 text-sm bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+								>
+									{#if passwordResetLoading}
+										Requesting...
+									{:else}
+										Request Password Reset
+									{/if}
+								</button>
+								{#if passwordResetError}
+									<div class="text-red-400 text-xs mt-2">{passwordResetError}</div>
+								{/if}
+								<p class="text-neutral-500 text-xs mt-2">
+									Request a new root password. The provider will reset it and you'll be able to decrypt it here.
+								</p>
+							{/if}
+						</div>
 					{/if}
 
 					{#if contract.provisioning_completed_at_ns}

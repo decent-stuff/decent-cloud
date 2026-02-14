@@ -2043,6 +2043,97 @@ async fn reconcile_instances(
         }
     }
 
+    // Process password reset requests
+    match api_client.get_pending_password_resets().await {
+        Ok(reset_requests) => {
+            if !reset_requests.is_empty() {
+                info!(count = reset_requests.len(), "Processing password reset requests");
+
+                for reset_req in &reset_requests {
+                    let contract_id = &reset_req.contract_id;
+                    let external_id = format!("dc-{}", contract_id);
+                    info!(contract_id = %contract_id, "Processing password reset request");
+
+                    // Find the VM in any provisioner
+                    let mut reset_done = false;
+                    for (ptype, provisioner) in provisioners {
+                        match provisioner.get_instance(&external_id).await {
+                            Ok(Some(instance)) => {
+                                if let Some(ref ip) = instance.ip_address {
+                                    let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
+                                    let new_password = dc_agent::provisioner::proxmox::generate_secure_password(24);
+
+                                    match dc_agent::post_provision::reset_password_via_ssh(
+                                        ip,
+                                        ssh_port,
+                                        "ubuntu",
+                                        true,
+                                        &new_password,
+                                        contract_id,
+                                    ).await {
+                                        Ok(()) => {
+                                            info!(
+                                                contract_id = %contract_id,
+                                                provisioner_type = %ptype,
+                                                "Password reset via SSH successful"
+                                            );
+
+                                            // Report new password to API
+                                            if let Err(e) = api_client
+                                                .update_contract_password(contract_id, &new_password)
+                                                .await
+                                            {
+                                                error!(
+                                                    contract_id = %contract_id,
+                                                    error = ?e,
+                                                    "Failed to report new password to API"
+                                                );
+                                            }
+                                            reset_done = true;
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                contract_id = %contract_id,
+                                                provisioner_type = %ptype,
+                                                error = ?e,
+                                                "Password reset via SSH failed"
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    warn!(
+                                        contract_id = %contract_id,
+                                        "VM has no IP address, cannot reset password"
+                                    );
+                                }
+                            }
+                            Ok(None) => continue, // Try next provisioner
+                            Err(e) => {
+                                warn!(
+                                    contract_id = %contract_id,
+                                    provisioner_type = %ptype,
+                                    error = ?e,
+                                    "Failed to get instance info"
+                                );
+                            }
+                        }
+                    }
+
+                    if !reset_done {
+                        warn!(
+                            contract_id = %contract_id,
+                            "Password reset failed - VM not found or SSH failed"
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            warn!(error = ?e, "Failed to get pending password resets");
+        }
+    }
+
     // Track and prune orphan VMs after grace period
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -1045,6 +1045,68 @@ impl Database {
         Ok(())
     }
 
+    /// Request a password reset for a contract.
+    /// Sets password_reset_requested_at_ns to current time.
+    pub async fn request_password_reset(&self, contract_id: &[u8]) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        let result = sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET password_reset_requested_at_ns = $1
+               WHERE contract_id = $2"#,
+        )
+        .bind(now_ns)
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!(
+                "No provisioning details found for contract {}",
+                hex::encode(contract_id)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Clear password reset request after it's been handled.
+    pub async fn clear_password_reset_request(&self, contract_id: &[u8]) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET password_reset_requested_at_ns = NULL
+               WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get contracts with pending password reset requests for a provider.
+    /// Returns contracts where password_reset_requested_at_ns is set and contract is active.
+    pub async fn get_pending_password_resets(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<Contract>> {
+        let provider_hex = hex::encode(provider_pubkey);
+
+        let rows = sqlx::query_as::<_, Contract>(
+            r#"SELECT c.* FROM contract_sign_requests c
+               INNER JOIN contract_provisioning_details pd ON c.contract_id = pd.contract_id
+               WHERE c.provider_pubkey = $1
+               AND c.status IN ('provisioned', 'active')
+               AND pd.password_reset_requested_at_ns IS NOT NULL
+               ORDER BY pd.password_reset_requested_at_ns ASC"#,
+        )
+        .bind(provider_hex)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
     /// Extend contract duration
     pub async fn extend_contract(
         &self,

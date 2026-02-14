@@ -69,6 +69,13 @@ pub struct ContractPendingTermination {
     pub instance_details: String,
 }
 
+/// Contract pending password reset
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPendingPasswordReset {
+    pub contract_id: String,
+}
+
 impl PendingContract {
     /// Parse memory amount string to MB
     /// Handles formats like "16 GB", "2048 MB", "16GB", "2048MB"
@@ -483,6 +490,17 @@ impl ApiClient {
             self.provider_pubkey
         );
         let response: ApiResponse<Vec<ContractPendingTermination>> =
+            self.request(Method::Get, &path, None).await?;
+        Self::unwrap_response(response, "API error")
+    }
+
+    /// Get contracts pending password reset.
+    pub async fn get_pending_password_resets(&self) -> Result<Vec<ContractPendingPasswordReset>> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/pending-password-reset",
+            self.provider_pubkey
+        );
+        let response: ApiResponse<Vec<ContractPendingPasswordReset>> =
             self.request(Method::Get, &path, None).await?;
         Self::unwrap_response(response, "API error")
     }

@@ -572,6 +572,29 @@ export async function getContractCredentials(
 	return payload.data ?? null;
 }
 
+export async function requestPasswordReset(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/reset-password`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to request password reset: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to request password reset');
+	}
+}
+
 export function offeringToCSVRow(offering: Offering): string[] {
 	return [
 		offering.offering_id,
