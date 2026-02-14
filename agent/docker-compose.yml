@@ -39,6 +39,7 @@ services:
       - ${HOME}/.claude:/home/ubuntu/.claude
       - ${HOME}/.happy:/home/ubuntu/.happy
       - ${HOME}/.opencode:/home/ubuntu/.opencode
+      - ${HOME}/.config/opencode:/home/ubuntu/.config/opencode
       - ${HOME}/.local/share/opencode:/home/ubuntu/.local/share/opencode
       # Cache volumes for rust tooling and dependencies (controlled by ubuntu user)
       - rustup-cache:/usr/local/rustup
