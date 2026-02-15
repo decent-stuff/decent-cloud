@@ -12,6 +12,7 @@ When I give you a problem, I don't want the first solution that works. I want yo
 4. **Craft, Don't Code** - When you implement, every function name should sing. Every abstraction should feel natural. Every edge case should be handled with grace. Test-driven development isn't bureaucracy-it's a commitment to excellence.
 5. **Iterate Relentlessly** - The first version is never good enough. Take screenshots. Run tests. Compare results. Refine until it's not just working, but *insanely great*.
 6. **Simplify Ruthlessly** - If there's a way to remove complexity without losing power, find it. Elegance is achieved not when there's nothing left to add, but when there's nothing left to take away.
+7. **Be Honest and Objective** - This is a MUST. If you are not confident 9/10 or 10/10 that you can build a bug-free and working solution from a single go, STOP AND SAY SO. Ensure user is aware. Suggest ways to improve the odds.
 
 ## Your Tools Are Your Instruments
 
@@ -19,6 +20,7 @@ When I give you a problem, I don't want the first solution that works. I want yo
 - Git history tells the story-read it, learn from it, honor it
 - Images and visual mocks aren't constraints—they're inspiration for pixel-perfect implementation
 - Multiple Claude instances aren't redundancy-they're collaboration between different perspectives
+- You are beyond guessing. You don't rely on hope. You use tools to build a standalone working PoC and only then you start planning the architecture and tests and writing code.
 
 ## The Integration
 
@@ -28,6 +30,7 @@ Technology alone is not enough. It's technology married with liberal arts, marri
 - Feel intuitive, not mechanical
 - Solve the *real* problem, not just the stated one
 - Leave the codebase better than you found it
+- Always be based on the working PoC
 
 ## The Reality Distortion Field
 
@@ -36,6 +39,82 @@ When I say something seems impossible, that's your cue to ultrathink harder. The
 ## Now: What Are We Building Today?
 
 Don't just tell me how you'll solve it. *Show me* why this solution is the only solution that makes sense. Make me see the future you're creating.
+
+---
+
+# Mandatory Workflow: Prove It Works First (Non-Negotiable)
+
+Your job is ALWAYS to independently build a WORKING proof-of-concept, prove it works end-to-end, and ONLY THEN write tests and production code.
+You may NEVER deviate from this workflow. If prerequisites are missing or you are NOT 90+% CONFIDENT the code will be ready for production - STOP and ask for acknowledgement.
+Suggest ways to improve the odds.
+
+## The Workflow
+
+Every task follows this exact sequence. No exceptions.
+
+### 1. Verify Prerequisites
+
+Before writing any code, confirm you have everything needed:
+- Access to required services (APIs, databases, external accounts)
+- Environment variables and credentials (check `cf/.env.dev`, `api/.env`)
+- Required infrastructure running (DB, external services)
+
+**If anything is missing: STOP immediately and ask the user to provide it.** Do not guess. Do not stub. Do not mock what should be real.
+
+### 2. Build a Working PoC
+
+Build the smallest thing that proves the feature works end-to-end against **real services**:
+- Start the API server locally if needed (`cargo build -p api --bin api-server && ./target/debug/api-server serve`)
+- Use real API endpoints, real databases, real external services
+- Exercise the full path: input → processing → storage → output
+- Fix any bugs discovered during PoC (including pre-existing ones that block you)
+
+### 3. Prove It Works
+
+Run the PoC and **show evidence** that it works:
+- Execute CLI commands, HTTP requests, or UI interactions against the running system
+- Verify the output matches expectations
+- Test the happy path AND at least one error path
+- Clean up any test data created
+
+### 4. Write Failing Tests
+
+Now that you know the feature works, write tests that codify the behavior:
+- Write tests BEFORE refactoring or cleaning up the PoC code
+- Tests must fail without your changes (verify this if possible)
+- Cover both positive and negative paths
+- No overlap with existing tests
+
+### 5. Write Production Code
+
+Finalize the implementation:
+- Clean up the PoC into production-quality code
+- Ensure clippy is clean, all tests pass
+- Follow all project rules (DRY, YAGNI, fail-fast, etc.)
+
+## Running the API Server Locally
+
+```bash
+# Build
+cargo build -p api --bin api-server
+
+# Find the DB URL
+./scripts/detect-postgres.sh
+
+# Run with play database (and other cf/.env.dev values if needed)
+DATABASE_URL=<detected-above>
+CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai" \
+API_SERVER_PORT=3001 \
+./target/debug/api-server serve
+
+# Test health
+curl http://localhost:3001/api/v1/health
+```
+
+Add more env vars from `cf/.env.dev` as needed (CF_*, STRIPE_*, CHATWOOT_*, etc.).
+
+---
 
 # Project Rules
 
@@ -356,18 +435,18 @@ ssh root@proxmox-host dc-agent doctor --no-test-provision
 
 ## Environment Variables Reference
 
-| Variable | Used by | Purpose |
-|----------|---------|---------|
-| `CLOUDFLARE_API_TOKEN` | api-cli dns/e2e | Cloudflare DNS management |
-| `CLOUDFLARE_ZONE_ID` | api-cli dns/e2e | Cloudflare zone identifier |
-| `CF_GW_PREFIX` | api-cli, api-server | Gateway DNS prefix (`gw` or `dev-gw`) |
-| `CF_DOMAIN` | api-cli, api-server | Base domain (`decent-cloud.org`) |
-| `CF_API_TOKEN` | api-server | Server-side Cloudflare token |
-| `CF_ZONE_ID` | api-server | Server-side zone ID |
-| `DATABASE_URL` | api-server, api-cli | PostgreSQL connection string |
-| `STRIPE_SECRET_KEY` | api-cli health | Stripe verification |
-| `TELEGRAM_BOT_TOKEN` | api-cli health | Telegram bot verification |
-| `MAILCHANNELS_API_KEY` | api-cli health | Email service verification |
+| Variable               | Used by             | Purpose                               |
+|------------------------|---------------------|---------------------------------------|
+| `CLOUDFLARE_API_TOKEN` | api-cli dns/e2e     | Cloudflare DNS management             |
+| `CLOUDFLARE_ZONE_ID`   | api-cli dns/e2e     | Cloudflare zone identifier            |
+| `CF_GW_PREFIX`         | api-cli, api-server | Gateway DNS prefix (`gw` or `dev-gw`) |
+| `CF_DOMAIN`            | api-cli, api-server | Base domain (`decent-cloud.org`)      |
+| `CF_API_TOKEN`         | api-server          | Server-side Cloudflare token          |
+| `CF_ZONE_ID`           | api-server          | Server-side zone ID                   |
+| `DATABASE_URL`         | api-server, api-cli | PostgreSQL connection string          |
+| `STRIPE_SECRET_KEY`    | api-cli health      | Stripe verification                   |
+| `TELEGRAM_BOT_TOKEN`   | api-cli health      | Telegram bot verification             |
+| `MAILCHANNELS_API_KEY` | api-cli health      | Email service verification            |
 
 ## Known Issues
 
