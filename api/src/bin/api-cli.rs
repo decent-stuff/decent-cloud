@@ -2879,3 +2879,165 @@ async fn handle_seed_provider(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod cloud_tests {
+    use super::*;
+
+    #[test]
+    fn test_add_cloud_account_request_serialization() {
+        let req = AddCloudAccountRequest {
+            backend_type: "hetzner".to_string(),
+            name: "My Account".to_string(),
+            credentials: "secret-token".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["backendType"], "hetzner");
+        assert_eq!(json["name"], "My Account");
+        assert_eq!(json["credentials"], "secret-token");
+        // Must NOT have snake_case keys
+        assert!(json.get("backend_type").is_none());
+    }
+
+    #[test]
+    fn test_provision_resource_request_serialization() {
+        let req = ProvisionResourceRequest {
+            cloud_account_id: "uuid-123".to_string(),
+            name: "my-vm".to_string(),
+            server_type: "cx22".to_string(),
+            location: "fsn1".to_string(),
+            image: "ubuntu-24.04".to_string(),
+            ssh_pubkey: "ssh-ed25519 AAAA...".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["cloudAccountId"], "uuid-123");
+        assert_eq!(json["serverType"], "cx22");
+        assert_eq!(json["sshPubkey"], "ssh-ed25519 AAAA...");
+        // Must NOT have snake_case keys
+        assert!(json.get("cloud_account_id").is_none());
+        assert!(json.get("server_type").is_none());
+        assert!(json.get("ssh_pubkey").is_none());
+    }
+
+    #[test]
+    fn test_cloud_account_response_deserialization() {
+        let json = r#"{
+            "id": "abc-123",
+            "backendType": "hetzner",
+            "name": "Test Account",
+            "isValid": true,
+            "validationError": null,
+            "createdAt": "2026-01-15T10:00:00Z"
+        }"#;
+        let account: CloudAccountResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(account.id, "abc-123");
+        assert_eq!(account.backend_type, "hetzner");
+        assert!(account.is_valid);
+        assert!(account.validation_error.is_none());
+    }
+
+    #[test]
+    fn test_cloud_account_response_with_validation_error() {
+        let json = r#"{
+            "id": "abc-123",
+            "backendType": "hetzner",
+            "name": "Bad Account",
+            "isValid": false,
+            "validationError": "Invalid API token",
+            "createdAt": "2026-01-15T10:00:00Z"
+        }"#;
+        let account: CloudAccountResponse = serde_json::from_str(json).unwrap();
+        assert!(!account.is_valid);
+        assert_eq!(
+            account.validation_error.as_deref(),
+            Some("Invalid API token")
+        );
+    }
+
+    #[test]
+    fn test_cloud_account_list_response_deserialization() {
+        let json = r#"{"accounts": []}"#;
+        let resp: CloudAccountListResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.accounts.is_empty());
+    }
+
+    #[test]
+    fn test_cloud_resource_response_deserialization() {
+        let json = r#"{
+            "id": "res-456",
+            "name": "my-vm",
+            "serverType": "cx22",
+            "location": "fsn1",
+            "image": "ubuntu-24.04",
+            "status": "running",
+            "publicIp": "203.0.113.5",
+            "cloudAccountName": "My Hetzner",
+            "cloudAccountBackend": "hetzner",
+            "createdAt": "2026-01-15T12:00:00Z"
+        }"#;
+        let resource: CloudResourceResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resource.id, "res-456");
+        assert_eq!(resource.status, "running");
+        assert_eq!(resource.public_ip.as_deref(), Some("203.0.113.5"));
+        assert_eq!(resource.server_type, "cx22");
+    }
+
+    #[test]
+    fn test_cloud_resource_response_no_ip() {
+        let json = r#"{
+            "id": "res-789",
+            "name": "pending-vm",
+            "serverType": "cx22",
+            "location": "fsn1",
+            "image": "ubuntu-24.04",
+            "status": "provisioning",
+            "publicIp": null,
+            "cloudAccountName": "My Hetzner",
+            "cloudAccountBackend": "hetzner",
+            "createdAt": "2026-01-15T12:00:00Z"
+        }"#;
+        let resource: CloudResourceResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resource.status, "provisioning");
+        assert!(resource.public_ip.is_none());
+    }
+
+    #[test]
+    fn test_catalog_response_deserialization() {
+        let json = r#"{
+            "serverTypes": [{
+                "id": "cx22",
+                "name": "CX22",
+                "cores": 2,
+                "memoryGb": 4.0,
+                "diskGb": 40,
+                "priceMonthly": 3.92
+            }],
+            "locations": [{
+                "id": "fsn1",
+                "name": "Falkenstein",
+                "city": "Falkenstein",
+                "country": "DE"
+            }],
+            "images": [{
+                "id": "161547269",
+                "name": "ubuntu-24.04",
+                "osType": "ubuntu"
+            }]
+        }"#;
+        let catalog: CatalogResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(catalog.server_types.len(), 1);
+        assert_eq!(catalog.server_types[0].cores, 2);
+        assert_eq!(catalog.server_types[0].price_monthly, Some(3.92));
+        assert_eq!(catalog.locations.len(), 1);
+        assert_eq!(catalog.locations[0].country, "DE");
+        assert_eq!(catalog.images.len(), 1);
+        assert_eq!(catalog.images[0].os_type, "ubuntu");
+    }
+
+    #[test]
+    fn test_cloud_resource_list_response_deserialization() {
+        let json = r#"{"resources": []}"#;
+        let resp: CloudResourceListResponse = serde_json::from_str(json).unwrap();
+        assert!(resp.resources.is_empty());
+    }
+}

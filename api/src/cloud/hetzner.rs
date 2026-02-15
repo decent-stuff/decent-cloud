@@ -594,4 +594,124 @@ mod tests {
         assert_eq!(converted.status, ServerStatus::Running);
         assert_eq!(converted.public_ip, Some("1.2.3.4".to_string()));
     }
+
+    #[test]
+    fn test_hetzner_price_deserialization() {
+        // Hetzner API returns prices as nested objects with string values, not plain floats
+        let json = r#"{
+            "location": "fsn1",
+            "price_monthly": {"net": "3.2900000000", "gross": "3.9151000000"},
+            "price_hourly": {"net": "0.0050000000", "gross": "0.0059500000"}
+        }"#;
+        let price: HetznerPrice = serde_json::from_str(json).unwrap();
+        assert_eq!(price.location, "fsn1");
+        assert_eq!(price.price_monthly.gross, "3.9151000000");
+        assert_eq!(price.price_hourly.gross, "0.0059500000");
+    }
+
+    #[test]
+    fn test_hetzner_server_type_price_conversion() {
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let st = HetznerServerType {
+            id: 1,
+            name: "cx22".to_string(),
+            cores: 2,
+            memory: 4.0,
+            disk: 40,
+            prices: vec![HetznerPrice {
+                location: "fsn1".to_string(),
+                price_monthly: HetznerPriceDetail {
+                    gross: "3.92".to_string(),
+                },
+                price_hourly: HetznerPriceDetail {
+                    gross: "0.006".to_string(),
+                },
+            }],
+        };
+        let converted = backend.convert_server_type(st);
+        assert_eq!(converted.price_monthly, Some(3.92));
+        assert_eq!(converted.price_hourly, Some(0.006));
+    }
+
+    #[test]
+    fn test_hetzner_server_type_no_prices() {
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let st = HetznerServerType {
+            id: 1,
+            name: "cx22".to_string(),
+            cores: 2,
+            memory: 4.0,
+            disk: 40,
+            prices: vec![],
+        };
+        let converted = backend.convert_server_type(st);
+        assert_eq!(converted.price_monthly, None);
+        assert_eq!(converted.price_hourly, None);
+    }
+
+    #[test]
+    fn test_hetzner_image_type_field_deserialization() {
+        // Hetzner API returns "type" (a Rust keyword) — we use #[serde(rename = "type")]
+        let json = r#"{
+            "id": 67794396,
+            "name": "ubuntu-22.04",
+            "os_flavor": "ubuntu",
+            "status": "available",
+            "type": "system",
+            "description": "Ubuntu 22.04 LTS"
+        }"#;
+        let img: HetznerImage = serde_json::from_str(json).unwrap();
+        assert_eq!(img.id, 67794396);
+        assert_eq!(img.type_, Some("system".to_string()));
+        assert_eq!(img.os_flavor, "ubuntu");
+    }
+
+    #[test]
+    fn test_hetzner_image_filters_non_available() {
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let img = HetznerImage {
+            id: 1,
+            name: Some("old-image".to_string()),
+            os_flavor: "ubuntu".to_string(),
+            status: "deprecated".to_string(),
+            type_: Some("system".to_string()),
+            description: None,
+        };
+        assert!(backend.convert_image(img).is_none());
+    }
+
+    #[test]
+    fn test_hetzner_image_filters_backups() {
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let img = HetznerImage {
+            id: 1,
+            name: Some("my-backup".to_string()),
+            os_flavor: "ubuntu".to_string(),
+            status: "available".to_string(),
+            type_: Some("backup".to_string()),
+            description: None,
+        };
+        assert!(backend.convert_image(img).is_none());
+    }
+
+    #[test]
+    fn test_hetzner_server_types_response_deserialization() {
+        let json = r#"{
+            "server_types": [{
+                "id": 22,
+                "name": "cpx11",
+                "cores": 2,
+                "memory": 2.0,
+                "disk": 40,
+                "prices": [{
+                    "location": "fsn1",
+                    "price_monthly": {"net": "4.0756", "gross": "4.8499"},
+                    "price_hourly": {"net": "0.0073", "gross": "0.0087"}
+                }]
+            }]
+        }"#;
+        let resp: ServerTypesResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.server_types.len(), 1);
+        assert_eq!(resp.server_types[0].name, "cpx11");
+    }
 }
