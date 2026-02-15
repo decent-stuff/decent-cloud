@@ -91,6 +91,11 @@ enum Commands {
         #[command(subcommand)]
         action: AdminAction,
     },
+    /// Cloud account and resource management (Hetzner, Proxmox)
+    Cloud {
+        #[command(subcommand)]
+        action: CloudAction,
+    },
     /// Send test email (for testing email configuration)
     TestEmail {
         /// Recipient email address
@@ -524,6 +529,92 @@ enum AdminAction {
 }
 
 // =============================================================================
+// Cloud subcommands
+// =============================================================================
+
+#[derive(Subcommand)]
+enum CloudAction {
+    /// List cloud accounts
+    ListAccounts {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+    },
+    /// Add a cloud account
+    AddAccount {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Backend type (hetzner or proxmox_api)
+        #[arg(long)]
+        backend: String,
+        /// Display name for the account
+        #[arg(long)]
+        name: String,
+        /// Credentials (API token for Hetzner, JSON config for Proxmox)
+        #[arg(long)]
+        credentials: String,
+    },
+    /// Delete a cloud account
+    DeleteAccount {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud account ID (UUID)
+        #[arg(long)]
+        id: String,
+    },
+    /// Show available server types, locations, and images
+    Catalog {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud account ID (UUID)
+        #[arg(long)]
+        account_id: String,
+    },
+    /// List cloud resources
+    ListResources {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+    },
+    /// Provision a new cloud resource (VM)
+    Provision {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud account ID (UUID)
+        #[arg(long)]
+        account_id: String,
+        /// VM name
+        #[arg(long)]
+        name: String,
+        /// Server type (e.g., cx22)
+        #[arg(long)]
+        server_type: String,
+        /// Location (e.g., fsn1)
+        #[arg(long)]
+        location: String,
+        /// OS image (e.g., ubuntu-24.04)
+        #[arg(long)]
+        image: String,
+        /// SSH public key for VM access
+        #[arg(long)]
+        ssh_pubkey: String,
+    },
+    /// Delete a cloud resource
+    DeleteResource {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud resource ID (UUID)
+        #[arg(long)]
+        id: String,
+    },
+}
+
+// =============================================================================
 // Main entry point
 // =============================================================================
 
@@ -557,6 +648,7 @@ async fn main() -> Result<()> {
         Commands::Health { action } => handle_health_action(action, &api_url).await,
         Commands::E2e { action } => handle_e2e_action(action, &api_url).await,
         Commands::Admin { action } => handle_admin_action(action).await,
+        Commands::Cloud { action } => handle_cloud_action(action, &api_url).await,
         Commands::TestEmail { to, with_dkim } => handle_test_email(&to, with_dkim).await,
         Commands::SeedProvider {
             name,
@@ -2319,6 +2411,317 @@ async fn handle_admin_action(action: AdminAction) -> Result<()> {
                 println!("{}", "=".repeat(80));
                 println!("Total: {} admin account(s)", admins.len());
             }
+        }
+    }
+    Ok(())
+}
+
+// =============================================================================
+// Cloud handlers
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudAccountResponse {
+    id: String,
+    backend_type: String,
+    name: String,
+    is_valid: bool,
+    validation_error: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudAccountListResponse {
+    accounts: Vec<CloudAccountResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+struct CloudResourceResponse {
+    id: String,
+    name: String,
+    server_type: String,
+    location: String,
+    image: String,
+    status: String,
+    public_ip: Option<String>,
+    cloud_account_name: String,
+    cloud_account_backend: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudResourceListResponse {
+    resources: Vec<CloudResourceResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogServerType {
+    id: String,
+    name: String,
+    cores: u32,
+    memory_gb: f64,
+    disk_gb: u32,
+    price_monthly: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogLocation {
+    id: String,
+    name: String,
+    city: String,
+    country: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogImage {
+    id: String,
+    name: String,
+    os_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CatalogResponse {
+    server_types: Vec<CatalogServerType>,
+    locations: Vec<CatalogLocation>,
+    images: Vec<CatalogImage>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AddCloudAccountRequest {
+    backend_type: String,
+    name: String,
+    credentials: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProvisionResourceRequest {
+    cloud_account_id: String,
+    name: String,
+    server_type: String,
+    location: String,
+    image: String,
+    ssh_pubkey: String,
+}
+
+async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
+    match action {
+        CloudAction::ListAccounts { identity } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let resp: CloudAccountListResponse = client.get_api("/cloud-accounts").await?;
+
+            if resp.accounts.is_empty() {
+                println!("No cloud accounts found.");
+            } else {
+                println!("\nCloud Accounts:");
+                println!("{}", "=".repeat(110));
+                println!(
+                    "{:<38} {:<20} {:<12} {:<8} {:<20}",
+                    "ID", "Name", "Backend", "Valid?", "Created"
+                );
+                println!("{}", "-".repeat(110));
+                for a in &resp.accounts {
+                    let valid = if a.is_valid { "yes" } else { "NO" };
+                    let created = &a.created_at[..a.created_at.len().min(19)];
+                    println!(
+                        "{:<38} {:<20} {:<12} {:<8} {:<20}",
+                        a.id,
+                        &a.name[..a.name.len().min(18)],
+                        a.backend_type,
+                        valid,
+                        created
+                    );
+                    if let Some(err) = &a.validation_error {
+                        println!("  Error: {}", err);
+                    }
+                }
+                println!("{}", "=".repeat(110));
+                println!("Total: {} account(s)", resp.accounts.len());
+            }
+        }
+        CloudAction::AddAccount {
+            identity,
+            backend,
+            name,
+            credentials,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let request = AddCloudAccountRequest {
+                backend_type: backend,
+                name: name.clone(),
+                credentials,
+            };
+
+            let account: CloudAccountResponse =
+                client.post_api("/cloud-accounts", &request).await?;
+            println!("Cloud account created:");
+            println!("  ID: {}", account.id);
+            println!("  Name: {}", account.name);
+            println!("  Backend: {}", account.backend_type);
+            println!("  Valid: {}", account.is_valid);
+        }
+        CloudAction::DeleteAccount { identity, id: account_id } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-accounts/{}", account_id);
+            let _: serde_json::Value = client.delete_api(&path).await?;
+            println!("Cloud account {} deleted.", account_id);
+        }
+        CloudAction::Catalog {
+            identity,
+            account_id,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-accounts/{}/catalog", account_id);
+            let catalog: CatalogResponse = client.get_api(&path).await?;
+
+            // Server types
+            println!("\nServer Types:");
+            println!("{}", "=".repeat(90));
+            println!(
+                "{:<12} {:<25} {:<8} {:<12} {:<10} {:<12}",
+                "ID", "Name", "Cores", "Memory GB", "Disk GB", "Price/mo"
+            );
+            println!("{}", "-".repeat(90));
+            for st in &catalog.server_types {
+                let price = st
+                    .price_monthly
+                    .map(|p| format!("${:.2}", p))
+                    .unwrap_or_else(|| "N/A".to_string());
+                println!(
+                    "{:<12} {:<25} {:<8} {:<12.1} {:<10} {:<12}",
+                    st.id,
+                    &st.name[..st.name.len().min(23)],
+                    st.cores,
+                    st.memory_gb,
+                    st.disk_gb,
+                    price
+                );
+            }
+            println!("{}", "=".repeat(90));
+            println!("Total: {} server type(s)", catalog.server_types.len());
+
+            // Locations
+            println!("\nLocations:");
+            println!("{}", "=".repeat(70));
+            println!(
+                "{:<12} {:<20} {:<20} {:<15}",
+                "ID", "Name", "City", "Country"
+            );
+            println!("{}", "-".repeat(70));
+            for loc in &catalog.locations {
+                println!(
+                    "{:<12} {:<20} {:<20} {:<15}",
+                    loc.id, loc.name, loc.city, loc.country
+                );
+            }
+            println!("{}", "=".repeat(70));
+            println!("Total: {} location(s)", catalog.locations.len());
+
+            // Images
+            println!("\nImages:");
+            println!("{}", "=".repeat(60));
+            println!("{:<25} {:<20} {:<12}", "ID", "Name", "OS Type");
+            println!("{}", "-".repeat(60));
+            for img in &catalog.images {
+                println!(
+                    "{:<25} {:<20} {:<12}",
+                    &img.id[..img.id.len().min(23)],
+                    &img.name[..img.name.len().min(18)],
+                    img.os_type
+                );
+            }
+            println!("{}", "=".repeat(60));
+            println!("Total: {} image(s)", catalog.images.len());
+        }
+        CloudAction::ListResources { identity } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let resp: CloudResourceListResponse = client.get_api("/cloud-resources").await?;
+
+            if resp.resources.is_empty() {
+                println!("No cloud resources found.");
+            } else {
+                println!("\nCloud Resources:");
+                println!("{}", "=".repeat(130));
+                println!(
+                    "{:<38} {:<15} {:<12} {:<16} {:<12} {:<15} {:<12}",
+                    "ID", "Name", "Status", "IP", "Type", "Account", "Backend"
+                );
+                println!("{}", "-".repeat(130));
+                for r in &resp.resources {
+                    let ip = r.public_ip.as_deref().unwrap_or("N/A");
+                    println!(
+                        "{:<38} {:<15} {:<12} {:<16} {:<12} {:<15} {:<12}",
+                        r.id,
+                        &r.name[..r.name.len().min(13)],
+                        r.status,
+                        ip,
+                        r.server_type,
+                        &r.cloud_account_name[..r.cloud_account_name.len().min(13)],
+                        r.cloud_account_backend
+                    );
+                }
+                println!("{}", "=".repeat(130));
+                println!("Total: {} resource(s)", resp.resources.len());
+            }
+        }
+        CloudAction::Provision {
+            identity,
+            account_id,
+            name,
+            server_type,
+            location,
+            image,
+            ssh_pubkey,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let request = ProvisionResourceRequest {
+                cloud_account_id: account_id,
+                name,
+                server_type,
+                location,
+                image,
+                ssh_pubkey,
+            };
+
+            let resource: serde_json::Value =
+                client.post_api("/cloud-resources", &request).await?;
+            println!("Cloud resource provisioning started:");
+            println!("  ID: {}", resource["id"].as_str().unwrap_or("N/A"));
+            println!("  Name: {}", resource["name"].as_str().unwrap_or("N/A"));
+            println!(
+                "  Status: {}",
+                resource["status"].as_str().unwrap_or("N/A")
+            );
+        }
+        CloudAction::DeleteResource { identity, id: resource_id } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-resources/{}", resource_id);
+            let _: serde_json::Value = client.delete_api(&path).await?;
+            println!("Cloud resource {} deleted.", resource_id);
         }
     }
     Ok(())

@@ -172,8 +172,13 @@ struct HetznerServerType {
 struct HetznerPrice {
     #[allow(dead_code)]
     location: String,
-    price_monthly: Option<f64>,
-    price_hourly: Option<f64>,
+    price_monthly: HetznerPriceDetail,
+    price_hourly: HetznerPriceDetail,
+}
+
+#[derive(Debug, Deserialize)]
+struct HetznerPriceDetail {
+    gross: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +196,7 @@ struct HetznerImage {
     name: Option<String>,
     os_flavor: String,
     status: String,
+    #[serde(rename = "type")]
     type_: Option<String>,
     description: Option<String>,
 }
@@ -225,7 +231,12 @@ impl HetznerBackend {
         let (price_monthly, price_hourly) = st
             .prices
             .first()
-            .map(|p| (p.price_monthly, p.price_hourly))
+            .map(|p| {
+                (
+                    p.price_monthly.gross.parse::<f64>().ok(),
+                    p.price_hourly.gross.parse::<f64>().ok(),
+                )
+            })
             .unwrap_or((None, None));
 
         ServerType {
