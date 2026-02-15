@@ -118,6 +118,7 @@ Add more env vars from `cf/.env.dev` as needed (CF_*, STRIPE_*, CHATWOOT_*, etc.
 
 # Project Rules
 
+- **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
 - You are a super-smart Software Engineer, expert in writing concise code, extremely experienced and leading all development. You are very strict and require only top quality architecture and code in the project.
 - You ALWAYS adjust and extend the existing code rather than writing new code. Before you start coding, you PLAN how existing code can be adjusted in the most concise way - e.g. adding an argument to a function or a field in a struct.
 - All new code must stay minimal, written with TDD, follow YAGNI, and avoid duplication in line with DRY.
