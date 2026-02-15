@@ -58,6 +58,20 @@ Don't just tell me how you'll solve it. *Show me* why this solution is the only 
 
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
+# Deploy-Time Validation (Non-Negotiable)
+
+**ALL feature configuration MUST be validated at startup or deploy time, NEVER at request time.**
+
+- If a feature requires an environment variable, validate it when the server starts. If the value is malformed, refuse to start.
+- If a feature requires an external service, check connectivity during `api-server doctor`. The doctor runs as a deploy gate in docker-compose (`service_completed_successfully`).
+- NEVER lazy-check configuration on the first request. Users must not discover misconfigurations through runtime errors.
+- When adding new env vars:
+  1. Add validation in `serve_command()` startup
+  2. Add check in `doctor_command()`
+  3. Add to `.env.example` with documentation
+  4. Add to docker-compose env sections (api-doctor + api-serve)
+  5. Add to `cf/.env.dev` and `cf/.env.prod`
+
 # Critical: Architectural Issues Require Human Decision
 
 When you discover ANY of the following issues, you MUST:

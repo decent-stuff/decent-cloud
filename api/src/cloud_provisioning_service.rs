@@ -32,30 +32,16 @@ impl CloudProvisioningService {
     }
 
     pub async fn run(self) {
-        let enabled = std::env::var("CLOUD_PROVISIONING_ENABLED")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(false);
-
-        if !enabled {
-            tracing::info!(
-                "CLOUD_PROVISIONING_ENABLED not set - cloud provisioning service disabled. Set CLOUD_PROVISIONING_ENABLED=true to enable."
-            );
-            return;
-        }
-
+        // Cloud provisioning requires CREDENTIAL_ENCRYPTION_KEY to decrypt provider credentials.
+        // The key is validated at startup in serve_command(); if we reach here without it,
+        // the service simply doesn't run (the key was never set).
         let encryption_key = match ServerEncryptionKey::from_env() {
             Ok(key) => key,
-            Err(e) => {
-                tracing::error!(
-                    "CLOUD_PROVISIONING_ENABLED=true but CREDENTIAL_ENCRYPTION_KEY is invalid: {}. The server cannot start without a valid encryption key.",
-                    e
+            Err(_) => {
+                tracing::info!(
+                    "CREDENTIAL_ENCRYPTION_KEY not set — cloud provisioning service disabled"
                 );
-                panic!(
-                    "CLOUD_PROVISIONING_ENABLED=true but CREDENTIAL_ENCRYPTION_KEY is invalid: {}. \
-                     Set CREDENTIAL_ENCRYPTION_KEY to a valid 64-character hex string (32 bytes) to enable cloud provisioning.",
-                    e
-                );
+                return;
             }
         };
 

@@ -925,6 +925,24 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
+    // === Cloud Account Management ===
+    println!("\nCloud Account Management:");
+    check_env!(
+        "CREDENTIAL_ENCRYPTION_KEY",
+        optional,
+        "cloud account management disabled - users cannot add Hetzner/Proxmox accounts. Generate with: openssl rand -hex 32"
+    );
+    if env::var("CREDENTIAL_ENCRYPTION_KEY").is_ok() {
+        print!("  Validating encryption key format... ");
+        match crate::crypto::ServerEncryptionKey::from_env() {
+            Ok(_) => println!("[OK] valid 32-byte key"),
+            Err(e) => {
+                println!("[ERROR] {:#}", e);
+                errors += 1;
+            }
+        }
+    }
+
     // === ICPay Integration ===
     println!("\nICPay (ICP Payments):");
     check_env!("ICPAY_SECRET_KEY", optional, "ICP payments disabled");
@@ -993,6 +1011,27 @@ async fn doctor_command() -> Result<(), std::io::Error> {
 async fn serve_command() -> Result<(), std::io::Error> {
     let port = env::var("API_SERVER_PORT").unwrap_or_else(|_| "59011".to_string());
     let addr = format!("0.0.0.0:{}", port);
+
+    // Validate CREDENTIAL_ENCRYPTION_KEY at startup (fail fast on misconfiguration)
+    match std::env::var("CREDENTIAL_ENCRYPTION_KEY") {
+        Ok(_) => {
+            // Key is set — validate it's well-formed. Refuse to start if malformed.
+            crate::crypto::ServerEncryptionKey::from_env().map_err(|e| {
+                std::io::Error::other(format!(
+                    "CREDENTIAL_ENCRYPTION_KEY is set but invalid: {:#}. \
+                     Generate a valid key with: openssl rand -hex 32",
+                    e
+                ))
+            })?;
+            tracing::info!("CREDENTIAL_ENCRYPTION_KEY validated — cloud account management enabled");
+        }
+        Err(_) => {
+            tracing::warn!(
+                "CREDENTIAL_ENCRYPTION_KEY not set — cloud account management (Hetzner/Proxmox) will NOT work! \
+                 Generate with: openssl rand -hex 32"
+            );
+        }
+    }
 
     let ctx = setup_app_context().await?;
 

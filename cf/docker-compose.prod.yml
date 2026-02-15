@@ -182,6 +182,8 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-}
       # Agent Bot webhook URL
       - API_PUBLIC_URL=${API_PUBLIC_URL:-https://api.decent-cloud.org}
+      # Cloud Account Management
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
     volumes:
       - ../data/api-data-prod:/data
     networks:
@@ -213,6 +215,8 @@ services:
     container_name: decent-cloud-prod-api-serve
     restart: unless-stopped
     depends_on:
+      api-doctor:
+        condition: service_completed_successfully
       chatwoot-web:
         condition: service_healthy
     command: ["api-server", "serve"]
@@ -266,6 +270,8 @@ services:
       - CF_ZONE_ID=${CF_ZONE_ID:-}
       - CF_DOMAIN=${CF_DOMAIN:-decent-cloud.org}
       - CF_GW_PREFIX=${CF_GW_PREFIX:-gw}
+      # Cloud Account Management
+      - CREDENTIAL_ENCRYPTION_KEY=${CREDENTIAL_ENCRYPTION_KEY:-}
     volumes:
       - ../data/api-data-prod:/data
     ports:
