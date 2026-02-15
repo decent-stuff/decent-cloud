@@ -504,12 +504,25 @@ impl ContractsApi {
                 // Also applies to ICPay which is pre-paid
                 let checkout_url = if is_self_rental || payment_method.to_lowercase() != "stripe" {
                     // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
-                    if let Err(e) = db.try_auto_accept_contract(&contract_id).await {
-                        tracing::warn!(
-                            "Auto-accept check failed for contract {}: {}",
-                            hex::encode(&contract_id),
-                            e
-                        );
+                    match db.try_auto_accept_contract(&contract_id).await {
+                        Ok(true) => {
+                            // Auto-accepted, try to trigger Hetzner provisioning
+                            if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id).await {
+                                tracing::warn!(
+                                    "Hetzner provisioning trigger failed for contract {}: {}",
+                                    hex::encode(&contract_id),
+                                    e
+                                );
+                            }
+                        }
+                        Ok(false) => {} // Not eligible for auto-accept
+                        Err(e) => {
+                            tracing::warn!(
+                                "Auto-accept check failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
                     }
                     None
                 } else {
@@ -959,12 +972,24 @@ impl ContractsApi {
         }
 
         // Try auto-accept if provider has it enabled
-        if let Err(e) = db.try_auto_accept_contract(&contract_id_bytes).await {
-            tracing::warn!(
-                "Auto-accept check failed for contract {}: {}",
-                session_result.contract_id,
-                e
-            );
+        match db.try_auto_accept_contract(&contract_id_bytes).await {
+            Ok(true) => {
+                if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id_bytes).await {
+                    tracing::warn!(
+                        "Hetzner provisioning trigger failed for contract {}: {}",
+                        session_result.contract_id,
+                        e
+                    );
+                }
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Auto-accept check failed for contract {}: {}",
+                    session_result.contract_id,
+                    e
+                );
+            }
         }
 
         Json(ApiResponse {

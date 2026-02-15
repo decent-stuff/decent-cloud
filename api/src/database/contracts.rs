@@ -1619,6 +1619,16 @@ impl Database {
         .await?;
 
         tx.commit().await?;
+
+        // Trigger cloud_resource deletion if this contract has a linked resource
+        if let Err(e) = self.mark_contract_resource_for_deletion(contract_id).await {
+            tracing::warn!(
+                "Failed to mark cloud resource for deletion for contract {}: {}",
+                hex::encode(contract_id),
+                e
+            );
+        }
+
         Ok(())
     }
 
@@ -1940,6 +1950,161 @@ impl Database {
         );
 
         Ok(true)
+    }
+
+    /// After auto-accept, check if the offering uses Hetzner provisioning and create
+    /// a cloud_resource linked to the contract. The provisioning service will pick it up.
+    pub async fn try_trigger_hetzner_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        // Only trigger for accepted contracts
+        if contract.status.to_lowercase() != "accepted" {
+            return Ok(false);
+        }
+
+        // Get the offering to check provisioner_type
+        let offering_db_id: i64 = contract
+            .offering_id
+            .parse()
+            .map_err(|_| anyhow::anyhow!("Invalid offering_id in contract: {}", contract.offering_id))?;
+
+        let offering = self
+            .get_offering(offering_db_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Offering {} not found", offering_db_id))?;
+
+        // Only Hetzner provisioner type triggers cloud_resource creation
+        match offering.provisioner_type.as_deref() {
+            Some("hetzner") => {}
+            _ => return Ok(false),
+        }
+
+        // Find the provider's Hetzner cloud_account
+        let provider_pubkey = hex::decode(&contract.provider_pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid provider pubkey hex"))?;
+
+        let cloud_account_id = self
+            .find_hetzner_cloud_account_for_provider(&provider_pubkey)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Provider {} has no valid Hetzner cloud account configured",
+                    contract.provider_pubkey
+                )
+            })?;
+
+        // Parse provisioner_config for server_type, location, image
+        let config: serde_json::Value = offering
+            .provisioner_config
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?
+            .unwrap_or(serde_json::json!({}));
+
+        let server_type = config["server_type"]
+            .as_str()
+            .unwrap_or("cx22")
+            .to_string();
+        let location = config["location"]
+            .as_str()
+            .unwrap_or(&offering.datacenter_city.to_lowercase())
+            .to_string();
+        let image = config["image"]
+            .as_str()
+            .or(offering.template_name.as_deref())
+            .unwrap_or("ubuntu-24.04")
+            .to_string();
+
+        let name = format!(
+            "dc-recipe-{}",
+            &hex::encode(contract_id)[..12]
+        );
+
+        self.create_cloud_resource_for_contract(
+            contract_id,
+            &cloud_account_id,
+            &name,
+            &server_type,
+            &location,
+            &image,
+            &contract.requester_ssh_pubkey,
+            offering.post_provision_script.as_deref(),
+        )
+        .await?;
+
+        tracing::info!(
+            contract_id = %hex::encode(contract_id),
+            cloud_account_id = %cloud_account_id,
+            "Triggered Hetzner provisioning for recipe contract"
+        );
+
+        Ok(true)
+    }
+
+    // ==================== Cloud Resource Provisioning Bridge ====================
+
+    /// Update contract to active after cloud_resource provisioning completes.
+    /// Called by the cloud provisioning service (system-level, no auth check).
+    pub async fn update_contract_provisioned_by_cloud_resource(
+        &self,
+        contract_id: &[u8],
+        instance_details: &str,
+    ) -> Result<()> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let new_status = ContractStatus::Active.to_string();
+
+        let mut tx = self.pool.begin().await?;
+
+        // Get current status for history
+        let current_status: Option<(String,)> = sqlx::query_as(
+            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(contract_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let old_status = current_status
+            .map(|r| r.0)
+            .ok_or_else(|| anyhow::anyhow!("Contract not found: {}", hex::encode(contract_id)))?;
+
+        sqlx::query(
+            r#"UPDATE contract_sign_requests
+               SET status = $1,
+                   status_updated_at_ns = $2,
+                   provisioning_instance_details = $3,
+                   provisioning_completed_at_ns = $4
+               WHERE contract_id = $5"#,
+        )
+        .bind(&new_status)
+        .bind(now_ns)
+        .bind(instance_details)
+        .bind(now_ns)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(contract_id)
+        .bind(&old_status)
+        .bind(&new_status)
+        .bind(now_ns)
+        .bind("Cloud resource provisioned by api-server")
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        tracing::info!(
+            contract_id = %hex::encode(contract_id),
+            "Contract updated to active after cloud resource provisioning"
+        );
+
+        Ok(())
     }
 
     // ==================== Provisioning Locks ====================

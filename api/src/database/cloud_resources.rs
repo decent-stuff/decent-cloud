@@ -397,23 +397,28 @@ impl Database {
         Ok(rows)
     }
 
+    /// Pending provisioning resource row with optional contract/script info.
     #[allow(clippy::type_complexity)]
-    pub async fn get_pending_provisioning_resources(&self, limit: i64) -> Result<Vec<(Uuid, Uuid, String, String, String, String, String, String, String, String)>> {
-        let rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, String, String, String, String, String)>(
+    pub async fn get_pending_provisioning_resources(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PendingProvisioningResource>> {
+        let rows = sqlx::query_as::<_, PendingProvisioningResource>(
             r#"
-            SELECT 
+            SELECT
                 cr.id, cr.cloud_account_id, cr.external_id, cr.name,
                 cr.server_type, cr.location, cr.image, cr.ssh_pubkey,
-                ca.backend_type, ca.credentials_encrypted
+                ca.backend_type, ca.credentials_encrypted,
+                cr.contract_id, cr.post_provision_script
             FROM cloud_resources cr
             JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
             WHERE cr.status = 'provisioning'
               AND ca.is_valid = true
-              AND (cr.provisioning_locked_at IS NULL 
+              AND (cr.provisioning_locked_at IS NULL
                    OR cr.provisioning_locked_at < NOW() - INTERVAL '10 minutes')
             ORDER BY cr.created_at ASC
             LIMIT $1
-            "#
+            "#,
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -421,13 +426,340 @@ impl Database {
 
         Ok(rows)
     }
+
+    /// Create a cloud_resource linked to a marketplace contract.
+    /// Called when a recipe contract with a Hetzner offering is auto-accepted.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_cloud_resource_for_contract(
+        &self,
+        contract_id: &[u8],
+        cloud_account_id: &Uuid,
+        name: &str,
+        server_type: &str,
+        location: &str,
+        image: &str,
+        ssh_pubkey: &str,
+        post_provision_script: Option<&str>,
+    ) -> Result<Uuid> {
+        let pending_external_id = format!("pending-{}", Uuid::new_v4());
+        let row: (Uuid,) = sqlx::query_as(
+            r#"
+            INSERT INTO cloud_resources (
+                cloud_account_id, external_id, name, server_type, location, image, ssh_pubkey,
+                status, ssh_port, ssh_username, listing_mode, contract_id, post_provision_script
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'provisioning', 22, 'root', 'personal', $8, $9)
+            RETURNING id
+            "#,
+        )
+        .bind(cloud_account_id)
+        .bind(&pending_external_id)
+        .bind(name)
+        .bind(server_type)
+        .bind(location)
+        .bind(image)
+        .bind(ssh_pubkey)
+        .bind(contract_id)
+        .bind(post_provision_script)
+        .fetch_one(&self.pool)
+        .await?;
+
+        tracing::info!(
+            resource_id = %row.0,
+            contract_id = %hex::encode(contract_id),
+            "Created cloud_resource for contract"
+        );
+
+        Ok(row.0)
+    }
+
+    /// Mark the cloud_resource linked to a contract for deletion.
+    /// The existing termination loop picks it up and deletes the VM.
+    pub async fn mark_contract_resource_for_deletion(&self, contract_id: &[u8]) -> Result<bool> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources
+            SET status = 'deleting', updated_at = NOW()
+            WHERE contract_id = $1
+              AND status NOT IN ('deleting', 'deleted', 'failed')
+              AND terminated_at IS NULL
+            "#,
+        )
+        .bind(contract_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected > 0 {
+            tracing::info!(
+                contract_id = %hex::encode(contract_id),
+                "Marked cloud_resource for deletion (contract cancelled/expired)"
+            );
+        }
+
+        Ok(rows_affected > 0)
+    }
+
+    /// Find the Hetzner cloud_account for a provider pubkey.
+    /// Looks up: provider_pubkey → account_id → cloud_accounts (backend_type='hetzner').
+    pub async fn find_hetzner_cloud_account_for_provider(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Option<Uuid>> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT ca.id
+            FROM cloud_accounts ca
+            JOIN account_public_keys apk ON ca.account_id = apk.account_id
+            WHERE apk.public_key = $1
+              AND apk.is_active = TRUE
+              AND ca.backend_type = 'hetzner'
+              AND ca.is_valid = TRUE
+            ORDER BY ca.created_at ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(provider_pubkey)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| r.0))
+    }
+}
+
+/// Row returned by `get_pending_provisioning_resources`.
+#[derive(Debug, FromRow)]
+#[allow(dead_code)]
+pub struct PendingProvisioningResource {
+    pub id: Uuid,
+    pub cloud_account_id: Uuid,
+    pub external_id: String,
+    pub name: String,
+    pub server_type: String,
+    pub location: String,
+    pub image: String,
+    pub ssh_pubkey: String,
+    pub backend_type: String,
+    pub credentials_encrypted: String,
+    pub contract_id: Option<Vec<u8>>,
+    pub post_provision_script: Option<String>,
 }
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_status_constants() {
-        assert_eq!("running", "running");
-        assert_eq!("provisioning", "provisioning");
+    use crate::database::test_helpers::setup_test_db;
+
+    #[tokio::test]
+    async fn test_create_cloud_resource_for_contract_sets_fields() {
+        let db = setup_test_db().await;
+
+        // Create account + cloud_account
+        let account = db
+            .create_account("hetzner_test", &[1u8; 32], "test@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "test-hetzner",
+                "encrypted-token-data",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xABu8; 32];
+
+        // Insert a dummy contract_sign_requests row for the FK
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[2u8; 32][..])
+        .bind(&[1u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-recipe-test",
+                "cx22",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                Some("#!/bin/bash\necho hello"),
+            )
+            .await
+            .unwrap();
+
+        // Verify the resource was created with correct fields
+        let resource = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .expect("Resource should exist");
+
+        assert_eq!(resource.resource.name, "dc-recipe-test");
+        assert_eq!(resource.resource.server_type, "cx22");
+        assert_eq!(resource.resource.location, "fsn1");
+        assert_eq!(resource.resource.image, "ubuntu-24.04");
+        assert_eq!(resource.resource.ssh_pubkey, "ssh-ed25519 AAAA test");
+        assert_eq!(resource.resource.status, "provisioning");
+    }
+
+    #[tokio::test]
+    async fn test_mark_contract_resource_for_deletion() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("del_test", &[3u8; 32], "del@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "del-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xCDu8; 32];
+
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[4u8; 32][..])
+        .bind(&[3u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-recipe-del",
+                "cx22",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Mark for deletion
+        let marked = db.mark_contract_resource_for_deletion(&contract_id).await.unwrap();
+        assert!(marked);
+
+        // Verify status changed to 'deleting'
+        let resource = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        assert_eq!(resource.resource.status, "deleting");
+
+        // Marking again should return false (already deleting)
+        let marked_again = db.mark_contract_resource_for_deletion(&contract_id).await.unwrap();
+        assert!(!marked_again);
+    }
+
+    #[tokio::test]
+    async fn test_mark_contract_resource_for_deletion_no_resource() {
+        let db = setup_test_db().await;
+
+        // Non-existent contract_id - should return false, not error
+        let marked = db.mark_contract_resource_for_deletion(&[0xEEu8; 32]).await.unwrap();
+        assert!(!marked);
+    }
+
+    #[tokio::test]
+    async fn test_find_hetzner_cloud_account_for_provider() {
+        let db = setup_test_db().await;
+
+        let pubkey = [5u8; 32];
+        let account = db
+            .create_account("prov_test", &pubkey, "prov@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "prov-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let found = db.find_hetzner_cloud_account_for_provider(&pubkey).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().to_string(), cloud_account.id);
+
+        // Non-existent provider should return None
+        let not_found = db.find_hetzner_cloud_account_for_provider(&[99u8; 32]).await.unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_pending_provisioning_includes_contract_fields() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("pending_test", &[6u8; 32], "pending@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "pending-hetzner",
+                "encrypted-token",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xBBu8; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[7u8; 32][..])
+        .bind(&[6u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        db.create_cloud_resource_for_contract(
+            &contract_id,
+            &cloud_account_uuid,
+            "dc-recipe-pending",
+            "cx22",
+            "fsn1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA test",
+            Some("#!/bin/bash\necho setup"),
+        )
+        .await
+        .unwrap();
+
+        let pending = db.get_pending_provisioning_resources(10).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].contract_id, Some(contract_id));
+        assert_eq!(
+            pending[0].post_provision_script.as_deref(),
+            Some("#!/bin/bash\necho setup")
+        );
+        assert_eq!(pending[0].name, "dc-recipe-pending");
     }
 }

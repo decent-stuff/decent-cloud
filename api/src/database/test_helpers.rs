@@ -326,6 +326,9 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/011_acme_dns_accounts.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/012_acme_dns_provider_ownership.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/013_password_reset.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/014_cloud_accounts.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/015_cloud_ssh_key_tracking.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/016_recipe_provisioning.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -535,6 +538,18 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "013_password_reset.sql",
                     include_str!("../../migrations_pg/013_password_reset.sql"),
+                ),
+                (
+                    "014_cloud_accounts.sql",
+                    include_str!("../../migrations_pg/014_cloud_accounts.sql"),
+                ),
+                (
+                    "015_cloud_ssh_key_tracking.sql",
+                    include_str!("../../migrations_pg/015_cloud_ssh_key_tracking.sql"),
+                ),
+                (
+                    "016_recipe_provisioning.sql",
+                    include_str!("../../migrations_pg/016_recipe_provisioning.sql"),
                 ),
             ];
 

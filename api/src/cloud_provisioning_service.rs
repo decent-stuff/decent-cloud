@@ -1,12 +1,14 @@
-//! Background service for provisioning and terminating self-provisioned cloud resources.
+//! Background service for provisioning and terminating cloud resources.
 //!
 //! Polls for pending cloud resources and provisions/deletes them via the appropriate backend.
+//! For contract-linked resources, also executes post-provision scripts and updates contract status.
 
 use crate::cloud::{
     hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType,
     CloudBackend, CreateServerRequest,
 };
 use crate::crypto::{decrypt_server_credential, ServerEncryptionKey};
+use crate::database::cloud_resources::PendingProvisioningResource;
 use crate::database::Database;
 use std::sync::Arc;
 use std::time::Duration;
@@ -110,36 +112,14 @@ async fn provision_pending_resources(
 
     tracing::info!("Found {} pending cloud resources to provision", pending.len());
 
-    for (
-        resource_id,
-        _cloud_account_id,
-        _external_id,
-        name,
-        server_type,
-        location,
-        image,
-        ssh_pubkey,
-        backend_type,
-        credentials_encrypted,
-    ) in pending
-    {
-        if !database.acquire_cloud_resource_lock(&resource_id, lock_holder).await? {
-            tracing::debug!("Could not acquire lock for resource {}, skipping", resource_id);
+    for resource in pending {
+        if !database.acquire_cloud_resource_lock(&resource.id, lock_holder).await? {
+            tracing::debug!("Could not acquire lock for resource {}, skipping", resource.id);
             continue;
         }
 
-        let result = provision_one(
-            database,
-            resource_id,
-            &name,
-            &server_type,
-            &location,
-            &image,
-            &ssh_pubkey,
-            &backend_type,
-            &credentials_encrypted,
-            encryption_key,
-        ).await;
+        let resource_id = resource.id;
+        let result = provision_one(database, resource, encryption_key).await;
 
         if let Err(e) = database.release_cloud_resource_lock(&resource_id).await {
             tracing::error!("Failed to release lock for resource {}: {}", resource_id, e);
@@ -156,31 +136,24 @@ async fn provision_pending_resources(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn provision_one(
     database: &Database,
-    resource_id: Uuid,
-    name: &str,
-    server_type: &str,
-    location: &str,
-    image: &str,
-    ssh_pubkey: &str,
-    backend_type_str: &str,
-    credentials_encrypted: &str,
+    resource: PendingProvisioningResource,
     encryption_key: &ServerEncryptionKey,
 ) -> anyhow::Result<()> {
-    tracing::info!("Provisioning resource {} ({})", resource_id, name);
+    let resource_id = resource.id;
+    tracing::info!("Provisioning resource {} ({})", resource_id, resource.name);
 
-    let credentials = decrypt_server_credential(credentials_encrypted, encryption_key)?;
-    let backend_type: BackendType = backend_type_str.parse()?;
+    let credentials = decrypt_server_credential(&resource.credentials_encrypted, encryption_key)?;
+    let backend_type: BackendType = resource.backend_type.parse()?;
     let backend = create_backend(backend_type, &credentials).await?;
 
     let request = CreateServerRequest {
-        name: name.to_string(),
-        server_type: server_type.to_string(),
-        location: location.to_string(),
-        image: image.to_string(),
-        ssh_pubkey: ssh_pubkey.to_string(),
+        name: resource.name.clone(),
+        server_type: resource.server_type.clone(),
+        location: resource.location.clone(),
+        image: resource.image.clone(),
+        ssh_pubkey: resource.ssh_pubkey.clone(),
     };
 
     let result = backend.create_server(request).await?;
@@ -193,6 +166,30 @@ async fn provision_one(
     let gateway_port_range_start = 20001;
     let gateway_port_range_end = 20010;
 
+    // Execute post-provision script if present (recipe provisioning)
+    if let Some(script) = &resource.post_provision_script {
+        let context_id = resource.contract_id
+            .as_ref()
+            .map(hex::encode)
+            .unwrap_or_else(|| resource_id.to_string());
+
+        if let Err(e) = dcc_common::ssh_exec::execute_post_provision_script(
+            &public_ip,
+            22,
+            script,
+            &context_id,
+        ).await {
+            tracing::error!(
+                resource_id = %resource_id,
+                "Post-provision script failed, cleaning up VM: {:#}",
+                e
+            );
+            // Cleanup: delete VM + SSH key on script failure
+            cleanup_failed_provision(&*backend, &result.server.id, &ssh_key_id).await;
+            return Err(e.context("Post-provision script failed"));
+        }
+    }
+
     database.update_cloud_resource_provisioned(
         &resource_id,
         &public_ip,
@@ -203,6 +200,30 @@ async fn provision_one(
         gateway_port_range_end,
     ).await?;
 
+    // If linked to a contract, update contract status to active
+    if let Some(contract_id) = &resource.contract_id {
+        let instance_details = serde_json::json!({
+            "public_ip": public_ip,
+            "ssh_port": 22,
+            "gateway_slug": gateway_slug,
+            "gateway_ssh_port": gateway_ssh_port,
+            "gateway_port_range_start": gateway_port_range_start,
+            "gateway_port_range_end": gateway_port_range_end,
+        })
+        .to_string();
+
+        if let Err(e) = database.update_contract_provisioned_by_cloud_resource(
+            contract_id,
+            &instance_details,
+        ).await {
+            tracing::error!(
+                contract_id = %hex::encode(contract_id),
+                "Failed to update contract status after provisioning: {:#}",
+                e
+            );
+        }
+    }
+
     tracing::info!(
         "Successfully provisioned resource {} with IP {} (gateway: {}, ssh_key_id: {})",
         resource_id,
@@ -212,6 +233,18 @@ async fn provision_one(
     );
 
     Ok(())
+}
+
+/// Cleanup a failed provisioning attempt by deleting the VM and SSH key.
+async fn cleanup_failed_provision(backend: &dyn CloudBackend, server_id: &str, ssh_key_id: &str) {
+    if let Err(e) = backend.delete_server(server_id).await {
+        tracing::error!("Failed to cleanup VM {} after script failure: {:#}", server_id, e);
+    }
+    if !ssh_key_id.is_empty() {
+        if let Err(e) = backend.delete_ssh_key(ssh_key_id).await {
+            tracing::error!("Failed to cleanup SSH key {} after script failure: {:#}", ssh_key_id, e);
+        }
+    }
 }
 
 async fn terminate_pending_resources(

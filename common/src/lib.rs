@@ -41,6 +41,8 @@ pub use registration::*;
 pub use rewards::*;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod ssh_exec;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod platform_specific_x86_64;
 #[cfg(not(target_arch = "wasm32"))]
 pub use platform_specific_x86_64 as platform_specific;
