@@ -25,7 +25,7 @@ if [ -n "${DATABASE_URL_PG:-}" ]; then
 fi
 
 # Try well-known postgres hosts with test/test/test credentials
-if [ "$_pg_detected" = false ]; then
+if [ "${_pg_detected:-false}" = false ]; then
     COMPOSE_PG_HOST="${COMPOSE_PG_HOST:-172.18.0.2}"
     for _pg_host in "${COMPOSE_PG_HOST}" "postgres"; do
         if PGPASSWORD="test" psql -h "${_pg_host}" -p 5432 -U test -d test -c "SELECT 1" >/dev/null 2>&1; then
@@ -41,7 +41,7 @@ if [ "$_pg_detected" = false ]; then
     done
 fi
 
-if [ "$_pg_detected" = false ]; then
+if [ "${_pg_detected:-false}" = false ]; then
     # Fall back to .env values or defaults
     export PG_HOST="${PG_HOST:-localhost}"
     export PG_PORT="${PG_PORT:-5432}"
@@ -50,3 +50,5 @@ if [ "$_pg_detected" = false ]; then
     export PG_DB="${PG_DB:-test}"
     export PG_SOURCE="env"
 fi
+
+echo "DATABASE_URL=postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
