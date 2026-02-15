@@ -29,11 +29,11 @@ services:
       # PostgreSQL connection for testing
       - DATABASE_URL_PG=postgres://test:test@postgres:5432/test
     volumes:
-      # Mount the entire repository directory to /code
-      - ..:/code
+      # Mount the entire repository directory
+      - ..:/code/decent-cloud
       # Use container-local target/ dir to avoid conflicts between concurrent agents
       # Volume name includes project name (-p flag) so each agent gets its own
-      - target-cache:/code/target
+      - target-cache:/code/decent-cloud/target
       # Mount some other configuration from home directory
       - ${HOME}/.claude.json:/home/ubuntu/.claude.json
       - ${HOME}/.claude:/home/ubuntu/.claude
@@ -50,7 +50,7 @@ services:
       - ${HOME}/.ssh/claude-code.pub:/tmp/claude-ssh/claude-code.pub:ro
       # Docker socket for running docker commands inside the container
       - /var/run/docker.sock:/var/run/docker.sock
-    working_dir: /code
+    working_dir: /code/decent-cloud
     stdin_open: true
     tty: true
     ports:
