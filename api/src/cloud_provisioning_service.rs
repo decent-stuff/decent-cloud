@@ -81,7 +81,9 @@ impl CloudProvisioningService {
             }
         });
 
-        let _ = tokio::try_join!(provision_task, termination_task);
+        if let Err(e) = tokio::try_join!(provision_task, termination_task) {
+            tracing::error!("Cloud provisioning service task failed: {:#}", e);
+        }
     }
 }
 
@@ -178,6 +180,7 @@ async fn provision_one(
 
     database.update_cloud_resource_provisioned(
         &resource_id,
+        &result.server.id,
         &public_ip,
         &ssh_key_id,
         &gateway_slug,

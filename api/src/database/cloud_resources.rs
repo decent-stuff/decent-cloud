@@ -229,6 +229,7 @@ impl Database {
     pub async fn update_cloud_resource_provisioned(
         &self,
         id: &Uuid,
+        external_id: &str,
         public_ip: &str,
         external_ssh_key_id: &str,
         gateway_slug: &str,
@@ -240,17 +241,19 @@ impl Database {
             r#"
             UPDATE cloud_resources
             SET status = 'running',
-                public_ip = $2,
-                external_ssh_key_id = $3,
-                gateway_slug = $4,
-                gateway_ssh_port = $5,
-                gateway_port_range_start = $6,
-                gateway_port_range_end = $7,
+                external_id = $2,
+                public_ip = $3,
+                external_ssh_key_id = $4,
+                gateway_slug = $5,
+                gateway_ssh_port = $6,
+                gateway_port_range_start = $7,
+                gateway_port_range_end = $8,
                 updated_at = NOW()
             WHERE id = $1
             "#
         )
         .bind(id)
+        .bind(external_id)
         .bind(public_ip)
         .bind(external_ssh_key_id)
         .bind(gateway_slug)

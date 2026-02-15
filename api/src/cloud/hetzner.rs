@@ -204,11 +204,16 @@ struct HetznerImage {
 impl HetznerBackend {
     fn convert_server(&self, s: HetznerServer) -> Server {
         let status = match s.status.as_str() {
-            "initializing" | "creating" => ServerStatus::Provisioning,
+            "initializing" | "starting" | "rebuilding" | "migrating" => {
+                ServerStatus::Provisioning
+            }
             "running" => ServerStatus::Running,
-            "off" | "stopped" => ServerStatus::Stopped,
+            "off" | "stopping" => ServerStatus::Stopped,
             "deleting" => ServerStatus::Deleting,
-            _ => ServerStatus::Failed,
+            other => {
+                tracing::warn!("Unknown Hetzner server status '{}', treating as failed", other);
+                ServerStatus::Failed
+            }
         };
 
         let created_at = chrono::DateTime::parse_from_rfc3339(&s.created)
@@ -430,7 +435,7 @@ impl CloudBackend for HetznerBackend {
             .await?;
 
         if !server_response.status().is_success() {
-            let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
+            cleanup_ssh_key(self, &ssh_key_id.to_string()).await;
             return Err(self.handle_error(server_response).await);
         }
 
@@ -445,15 +450,13 @@ impl CloudBackend for HetznerBackend {
         }
 
         if server.status != ServerStatus::Running {
-            let _ = self.delete_server(&server.id).await;
-            let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
+            cleanup_server_and_key(self, &server.id, &ssh_key_id.to_string()).await;
             anyhow::bail!("Server failed to reach running state: {:?}", server.status);
         }
 
         if let Some(ref ip) = server.public_ip {
             if !self.wait_for_ssh_reachable(ip, 120).await? {
-                let _ = self.delete_server(&server.id).await;
-                let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
+                cleanup_server_and_key(self, &server.id, &ssh_key_id.to_string()).await;
                 anyhow::bail!("SSH port not reachable after 120s");
             }
         }
@@ -556,25 +559,36 @@ impl CloudBackend for HetznerBackend {
     }
 }
 
+/// Log-and-continue cleanup for failed provisioning. Best-effort — errors are logged, not propagated.
+async fn cleanup_server_and_key(backend: &HetznerBackend, server_id: &str, ssh_key_id: &str) {
+    if let Err(e) = backend.delete_server(server_id).await {
+        tracing::warn!("Cleanup: failed to delete server {}: {:#}", server_id, e);
+    }
+    cleanup_ssh_key(backend, ssh_key_id).await;
+}
+
+async fn cleanup_ssh_key(backend: &HetznerBackend, ssh_key_id: &str) {
+    if let Err(e) = backend.delete_ssh_key(ssh_key_id).await {
+        tracing::warn!("Cleanup: failed to delete SSH key {}: {:#}", ssh_key_id, e);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_hetzner_status_conversion() {
-        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
-
-        let server = HetznerServer {
+    fn make_test_server(status: &str) -> HetznerServer {
+        HetznerServer {
             id: 123,
             name: "test-server".to_string(),
-            status: "running".to_string(),
+            status: status.to_string(),
             public_net: HetznerPublicNet {
                 ipv4: HetznerIpv4 {
                     ip: "1.2.3.4".to_string(),
                 },
             },
             server_type: HetznerServerTypeRef {
-                name: "cx22".to_string(),
+                name: "cx23".to_string(),
             },
             datacenter: HetznerDatacenter {
                 name: "fsn1-dc14".to_string(),
@@ -583,16 +597,40 @@ mod tests {
                 },
             },
             image: Some(HetznerImageRef {
-                name: "ubuntu-22.04".to_string(),
+                name: "ubuntu-24.04".to_string(),
             }),
             created: "2024-01-01T00:00:00Z".to_string(),
-        };
+        }
+    }
 
-        let converted = backend.convert_server(server);
-        assert_eq!(converted.id, "123");
-        assert_eq!(converted.name, "test-server");
+    #[test]
+    fn test_hetzner_status_conversion_all_states() {
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+
+        // Provisioning states (server not yet usable)
+        for status in ["initializing", "starting", "rebuilding", "migrating"] {
+            let converted = backend.convert_server(make_test_server(status));
+            assert_eq!(converted.status, ServerStatus::Provisioning, "status '{status}'");
+        }
+
+        // Running
+        let converted = backend.convert_server(make_test_server("running"));
         assert_eq!(converted.status, ServerStatus::Running);
         assert_eq!(converted.public_ip, Some("1.2.3.4".to_string()));
+
+        // Stopped states
+        for status in ["off", "stopping"] {
+            let converted = backend.convert_server(make_test_server(status));
+            assert_eq!(converted.status, ServerStatus::Stopped, "status '{status}'");
+        }
+
+        // Deleting
+        let converted = backend.convert_server(make_test_server("deleting"));
+        assert_eq!(converted.status, ServerStatus::Deleting);
+
+        // Unknown falls to Failed
+        let converted = backend.convert_server(make_test_server("exploded"));
+        assert_eq!(converted.status, ServerStatus::Failed);
     }
 
     #[test]
