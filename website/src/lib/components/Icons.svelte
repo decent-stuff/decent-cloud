@@ -62,6 +62,7 @@
 		| 'hard-drive'
 		| 'sparkles'
 		| 'key'
+		| 'trash'
 		| 'arrow-left';
 </script>
 
@@ -310,6 +311,9 @@
 		<path d="M19 13l.5 1.5L21 15l-1.5.5L19 17l-.5-1.5L17 15l1.5-.5L19 13z" />
 	{:else if name === 'key'}
 		<path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+	{:else if name === 'trash'}
+		<polyline points="3 6 5 6 21 6" />
+		<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
 	{:else if name === 'arrow-left'}
 		<line x1="19" y1="12" x2="5" y2="12" />
 		<polyline points="12 19 5 12 12 5" />

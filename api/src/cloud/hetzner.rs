@@ -8,12 +8,14 @@ use anyhow::Context;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use tokio::io::AsyncReadExt;
+use tokio::net::TcpStream;
 
 use crate::cloud::types::{
     BackendCatalog, CreateServerRequest, Image, Location, Server, ServerMetrics, ServerStatus,
     ServerType,
 };
-use super::CloudBackend;
+use super::{CloudBackend, ProvisionResult};
 
 const HETZNER_API_BASE: &str = "https://api.hetzner.cloud/v1";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -76,7 +78,9 @@ struct SshKeyResponse {
 
 #[derive(Debug, Deserialize)]
 struct HetznerSshKey {
+    #[allow(dead_code)]
     id: i64,
+    #[allow(dead_code)]
     name: String,
 }
 
@@ -93,11 +97,6 @@ struct CreateServerRequestHetzner {
 #[derive(Debug, Deserialize)]
 struct ServerResponse {
     server: HetznerServer,
-}
-
-#[derive(Debug, Deserialize)]
-struct ServersResponse {
-    servers: Vec<HetznerServer>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +143,7 @@ struct HetznerServerTypeRef {
 
 #[derive(Debug, Deserialize)]
 struct HetznerDatacenter {
+    #[allow(dead_code)]
     name: String,
     location: HetznerLocationRef,
 }
@@ -170,6 +170,7 @@ struct HetznerServerType {
 
 #[derive(Debug, Deserialize)]
 struct HetznerPrice {
+    #[allow(dead_code)]
     location: String,
     price_monthly: Option<f64>,
     price_hourly: Option<f64>,
@@ -177,6 +178,7 @@ struct HetznerPrice {
 
 #[derive(Debug, Deserialize)]
 struct HetznerLocation {
+    #[allow(dead_code)]
     id: i64,
     name: String,
     city: String,
@@ -265,6 +267,38 @@ impl HetznerBackend {
             }),
         })
     }
+
+    async fn wait_for_ssh_reachable(&self, ip: &str, timeout_secs: u64) -> anyhow::Result<bool> {
+        let addr = format!("{}:22", ip);
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+
+        while start.elapsed() < timeout {
+            match TcpStream::connect(&addr).await {
+                Ok(mut stream) => {
+                    let mut banner = [0u8; 256];
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        stream.read(&mut banner)
+                    ).await {
+                        Ok(Ok(n)) if n > 0 => {
+                            let banner_str = String::from_utf8_lossy(&banner[..n]);
+                            if banner_str.contains("SSH") {
+                                tracing::info!("SSH reachable at {} after {:?}", addr, start.elapsed());
+                                return Ok(true);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Err(_) => {}
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+
+        tracing::warn!("SSH not reachable at {} after {}s", addr, timeout_secs);
+        Ok(false)
+    }
 }
 
 #[async_trait]
@@ -352,7 +386,7 @@ impl CloudBackend for HetznerBackend {
             .collect())
     }
 
-    async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<Server> {
+    async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<ProvisionResult> {
         let ssh_key_response = self
             .request_builder(reqwest::Method::POST, "/ssh_keys")
             .json(&CreateSshKeyRequest {
@@ -385,7 +419,7 @@ impl CloudBackend for HetznerBackend {
             .await?;
 
         if !server_response.status().is_success() {
-            let _ = self.delete_ssh_key(ssh_key_id).await;
+            let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
             return Err(self.handle_error(server_response).await);
         }
 
@@ -399,7 +433,24 @@ impl CloudBackend for HetznerBackend {
             retries += 1;
         }
 
-        Ok(server)
+        if server.status != ServerStatus::Running {
+            let _ = self.delete_server(&server.id).await;
+            let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
+            anyhow::bail!("Server failed to reach running state: {:?}", server.status);
+        }
+
+        if let Some(ref ip) = server.public_ip {
+            if !self.wait_for_ssh_reachable(ip, 120).await? {
+                let _ = self.delete_server(&server.id).await;
+                let _ = self.delete_ssh_key(&ssh_key_id.to_string()).await;
+                anyhow::bail!("SSH port not reachable after 120s");
+            }
+        }
+
+        Ok(ProvisionResult {
+            server,
+            ssh_key_id: Some(ssh_key_id.to_string()),
+        })
     }
 
     async fn get_server(&self, id: &str) -> anyhow::Result<Server> {
@@ -478,10 +529,9 @@ impl CloudBackend for HetznerBackend {
             network_out_bytes: None,
         })
     }
-}
 
-impl HetznerBackend {
-    async fn delete_ssh_key(&self, id: i64) -> anyhow::Result<()> {
+    async fn delete_ssh_key(&self, key_id: &str) -> anyhow::Result<()> {
+        let id: i64 = key_id.parse().context("Invalid SSH key ID")?;
         let response = self
             .request_builder(reqwest::Method::DELETE, &format!("/ssh_keys/{}", id))
             .send()

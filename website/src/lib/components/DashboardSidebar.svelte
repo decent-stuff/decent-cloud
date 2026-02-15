@@ -46,6 +46,12 @@
 		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' }
 	];
 
+	// Cloud section - self-provisioning
+	const cloudItems: NavItem[] = [
+		{ href: '/dashboard/cloud/accounts', icon: 'key', label: 'Cloud Accounts' },
+		{ href: '/dashboard/cloud/resources', icon: 'server', label: 'Cloud Resources' }
+	];
+
 	// Provider section - for users who provide services
 	const providerSetupItem: NavItem = {
 		href: '/dashboard/provider/support',
@@ -181,6 +187,22 @@
 				<div class="section-label">My Activity</div>
 			</div>
 			{#each activityItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="nav-item {isActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name={item.icon} size={20} />
+					<span class="text-sm">{item.label}</span>
+				</a>
+			{/each}
+
+			<!-- Cloud section -->
+			<div class="pt-5 pb-2 px-3">
+				<div class="section-label">Self-Hosting</div>
+			</div>
+			{#each cloudItems as item}
 				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 				<a
 					href={item.href}

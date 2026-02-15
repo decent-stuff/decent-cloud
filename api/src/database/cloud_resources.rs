@@ -28,6 +28,7 @@ pub struct CloudResource {
     pub public_ip: Option<String>,
     pub ssh_port: i32,
     pub ssh_username: String,
+    pub external_ssh_key_id: Option<String>,
     pub gateway_slug: Option<String>,
     pub gateway_ssh_port: Option<i32>,
     pub gateway_port_range_start: Option<i32>,
@@ -78,6 +79,7 @@ struct CloudResourceRow {
     public_ip: Option<String>,
     ssh_port: i32,
     ssh_username: String,
+    external_ssh_key_id: Option<String>,
     gateway_slug: Option<String>,
     gateway_ssh_port: Option<i32>,
     gateway_port_range_start: Option<i32>,
@@ -112,6 +114,7 @@ impl From<CloudResourceRow> for CloudResource {
             public_ip: row.public_ip,
             ssh_port: row.ssh_port,
             ssh_username: row.ssh_username,
+            external_ssh_key_id: row.external_ssh_key_id,
             gateway_slug: row.gateway_slug,
             gateway_ssh_port: row.gateway_ssh_port,
             gateway_port_range_start: row.gateway_port_range_start,
@@ -142,7 +145,7 @@ impl Database {
             SELECT 
                 cr.id, cr.cloud_account_id, cr.external_id, cr.name, 
                 cr.server_type, cr.location, cr.image, cr.ssh_pubkey, cr.status,
-                cr.public_ip, cr.ssh_port, cr.ssh_username,
+                cr.public_ip, cr.ssh_port, cr.ssh_username, cr.external_ssh_key_id,
                 cr.gateway_slug, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
                 cr.offering_id, cr.listing_mode,
                 cr.created_at, cr.updated_at, cr.terminated_at,
@@ -166,7 +169,7 @@ impl Database {
             SELECT 
                 cr.id, cr.cloud_account_id, cr.external_id, cr.name, 
                 cr.server_type, cr.location, cr.image, cr.ssh_pubkey, cr.status,
-                cr.public_ip, cr.ssh_port, cr.ssh_username,
+                cr.public_ip, cr.ssh_port, cr.ssh_username, cr.external_ssh_key_id,
                 cr.gateway_slug, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
                 cr.offering_id, cr.listing_mode,
                 cr.created_at, cr.updated_at, cr.terminated_at,
@@ -204,7 +207,7 @@ impl Database {
             RETURNING 
                 id, cloud_account_id, external_id, name, 
                 server_type, location, image, ssh_pubkey, status,
-                public_ip, ssh_port, ssh_username,
+                public_ip, ssh_port, ssh_username, external_ssh_key_id,
                 gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end,
                 offering_id, listing_mode,
                 created_at, updated_at, terminated_at
@@ -227,6 +230,7 @@ impl Database {
         &self,
         id: &Uuid,
         public_ip: &str,
+        external_ssh_key_id: &str,
         gateway_slug: &str,
         gateway_ssh_port: i32,
         gateway_port_range_start: i32,
@@ -237,16 +241,18 @@ impl Database {
             UPDATE cloud_resources
             SET status = 'running',
                 public_ip = $2,
-                gateway_slug = $3,
-                gateway_ssh_port = $4,
-                gateway_port_range_start = $5,
-                gateway_port_range_end = $6,
+                external_ssh_key_id = $3,
+                gateway_slug = $4,
+                gateway_ssh_port = $5,
+                gateway_port_range_start = $6,
+                gateway_port_range_end = $7,
                 updated_at = NOW()
             WHERE id = $1
             "#
         )
         .bind(id)
         .bind(public_ip)
+        .bind(external_ssh_key_id)
         .bind(gateway_slug)
         .bind(gateway_ssh_port)
         .bind(gateway_port_range_start)
@@ -368,11 +374,11 @@ impl Database {
     }
 
     #[allow(clippy::type_complexity)]
-    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<(Uuid, String, String, String)>> {
-        let rows = sqlx::query_as::<_, (Uuid, String, String, String)>(
+    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<(Uuid, String, Option<String>, String, String)>> {
+        let rows = sqlx::query_as::<_, (Uuid, String, Option<String>, String, String)>(
             r#"
             SELECT 
-                cr.id, cr.external_id,
+                cr.id, cr.external_id, cr.external_ssh_key_id,
                 ca.backend_type, ca.credentials_encrypted
             FROM cloud_resources cr
             JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
@@ -419,8 +425,6 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_status_constants() {
         assert_eq!("running", "running");

@@ -7,17 +7,17 @@
 use anyhow::Context;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::cloud::types::{
     BackendCatalog, CreateServerRequest, Image, Location, Server, ServerMetrics, ServerStatus,
     ServerType,
 };
-use super::CloudBackend;
+use super::{CloudBackend, ProvisionResult};
 
 const REQUEST_TIMEOUT_SECS: u64 = 30;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct ProxmoxConfig {
     pub url: String,
     pub token: String,
@@ -47,7 +47,7 @@ impl ProxmoxApiBackend {
 
     fn request_builder(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         self.client
-            .request(method, &self.api_url(path))
+            .request(method, self.api_url(path))
             .header("Authorization", format!("PVEAPIToken={}", self.config.token))
             .header("Content-Type", "application/json")
     }
@@ -82,6 +82,7 @@ struct ProxmoxResponse<T> {
 #[derive(Debug, Deserialize)]
 struct ProxmoxNode {
     node: String,
+    #[allow(dead_code)]
     status: String,
 }
 
@@ -97,28 +98,8 @@ struct ProxmoxVm {
     #[serde(default)]
     maxmem: i64,
     #[serde(default)]
+    #[allow(dead_code)]
     maxdisk: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct ProxmoxVmConfig {
-    #[serde(default)]
-    cores: Option<i64>,
-    #[serde(default)]
-    memory: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-struct CreateVmRequest {
-    vmid: i64,
-    name: String,
-    cores: i64,
-    memory: i64,
-    #[serde(rename = "net0")]
-    net: String,
-    #[serde(rename = "scsi0")]
-    disk: String,
-    ostype: String,
 }
 
 impl ProxmoxApiBackend {
@@ -263,7 +244,7 @@ impl CloudBackend for ProxmoxApiBackend {
         Ok(images)
     }
 
-    async fn create_server(&self, _req: CreateServerRequest) -> anyhow::Result<Server> {
+    async fn create_server(&self, _req: CreateServerRequest) -> anyhow::Result<ProvisionResult> {
         anyhow::bail!("Proxmox VM creation requires clone from template - use dc-agent for full Proxmox support")
     }
 
@@ -396,6 +377,10 @@ impl CloudBackend for ProxmoxApiBackend {
             network_in_bytes: None,
             network_out_bytes: None,
         })
+    }
+
+    async fn delete_ssh_key(&self, _key_id: &str) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 

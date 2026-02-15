@@ -14,6 +14,11 @@ pub struct HealthResponse {
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct EmptyResponse {}
+
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 #[oai(skip_serializing_if_is_none)]
 pub struct ApiResponse<T: poem_openapi::types::ParseFromJSON + poem_openapi::types::ToJSON> {
     pub success: bool,

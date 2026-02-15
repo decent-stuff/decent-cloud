@@ -41,22 +41,26 @@ use poem_openapi::OpenApi;
 /// Combines all API modules into a single OpenAPI specification
 pub fn create_combined_api() -> impl OpenApi {
     (
-        SystemApi,
-        AccountsApi,
-        AdminApi,
-        AgentsApi,
-        ChatwootApi,
-        CloudApi,
-        ProvidersApi,
-        ValidatorsApi,
-        OfferingsApi,
-        ContractsApi,
-        InvoicesApi,
-        UsersApi,
-        TransfersApi,
-        StatsApi,
-        ResellersApi,
-        SubscriptionsApi,
-        VatApi,
+        (
+            SystemApi,
+            AccountsApi,
+            AdminApi,
+            AgentsApi,
+            ChatwootApi,
+            CloudApi,
+            ProvidersApi,
+            ValidatorsApi,
+        ),
+        (
+            OfferingsApi,
+            ContractsApi,
+            InvoicesApi,
+            UsersApi,
+            TransfersApi,
+            StatsApi,
+            ResellersApi,
+            SubscriptionsApi,
+            VatApi,
+        ),
     )
 }

@@ -2,11 +2,19 @@
 
 use async_trait::async_trait;
 
-use crate::cloud::types::{BackendCatalog, CreateServerRequest, Server, ServerMetrics};
+use crate::cloud::types::{BackendCatalog, Server, ServerMetrics};
 
 pub mod hetzner;
 pub mod proxmox_api;
 pub mod types;
+
+pub use types::CreateServerRequest;
+
+#[derive(Debug, Clone)]
+pub struct ProvisionResult {
+    pub server: Server,
+    pub ssh_key_id: Option<String>,
+}
 
 #[async_trait]
 pub trait CloudBackend: Send + Sync {
@@ -22,7 +30,7 @@ pub trait CloudBackend: Send + Sync {
 
     async fn list_images(&self) -> anyhow::Result<Vec<types::Image>>;
 
-    async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<Server>;
+    async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<ProvisionResult>;
 
     async fn get_server(&self, id: &str) -> anyhow::Result<Server>;
 
@@ -31,6 +39,8 @@ pub trait CloudBackend: Send + Sync {
     async fn stop_server(&self, id: &str) -> anyhow::Result<()>;
 
     async fn delete_server(&self, id: &str) -> anyhow::Result<()>;
+
+    async fn delete_ssh_key(&self, key_id: &str) -> anyhow::Result<()>;
 
     async fn get_server_metrics(&self, id: &str) -> anyhow::Result<ServerMetrics>;
 }

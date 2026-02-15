@@ -30,17 +30,6 @@ impl CloudProvisioningService {
     }
 
     pub async fn run(self) {
-        let encryption_key = match ServerEncryptionKey::from_env() {
-            Ok(key) => key,
-            Err(e) => {
-                tracing::warn!(
-                    "CREDENTIAL_ENCRYPTION_KEY not set - cloud provisioning service will NOT run. Set CREDENTIAL_ENCRYPTION_KEY to enable. Error: {}",
-                    e
-                );
-                return;
-            }
-        };
-
         let enabled = std::env::var("CLOUD_PROVISIONING_ENABLED")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -52,6 +41,21 @@ impl CloudProvisioningService {
             );
             return;
         }
+
+        let encryption_key = match ServerEncryptionKey::from_env() {
+            Ok(key) => key,
+            Err(e) => {
+                tracing::error!(
+                    "CLOUD_PROVISIONING_ENABLED=true but CREDENTIAL_ENCRYPTION_KEY is invalid: {}. The server cannot start without a valid encryption key.",
+                    e
+                );
+                panic!(
+                    "CLOUD_PROVISIONING_ENABLED=true but CREDENTIAL_ENCRYPTION_KEY is invalid: {}. \
+                     Set CREDENTIAL_ENCRYPTION_KEY to a valid 64-character hex string (32 bytes) to enable cloud provisioning.",
+                    e
+                );
+            }
+        };
 
         tracing::info!(
             "Starting cloud provisioning service (provision interval: {}s, termination interval: {}s)",
@@ -179,9 +183,10 @@ async fn provision_one(
         ssh_pubkey: ssh_pubkey.to_string(),
     };
 
-    let server = backend.create_server(request).await?;
+    let result = backend.create_server(request).await?;
 
-    let public_ip = server.public_ip.ok_or_else(|| anyhow::anyhow!("Server has no public IP"))?;
+    let public_ip = result.server.public_ip.ok_or_else(|| anyhow::anyhow!("Server has no public IP"))?;
+    let ssh_key_id = result.ssh_key_id.unwrap_or_default();
 
     let gateway_slug = generate_gateway_slug();
     let gateway_ssh_port = 20000;
@@ -191,6 +196,7 @@ async fn provision_one(
     database.update_cloud_resource_provisioned(
         &resource_id,
         &public_ip,
+        &ssh_key_id,
         &gateway_slug,
         gateway_ssh_port,
         gateway_port_range_start,
@@ -198,10 +204,11 @@ async fn provision_one(
     ).await?;
 
     tracing::info!(
-        "Successfully provisioned resource {} with IP {} (gateway: {})",
+        "Successfully provisioned resource {} with IP {} (gateway: {}, ssh_key_id: {})",
         resource_id,
         public_ip,
-        gateway_slug
+        gateway_slug,
+        ssh_key_id
     );
 
     Ok(())
@@ -220,7 +227,7 @@ async fn terminate_pending_resources(
 
     tracing::info!("Found {} pending cloud resources to terminate", pending.len());
 
-    for (resource_id, external_id, backend_type, credentials_encrypted) in pending {
+    for (resource_id, external_id, ssh_key_id, backend_type, credentials_encrypted) in pending {
         if !database.acquire_cloud_resource_lock(&resource_id, lock_holder).await? {
             tracing::debug!("Could not acquire lock for resource {}, skipping", resource_id);
             continue;
@@ -230,6 +237,7 @@ async fn terminate_pending_resources(
             database,
             resource_id,
             &external_id,
+            ssh_key_id.as_deref(),
             &backend_type,
             &credentials_encrypted,
             encryption_key,
@@ -251,6 +259,7 @@ async fn terminate_one(
     database: &Database,
     resource_id: Uuid,
     external_id: &str,
+    ssh_key_id: Option<&str>,
     backend_type_str: &str,
     credentials_encrypted: &str,
     encryption_key: &ServerEncryptionKey,
@@ -277,6 +286,16 @@ async fn terminate_one(
                 tracing::info!("Server {} already deleted, marking resource {} as terminated", external_id, resource_id);
             } else {
                 return Err(e);
+            }
+        }
+    }
+
+    if let Some(key_id) = ssh_key_id {
+        if !key_id.is_empty() {
+            if let Err(e) = backend.delete_ssh_key(key_id).await {
+                tracing::warn!("Failed to delete SSH key {} for resource {}: {}", key_id, resource_id, e);
+            } else {
+                tracing::info!("Successfully deleted SSH key {} for resource {}", key_id, resource_id);
             }
         }
     }

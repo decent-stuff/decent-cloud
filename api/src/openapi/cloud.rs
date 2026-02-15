@@ -2,7 +2,7 @@
 //!
 //! Handles self-provisioning of cloud resources (Hetzner, Proxmox).
 
-use super::common::{ApiResponse, ApiTags};
+use super::common::{ApiResponse, ApiTags, EmptyResponse};
 use crate::auth::ApiAuthenticatedUser;
 use crate::cloud::types::BackendCatalog;
 use crate::cloud::{hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, CloudBackend};
@@ -10,8 +10,7 @@ use crate::crypto::{
     decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey,
 };
 use crate::database::{
-    CloudAccount, CloudAccountWithCatalog, CloudResourceWithDetails,
-    CreateCloudAccountInput, CreateCloudResourceInput, Database,
+    CloudAccount, CloudResourceWithDetails, Database,
 };
 use anyhow::Context;
 use poem::web::Data;
@@ -311,7 +310,7 @@ impl CloudApi {
         db: Data<&Arc<Database>>,
         user: ApiAuthenticatedUser,
         id: Path<String>,
-    ) -> Json<ApiResponse<()>> {
+    ) -> Json<ApiResponse<EmptyResponse>> {
         let account_id = match db.get_account_id_by_public_key(&user.pubkey).await {
             Ok(Some(id)) => id,
             Ok(None) => {
@@ -344,7 +343,7 @@ impl CloudApi {
         match db.delete_cloud_account(&uuid, &account_id).await {
             Ok(true) => Json(ApiResponse {
                 success: true,
-                data: Some(()),
+                data: Some(EmptyResponse {}),
                 error: None,
             }),
             Ok(false) => Json(ApiResponse {
@@ -686,7 +685,7 @@ impl CloudApi {
         db: Data<&Arc<Database>>,
         user: ApiAuthenticatedUser,
         id: Path<String>,
-    ) -> Json<ApiResponse<()>> {
+    ) -> Json<ApiResponse<EmptyResponse>> {
         let account_id = match db.get_account_id_by_public_key(&user.pubkey).await {
             Ok(Some(id)) => id,
             Ok(None) => {
@@ -719,7 +718,7 @@ impl CloudApi {
         match db.delete_cloud_resource(&uuid, &account_id).await {
             Ok(true) => Json(ApiResponse {
                 success: true,
-                data: Some(()),
+                data: Some(EmptyResponse {}),
                 error: None,
             }),
             Ok(false) => Json(ApiResponse {

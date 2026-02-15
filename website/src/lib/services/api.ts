@@ -2300,3 +2300,262 @@ export async function generateOfferings(
 
 	return payload.data;
 }
+
+// ==================== Cloud Self-Provisioning API ====================
+
+export interface CloudAccount {
+	id: string;
+	accountId: string;
+	backendType: string;
+	name: string;
+	config?: string;
+	isValid: boolean;
+	lastValidatedAt?: string;
+	validationError?: string;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface CloudAccountListResponse {
+	accounts: CloudAccount[];
+}
+
+export interface AddCloudAccountRequest {
+	backendType: string;
+	name: string;
+	credentials: string;
+	config?: string;
+}
+
+export interface BackendCatalog {
+	serverTypes: ServerType[];
+	locations: Location[];
+	images: Image[];
+}
+
+export interface ServerType {
+	id: string;
+	name: string;
+	cores: number;
+	memoryGb: number;
+	diskGb: number;
+	priceMonthly?: number;
+	priceHourly?: number;
+}
+
+export interface Location {
+	id: string;
+	name: string;
+	city: string;
+	country: string;
+}
+
+export interface Image {
+	id: string;
+	name: string;
+	osType: string;
+	osVersion?: string;
+}
+
+export interface CloudResource {
+	id: string;
+	cloudAccountId: string;
+	externalId: string;
+	name: string;
+	serverType: string;
+	location: string;
+	image: string;
+	sshPubkey: string;
+	status: string;
+	publicIp?: string;
+	sshPort: number;
+	sshUsername: string;
+	externalSshKeyId?: string;
+	gatewaySlug?: string;
+	gatewaySshPort?: number;
+	gatewayPortRangeStart?: number;
+	gatewayPortRangeEnd?: number;
+	offeringId?: number;
+	listingMode: string;
+	createdAt: string;
+	updatedAt: string;
+	terminatedAt?: string;
+}
+
+export interface CloudResourceWithDetails {
+	id: string;
+	cloudAccountId: string;
+	externalId: string;
+	name: string;
+	serverType: string;
+	location: string;
+	image: string;
+	sshPubkey: string;
+	status: string;
+	publicIp?: string;
+	sshPort: number;
+	sshUsername: string;
+	externalSshKeyId?: string;
+	gatewaySlug?: string;
+	gatewaySshPort?: number;
+	gatewayPortRangeStart?: number;
+	gatewayPortRangeEnd?: number;
+	offeringId?: number;
+	listingMode: string;
+	createdAt: string;
+	updatedAt: string;
+	terminatedAt?: string;
+	cloudAccountName: string;
+	cloudAccountBackend: string;
+}
+
+export interface CloudResourceListResponse {
+	resources: CloudResourceWithDetails[];
+}
+
+export interface ProvisionResourceRequest {
+	cloudAccountId: string;
+	name: string;
+	serverType: string;
+	location: string;
+	image: string;
+	sshPubkey: string;
+}
+
+export async function listCloudAccounts(
+	headers: SignedRequestHeaders
+): Promise<CloudAccount[]> {
+	const url = `${API_BASE_URL}/api/v1/cloud-accounts`;
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch cloud accounts: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CloudAccountListResponse>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch cloud accounts');
+	}
+
+	return payload.data?.accounts ?? [];
+}
+
+export async function addCloudAccount(
+	request: AddCloudAccountRequest,
+	headers: SignedRequestHeaders
+): Promise<CloudAccount> {
+	const url = `${API_BASE_URL}/api/v1/cloud-accounts`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to add cloud account: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CloudAccount>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to add cloud account');
+	}
+
+	return payload.data;
+}
+
+export async function deleteCloudAccount(
+	accountId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/cloud-accounts/${accountId}`;
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to delete cloud account: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+}
+
+export async function getCloudAccountCatalog(
+	accountId: string,
+	headers: SignedRequestHeaders
+): Promise<BackendCatalog> {
+	const url = `${API_BASE_URL}/api/v1/cloud-accounts/${accountId}/catalog`;
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch catalog: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BackendCatalog>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch catalog');
+	}
+
+	return payload.data;
+}
+
+export async function listCloudResources(
+	headers: SignedRequestHeaders
+): Promise<CloudResourceWithDetails[]> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources`;
+	const response = await fetch(url, { headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch cloud resources: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CloudResourceListResponse>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch cloud resources');
+	}
+
+	return payload.data?.resources ?? [];
+}
+
+export async function provisionCloudResource(
+	request: ProvisionResourceRequest,
+	headers: SignedRequestHeaders
+): Promise<CloudResource> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to provision resource: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CloudResource>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to provision resource');
+	}
+
+	return payload.data;
+}
+
+export async function deleteCloudResource(
+	resourceId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources/${resourceId}`;
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to delete cloud resource: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+}

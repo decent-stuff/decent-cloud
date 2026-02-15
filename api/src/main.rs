@@ -2,6 +2,7 @@ mod acme_dns;
 mod auth;
 mod chatwoot;
 mod cleanup_service;
+mod cloud;
 mod cloud_provisioning_service;
 mod cloudflare_dns;
 mod crypto;
