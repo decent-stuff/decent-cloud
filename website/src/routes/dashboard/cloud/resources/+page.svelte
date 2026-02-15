@@ -112,22 +112,21 @@
 		provisioning = true;
 		provisionError = null;
 		try {
+			const body = {
+				cloudAccountId: provisionAccountId,
+				name: provisionName.trim(),
+				serverType: provisionServerType,
+				location: provisionLocation,
+				image: provisionImage,
+				sshPubkey: provisionSshPubkey.trim()
+			};
 			const { headers } = await signRequest(
 				currentIdentity.identity,
 				"POST",
-				"/api/v1/cloud-resources"
+				"/api/v1/cloud-resources",
+				body
 			);
-			await provisionCloudResource(
-				{
-					cloudAccountId: provisionAccountId,
-					name: provisionName.trim(),
-					serverType: provisionServerType,
-					location: provisionLocation,
-					image: provisionImage,
-					sshPubkey: provisionSshPubkey.trim()
-				},
-				headers
-			);
+			await provisionCloudResource(body, headers);
 			showProvisionModal = false;
 			provisionName = "";
 			provisionSshPubkey = "";

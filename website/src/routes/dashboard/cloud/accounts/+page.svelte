@@ -55,19 +55,18 @@
 		adding = true;
 		addError = null;
 		try {
+			const body = {
+				backendType: addBackendType,
+				name: addName.trim(),
+				credentials: addCredentials.trim()
+			};
 			const { headers } = await signRequest(
 				currentIdentity.identity,
 				"POST",
-				"/api/v1/cloud-accounts"
+				"/api/v1/cloud-accounts",
+				body
 			);
-			await addCloudAccount(
-				{
-					backendType: addBackendType,
-					name: addName.trim(),
-					credentials: addCredentials.trim()
-				},
-				headers
-			);
+			await addCloudAccount(body, headers);
 			showAddModal = false;
 			addName = "";
 			addCredentials = "";

@@ -125,6 +125,27 @@ describe('signRequest', () => {
 		expect(result1.headers['X-Signature']).not.toBe(result2.headers['X-Signature']);
 	});
 
+	it('produces different signatures with and without body for same method/path', async () => {
+		// Regression test: signing a POST without body when body is sent causes server rejection.
+		// The signature MUST include the body bytes.
+		const seed = new Uint8Array(32).fill(5);
+		const identity = Ed25519KeyIdentity.fromSecretKey(seed);
+
+		const withBody = await signRequest(identity, 'POST', '/api/v1/cloud-accounts', {
+			backendType: 'hetzner',
+			name: 'test',
+			credentials: 'token123'
+		});
+
+		const withoutBody = await signRequest(identity, 'POST', '/api/v1/cloud-accounts');
+
+		// Body must be included in signature — omitting it produces a completely different sig
+		expect(withBody.body).not.toBe('');
+		expect(withoutBody.body).toBe('');
+		// The signatures must differ because the signed messages differ
+		expect(withBody.headers['X-Signature']).not.toBe(withoutBody.headers['X-Signature']);
+	});
+
 	it('encodes public key correctly', async () => {
 		const seed = new Uint8Array(32).fill(3);
 		const identity = Ed25519KeyIdentity.fromSecretKey(seed);
