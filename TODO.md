@@ -1,5 +1,9 @@
 # TODO
 
+- docs/specs/2026-14-decent-recipes.md
+- docs/specs/2026-14-hetzner-provisioner.md
+- docs/specs/2026-14-self-provisioning-platform.md
+
 ---
 
 ## Provider Provisioning Agent
