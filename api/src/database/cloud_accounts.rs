@@ -153,38 +153,6 @@ impl Database {
         })
     }
 
-    pub async fn update_cloud_account_validation(
-        &self,
-        id: &Uuid,
-        account_id: &[u8],
-        is_valid: bool,
-        validation_error: Option<&str>,
-    ) -> Result<()> {
-        let rows_affected = sqlx::query(
-            r#"
-            UPDATE cloud_accounts
-            SET is_valid = $3, 
-                validation_error = $4,
-                last_validated_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $1 AND account_id = $2
-            "#
-        )
-        .bind(id)
-        .bind(account_id)
-        .bind(is_valid)
-        .bind(validation_error)
-        .execute(&self.pool)
-        .await?
-        .rows_affected();
-
-        if rows_affected == 0 {
-            return Err(anyhow!("Cloud account not found"));
-        }
-
-        Ok(())
-    }
-
     pub async fn delete_cloud_account(&self, id: &Uuid, account_id: &[u8]) -> Result<bool> {
         // Block deletion if any non-terminal resources exist (prevents orphaned VMs on Hetzner)
         let active_count: (i64,) = sqlx::query_as(

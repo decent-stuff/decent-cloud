@@ -94,8 +94,10 @@ struct ProxmoxVm {
     #[serde(default)]
     ip: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     maxcpu: f64,
     #[serde(default)]
+    #[allow(dead_code)]
     maxmem: i64,
     #[serde(default)]
     #[allow(dead_code)]

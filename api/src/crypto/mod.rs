@@ -25,6 +25,5 @@ pub use credential_encryption::{
 
 // Re-export public functions for server-side credential encryption
 pub use server_credential_encryption::{
-    decrypt_server_credential, encrypt_server_credential, EncryptedServerCredential,
-    ServerEncryptionKey, ENV_CREDENTIAL_ENCRYPTION_KEY, SERVER_CREDENTIAL_ENCRYPTION_VERSION,
+    decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey,
 };

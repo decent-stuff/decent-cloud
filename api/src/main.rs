@@ -1329,6 +1329,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     metadata_cache_task.abort();
     cleanup_task.abort();
     payment_release_task.abort();
+    cloud_provisioning_task.abort();
     if let Some(task) = email_processor_task {
         task.abort();
     }

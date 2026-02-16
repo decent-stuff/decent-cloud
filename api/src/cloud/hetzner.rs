@@ -290,24 +290,20 @@ impl HetznerBackend {
         let timeout = std::time::Duration::from_secs(timeout_secs);
 
         while start.elapsed() < timeout {
-            match TcpStream::connect(&addr).await {
-                Ok(mut stream) => {
-                    let mut banner = [0u8; 256];
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(5),
-                        stream.read(&mut banner)
-                    ).await {
-                        Ok(Ok(n)) if n > 0 => {
-                            let banner_str = String::from_utf8_lossy(&banner[..n]);
-                            if banner_str.contains("SSH") {
-                                tracing::info!("SSH reachable at {} after {:?}", addr, start.elapsed());
-                                return Ok(true);
-                            }
+            if let Ok(mut stream) = TcpStream::connect(&addr).await {
+                let mut banner = [0u8; 256];
+                if let Ok(Ok(n)) = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    stream.read(&mut banner)
+                ).await {
+                    if n > 0 {
+                        let banner_str = String::from_utf8_lossy(&banner[..n]);
+                        if banner_str.contains("SSH") {
+                            tracing::info!("SSH reachable at {} after {:?}", addr, start.elapsed());
+                            return Ok(true);
                         }
-                        _ => {}
                     }
                 }
-                Err(_) => {}
             }
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }

@@ -41,6 +41,41 @@
 
 	let deleteResourceId = $state<string | null>(null);
 	let deleting = $state(false);
+	let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+	const POLL_INTERVAL_MS = 10_000;
+	const TRANSIENT_STATUSES = ['provisioning', 'deleting'];
+
+	function hasTransientResources(): boolean {
+		return resources.some((r) => TRANSIENT_STATUSES.includes(r.status.toLowerCase()));
+	}
+
+	function startPolling() {
+		stopPolling();
+		if (hasTransientResources()) {
+			pollInterval = setInterval(async () => {
+				if (!currentIdentity) return;
+				try {
+					const { headers } = await signRequest(
+						currentIdentity.identity,
+						"GET",
+						"/api/v1/cloud-resources"
+					);
+					resources = await listCloudResources(headers);
+					if (!hasTransientResources()) stopPolling();
+				} catch {
+					// Poll failures are transient; next poll will retry
+				}
+			}, POLL_INTERVAL_MS);
+		}
+	}
+
+	function stopPolling() {
+		if (pollInterval) {
+			clearInterval(pollInterval);
+			pollInterval = null;
+		}
+	}
 
 	async function loadData() {
 		if (!currentIdentity) return;
@@ -65,6 +100,7 @@
 			error = e instanceof Error ? e.message : "Failed to load data";
 		} finally {
 			loading = false;
+			startPolling();
 		}
 	}
 
@@ -131,6 +167,7 @@
 			provisionName = "";
 			provisionSshPubkey = "";
 			await loadData();
+			startPolling();
 		} catch (e) {
 			provisionError = e instanceof Error ? e.message : "Failed to provision";
 		} finally {
@@ -150,6 +187,7 @@
 			await deleteCloudResource(deleteResourceId, headers);
 			deleteResourceId = null;
 			await loadData();
+			startPolling();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to delete resource";
 		} finally {
@@ -204,6 +242,7 @@
 	});
 
 	onDestroy(() => {
+		stopPolling();
 		unsubscribeAuth?.();
 	});
 </script>

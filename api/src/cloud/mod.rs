@@ -17,6 +17,7 @@ pub struct ProvisionResult {
 }
 
 #[async_trait]
+#[allow(dead_code)]
 pub trait CloudBackend: Send + Sync {
     fn backend_type(&self) -> types::BackendType;
 

@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn test_too_short_blob() {
         let key = test_key();
-        let short_blob = BASE64.encode(&[1u8; 5]);
+        let short_blob = BASE64.encode([1u8; 5]);
         let result = decrypt_server_credential(&short_blob, &key);
         assert!(result.is_err());
     }

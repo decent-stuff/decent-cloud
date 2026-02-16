@@ -31,8 +31,8 @@ pub mod visibility_allowlist;
 // Re-export main types
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
 pub use agent_pools::{AgentPool, AgentPoolWithStats, SetupToken};
-pub use cloud_accounts::{CloudAccount, CloudAccountWithCatalog, CreateCloudAccountInput};
-pub use cloud_resources::{CloudResource, CloudResourceWithDetails, CreateCloudResourceInput};
+pub use cloud_accounts::CloudAccount;
+pub use cloud_resources::CloudResourceWithDetails;
 pub use notification_config::UserNotificationConfig;
 pub use subscriptions::{AccountSubscription, SubscriptionEventInput, SubscriptionPlan};
 pub use types::{Database, LedgerEntryData};

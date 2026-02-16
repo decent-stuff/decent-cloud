@@ -198,6 +198,7 @@ impl Database {
         Ok(row.map(CloudResourceWithDetails::from))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_cloud_resource(
         &self,
         cloud_account_id: &Uuid,
