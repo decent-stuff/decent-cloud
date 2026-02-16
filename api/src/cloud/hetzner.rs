@@ -378,6 +378,32 @@ impl HetznerBackend {
         tracing::warn!("SSH not reachable at {} after {}s", addr, timeout_secs);
         Ok(false)
     }
+
+    /// Poll Hetzner until server reaches the expected status, or timeout.
+    async fn wait_for_server_status(
+        &self,
+        id: &str,
+        expected: ServerStatus,
+        timeout_secs: u64,
+    ) -> anyhow::Result<()> {
+        let start = std::time::Instant::now();
+        loop {
+            let server = self.get_server(id).await?;
+            if server.status == expected {
+                return Ok(());
+            }
+            if start.elapsed().as_secs() >= timeout_secs {
+                anyhow::bail!(
+                    "Server {} did not reach '{}' status within {}s (current: '{}')",
+                    id,
+                    expected,
+                    timeout_secs,
+                    server.status
+                );
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    }
 }
 
 #[async_trait]
@@ -566,7 +592,9 @@ impl CloudBackend for HetznerBackend {
             return Err(self.handle_error(response).await);
         }
 
-        Ok(())
+        // Poll until server is running (Hetzner start is async)
+        self.wait_for_server_status(id, ServerStatus::Running, 120)
+            .await
     }
 
     async fn stop_server(&self, id: &str) -> anyhow::Result<()> {
@@ -582,7 +610,9 @@ impl CloudBackend for HetznerBackend {
             return Err(self.handle_error(response).await);
         }
 
-        Ok(())
+        // Poll until server is off (Hetzner shutdown is async ACPI signal)
+        self.wait_for_server_status(id, ServerStatus::Stopped, 120)
+            .await
     }
 
     async fn delete_server(&self, id: &str) -> anyhow::Result<()> {
