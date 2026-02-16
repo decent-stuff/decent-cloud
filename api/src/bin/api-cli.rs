@@ -618,6 +618,33 @@ enum CloudAction {
         #[arg(long)]
         id: String,
     },
+    /// Start a stopped cloud resource (VM)
+    Start {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud resource ID (UUID)
+        #[arg(long)]
+        id: String,
+    },
+    /// Stop a running cloud resource (VM)
+    Stop {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud resource ID (UUID)
+        #[arg(long)]
+        id: String,
+    },
+    /// Re-validate cloud account credentials
+    ValidateAccount {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud account ID (UUID)
+        #[arg(long)]
+        id: String,
+    },
 }
 
 // =============================================================================
@@ -2887,6 +2914,45 @@ async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
             let path = format!("/cloud-resources/{}", resource_id);
             let _: serde_json::Value = client.delete_api(&path).await?;
             println!("Cloud resource {} deleted.", resource_id);
+        }
+        CloudAction::Start {
+            identity,
+            id: resource_id,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-resources/{}/start", resource_id);
+            let _: serde_json::Value = client.post_api(&path, &()).await?;
+            println!("Cloud resource {} started.", resource_id);
+        }
+        CloudAction::Stop {
+            identity,
+            id: resource_id,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-resources/{}/stop", resource_id);
+            let _: serde_json::Value = client.post_api(&path, &()).await?;
+            println!("Cloud resource {} stopped.", resource_id);
+        }
+        CloudAction::ValidateAccount {
+            identity,
+            id: account_id,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-accounts/{}/validate", account_id);
+            let account: CloudAccountResponse = client.post_api(&path, &()).await?;
+            println!("Cloud account validated:");
+            println!("  ID: {}", account.id);
+            println!("  Name: {}", account.name);
+            println!("  Valid: {}", account.is_valid);
+            if let Some(err) = &account.validation_error {
+                println!("  Error: {}", err);
+            }
         }
     }
     Ok(())
