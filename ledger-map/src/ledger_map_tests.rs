@@ -27,8 +27,8 @@ mod tests {
         if std::env::var("RUST_LOG").is_err() {
             std::env::set_var("RUST_LOG", "info");
         }
-        // Ignore error if logger already initialized - this is safe in tests
-        let _ = env_logger::builder().is_test(true).try_init();
+        // OK to ignore: try_init() returns Err if already initialized by another test
+        env_logger::builder().is_test(true).try_init().ok();
     }
 
     #[cfg(target_arch = "wasm32")]
