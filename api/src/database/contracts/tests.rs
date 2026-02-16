@@ -3023,3 +3023,249 @@ async fn test_purge_terminal_contracts_none_to_purge() {
     let purged = db.purge_terminal_contracts(180).await.unwrap();
     assert_eq!(purged, 0);
 }
+
+// --- duration validation tests ---
+
+/// Helper to insert an offering with optional min/max contract hours
+async fn insert_offering_with_duration_limits(
+    db: &Database,
+    provider_pk: &[u8],
+    offering_id_str: &str,
+    min_hours: Option<i64>,
+    max_hours: Option<i64>,
+) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, min_contract_hours, max_contract_hours) VALUES ($1, $2, 'Test Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0, $3, $4) RETURNING id",
+    )
+    .bind(provider_pk)
+    .bind(offering_id_str)
+    .bind(min_hours)
+    .bind(max_hours)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap()
+}
+
+fn rental_params(offering_db_id: i64, duration_hours: Option<i64>) -> RentalRequestParams {
+    RentalRequestParams {
+        offering_db_id,
+        ssh_pubkey: Some("ssh-key".to_string()),
+        contact_method: Some("email:test@example.com".to_string()),
+        request_memo: None,
+        duration_hours,
+        payment_method: Some("icpay".to_string()),
+        buyer_address: None,
+    }
+}
+
+#[tokio::test]
+async fn test_create_rental_rejects_negative_duration() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let oid = insert_offering_with_duration_limits(&db, &provider_pk, "off-neg", None, None).await;
+    let result = db
+        .create_rental_request(&user_pk, rental_params(oid, Some(-5)))
+        .await;
+
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("at least 1"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_create_rental_rejects_zero_duration() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let oid = insert_offering_with_duration_limits(&db, &provider_pk, "off-zero", None, None).await;
+    let result = db
+        .create_rental_request(&user_pk, rental_params(oid, Some(0)))
+        .await;
+
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("at least 1"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_create_rental_rejects_below_min_contract_hours() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let oid =
+        insert_offering_with_duration_limits(&db, &provider_pk, "off-min", Some(24), None).await;
+    let result = db
+        .create_rental_request(&user_pk, rental_params(oid, Some(12)))
+        .await;
+
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("minimum 24 hours"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_create_rental_rejects_above_max_contract_hours() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let oid =
+        insert_offering_with_duration_limits(&db, &provider_pk, "off-max", None, Some(720)).await;
+    let result = db
+        .create_rental_request(&user_pk, rental_params(oid, Some(1440)))
+        .await;
+
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("maximum 720 hours"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_create_rental_accepts_valid_duration_within_limits() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    let oid = insert_offering_with_duration_limits(
+        &db,
+        &provider_pk,
+        "off-valid",
+        Some(24),
+        Some(2160),
+    )
+    .await;
+    let contract_id = db
+        .create_rental_request(&user_pk, rental_params(oid, Some(720)))
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.duration_hours, Some(720));
+}
+
+#[tokio::test]
+async fn test_create_rental_default_720_rejected_if_below_min() {
+    let db = setup_test_db().await;
+    let user_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+
+    // Offering requires minimum 2160 hours (3 months) - default 720 should fail
+    let oid =
+        insert_offering_with_duration_limits(&db, &provider_pk, "off-high-min", Some(2160), None)
+            .await;
+    let result = db
+        .create_rental_request(&user_pk, rental_params(oid, None))
+        .await;
+
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("minimum 2160 hours"), "got: {}", err);
+}
+
+// --- extend_contract duration validation tests ---
+
+/// Create an active contract for extension testing
+async fn create_active_contract(
+    db: &Database,
+    contract_id: &[u8],
+    requester: &[u8],
+    provider: &[u8],
+    offering_id_str: &str,
+    duration_hours: i64,
+) {
+    insert_contract_request(
+        db,
+        contract_id,
+        requester,
+        provider,
+        offering_id_str,
+        0,
+        "active",
+    )
+    .await;
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let end_ns = now_ns + (duration_hours * 3600 * 1_000_000_000);
+    sqlx::query(
+        "UPDATE contract_sign_requests SET end_timestamp_ns = $1, duration_hours = $2 WHERE contract_id = $3",
+    )
+    .bind(end_ns)
+    .bind(duration_hours)
+    .bind(contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_extend_contract_rejects_zero_hours() {
+    let db = setup_test_db().await;
+    let requester = vec![70u8; 32];
+    let provider = vec![71u8; 32];
+    let contract_id = vec![72u8; 32];
+
+    insert_offering_with_duration_limits(&db, &provider, "off-ext-zero", None, None).await;
+    create_active_contract(&db, &contract_id, &requester, &provider, "off-ext-zero", 720).await;
+
+    let result = db.extend_contract(&contract_id, &requester, 0, None).await;
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("at least 1"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_extend_contract_rejects_negative_hours() {
+    let db = setup_test_db().await;
+    let requester = vec![73u8; 32];
+    let provider = vec![74u8; 32];
+    let contract_id = vec![75u8; 32];
+
+    insert_offering_with_duration_limits(&db, &provider, "off-ext-neg", None, None).await;
+    create_active_contract(&db, &contract_id, &requester, &provider, "off-ext-neg", 720).await;
+
+    let result = db
+        .extend_contract(&contract_id, &requester, -10, None)
+        .await;
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("at least 1"), "got: {}", err);
+}
+
+#[tokio::test]
+async fn test_extend_contract_rejects_exceeding_max_hours() {
+    let db = setup_test_db().await;
+    let requester = vec![76u8; 32];
+    let provider = vec![77u8; 32];
+    let contract_id = vec![78u8; 32];
+
+    insert_offering_with_duration_limits(&db, &provider, "off-ext-max", None, Some(1000)).await;
+    create_active_contract(&db, &contract_id, &requester, &provider, "off-ext-max", 720).await;
+
+    // 720 + 500 = 1220 > 1000 max
+    let result = db
+        .extend_contract(&contract_id, &requester, 500, None)
+        .await;
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("exceed maximum 1000 hours"),
+        "got: {}",
+        err
+    );
+}
+
+#[tokio::test]
+async fn test_extend_contract_accepts_valid_extension() {
+    let db = setup_test_db().await;
+    let requester = vec![79u8; 32];
+    let provider = vec![80u8; 32];
+    let contract_id = vec![81u8; 32];
+
+    insert_offering_with_duration_limits(&db, &provider, "off-ext-ok", None, Some(2000)).await;
+    create_active_contract(&db, &contract_id, &requester, &provider, "off-ext-ok", 720).await;
+
+    // 720 + 200 = 920 < 2000 max
+    let payment = db
+        .extend_contract(&contract_id, &requester, 200, None)
+        .await
+        .unwrap();
+    assert!(payment > 0, "extension should have a payment amount");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.duration_hours, Some(920));
+}

@@ -469,6 +469,30 @@ impl Database {
 
         // Calculate duration and timestamps
         let duration_hours = params.duration_hours.unwrap_or(720); // Default: 30 days
+        if duration_hours < 1 {
+            return Err(anyhow::anyhow!(
+                "duration_hours must be at least 1 (got {})",
+                duration_hours
+            ));
+        }
+        if let Some(min_hours) = offering.min_contract_hours {
+            if duration_hours < min_hours {
+                return Err(anyhow::anyhow!(
+                    "Offering requires minimum {} hours (requested {})",
+                    min_hours,
+                    duration_hours
+                ));
+            }
+        }
+        if let Some(max_hours) = offering.max_contract_hours {
+            if duration_hours > max_hours {
+                return Err(anyhow::anyhow!(
+                    "Offering allows maximum {} hours (requested {})",
+                    max_hours,
+                    duration_hours
+                ));
+            }
+        }
         let start_timestamp_ns = created_at_ns;
         let end_timestamp_ns = start_timestamp_ns + (duration_hours * 3600 * 1_000_000_000);
 
@@ -1257,20 +1281,38 @@ impl Database {
             ));
         }
 
+        if extension_hours < 1 {
+            return Err(anyhow::anyhow!(
+                "extension_hours must be at least 1 (got {})",
+                extension_hours
+            ));
+        }
+
         // Get current end timestamp
         let previous_end_timestamp_ns = contract
             .end_timestamp_ns
             .ok_or_else(|| anyhow::anyhow!("Contract has no end timestamp"))?;
 
-        // Calculate new end timestamp
-        let new_end_timestamp_ns =
-            previous_end_timestamp_ns + (extension_hours * 3600 * 1_000_000_000);
-
-        // Get offering to calculate extension payment
+        // Get offering to calculate extension payment and check max duration
         let offering = self
             .get_offering_by_id(&contract.offering_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Offering not found"))?;
+
+        let new_duration_hours = contract.duration_hours.unwrap_or(0) + extension_hours;
+        if let Some(max_hours) = offering.max_contract_hours {
+            if new_duration_hours > max_hours {
+                return Err(anyhow::anyhow!(
+                    "Extension would exceed maximum {} hours (total would be {})",
+                    max_hours,
+                    new_duration_hours
+                ));
+            }
+        }
+
+        // Calculate new end timestamp
+        let new_end_timestamp_ns =
+            previous_end_timestamp_ns + (extension_hours * 3600 * 1_000_000_000);
 
         // Use integer arithmetic to avoid floating-point precision issues
         let monthly_price_e9s = (offering.monthly_price * 1_000_000_000.0) as i128;
@@ -1279,7 +1321,6 @@ impl Database {
         let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
 
         // Update contract end timestamp and duration
-        let new_duration_hours = contract.duration_hours.unwrap_or(0) + extension_hours;
         sqlx::query!(
             "UPDATE contract_sign_requests SET end_timestamp_ns = $1, duration_hours = $2 WHERE contract_id = $3",
             new_end_timestamp_ns,
@@ -1374,16 +1415,23 @@ impl Database {
         &self,
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offering = sqlx::query_as::<_, crate::database::offerings::Offering>(
             r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
-               setup_fee, visibility, product_type, virtualization_type, billing_interval, stock_status,
-               processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
+               setup_fee, visibility, product_type, virtualization_type, billing_interval,
+               billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
+               is_subscription, subscription_interval_days,
+               stock_status, processor_brand, processor_amount, processor_cores, processor_speed, processor_name,
                memory_error_correction, memory_type, memory_amount, hdd_amount, total_hdd_capacity,
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
-               control_panel, gpu_name, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems
-               FROM provider_offerings WHERE offering_id = $1"#
+               control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
+               NULL as trust_score, NULL as has_critical_flags, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               FROM provider_offerings WHERE offering_id = $2"#
         )
+        .bind(example_provider_pubkey)
         .bind(offering_id)
         .fetch_optional(&self.pool)
         .await?;
@@ -1553,16 +1601,15 @@ impl Database {
                 // Create refund via ICPay API
                 match client.create_refund(payment_id, Some(net_refund_e9s)).await {
                     Ok(refund_id) => {
-                        eprintln!(
+                        tracing::info!(
                             "ICPay refund created: {} for contract {} (amount: {} e9s)",
                             refund_id, &contract.contract_id, net_refund_e9s
                         );
                         Ok((Some(net_refund_e9s), Some(refund_id)))
                     }
                     Err(e) => {
-                        // Log error but don't fail cancellation
-                        eprintln!(
-                            "Failed to create ICPay refund for contract {}: {}",
+                        tracing::warn!(
+                            "Failed to create ICPay refund for contract {}: {:#}",
                             &contract.contract_id, e
                         );
                         Ok((Some(net_refund_e9s), None))
@@ -1646,7 +1693,7 @@ impl Database {
                                     .await
                                 {
                                     Ok(refund_id) => {
-                                        eprintln!(
+                                        tracing::info!(
                                             "Stripe refund created: {} for contract {} (amount: {} cents)",
                                             refund_id,
                                             hex::encode(contract_id),
@@ -1655,9 +1702,8 @@ impl Database {
                                         (Some(refund_e9s), Some(refund_id), None)
                                     }
                                     Err(e) => {
-                                        // Log error but don't fail cancellation
-                                        eprintln!(
-                                            "Failed to create Stripe refund for contract {}: {}",
+                                        tracing::warn!(
+                                            "Failed to create Stripe refund for contract {}: {:#}",
                                             hex::encode(contract_id),
                                             e
                                         );
