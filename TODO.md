@@ -5,7 +5,7 @@
 **Specs:**
 - [docs/specs/2026-02-14-decent-recipes.md](docs/specs/2026-02-14-decent-recipes.md)
 - [docs/specs/2026-02-14-hetzner-provisioner.md](docs/specs/2026-02-14-hetzner-provisioner.md)
-- [docs/specs/2026-02-14-self-provisioning-platform.md](docs/specs/2026-02-14-self-provisioning-platform.md)
+- [docs/specs/2026-02-14-self-provisioning-platform.md](docs/specs/2026-02-14-self-provisioning-platform.md) — Phases 1-3 complete. Phase 4 (marketplace listing) remaining.
 
 ---
 
@@ -14,6 +14,11 @@
 ### Known Limitations
 
 - **Multi-instance race** — If two API server instances share the same DB, both provisioning services race on the same resources. The 10-minute lock timeout prevents corruption but can cause delayed provisioning or double-attempt waste. *(Not a prod issue if only one instance runs. Only matters at scale.)*
+
+### Remaining (Self-Provisioning Platform Phase 4)
+
+- **Marketplace listing flow** — Convert self-provisioned resources to marketplace offerings (`POST /cloud-resources/:id/list-on-marketplace`). Requires: offering creation pre-filled from resource, linking offering_id on cloud_resources, listing_mode transitions. *(Single session: API endpoint + UI flow.)*
+- **Marketplace billing for listed resources** — Platform fee for marketplace-listed self-provisioned resources. *(Needs product decisions on fee structure.)*
 
 ### Longer-term
 

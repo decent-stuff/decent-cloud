@@ -63,6 +63,18 @@ fn get_encryption_key() -> anyhow::Result<ServerEncryptionKey> {
         .context("CREDENTIAL_ENCRYPTION_KEY not configured - cloud account management unavailable")
 }
 
+/// Resolve the authenticated user's account_id (pubkey bytes).
+async fn resolve_account_id(
+    db: &Database,
+    user: &ApiAuthenticatedUser,
+) -> Result<Vec<u8>, String> {
+    match db.get_account_id_by_public_key(&user.pubkey).await {
+        Ok(Some(id)) => Ok(id),
+        Ok(None) => Err("Account not found".to_string()),
+        Err(e) => Err(format!("Database error: {e}")),
+    }
+}
+
 async fn create_backend(
     backend_type: &str,
     credentials: &str,
@@ -718,6 +730,212 @@ impl CloudApi {
                 data: None,
                 error: Some(format!("Failed to delete cloud resource: {}", e)),
             }),
+        }
+    }
+
+    /// Start cloud resource
+    ///
+    /// Powers on a stopped cloud resource (VM).
+    #[oai(
+        path = "/cloud-resources/:id/start",
+        method = "post",
+        tag = "ApiTags::Cloud"
+    )]
+    async fn start_cloud_resource(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        let account_id = match resolve_account_id(&db, &user).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+        };
+
+        let uuid = match id.0.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+        };
+
+        let encryption_key = match get_encryption_key() {
+            Ok(key) => key,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        };
+
+        let ctx = match db.get_cloud_resource_action_context(&uuid, &account_id).await {
+            Ok(Some(ctx)) => ctx,
+            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+        };
+
+        if ctx.status != "stopped" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Cannot start resource in '{}' status (must be 'stopped')", ctx.status)),
+            });
+        }
+
+        let credentials = match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
+            Ok(c) => c,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+        };
+
+        let backend = match create_backend(&ctx.backend_type, &credentials).await {
+            Ok(b) => b,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+        };
+
+        if let Err(e) = backend.start_server(&ctx.external_id).await {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to start server: {e}")),
+            });
+        }
+
+        if let Err(e) = db.transition_cloud_resource_status(&uuid, &account_id, "stopped", "running").await {
+            tracing::error!(resource_id = %uuid, "Server started but DB update failed: {e:#}");
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Server started but status update failed: {e}")) });
+        }
+
+        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
+    }
+
+    /// Stop cloud resource
+    ///
+    /// Shuts down a running cloud resource (VM). The resource can be started again later.
+    #[oai(
+        path = "/cloud-resources/:id/stop",
+        method = "post",
+        tag = "ApiTags::Cloud"
+    )]
+    async fn stop_cloud_resource(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        let account_id = match resolve_account_id(&db, &user).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+        };
+
+        let uuid = match id.0.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+        };
+
+        let encryption_key = match get_encryption_key() {
+            Ok(key) => key,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        };
+
+        let ctx = match db.get_cloud_resource_action_context(&uuid, &account_id).await {
+            Ok(Some(ctx)) => ctx,
+            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+        };
+
+        if ctx.status != "running" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Cannot stop resource in '{}' status (must be 'running')", ctx.status)),
+            });
+        }
+
+        let credentials = match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
+            Ok(c) => c,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+        };
+
+        let backend = match create_backend(&ctx.backend_type, &credentials).await {
+            Ok(b) => b,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+        };
+
+        if let Err(e) = backend.stop_server(&ctx.external_id).await {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to stop server: {e}")),
+            });
+        }
+
+        if let Err(e) = db.transition_cloud_resource_status(&uuid, &account_id, "running", "stopped").await {
+            tracing::error!(resource_id = %uuid, "Server stopped but DB update failed: {e:#}");
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Server stopped but status update failed: {e}")) });
+        }
+
+        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
+    }
+
+    /// Validate cloud account credentials
+    ///
+    /// Re-validates the stored credentials against the cloud backend.
+    /// Updates the account's validation status.
+    #[oai(
+        path = "/cloud-accounts/:id/validate",
+        method = "post",
+        tag = "ApiTags::Cloud"
+    )]
+    async fn validate_cloud_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<CloudAccount>> {
+        let account_id = match resolve_account_id(&db, &user).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+        };
+
+        let uuid = match id.0.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid account ID".to_string()) }),
+        };
+
+        let encryption_key = match get_encryption_key() {
+            Ok(key) => key,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        };
+
+        let (owner_id, backend_type, credentials_encrypted) =
+            match db.get_cloud_account_credentials(&uuid).await {
+                Ok(Some(row)) => row,
+                Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found".to_string()) }),
+                Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            };
+
+        if owner_id != account_id {
+            return Json(ApiResponse { success: false, data: None, error: Some("Unauthorized".to_string()) });
+        }
+
+        let credentials = match decrypt_server_credential(&credentials_encrypted, &encryption_key) {
+            Ok(c) => c,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+        };
+
+        let (is_valid, validation_error) = match create_backend(&backend_type, &credentials).await {
+            Ok(backend) => match backend.validate_credentials().await {
+                Ok(()) => (true, None),
+                Err(e) => (false, Some(format!("{e}"))),
+            },
+            Err(e) => (false, Some(format!("Failed to create backend: {e}"))),
+        };
+
+        if let Err(e) = db
+            .update_cloud_account_validation(&uuid, &account_id, is_valid, validation_error.as_deref())
+            .await
+        {
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to update validation status: {e}")) });
+        }
+
+        match db.get_cloud_account(&uuid, &account_id).await {
+            Ok(Some(account)) => Json(ApiResponse { success: true, data: Some(account), error: None }),
+            Ok(None) => Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found after update".to_string()) }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
         }
     }
 }

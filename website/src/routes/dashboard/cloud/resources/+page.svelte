@@ -7,6 +7,8 @@
 		listCloudAccounts,
 		provisionCloudResource,
 		deleteCloudResource,
+		startCloudResource,
+		stopCloudResource,
 		getCloudAccountCatalog,
 		type CloudResourceWithDetails,
 		type CloudAccount,
@@ -41,6 +43,7 @@
 
 	let deleteResourceId = $state<string | null>(null);
 	let deleting = $state(false);
+	let actionInProgress = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	const POLL_INTERVAL_MS = 10_000;
@@ -195,6 +198,42 @@
 		}
 	}
 
+	async function handleStartResource(resourceId: string) {
+		if (!currentIdentity) return;
+		actionInProgress = resourceId;
+		try {
+			const { headers } = await signRequest(
+				currentIdentity.identity,
+				"POST",
+				`/api/v1/cloud-resources/${resourceId}/start`
+			);
+			await startCloudResource(resourceId, headers);
+			await loadData();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to start resource";
+		} finally {
+			actionInProgress = null;
+		}
+	}
+
+	async function handleStopResource(resourceId: string) {
+		if (!currentIdentity) return;
+		actionInProgress = resourceId;
+		try {
+			const { headers } = await signRequest(
+				currentIdentity.identity,
+				"POST",
+				`/api/v1/cloud-resources/${resourceId}/stop`
+			);
+			await stopCloudResource(resourceId, headers);
+			await loadData();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to stop resource";
+		} finally {
+			actionInProgress = null;
+		}
+	}
+
 	function closeProvisionModal() {
 		showProvisionModal = false;
 		provisionAccountId = "";
@@ -217,6 +256,8 @@
 		switch (status.toLowerCase()) {
 			case "running":
 				return "bg-green-900/50 text-green-400";
+			case "stopped":
+				return "bg-blue-900/50 text-blue-400";
 			case "provisioning":
 				return "bg-yellow-900/50 text-yellow-400";
 			case "deleting":
@@ -334,6 +375,41 @@
 								{:else if resource.status === 'running'}
 									<button
 										type="button"
+										onclick={() => handleStopResource(resource.id)}
+										disabled={actionInProgress === resource.id}
+										class="p-2 text-neutral-400 hover:text-yellow-400 transition-colors disabled:opacity-50"
+										title="Stop"
+									>
+										{#if actionInProgress === resource.id}
+											<span class="text-xs">Stopping...</span>
+										{:else}
+											<Icon name="pause" size={18} />
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={() => (deleteResourceId = resource.id)}
+										class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
+										title="Terminate"
+									>
+										<Icon name="trash" size={18} />
+									</button>
+								{:else if resource.status === 'stopped'}
+									<button
+										type="button"
+										onclick={() => handleStartResource(resource.id)}
+										disabled={actionInProgress === resource.id}
+										class="p-2 text-neutral-400 hover:text-green-400 transition-colors disabled:opacity-50"
+										title="Start"
+									>
+										{#if actionInProgress === resource.id}
+											<span class="text-xs">Starting...</span>
+										{:else}
+											<Icon name="play" size={18} />
+										{/if}
+									</button>
+									<button
+										type="button"
 										onclick={() => (deleteResourceId = resource.id)}
 										class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
 										title="Terminate"
@@ -343,7 +419,14 @@
 								{:else if resource.status === 'deleting'}
 									<span class="text-xs text-orange-400">Terminating...</span>
 								{:else if resource.status === 'failed'}
-									<span class="text-xs text-red-400">Failed</span>
+									<button
+										type="button"
+										onclick={() => (deleteResourceId = resource.id)}
+										class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
+										title="Remove"
+									>
+										<Icon name="trash" size={18} />
+									</button>
 								{/if}
 							</div>
 						</div>

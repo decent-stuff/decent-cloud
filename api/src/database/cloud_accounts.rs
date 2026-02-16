@@ -246,6 +246,35 @@ impl Database {
         Ok(rows_affected > 0)
     }
 
+    /// Update validation status for a cloud account after re-checking credentials.
+    pub async fn update_cloud_account_validation(
+        &self,
+        id: &Uuid,
+        account_id: &[u8],
+        is_valid: bool,
+        validation_error: Option<&str>,
+    ) -> Result<bool> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_accounts
+            SET is_valid = $3,
+                last_validated_at = NOW(),
+                validation_error = $4,
+                updated_at = NOW()
+            WHERE id = $1 AND account_id = $2
+            "#,
+        )
+        .bind(id)
+        .bind(account_id)
+        .bind(is_valid)
+        .bind(validation_error)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        Ok(rows_affected > 0)
+    }
+
     pub async fn get_cloud_account_credentials(
         &self,
         id: &Uuid,
@@ -368,5 +397,127 @@ mod tests {
             .await
             .unwrap();
         assert!(deleted);
+    }
+
+    #[tokio::test]
+    async fn test_update_cloud_account_validation_marks_invalid() {
+        let db = setup_test_db().await;
+
+        let pubkey = [40u8; 32];
+        let account = db
+            .create_account("valid_test", &pubkey, "valid@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                BackendType::Hetzner,
+                "valid-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        assert!(cloud_account.is_valid);
+
+        // Mark invalid with error
+        let updated = db
+            .update_cloud_account_validation(
+                &ca_uuid,
+                &account.id,
+                false,
+                Some("Token expired"),
+            )
+            .await
+            .unwrap();
+        assert!(updated);
+
+        let refreshed = db
+            .get_cloud_account(&ca_uuid, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!refreshed.is_valid);
+        assert_eq!(refreshed.validation_error.as_deref(), Some("Token expired"));
+        assert!(refreshed.last_validated_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_update_cloud_account_validation_marks_valid() {
+        let db = setup_test_db().await;
+
+        let pubkey = [41u8; 32];
+        let account = db
+            .create_account("revalid_test", &pubkey, "revalid@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                BackendType::Hetzner,
+                "revalid-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        // First mark invalid
+        db.update_cloud_account_validation(&ca_uuid, &account.id, false, Some("Bad token"))
+            .await
+            .unwrap();
+
+        // Then mark valid again (cleared error)
+        db.update_cloud_account_validation(&ca_uuid, &account.id, true, None)
+            .await
+            .unwrap();
+
+        let refreshed = db
+            .get_cloud_account(&ca_uuid, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(refreshed.is_valid);
+        assert!(refreshed.validation_error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_update_cloud_account_validation_wrong_owner() {
+        let db = setup_test_db().await;
+
+        let pubkey = [42u8; 32];
+        let account = db
+            .create_account("wrongowner_test", &pubkey, "wrong@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                BackendType::Hetzner,
+                "wrongowner-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        // Different account_id should return false
+        let updated = db
+            .update_cloud_account_validation(&ca_uuid, &[99u8; 32], false, Some("hacked"))
+            .await
+            .unwrap();
+        assert!(!updated, "Should not update with wrong owner");
+
+        // Verify original is unchanged
+        let refreshed = db
+            .get_cloud_account(&ca_uuid, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(refreshed.is_valid);
     }
 }

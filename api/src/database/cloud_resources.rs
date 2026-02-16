@@ -318,6 +318,73 @@ impl Database {
         Ok(())
     }
 
+    /// Transition a cloud resource from one status to another atomically.
+    /// Returns error if the resource is not in the expected `from_status`.
+    pub async fn transition_cloud_resource_status(
+        &self,
+        id: &Uuid,
+        account_id: &[u8],
+        from_status: &str,
+        to_status: &str,
+    ) -> Result<()> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources cr
+            SET status = $3, updated_at = NOW()
+            FROM cloud_accounts ca
+            WHERE cr.id = $1
+              AND cr.cloud_account_id = ca.id
+              AND ca.account_id = $2
+              AND cr.status = $4
+              AND cr.terminated_at IS NULL
+            "#,
+        )
+        .bind(id)
+        .bind(account_id)
+        .bind(to_status)
+        .bind(from_status)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(anyhow!(
+                "Resource not found or not in '{from_status}' status"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Get the external_id and cloud account credentials for a resource, verifying ownership.
+    /// Used by start/stop operations that need to call the cloud backend.
+    pub async fn get_cloud_resource_action_context(
+        &self,
+        resource_id: &Uuid,
+        account_id: &[u8],
+    ) -> Result<Option<CloudResourceActionContext>> {
+        let row = sqlx::query_as::<_, CloudResourceActionContext>(
+            r#"
+            SELECT
+                cr.external_id,
+                cr.status,
+                ca.backend_type,
+                ca.credentials_encrypted
+            FROM cloud_resources cr
+            JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
+            WHERE cr.id = $1
+              AND ca.account_id = $2
+              AND cr.terminated_at IS NULL
+            "#,
+        )
+        .bind(resource_id)
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row)
+    }
+
     /// Mark a cloud resource as failed with an error message visible to the user.
     pub async fn mark_cloud_resource_failed(&self, id: &Uuid, error_message: &str) -> Result<()> {
         let rows_affected = sqlx::query(
@@ -686,6 +753,15 @@ pub struct PendingProvisioningResource {
     pub credentials_encrypted: String,
     pub contract_id: Option<Vec<u8>>,
     pub post_provision_script: Option<String>,
+}
+
+/// Context needed for start/stop operations on a cloud resource.
+#[derive(Debug, FromRow)]
+pub struct CloudResourceActionContext {
+    pub external_id: String,
+    pub status: String,
+    pub backend_type: String,
+    pub credentials_encrypted: String,
 }
 
 #[cfg(test)]
@@ -1065,5 +1141,215 @@ mod tests {
 
         let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
         assert_eq!(count, 0, "Should not expire future contracts");
+    }
+
+    #[tokio::test]
+    async fn test_transition_cloud_resource_status_running_to_stopped() {
+        let db = setup_test_db().await;
+
+        let pubkey = [30u8; 32];
+        let account = db
+            .create_account("transition_test", &pubkey, "trans@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "trans-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-1",
+                "trans-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        // Move to running first
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+
+        // Transition running -> stopped
+        db.transition_cloud_resource_status(&resource_id, &account.id, "running", "stopped")
+            .await
+            .unwrap();
+
+        let updated = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.resource.status, "stopped");
+    }
+
+    #[tokio::test]
+    async fn test_transition_rejects_wrong_current_status() {
+        let db = setup_test_db().await;
+
+        let pubkey = [31u8; 32];
+        let account = db
+            .create_account("reject_test", &pubkey, "reject@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "reject-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-2",
+                "reject-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        // Resource is in 'provisioning' status, try to stop it — should fail
+        let err = db
+            .transition_cloud_resource_status(&resource_id, &account.id, "running", "stopped")
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not in 'running' status"),
+            "Expected status mismatch error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_transition_rejects_wrong_owner() {
+        let db = setup_test_db().await;
+
+        let pubkey = [32u8; 32];
+        let account = db
+            .create_account("owner_test", &pubkey, "owner@example.com")
+            .await
+            .unwrap();
+        let other_pubkey = [33u8; 32];
+        let other_account = db
+            .create_account("other_test", &other_pubkey, "other@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "owner-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-3",
+                "owner-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+
+        // Other user tries to stop it — should fail
+        let err = db
+            .transition_cloud_resource_status(&resource_id, &other_account.id, "running", "stopped")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("not in 'running' status"));
+    }
+
+    #[tokio::test]
+    async fn test_get_cloud_resource_action_context() {
+        let db = setup_test_db().await;
+
+        let pubkey = [34u8; 32];
+        let account = db
+            .create_account("ctx_test", &pubkey, "ctx@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "ctx-hetzner",
+                "encrypted-token-xyz",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "hetzner-12345",
+                "ctx-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+
+        // Get action context as owner
+        let ctx = db
+            .get_cloud_resource_action_context(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .expect("Should find resource");
+
+        assert_eq!(ctx.external_id, "hetzner-12345");
+        assert_eq!(ctx.status, "running");
+        assert_eq!(ctx.backend_type, "hetzner");
+        assert_eq!(ctx.credentials_encrypted, "encrypted-token-xyz");
+
+        // Non-owner should get None
+        let other = db
+            .get_cloud_resource_action_context(&resource_id, &[99u8; 32])
+            .await
+            .unwrap();
+        assert!(other.is_none());
     }
 }

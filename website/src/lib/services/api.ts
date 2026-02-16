@@ -2372,11 +2372,14 @@ export interface CloudResource {
 	sshUsername: string;
 	externalSshKeyId?: string;
 	gatewaySlug?: string;
+	gatewaySubdomain?: string;
 	gatewaySshPort?: number;
 	gatewayPortRangeStart?: number;
 	gatewayPortRangeEnd?: number;
 	offeringId?: number;
 	listingMode: string;
+	errorMessage?: string;
+	platformFeeE9s: number;
 	createdAt: string;
 	updatedAt: string;
 	terminatedAt?: string;
@@ -2397,11 +2400,14 @@ export interface CloudResourceWithDetails {
 	sshUsername: string;
 	externalSshKeyId?: string;
 	gatewaySlug?: string;
+	gatewaySubdomain?: string;
 	gatewaySshPort?: number;
 	gatewayPortRangeStart?: number;
 	gatewayPortRangeEnd?: number;
 	offeringId?: number;
 	listingMode: string;
+	errorMessage?: string;
+	platformFeeE9s: number;
 	createdAt: string;
 	updatedAt: string;
 	terminatedAt?: string;
@@ -2558,4 +2564,60 @@ export async function deleteCloudResource(
 		const errorMsg = await getErrorMessage(response, `Failed to delete cloud resource: ${response.status}`);
 		throw new Error(errorMsg);
 	}
+}
+
+export async function startCloudResource(
+	resourceId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources/${resourceId}/start`;
+	const response = await fetch(url, { method: 'POST', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to start resource: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to start resource');
+	}
+}
+
+export async function stopCloudResource(
+	resourceId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources/${resourceId}/stop`;
+	const response = await fetch(url, { method: 'POST', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to stop resource: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to stop resource');
+	}
+}
+
+export async function validateCloudAccount(
+	accountId: string,
+	headers: SignedRequestHeaders
+): Promise<CloudAccount> {
+	const url = `${API_BASE_URL}/api/v1/cloud-accounts/${accountId}/validate`;
+	const response = await fetch(url, { method: 'POST', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to validate account: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<CloudAccount>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to validate account');
+	}
+
+	return payload.data;
 }

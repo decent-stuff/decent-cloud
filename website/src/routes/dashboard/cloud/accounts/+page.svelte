@@ -6,6 +6,7 @@
 		listCloudAccounts,
 		addCloudAccount,
 		deleteCloudAccount,
+		validateCloudAccount,
 		type CloudAccount
 	} from "$lib/services/api";
 	import Icon from "$lib/components/Icons.svelte";
@@ -26,6 +27,7 @@
 
 	let deleteAccountId = $state<string | null>(null);
 	let deleting = $state(false);
+	let validatingAccountId = $state<string | null>(null);
 
 	async function loadAccounts() {
 		if (!currentIdentity) return;
@@ -94,6 +96,25 @@
 			error = e instanceof Error ? e.message : "Failed to delete account";
 		} finally {
 			deleting = false;
+		}
+	}
+
+	async function handleValidateAccount(accountId: string) {
+		if (!currentIdentity) return;
+		validatingAccountId = accountId;
+		error = null;
+		try {
+			const { headers } = await signRequest(
+				currentIdentity.identity,
+				"POST",
+				`/api/v1/cloud-accounts/${accountId}/validate`
+			);
+			await validateCloudAccount(accountId, headers);
+			await loadAccounts();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to validate account";
+		} finally {
+			validatingAccountId = null;
 		}
 	}
 
@@ -187,6 +208,9 @@
 								</div>
 								<div class="text-sm text-neutral-400 mt-1">
 									{getBackendLabel(account.backendType)} &middot; Added {formatDate(account.createdAt)}
+									{#if account.lastValidatedAt}
+										&middot; Checked {formatDate(account.lastValidatedAt)}
+									{/if}
 								</div>
 								{#if account.validationError}
 									<div class="text-sm text-red-400 mt-2">
@@ -194,14 +218,29 @@
 									</div>
 								{/if}
 							</div>
-							<button
-								type="button"
-								onclick={() => (deleteAccountId = account.id)}
-								class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
-								title="Delete account"
-							>
-								<Icon name="trash" size={18} />
-							</button>
+							<div class="flex items-center gap-1">
+								<button
+									type="button"
+									onclick={() => handleValidateAccount(account.id)}
+									disabled={validatingAccountId === account.id}
+									class="p-2 text-neutral-400 hover:text-primary-400 transition-colors disabled:opacity-50"
+									title="Re-validate credentials"
+								>
+									{#if validatingAccountId === account.id}
+										<span class="text-xs">Checking...</span>
+									{:else}
+										<Icon name="refresh" size={18} />
+									{/if}
+								</button>
+								<button
+									type="button"
+									onclick={() => (deleteAccountId = account.id)}
+									class="p-2 text-neutral-400 hover:text-red-400 transition-colors"
+									title="Delete account"
+								>
+									<Icon name="trash" size={18} />
+								</button>
+							</div>
 						</div>
 					</div>
 				{/each}
