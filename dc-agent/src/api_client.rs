@@ -164,7 +164,12 @@ struct ProvisionFailedRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HealthCheckRequest {
-    health_status: HealthStatus,
+    checked_at: i64,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latency_ms: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -446,11 +451,28 @@ impl ApiClient {
         Self::unwrap_response(response, "API error").map(|_| ())
     }
 
-    /// Report health check.
+    /// Report health check result to the API server.
     pub async fn report_health(&self, contract_id: &str, status: &HealthStatus) -> Result<()> {
         let path = format!("/api/v1/provider/contracts/{}/health", contract_id);
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock before epoch")
+            .as_nanos() as i64;
+        let (status_str, details) = match status {
+            HealthStatus::Healthy { uptime_seconds } => (
+                "healthy".to_string(),
+                Some(format!(r#"{{"uptime_seconds":{uptime_seconds}}}"#)),
+            ),
+            HealthStatus::Unhealthy { reason } => {
+                ("unhealthy".to_string(), Some(reason.clone()))
+            }
+            HealthStatus::Unknown => ("unknown".to_string(), None),
+        };
         let request = HealthCheckRequest {
-            health_status: status.clone(),
+            checked_at: now_ns,
+            status: status_str,
+            latency_ms: None,
+            details,
         };
         let body = serde_json::to_vec(&request)?;
         let response: ApiResponse<serde_json::Value> =
@@ -1097,5 +1119,100 @@ mod tests {
 
         assert_eq!(contract.memory_mb(), Some(16 * 1024));
         assert_eq!(contract.storage_gb(), Some(100));
+    }
+
+    #[test]
+    fn test_health_check_request_serialization_healthy() {
+        let request = HealthCheckRequest {
+            checked_at: 1_700_000_000_000_000_000,
+            status: "healthy".to_string(),
+            latency_ms: None,
+            details: Some(r#"{"uptime_seconds":3600}"#.to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["checkedAt"], 1_700_000_000_000_000_000_i64);
+        assert_eq!(json["status"], "healthy");
+        assert!(json.get("latencyMs").is_none()); // skip_serializing_if None
+        assert_eq!(json["details"], r#"{"uptime_seconds":3600}"#);
+    }
+
+    #[test]
+    fn test_health_check_request_serialization_unhealthy() {
+        let request = HealthCheckRequest {
+            checked_at: 1_700_000_000_000_000_000,
+            status: "unhealthy".to_string(),
+            latency_ms: Some(150),
+            details: Some("VM not running".to_string()),
+        };
+        let json: serde_json::Value = serde_json::to_value(&request).unwrap();
+        assert_eq!(json["checkedAt"], 1_700_000_000_000_000_000_i64);
+        assert_eq!(json["status"], "unhealthy");
+        assert_eq!(json["latencyMs"], 150);
+        assert_eq!(json["details"], "VM not running");
+    }
+
+    #[tokio::test]
+    async fn test_report_health_sends_correct_format() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/provider/contracts/abc123/health")
+            .match_body(mockito::Matcher::JsonString(
+                r#"{"checkedAt": 0, "status": "healthy"}"#.to_string(),
+            ))
+            .match_body(mockito::Matcher::PartialJsonString(
+                r#"{"status": "healthy"}"#.to_string(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"success":true,"data":{"id":1,"contractId":"abc123","checkedAt":0,"status":"healthy","latencyMs":null,"details":null,"createdAt":0}}"#)
+            .create_async()
+            .await;
+
+        let signing_key = SigningKey::from_bytes(&[42u8; 32]);
+        let config = ApiConfig {
+            endpoint: server.url(),
+            provider_pubkey: "test_pubkey".to_string(),
+            agent_secret_key: None,
+            provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
+        };
+        let client = ApiClient::new(&config).unwrap();
+
+        let status = HealthStatus::Healthy {
+            uptime_seconds: 3600,
+        };
+        let result = client.report_health("abc123", &status).await;
+        assert!(result.is_ok(), "report_health failed: {result:?}");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_report_health_unhealthy() {
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock("POST", "/api/v1/provider/contracts/def456/health")
+            .match_body(mockito::Matcher::PartialJsonString(
+                r#"{"status": "unhealthy"}"#.to_string(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"success":true,"data":{"id":2,"contractId":"def456","checkedAt":0,"status":"unhealthy","latencyMs":null,"details":"VM status: stopped","createdAt":0}}"#)
+            .create_async()
+            .await;
+
+        let signing_key = SigningKey::from_bytes(&[42u8; 32]);
+        let config = ApiConfig {
+            endpoint: server.url(),
+            provider_pubkey: "test_pubkey".to_string(),
+            agent_secret_key: None,
+            provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
+        };
+        let client = ApiClient::new(&config).unwrap();
+
+        let status = HealthStatus::Unhealthy {
+            reason: "VM status: stopped".to_string(),
+        };
+        let result = client.report_health("def456", &status).await;
+        assert!(result.is_ok(), "report_health failed: {result:?}");
+        mock.assert_async().await;
     }
 }

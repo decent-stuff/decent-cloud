@@ -1413,9 +1413,16 @@ async fn run_agent(config: Config) -> Result<()> {
     let mut update_check_ticker = interval(Duration::from_secs(UPDATE_CHECK_INTERVAL_SECS));
     update_check_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    // Health check ticker - runs health checks on all provisioned instances
+    let health_check_interval_secs = config.polling.health_check_interval_seconds;
+    let mut health_check_ticker = interval(Duration::from_secs(health_check_interval_secs));
+    health_check_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut health_check_failures: u32 = 0;
+
     info!(
         poll_interval_seconds = config.polling.interval_seconds,
         heartbeat_interval_seconds = heartbeat_interval_secs,
+        health_check_interval_seconds = health_check_interval_secs,
         orphan_grace_period_seconds = config.polling.orphan_grace_period_seconds,
         update_check_interval_seconds = UPDATE_CHECK_INTERVAL_SECS,
         "Agent started"
@@ -1458,7 +1465,97 @@ async fn run_agent(config: Config) -> Result<()> {
             _ = update_check_ticker.tick() => {
                 check_for_updates_and_log().await;
             }
+            _ = health_check_ticker.tick() => {
+                run_health_checks(&api_client, &provisioners, &mut health_check_failures).await;
+            }
         }
+    }
+}
+
+/// Run health checks on all running instances and report results to the API.
+///
+/// Lists running instances from all provisioners, checks each one's health,
+/// and reports the result to the central API for uptime tracking.
+async fn run_health_checks(
+    api_client: &ApiClient,
+    provisioners: &ProvisionerMap,
+    consecutive_failures: &mut u32,
+) {
+    // Collect running instances from all provisioners
+    let mut instances: Vec<(String, String)> = Vec::new(); // (contract_id, external_id)
+    for (ptype, provisioner) in provisioners {
+        match provisioner.list_running_instances().await {
+            Ok(running) => {
+                for inst in running {
+                    if let Some(contract_id) = inst.contract_id {
+                        instances.push((contract_id, inst.external_id));
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(
+                    provisioner_type = %ptype,
+                    error = %e,
+                    "Failed to list running instances for health checks"
+                );
+            }
+        }
+    }
+
+    if instances.is_empty() {
+        return;
+    }
+
+    let mut checked = 0u32;
+    let mut failed = 0u32;
+    for (contract_id, external_id) in &instances {
+        // Find the provisioner that owns this instance (try each)
+        let mut health_status = None;
+        for provisioner in provisioners.values() {
+            match provisioner.health_check(external_id).await {
+                Ok(status) => {
+                    health_status = Some(status);
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+
+        let status = health_status.unwrap_or(dc_agent::provisioner::HealthStatus::Unknown);
+
+        if let Err(e) = api_client.report_health(contract_id, &status).await {
+            failed += 1;
+            if *consecutive_failures < 3 {
+                warn!(
+                    contract_id = %contract_id,
+                    error = %e,
+                    "Failed to report health check"
+                );
+            }
+        } else {
+            checked += 1;
+        }
+    }
+
+    if failed > 0 {
+        *consecutive_failures += 1;
+        if *consecutive_failures == 3 {
+            warn!(
+                "Suppressing repeated health check report failures (3+ consecutive)"
+            );
+        }
+    } else {
+        if *consecutive_failures >= 3 {
+            info!(
+                previous_failures = *consecutive_failures,
+                "Health check reporting restored"
+            );
+        }
+        *consecutive_failures = 0;
+    }
+
+    if checked > 0 {
+        info!(checked, failed, "Health checks completed");
     }
 }
 

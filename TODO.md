@@ -26,7 +26,7 @@
 ## Provider Provisioning Agent (dc-agent)
 
 **Spec:** [2025-12-07-provider-provisioning-agent-spec.md](docs/2025-12-07-provider-provisioning-agent-spec.md)
-**Status:** MVP complete through Phase 7 (Credential Encryption). Phase 8 (Hetzner) implemented server-side in api-server via `HetznerBackend`, not in dc-agent.
+**Status:** MVP complete through Phase 8 (Hetzner server-side in api-server via `HetznerBackend`). Health check scheduling wired up in dc-agent main loop.
 
 - Phase 9: Docker, DigitalOcean, Vultr provisioners
 
@@ -34,10 +34,9 @@
 
 ## Provider Trust & Reliability System
 
-DB tables (`contract_health_checks`) and query methods exist but no automated health check scheduling is implemented.
+DB tables (`contract_health_checks`), API endpoints, and automated health check scheduling in dc-agent are implemented.
 
-- Automated health checks on provisioned services
-- Uptime monitoring and SLA compliance tracking
+- SLA compliance tracking and provider reputation scoring
 
 ---
 
@@ -52,20 +51,14 @@ DB tables (`contract_health_checks`) and query methods exist but no automated he
 
 ## ICPay Integration
 
-### Manual Payout Requirement
-**ICPay does NOT have a programmatic payout API.** Provider payouts must be done manually:
-1. View pending releases: `GET /api/v1/admin/payment-releases`
-2. Create payouts in icpay.org dashboard (Payouts section)
-3. Mark as paid: `POST /api/v1/admin/payouts`
-
 ### Future: Automated Payouts
-Implement direct ICRC-1 transfers from platform wallet using `ic-agent`.
+ICPay does not have a programmatic payout API. Currently payouts are manual via `GET /api/v1/admin/payment-releases` + icpay.org dashboard + `POST /api/v1/admin/payouts`. Implement direct ICRC-1 transfers from platform wallet using `ic-agent` when ICPay adds payout API support.
 
 ---
 
 ## Rental State Machine
 
-- [ ] **Contract archival** — Old contracts stay in DB indefinitely
+- [ ] **Contract archival** — Old contracts stay in DB indefinitely. Expiration and cleanup service runs, but expired contract records are never archived or purged.
 
 ---
 
