@@ -6,12 +6,8 @@ use super::common::{ApiResponse, ApiTags, EmptyResponse};
 use crate::auth::ApiAuthenticatedUser;
 use crate::cloud::types::BackendCatalog;
 use crate::cloud::{hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, CloudBackend};
-use crate::crypto::{
-    decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey,
-};
-use crate::database::{
-    CloudAccount, CloudResourceWithDetails, Database,
-};
+use crate::crypto::{decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey};
+use crate::database::{CloudAccount, CloudResourceWithDetails, Database};
 use anyhow::Context;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
@@ -63,9 +59,8 @@ pub struct CloudResourceListResponse {
 pub struct CloudApi;
 
 fn get_encryption_key() -> anyhow::Result<ServerEncryptionKey> {
-    ServerEncryptionKey::from_env().context(
-        "CREDENTIAL_ENCRYPTION_KEY not configured - cloud account management unavailable",
-    )
+    ServerEncryptionKey::from_env()
+        .context("CREDENTIAL_ENCRYPTION_KEY not configured - cloud account management unavailable")
 }
 
 async fn create_backend(
@@ -200,17 +195,17 @@ impl CloudApi {
             });
         }
 
-        let credentials_encrypted = match encrypt_server_credential(&req.credentials, &encryption_key)
-        {
-            Ok(enc) => enc,
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Failed to encrypt credentials: {}", e)),
-                })
-            }
-        };
+        let credentials_encrypted =
+            match encrypt_server_credential(&req.credentials, &encryption_key) {
+                Ok(enc) => enc,
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to encrypt credentials: {}", e)),
+                    })
+                }
+            };
 
         match db
             .create_cloud_account(
@@ -238,11 +233,7 @@ impl CloudApi {
     /// Get cloud account
     ///
     /// Returns details for a specific cloud account.
-    #[oai(
-        path = "/cloud-accounts/:id",
-        method = "get",
-        tag = "ApiTags::Cloud"
-    )]
+    #[oai(path = "/cloud-accounts/:id", method = "get", tag = "ApiTags::Cloud")]
     async fn get_cloud_account(
         &self,
         db: Data<&Arc<Database>>,
@@ -520,11 +511,7 @@ impl CloudApi {
     /// Get cloud resource
     ///
     /// Returns details for a specific self-provisioned resource.
-    #[oai(
-        path = "/cloud-resources/:id",
-        method = "get",
-        tag = "ApiTags::Cloud"
-    )]
+    #[oai(path = "/cloud-resources/:id", method = "get", tag = "ApiTags::Cloud")]
     async fn get_cloud_resource(
         &self,
         db: Data<&Arc<Database>>,

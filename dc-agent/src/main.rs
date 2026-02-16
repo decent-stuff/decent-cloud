@@ -2906,6 +2906,9 @@ WantedBy=multi-user.target
     fn test_is_service_installed_returns_false_in_test_env() {
         // dc-agent.service should not be installed in test environments
         let result = is_service_installed();
-        assert!(!result, "dc-agent.service should not be installed in test environment");
+        assert!(
+            !result,
+            "dc-agent.service should not be installed in test environment"
+        );
     }
 }

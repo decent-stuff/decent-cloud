@@ -1966,10 +1966,9 @@ impl Database {
         }
 
         // Get the offering to check provisioner_type
-        let offering_db_id: i64 = contract
-            .offering_id
-            .parse()
-            .map_err(|_| anyhow::anyhow!("Invalid offering_id in contract: {}", contract.offering_id))?;
+        let offering_db_id: i64 = contract.offering_id.parse().map_err(|_| {
+            anyhow::anyhow!("Invalid offering_id in contract: {}", contract.offering_id)
+        })?;
 
         let offering = self
             .get_offering(offering_db_id)
@@ -2004,10 +2003,7 @@ impl Database {
             .transpose()?
             .unwrap_or(serde_json::json!({}));
 
-        let server_type = config["server_type"]
-            .as_str()
-            .unwrap_or("cx22")
-            .to_string();
+        let server_type = config["server_type"].as_str().unwrap_or("cx22").to_string();
         let location = config["location"]
             .as_str()
             .unwrap_or(&offering.datacenter_city.to_lowercase())
@@ -2018,10 +2014,7 @@ impl Database {
             .unwrap_or("ubuntu-24.04")
             .to_string();
 
-        let name = format!(
-            "dc-recipe-{}",
-            &hex::encode(contract_id)[..12]
-        );
+        let name = format!("dc-recipe-{}", &hex::encode(contract_id)[..12]);
 
         self.create_cloud_resource_for_contract(
             contract_id,
@@ -2062,12 +2055,11 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Get current status for history
-        let current_status: Option<(String,)> = sqlx::query_as(
-            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
-        )
-        .bind(contract_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+        let current_status: Option<(String,)> =
+            sqlx::query_as("SELECT status FROM contract_sign_requests WHERE contract_id = $1")
+                .bind(contract_id)
+                .fetch_optional(&mut *tx)
+                .await?;
 
         let old_status = current_status
             .map(|r| r.0)

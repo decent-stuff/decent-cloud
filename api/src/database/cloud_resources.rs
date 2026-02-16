@@ -150,7 +150,10 @@ impl From<CloudResourceWithAccountRow> for CloudResourceWithDetails {
 }
 
 impl Database {
-    pub async fn list_cloud_resources(&self, account_id: &[u8]) -> Result<Vec<CloudResourceWithDetails>> {
+    pub async fn list_cloud_resources(
+        &self,
+        account_id: &[u8],
+    ) -> Result<Vec<CloudResourceWithDetails>> {
         let rows: Vec<CloudResourceWithAccountRow> = sqlx::query_as(
             r#"
             SELECT 
@@ -171,10 +174,17 @@ impl Database {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(CloudResourceWithDetails::from).collect())
+        Ok(rows
+            .into_iter()
+            .map(CloudResourceWithDetails::from)
+            .collect())
     }
 
-    pub async fn get_cloud_resource(&self, id: &Uuid, account_id: &[u8]) -> Result<Option<CloudResourceWithDetails>> {
+    pub async fn get_cloud_resource(
+        &self,
+        id: &Uuid,
+        account_id: &[u8],
+    ) -> Result<Option<CloudResourceWithDetails>> {
         let row: Option<CloudResourceWithAccountRow> = sqlx::query_as(
             r#"
             SELECT 
@@ -265,7 +275,7 @@ impl Database {
                 gateway_port_range_end = $9,
                 updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .bind(external_id)
@@ -287,17 +297,13 @@ impl Database {
         Ok(())
     }
 
-    pub async fn update_cloud_resource_status(
-        &self,
-        id: &Uuid,
-        status: &str,
-    ) -> Result<()> {
+    pub async fn update_cloud_resource_status(&self, id: &Uuid, status: &str) -> Result<()> {
         let rows_affected = sqlx::query(
             r#"
             UPDATE cloud_resources
             SET status = $2, updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .bind(status)
@@ -313,11 +319,7 @@ impl Database {
     }
 
     /// Mark a cloud resource as failed with an error message visible to the user.
-    pub async fn mark_cloud_resource_failed(
-        &self,
-        id: &Uuid,
-        error_message: &str,
-    ) -> Result<()> {
+    pub async fn mark_cloud_resource_failed(&self, id: &Uuid, error_message: &str) -> Result<()> {
         let rows_affected = sqlx::query(
             r#"
             UPDATE cloud_resources
@@ -347,7 +349,7 @@ impl Database {
             WHERE id = $1 
               AND (provisioning_locked_at IS NULL 
                    OR provisioning_locked_at < NOW() - INTERVAL '10 minutes')
-            "#
+            "#,
         )
         .bind(id)
         .bind(lock_holder)
@@ -365,7 +367,7 @@ impl Database {
             SET provisioning_locked_at = NULL,
                 provisioning_locked_by = NULL
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .execute(&self.pool)
@@ -385,7 +387,7 @@ impl Database {
               AND cr.id = $1 
               AND ca.account_id = $2
               AND cr.terminated_at IS NULL
-            "#
+            "#,
         )
         .bind(id)
         .bind(account_id)
@@ -404,7 +406,7 @@ impl Database {
                 terminated_at = NOW(),
                 updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .execute(&self.pool)
@@ -418,7 +420,10 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<PendingTerminationResource>> {
+    pub async fn get_pending_termination_resources(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<PendingTerminationResource>> {
         let rows = sqlx::query_as::<_, PendingTerminationResource>(
             r#"
             SELECT
@@ -433,7 +438,7 @@ impl Database {
                    OR cr.provisioning_locked_at < NOW() - INTERVAL '10 minutes')
             ORDER BY cr.updated_at ASC
             LIMIT $1
-            "#
+            "#,
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -797,15 +802,25 @@ mod tests {
             .unwrap();
 
         // Mark for deletion
-        let marked = db.mark_contract_resource_for_deletion(&contract_id).await.unwrap();
+        let marked = db
+            .mark_contract_resource_for_deletion(&contract_id)
+            .await
+            .unwrap();
         assert!(marked);
 
         // Verify status changed to 'deleting'
-        let resource = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        let resource = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(resource.resource.status, "deleting");
 
         // Marking again should return false (already deleting)
-        let marked_again = db.mark_contract_resource_for_deletion(&contract_id).await.unwrap();
+        let marked_again = db
+            .mark_contract_resource_for_deletion(&contract_id)
+            .await
+            .unwrap();
         assert!(!marked_again);
     }
 
@@ -814,7 +829,10 @@ mod tests {
         let db = setup_test_db().await;
 
         // Non-existent contract_id - should return false, not error
-        let marked = db.mark_contract_resource_for_deletion(&[0xEEu8; 32]).await.unwrap();
+        let marked = db
+            .mark_contract_resource_for_deletion(&[0xEEu8; 32])
+            .await
+            .unwrap();
         assert!(!marked);
     }
 
@@ -838,12 +856,18 @@ mod tests {
             .await
             .unwrap();
 
-        let found = db.find_hetzner_cloud_account_for_provider(&pubkey).await.unwrap();
+        let found = db
+            .find_hetzner_cloud_account_for_provider(&pubkey)
+            .await
+            .unwrap();
         assert!(found.is_some());
         assert_eq!(found.unwrap().to_string(), cloud_account.id);
 
         // Non-existent provider should return None
-        let not_found = db.find_hetzner_cloud_account_for_provider(&[99u8; 32]).await.unwrap();
+        let not_found = db
+            .find_hetzner_cloud_account_for_provider(&[99u8; 32])
+            .await
+            .unwrap();
         assert!(not_found.is_none());
     }
 
@@ -953,7 +977,15 @@ mod tests {
 
         // Mark resource as running (simulate successful provision)
         db.update_cloud_resource_provisioned(
-            &resource_id, "ext-123", "1.2.3.4", "key-1", "abc123", Some("abc123.hz-nbg1.dev-gw.decent-cloud.org"), 22, 22, 22,
+            &resource_id,
+            "ext-123",
+            "1.2.3.4",
+            "key-1",
+            "abc123",
+            Some("abc123.hz-nbg1.dev-gw.decent-cloud.org"),
+            22,
+            22,
+            22,
         )
         .await
         .unwrap();
@@ -963,17 +995,20 @@ mod tests {
         assert_eq!(count, 1, "Should expire exactly one contract");
 
         // Verify contract status changed to expired
-        let status: (String,) = sqlx::query_as(
-            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
-        )
-        .bind(&contract_id)
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let status: (String,) =
+            sqlx::query_as("SELECT status FROM contract_sign_requests WHERE contract_id = $1")
+                .bind(&contract_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
         assert_eq!(status.0, "expired");
 
         // Verify cloud resource is now deleting
-        let resource = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        let resource = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(resource.resource.status, "deleting");
 
         // Running again should find nothing

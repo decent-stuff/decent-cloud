@@ -9,11 +9,11 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 
+use super::{CloudBackend, ProvisionResult};
 use crate::cloud::types::{
     BackendCatalog, CreateServerRequest, Image, Location, Server, ServerMetrics, ServerStatus,
     ServerType,
 };
-use super::{CloudBackend, ProvisionResult};
 
 const REQUEST_TIMEOUT_SECS: u64 = 30;
 
@@ -48,7 +48,10 @@ impl ProxmoxApiBackend {
     fn request_builder(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
         self.client
             .request(method, self.api_url(path))
-            .header("Authorization", format!("PVEAPIToken={}", self.config.token))
+            .header(
+                "Authorization",
+                format!("PVEAPIToken={}", self.config.token),
+            )
             .header("Content-Type", "application/json")
     }
 
@@ -366,11 +369,7 @@ impl CloudBackend for ProxmoxApiBackend {
             None
         };
 
-        let memory_percent = if vm.maxmem > 0 {
-            Some(0.0)
-        } else {
-            None
-        };
+        let memory_percent = if vm.maxmem > 0 { Some(0.0) } else { None };
 
         Ok(ServerMetrics {
             cpu_percent,

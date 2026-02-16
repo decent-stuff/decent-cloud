@@ -507,7 +507,8 @@ impl ContractsApi {
                     match db.try_auto_accept_contract(&contract_id).await {
                         Ok(true) => {
                             // Auto-accepted, try to trigger Hetzner provisioning
-                            if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id).await {
+                            if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id).await
+                            {
                                 tracing::warn!(
                                     "Hetzner provisioning trigger failed for contract {}: {}",
                                     hex::encode(&contract_id),
@@ -974,7 +975,10 @@ impl ContractsApi {
         // Try auto-accept if provider has it enabled
         match db.try_auto_accept_contract(&contract_id_bytes).await {
             Ok(true) => {
-                if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id_bytes).await {
+                if let Err(e) = db
+                    .try_trigger_hetzner_provisioning(&contract_id_bytes)
+                    .await
+                {
                     tracing::warn!(
                         "Hetzner provisioning trigger failed for contract {}: {}",
                         session_result.contract_id,

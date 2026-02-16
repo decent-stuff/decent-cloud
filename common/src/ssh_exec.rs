@@ -65,11 +65,16 @@ async fn wait_for_ssh(ip_address: &str, ssh_port: u16, context_id: &str) -> Resu
 
         let result = Command::new("ssh")
             .args([
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "UserKnownHostsFile=/dev/null",
-                "-o", "ConnectTimeout=5",
-                "-o", "BatchMode=yes",
-                "-p", &ssh_port.to_string(),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ConnectTimeout=5",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &ssh_port.to_string(),
                 &format!("root@{}", ip_address),
                 "true",
             ])
@@ -159,11 +164,16 @@ exit $EXIT_CODE
         SCRIPT_TIMEOUT,
         Command::new("ssh")
             .args([
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "UserKnownHostsFile=/dev/null",
-                "-o", "ConnectTimeout=10",
-                "-o", "BatchMode=yes",
-                "-p", &ssh_port.to_string(),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ConnectTimeout=10",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &ssh_port.to_string(),
                 &format!("root@{}", ip_address),
                 &remote_script,
             ])
@@ -245,11 +255,16 @@ pub async fn reset_password_via_ssh(
         PASSWORD_RESET_TIMEOUT,
         Command::new("ssh")
             .args([
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "UserKnownHostsFile=/dev/null",
-                "-o", "ConnectTimeout=10",
-                "-o", "BatchMode=yes",
-                "-p", &ssh_port.to_string(),
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ConnectTimeout=10",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &ssh_port.to_string(),
                 &format!("{}@{}", ssh_user, ip_address),
                 &full_cmd,
             ])

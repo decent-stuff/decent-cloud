@@ -108,7 +108,10 @@ impl CleanupService {
         // Expire cloud contracts past their end_timestamp_ns
         match self.database.expire_and_cleanup_cloud_contracts().await {
             Ok(count) if count > 0 => {
-                tracing::info!("Expired {} cloud contracts and marked resources for deletion", count);
+                tracing::info!(
+                    "Expired {} cloud contracts and marked resources for deletion",
+                    count
+                );
             }
             Ok(_) => {
                 tracing::debug!("No expired cloud contracts to clean up");

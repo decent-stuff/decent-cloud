@@ -2223,8 +2223,15 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 )
                 .await?;
             let account_id = account.id.clone();
-            println!("  Account created: {} (valid: {})", account.id, account.is_valid);
-            anyhow::ensure!(account.is_valid, "Cloud account validation failed: {:?}", account.validation_error);
+            println!(
+                "  Account created: {} (valid: {})",
+                account.id, account.is_valid
+            );
+            anyhow::ensure!(
+                account.is_valid,
+                "Cloud account validation failed: {:?}",
+                account.validation_error
+            );
 
             // Ensure cleanup on any failure
             let cleanup_result = async {
@@ -2239,11 +2246,15 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                             server_type: "cx22".to_string(),
                             location: "nbg1".to_string(),
                             image: "ubuntu-24.04".to_string(),
-                            ssh_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-cloud-test".to_string(),
+                            ssh_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-cloud-test"
+                                .to_string(),
                         },
                     )
                     .await?;
-                let resource_id = resource["id"].as_str().context("No resource ID in response")?.to_string();
+                let resource_id = resource["id"]
+                    .as_str()
+                    .context("No resource ID in response")?
+                    .to_string();
                 println!("  Resource created: {}", resource_id);
 
                 // Step 3: Poll until running (timeout: 300s)
@@ -2253,12 +2264,19 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 let poll_interval = std::time::Duration::from_secs(10);
                 loop {
                     if start.elapsed() > timeout {
-                        anyhow::bail!("Timeout waiting for resource {} to reach 'running' status", resource_id);
+                        anyhow::bail!(
+                            "Timeout waiting for resource {} to reach 'running' status",
+                            resource_id
+                        );
                     }
                     let path = format!("/cloud-resources/{}", resource_id);
                     let res: serde_json::Value = client.get_api(&path).await?;
                     let status = res["status"].as_str().unwrap_or("unknown");
-                    println!("  Status: {} ({}s elapsed)", status, start.elapsed().as_secs());
+                    println!(
+                        "  Status: {} ({}s elapsed)",
+                        status,
+                        start.elapsed().as_secs()
+                    );
                     match status {
                         "running" => {
                             let ip = res["publicIp"].as_str().unwrap_or("N/A");
@@ -2275,7 +2293,9 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 println!("\nStep 4: Verifying SSH reachability...");
                 let path = format!("/cloud-resources/{}", resource_id);
                 let res: serde_json::Value = client.get_api(&path).await?;
-                let public_ip = res["publicIp"].as_str().context("No public IP on resource")?;
+                let public_ip = res["publicIp"]
+                    .as_str()
+                    .context("No public IP on resource")?;
                 verify_ssh_reachable(public_ip, 22).await?;
 
                 // Step 5: Delete resource
@@ -2296,7 +2316,11 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                     match client.get_api::<serde_json::Value>(&path).await {
                         Ok(res) => {
                             let status = res["status"].as_str().unwrap_or("unknown");
-                            println!("  Status: {} ({}s elapsed)", status, start.elapsed().as_secs());
+                            println!(
+                                "  Status: {} ({}s elapsed)",
+                                status,
+                                start.elapsed().as_secs()
+                            );
                             if status == "deleted" {
                                 break;
                             }
@@ -2318,7 +2342,10 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             println!("\nStep 7: Cleaning up cloud account...");
             let delete_path = format!("/cloud-accounts/{}", account_id);
             if let Err(e) = client.delete_api::<serde_json::Value>(&delete_path).await {
-                eprintln!("  WARNING: Failed to delete cloud account {}: {:#}", account_id, e);
+                eprintln!(
+                    "  WARNING: Failed to delete cloud account {}: {:#}",
+                    account_id, e
+                );
             } else {
                 println!("  Cloud account deleted");
             }
@@ -2710,7 +2737,10 @@ async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
             println!("  Backend: {}", account.backend_type);
             println!("  Valid: {}", account.is_valid);
         }
-        CloudAction::DeleteAccount { identity, id: account_id } => {
+        CloudAction::DeleteAccount {
+            identity,
+            id: account_id,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
@@ -2841,17 +2871,16 @@ async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
                 ssh_pubkey,
             };
 
-            let resource: serde_json::Value =
-                client.post_api("/cloud-resources", &request).await?;
+            let resource: serde_json::Value = client.post_api("/cloud-resources", &request).await?;
             println!("Cloud resource provisioning started:");
             println!("  ID: {}", resource["id"].as_str().unwrap_or("N/A"));
             println!("  Name: {}", resource["name"].as_str().unwrap_or("N/A"));
-            println!(
-                "  Status: {}",
-                resource["status"].as_str().unwrap_or("N/A")
-            );
+            println!("  Status: {}", resource["status"].as_str().unwrap_or("N/A"));
         }
-        CloudAction::DeleteResource { identity, id: resource_id } => {
+        CloudAction::DeleteResource {
+            identity,
+            id: resource_id,
+        } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 

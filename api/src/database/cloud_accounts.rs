@@ -53,14 +53,28 @@ pub struct CloudAccountWithCatalog {
 
 impl Database {
     pub async fn list_cloud_accounts(&self, account_id: &[u8]) -> Result<Vec<CloudAccount>> {
-        let rows = sqlx::query_as::<_, (Uuid, Vec<u8>, String, String, Option<String>, bool, Option<DateTime<Utc>>, Option<String>, DateTime<Utc>, DateTime<Utc>)>(
+        let rows = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Vec<u8>,
+                String,
+                String,
+                Option<String>,
+                bool,
+                Option<DateTime<Utc>>,
+                Option<String>,
+                DateTime<Utc>,
+                DateTime<Utc>,
+            ),
+        >(
             r#"
             SELECT id, account_id, backend_type, name, config, is_valid, 
                    last_validated_at, validation_error, created_at, updated_at
             FROM cloud_accounts
             WHERE account_id = $1
             ORDER BY created_at DESC
-            "#
+            "#,
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -68,7 +82,81 @@ impl Database {
 
         Ok(rows
             .into_iter()
-            .map(|(id, acc_id, backend_type, name, config, is_valid, last_validated_at, validation_error, created_at, updated_at)| {
+            .map(
+                |(
+                    id,
+                    acc_id,
+                    backend_type,
+                    name,
+                    config,
+                    is_valid,
+                    last_validated_at,
+                    validation_error,
+                    created_at,
+                    updated_at,
+                )| {
+                    CloudAccount {
+                        id: id.to_string(),
+                        account_id: hex::encode(&acc_id),
+                        backend_type,
+                        name,
+                        config,
+                        is_valid,
+                        last_validated_at: last_validated_at.map(|t| t.to_rfc3339()),
+                        validation_error,
+                        created_at: created_at.to_rfc3339(),
+                        updated_at: updated_at.to_rfc3339(),
+                    }
+                },
+            )
+            .collect())
+    }
+
+    pub async fn get_cloud_account(
+        &self,
+        id: &Uuid,
+        account_id: &[u8],
+    ) -> Result<Option<CloudAccount>> {
+        let row = sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Vec<u8>,
+                String,
+                String,
+                Option<String>,
+                bool,
+                Option<DateTime<Utc>>,
+                Option<String>,
+                DateTime<Utc>,
+                DateTime<Utc>,
+            ),
+        >(
+            r#"
+            SELECT id, account_id, backend_type, name, config, is_valid, 
+                   last_validated_at, validation_error, created_at, updated_at
+            FROM cloud_accounts
+            WHERE id = $1 AND account_id = $2
+            "#,
+        )
+        .bind(id)
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(
+            |(
+                id,
+                acc_id,
+                backend_type,
+                name,
+                config,
+                is_valid,
+                last_validated_at,
+                validation_error,
+                created_at,
+                updated_at,
+            )| {
                 CloudAccount {
                     id: id.to_string(),
                     account_id: hex::encode(&acc_id),
@@ -81,38 +169,8 @@ impl Database {
                     created_at: created_at.to_rfc3339(),
                     updated_at: updated_at.to_rfc3339(),
                 }
-            })
-            .collect())
-    }
-
-    pub async fn get_cloud_account(&self, id: &Uuid, account_id: &[u8]) -> Result<Option<CloudAccount>> {
-        let row = sqlx::query_as::<_, (Uuid, Vec<u8>, String, String, Option<String>, bool, Option<DateTime<Utc>>, Option<String>, DateTime<Utc>, DateTime<Utc>)>(
-            r#"
-            SELECT id, account_id, backend_type, name, config, is_valid, 
-                   last_validated_at, validation_error, created_at, updated_at
-            FROM cloud_accounts
-            WHERE id = $1 AND account_id = $2
-            "#
-        )
-        .bind(id)
-        .bind(account_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(|(id, acc_id, backend_type, name, config, is_valid, last_validated_at, validation_error, created_at, updated_at)| {
-            CloudAccount {
-                id: id.to_string(),
-                account_id: hex::encode(&acc_id),
-                backend_type,
-                name,
-                config,
-                is_valid,
-                last_validated_at: last_validated_at.map(|t| t.to_rfc3339()),
-                validation_error,
-                created_at: created_at.to_rfc3339(),
-                updated_at: updated_at.to_rfc3339(),
-            }
-        }))
+            },
+        ))
     }
 
     pub async fn create_cloud_account(
@@ -177,7 +235,7 @@ impl Database {
             r#"
             DELETE FROM cloud_accounts
             WHERE id = $1 AND account_id = $2
-            "#
+            "#,
         )
         .bind(id)
         .bind(account_id)
@@ -188,13 +246,16 @@ impl Database {
         Ok(rows_affected > 0)
     }
 
-    pub async fn get_cloud_account_credentials(&self, id: &Uuid) -> Result<Option<(Vec<u8>, String, String)>> {
+    pub async fn get_cloud_account_credentials(
+        &self,
+        id: &Uuid,
+    ) -> Result<Option<(Vec<u8>, String, String)>> {
         let row = sqlx::query_as::<_, (Vec<u8>, String, String)>(
             r#"
             SELECT account_id, backend_type, credentials_encrypted
             FROM cloud_accounts
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -250,7 +311,10 @@ mod tests {
         .unwrap();
 
         // Deletion must fail
-        let err = db.delete_cloud_account(&ca_uuid, &account.id).await.unwrap_err();
+        let err = db
+            .delete_cloud_account(&ca_uuid, &account.id)
+            .await
+            .unwrap_err();
         assert!(
             err.to_string().contains("active resource(s) exist"),
             "Expected active resources error, got: {}",

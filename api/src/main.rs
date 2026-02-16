@@ -1023,7 +1023,9 @@ async fn serve_command() -> Result<(), std::io::Error> {
                     e
                 ))
             })?;
-            tracing::info!("CREDENTIAL_ENCRYPTION_KEY validated — cloud account management enabled");
+            tracing::info!(
+                "CREDENTIAL_ENCRYPTION_KEY validated — cloud account management enabled"
+            );
         }
         Err(_) => {
             tracing::warn!(

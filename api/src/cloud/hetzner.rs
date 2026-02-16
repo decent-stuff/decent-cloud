@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
+use super::{CloudBackend, ProvisionResult};
 use crate::cloud::types::{
     BackendCatalog, CreateServerRequest, Image, Location, Server, ServerMetrics, ServerStatus,
     ServerType,
 };
-use super::{CloudBackend, ProvisionResult};
 
 const HETZNER_API_BASE: &str = "https://api.hetzner.cloud/v1";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -204,14 +204,15 @@ struct HetznerImage {
 impl HetznerBackend {
     fn convert_server(&self, s: HetznerServer) -> Server {
         let status = match s.status.as_str() {
-            "initializing" | "starting" | "rebuilding" | "migrating" => {
-                ServerStatus::Provisioning
-            }
+            "initializing" | "starting" | "rebuilding" | "migrating" => ServerStatus::Provisioning,
             "running" => ServerStatus::Running,
             "off" | "stopping" => ServerStatus::Stopped,
             "deleting" => ServerStatus::Deleting,
             other => {
-                tracing::warn!("Unknown Hetzner server status '{}', treating as failed", other);
+                tracing::warn!(
+                    "Unknown Hetzner server status '{}', treating as failed",
+                    other
+                );
                 ServerStatus::Failed
             }
         };
@@ -294,8 +295,10 @@ impl HetznerBackend {
                 let mut banner = [0u8; 256];
                 if let Ok(Ok(n)) = tokio::time::timeout(
                     std::time::Duration::from_secs(5),
-                    stream.read(&mut banner)
-                ).await {
+                    stream.read(&mut banner),
+                )
+                .await
+                {
                     if n > 0 {
                         let banner_str = String::from_utf8_lossy(&banner[..n]);
                         if banner_str.contains("SSH") {
@@ -548,7 +551,11 @@ impl CloudBackend for HetznerBackend {
             .await?;
 
         if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
-            tracing::warn!("Failed to delete Hetzner SSH key {}: {:?}", id, response.status());
+            tracing::warn!(
+                "Failed to delete Hetzner SSH key {}: {:?}",
+                id,
+                response.status()
+            );
         }
 
         Ok(())
@@ -606,7 +613,11 @@ mod tests {
         // Provisioning states (server not yet usable)
         for status in ["initializing", "starting", "rebuilding", "migrating"] {
             let converted = backend.convert_server(make_test_server(status));
-            assert_eq!(converted.status, ServerStatus::Provisioning, "status '{status}'");
+            assert_eq!(
+                converted.status,
+                ServerStatus::Provisioning,
+                "status '{status}'"
+            );
         }
 
         // Running
