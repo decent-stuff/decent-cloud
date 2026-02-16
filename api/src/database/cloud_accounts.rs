@@ -186,6 +186,25 @@ impl Database {
     }
 
     pub async fn delete_cloud_account(&self, id: &Uuid, account_id: &[u8]) -> Result<bool> {
+        // Block deletion if any non-terminal resources exist (prevents orphaned VMs on Hetzner)
+        let active_count: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM cloud_resources
+            WHERE cloud_account_id = $1
+              AND status NOT IN ('deleted', 'failed')
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if active_count.0 > 0 {
+            return Err(anyhow!(
+                "Cannot delete cloud account: {} active resource(s) exist. Terminate all resources first.",
+                active_count.0
+            ));
+        }
+
         let rows_affected = sqlx::query(
             r#"
             DELETE FROM cloud_accounts
@@ -220,10 +239,102 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::test_helpers::setup_test_db;
 
     #[test]
     fn test_backend_type_display() {
         assert_eq!(BackendType::Hetzner.to_string(), "hetzner");
         assert_eq!(BackendType::ProxmoxApi.to_string(), "proxmox_api");
+    }
+
+    #[tokio::test]
+    async fn test_delete_cloud_account_blocked_by_active_resources() {
+        let db = setup_test_db().await;
+
+        let pubkey = [20u8; 32];
+        let account = db
+            .create_account("delete_test", &pubkey, "del@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                BackendType::Hetzner,
+                "del-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        // Create a resource in 'provisioning' status
+        db.create_cloud_resource(
+            &ca_uuid,
+            "pending-test",
+            "dc-del-test",
+            "cx22",
+            "nbg1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA test",
+        )
+        .await
+        .unwrap();
+
+        // Deletion must fail
+        let err = db.delete_cloud_account(&ca_uuid, &account.id).await.unwrap_err();
+        assert!(
+            err.to_string().contains("active resource(s) exist"),
+            "Expected active resources error, got: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delete_cloud_account_succeeds_after_resources_terminated() {
+        let db = setup_test_db().await;
+
+        let pubkey = [21u8; 32];
+        let account = db
+            .create_account("del_ok_test", &pubkey, "delok@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                BackendType::Hetzner,
+                "delok-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "pending-test",
+                "dc-delok-test",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        // Mark resource as deleted
+        db.update_cloud_resource_status(&resource_id, "deleted")
+            .await
+            .unwrap();
+
+        // Now deletion should succeed
+        let deleted = db
+            .delete_cloud_account(&ca_uuid, &account.id)
+            .await
+            .unwrap();
+        assert!(deleted);
     }
 }

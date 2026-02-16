@@ -132,7 +132,8 @@ async fn provision_pending_resources(
 
         if let Err(e) = result {
             tracing::error!("Failed to provision resource {}: {:#}", resource_id, e);
-            if let Err(e) = database.update_cloud_resource_status(&resource_id, "failed").await {
+            let error_msg = format!("{:#}", e);
+            if let Err(e) = database.mark_cloud_resource_failed(&resource_id, &error_msg).await {
                 tracing::error!("Failed to mark resource {} as failed: {}", resource_id, e);
             }
         }
@@ -219,6 +220,7 @@ async fn provision_one(
         &public_ip,
         &ssh_key_id,
         &gateway_slug,
+        gateway_subdomain.as_deref(),
         gateway_ssh_port,
         gateway_ssh_port, // no port range — start = ssh port
         gateway_ssh_port, // no port range — end = ssh port

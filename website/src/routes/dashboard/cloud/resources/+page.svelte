@@ -276,11 +276,16 @@
 										<div class="text-neutral-300 font-mono">
 											ssh -p {resource.sshPort} {resource.sshUsername}@{resource.publicIp}
 										</div>
-										{#if resource.gatewaySlug}
+										{#if resource.gatewaySubdomain}
 											<div class="text-neutral-400 mt-1 text-xs">
-												Gateway: {resource.gatewaySlug}.gw.decent-cloud.org:{resource.gatewaySshPort}
+												Gateway: {resource.gatewaySubdomain}
 											</div>
 										{/if}
+									</div>
+								{/if}
+								{#if resource.status === 'failed' && resource.errorMessage}
+									<div class="mt-3 p-3 bg-red-900/20 border border-red-800/30 text-sm text-red-300">
+										{resource.errorMessage}
 									</div>
 								{/if}
 							</div>
@@ -298,6 +303,8 @@
 									</button>
 								{:else if resource.status === 'deleting'}
 									<span class="text-xs text-orange-400">Terminating...</span>
+								{:else if resource.status === 'failed'}
+									<span class="text-xs text-red-400">Failed</span>
 								{/if}
 							</div>
 						</div>

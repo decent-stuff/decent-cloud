@@ -30,11 +30,17 @@ pub struct CloudResource {
     pub ssh_username: String,
     pub external_ssh_key_id: Option<String>,
     pub gateway_slug: Option<String>,
+    pub gateway_subdomain: Option<String>,
     pub gateway_ssh_port: Option<i32>,
     pub gateway_port_range_start: Option<i32>,
     pub gateway_port_range_end: Option<i32>,
     pub offering_id: Option<i64>,
     pub listing_mode: String,
+    pub error_message: Option<String>,
+    /// Platform fee for this resource in e9s (1/1e9 USD). Always 0 for self-provisioned resources —
+    /// users pay the cloud provider directly.
+    #[ts(type = "number")]
+    pub platform_fee_e9s: i64,
     pub created_at: String,
     pub updated_at: String,
     pub terminated_at: Option<String>,
@@ -81,11 +87,13 @@ struct CloudResourceRow {
     ssh_username: String,
     external_ssh_key_id: Option<String>,
     gateway_slug: Option<String>,
+    gateway_subdomain: Option<String>,
     gateway_ssh_port: Option<i32>,
     gateway_port_range_start: Option<i32>,
     gateway_port_range_end: Option<i32>,
     offering_id: Option<i64>,
     listing_mode: String,
+    error_message: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     terminated_at: Option<DateTime<Utc>>,
@@ -116,11 +124,14 @@ impl From<CloudResourceRow> for CloudResource {
             ssh_username: row.ssh_username,
             external_ssh_key_id: row.external_ssh_key_id,
             gateway_slug: row.gateway_slug,
+            gateway_subdomain: row.gateway_subdomain,
             gateway_ssh_port: row.gateway_ssh_port,
             gateway_port_range_start: row.gateway_port_range_start,
             gateway_port_range_end: row.gateway_port_range_end,
             offering_id: row.offering_id,
             listing_mode: row.listing_mode,
+            error_message: row.error_message,
+            platform_fee_e9s: 0,
             created_at: row.created_at.to_rfc3339(),
             updated_at: row.updated_at.to_rfc3339(),
             terminated_at: row.terminated_at.map(|t| t.to_rfc3339()),
@@ -146,8 +157,8 @@ impl Database {
                 cr.id, cr.cloud_account_id, cr.external_id, cr.name, 
                 cr.server_type, cr.location, cr.image, cr.ssh_pubkey, cr.status,
                 cr.public_ip, cr.ssh_port, cr.ssh_username, cr.external_ssh_key_id,
-                cr.gateway_slug, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
-                cr.offering_id, cr.listing_mode,
+                cr.gateway_slug, cr.gateway_subdomain, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
+                cr.offering_id, cr.listing_mode, cr.error_message,
                 cr.created_at, cr.updated_at, cr.terminated_at,
                 ca.name as cloud_account_name, ca.backend_type as cloud_account_backend
             FROM cloud_resources cr
@@ -170,8 +181,8 @@ impl Database {
                 cr.id, cr.cloud_account_id, cr.external_id, cr.name, 
                 cr.server_type, cr.location, cr.image, cr.ssh_pubkey, cr.status,
                 cr.public_ip, cr.ssh_port, cr.ssh_username, cr.external_ssh_key_id,
-                cr.gateway_slug, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
-                cr.offering_id, cr.listing_mode,
+                cr.gateway_slug, cr.gateway_subdomain, cr.gateway_ssh_port, cr.gateway_port_range_start, cr.gateway_port_range_end,
+                cr.offering_id, cr.listing_mode, cr.error_message,
                 cr.created_at, cr.updated_at, cr.terminated_at,
                 ca.name as cloud_account_name, ca.backend_type as cloud_account_backend
             FROM cloud_resources cr
@@ -204,12 +215,12 @@ impl Database {
                 status, ssh_port, ssh_username, listing_mode
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, 'provisioning', 22, 'root', 'personal')
-            RETURNING 
-                id, cloud_account_id, external_id, name, 
+            RETURNING
+                id, cloud_account_id, external_id, name,
                 server_type, location, image, ssh_pubkey, status,
                 public_ip, ssh_port, ssh_username, external_ssh_key_id,
-                gateway_slug, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end,
-                offering_id, listing_mode,
+                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end,
+                offering_id, listing_mode, error_message,
                 created_at, updated_at, terminated_at
             "#
         )
@@ -226,6 +237,7 @@ impl Database {
         Ok(CloudResource::from(row))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_cloud_resource_provisioned(
         &self,
         id: &Uuid,
@@ -233,6 +245,7 @@ impl Database {
         public_ip: &str,
         external_ssh_key_id: &str,
         gateway_slug: &str,
+        gateway_subdomain: Option<&str>,
         gateway_ssh_port: i32,
         gateway_port_range_start: i32,
         gateway_port_range_end: i32,
@@ -245,9 +258,10 @@ impl Database {
                 public_ip = $3,
                 external_ssh_key_id = $4,
                 gateway_slug = $5,
-                gateway_ssh_port = $6,
-                gateway_port_range_start = $7,
-                gateway_port_range_end = $8,
+                gateway_subdomain = $6,
+                gateway_ssh_port = $7,
+                gateway_port_range_start = $8,
+                gateway_port_range_end = $9,
                 updated_at = NOW()
             WHERE id = $1
             "#
@@ -257,6 +271,7 @@ impl Database {
         .bind(public_ip)
         .bind(external_ssh_key_id)
         .bind(gateway_slug)
+        .bind(gateway_subdomain)
         .bind(gateway_ssh_port)
         .bind(gateway_port_range_start)
         .bind(gateway_port_range_end)
@@ -285,6 +300,32 @@ impl Database {
         )
         .bind(id)
         .bind(status)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(anyhow!("Cloud resource not found"));
+        }
+
+        Ok(())
+    }
+
+    /// Mark a cloud resource as failed with an error message visible to the user.
+    pub async fn mark_cloud_resource_failed(
+        &self,
+        id: &Uuid,
+        error_message: &str,
+    ) -> Result<()> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources
+            SET status = 'failed', error_message = $2, updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(error_message)
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -911,7 +952,7 @@ mod tests {
 
         // Mark resource as running (simulate successful provision)
         db.update_cloud_resource_provisioned(
-            &resource_id, "ext-123", "1.2.3.4", "key-1", "abc123", 22, 22, 22,
+            &resource_id, "ext-123", "1.2.3.4", "key-1", "abc123", Some("abc123.hz-nbg1.dev-gw.decent-cloud.org"), 22, 22, 22,
         )
         .await
         .unwrap();
