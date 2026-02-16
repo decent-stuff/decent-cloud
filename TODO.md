@@ -14,7 +14,6 @@
 ### Known Limitations
 
 - **Multi-instance race** — If two API server instances share the same DB, both provisioning services race on the same resources. The 10-minute lock timeout prevents corruption but can cause delayed provisioning or double-attempt waste. Not a prod issue if only one instance runs.
-- **Hetzner server type availability is location-dependent** — No server-side validation before sending to Hetzner API; user sees a cryptic "unsupported location for server type" error.
 
 ### Longer-term
 

@@ -170,7 +170,6 @@ struct HetznerServerType {
 
 #[derive(Debug, Deserialize)]
 struct HetznerPrice {
-    #[allow(dead_code)]
     location: String,
     price_monthly: HetznerPriceDetail,
     price_hourly: HetznerPriceDetail,
@@ -199,6 +198,47 @@ struct HetznerImage {
     #[serde(rename = "type")]
     type_: Option<String>,
     description: Option<String>,
+}
+
+/// Check that `server_type` exists in the catalog and is available in `location`.
+/// Pure function for testability — the caller fetches the catalog from the API.
+fn check_server_type_location(
+    server_types: &[HetznerServerType],
+    server_type: &str,
+    location: &str,
+) -> anyhow::Result<()> {
+    let st = server_types
+        .iter()
+        .find(|s| s.name == server_type)
+        .ok_or_else(|| {
+            let known: Vec<&str> = server_types.iter().map(|s| s.name.as_str()).collect();
+            anyhow::anyhow!(
+                "Unknown Hetzner server type '{}'. Available types: {}",
+                server_type,
+                if known.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    known.join(", ")
+                }
+            )
+        })?;
+
+    let available: Vec<&str> = st.prices.iter().map(|p| p.location.as_str()).collect();
+    if !available.contains(&location) {
+        anyhow::bail!(
+            "Server type '{}' is not available in location '{}'. Available locations for '{}': {}",
+            server_type,
+            location,
+            server_type,
+            if available.is_empty() {
+                "(none)".to_string()
+            } else {
+                available.join(", ")
+            }
+        );
+    }
+
+    Ok(())
 }
 
 impl HetznerBackend {
@@ -283,6 +323,30 @@ impl HetznerBackend {
                     .map(|s| s.trim_end_matches('.').to_string())
             }),
         })
+    }
+
+    /// Validate that `server_type` is available in `location` by querying the Hetzner API.
+    /// Prevents cryptic 422 errors from Hetzner when a server type isn't offered in a location.
+    async fn validate_server_type_in_location(
+        &self,
+        server_type: &str,
+        location: &str,
+    ) -> anyhow::Result<()> {
+        let response = self
+            .request_builder(
+                reqwest::Method::GET,
+                &format!("/server_types?name={}", server_type),
+            )
+            .send()
+            .await
+            .context("Failed to query Hetzner server types")?;
+
+        if !response.status().is_success() {
+            return Err(self.handle_error(response).await);
+        }
+
+        let data: ServerTypesResponse = response.json().await?;
+        check_server_type_location(&data.server_types, server_type, location)
     }
 
     async fn wait_for_ssh_reachable(&self, ip: &str, timeout_secs: u64) -> anyhow::Result<bool> {
@@ -402,6 +466,11 @@ impl CloudBackend for HetznerBackend {
     }
 
     async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<ProvisionResult> {
+        // Validate server_type + location before creating any resources.
+        // This prevents cryptic Hetzner 422 errors and avoids orphaned SSH keys.
+        self.validate_server_type_in_location(&req.server_type, &req.location)
+            .await?;
+
         let ssh_key_response = self
             .request_builder(reqwest::Method::POST, "/ssh_keys")
             .json(&CreateSshKeyRequest {
@@ -758,5 +827,104 @@ mod tests {
         let resp: ServerTypesResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.server_types.len(), 1);
         assert_eq!(resp.server_types[0].name, "cpx11");
+    }
+
+    fn make_test_catalog() -> Vec<HetznerServerType> {
+        vec![
+            HetznerServerType {
+                id: 1,
+                name: "cx22".to_string(),
+                cores: 2,
+                memory: 4.0,
+                disk: 40,
+                prices: vec![
+                    HetznerPrice {
+                        location: "fsn1".to_string(),
+                        price_monthly: HetznerPriceDetail {
+                            gross: "3.92".to_string(),
+                        },
+                        price_hourly: HetznerPriceDetail {
+                            gross: "0.006".to_string(),
+                        },
+                    },
+                    HetznerPrice {
+                        location: "nbg1".to_string(),
+                        price_monthly: HetznerPriceDetail {
+                            gross: "3.92".to_string(),
+                        },
+                        price_hourly: HetznerPriceDetail {
+                            gross: "0.006".to_string(),
+                        },
+                    },
+                ],
+            },
+            HetznerServerType {
+                id: 2,
+                name: "ccx13".to_string(),
+                cores: 2,
+                memory: 8.0,
+                disk: 80,
+                prices: vec![HetznerPrice {
+                    location: "fsn1".to_string(),
+                    price_monthly: HetznerPriceDetail {
+                        gross: "12.00".to_string(),
+                    },
+                    price_hourly: HetznerPriceDetail {
+                        gross: "0.02".to_string(),
+                    },
+                }],
+            },
+        ]
+    }
+
+    #[test]
+    fn test_check_server_type_location_valid() {
+        let catalog = make_test_catalog();
+        assert!(check_server_type_location(&catalog, "cx22", "fsn1").is_ok());
+        assert!(check_server_type_location(&catalog, "cx22", "nbg1").is_ok());
+        assert!(check_server_type_location(&catalog, "ccx13", "fsn1").is_ok());
+    }
+
+    #[test]
+    fn test_check_server_type_location_wrong_location() {
+        let catalog = make_test_catalog();
+        let err = check_server_type_location(&catalog, "ccx13", "ash")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("not available in location 'ash'"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.contains("fsn1"),
+            "error should list available locations: {err}"
+        );
+    }
+
+    #[test]
+    fn test_check_server_type_location_unknown_type() {
+        let catalog = make_test_catalog();
+        let err = check_server_type_location(&catalog, "nonexistent", "fsn1")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Unknown Hetzner server type 'nonexistent'"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.contains("cx22") && err.contains("ccx13"),
+            "error should list available types: {err}"
+        );
+    }
+
+    #[test]
+    fn test_check_server_type_location_empty_catalog() {
+        let err = check_server_type_location(&[], "cx22", "fsn1")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("(none)"),
+            "empty catalog should say (none): {err}"
+        );
     }
 }
