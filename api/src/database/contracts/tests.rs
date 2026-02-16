@@ -2733,3 +2733,61 @@ async fn test_get_provider_health_summary_all_status_types() {
 }
 
 // === Subscription Management Tests ===
+
+// === Cloud Resource Provisioning Bridge Tests ===
+
+#[tokio::test]
+async fn test_update_contract_provisioned_by_cloud_resource_sets_gateway_fields() {
+    let db = setup_test_db().await;
+
+    let contract_id = vec![0xF1u8; 32];
+    let requester = [0xF2u8; 32];
+    let provider = [0xF3u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester,
+        &provider,
+        "test-offering",
+        1000,
+        "accepted",
+    )
+    .await;
+
+    let instance_details = r#"{"public_ip":"1.2.3.4","ssh_port":22}"#;
+
+    db.update_contract_provisioned_by_cloud_resource(
+        &contract_id,
+        instance_details,
+        Some("abc123"),
+        Some("abc123.hz-nbg1.dev-gw.decent-cloud.org"),
+        Some(22),
+    )
+    .await
+    .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "active");
+    assert_eq!(
+        contract.provisioning_instance_details.as_deref(),
+        Some(instance_details)
+    );
+    assert!(contract.provisioning_completed_at_ns.is_some());
+
+    // Verify gateway fields were set on the contract row
+    let row: (Option<String>, Option<String>, Option<i32>) = sqlx::query_as(
+        "SELECT gateway_slug, gateway_subdomain, gateway_ssh_port FROM contract_sign_requests WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.0.as_deref(), Some("abc123"));
+    assert_eq!(
+        row.1.as_deref(),
+        Some("abc123.hz-nbg1.dev-gw.decent-cloud.org")
+    );
+    assert_eq!(row.2, Some(22));
+}

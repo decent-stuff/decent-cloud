@@ -376,18 +376,18 @@ impl Database {
         Ok(())
     }
 
-    #[allow(clippy::type_complexity)]
-    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<(Uuid, String, Option<String>, String, String)>> {
-        let rows = sqlx::query_as::<_, (Uuid, String, Option<String>, String, String)>(
+    pub async fn get_pending_termination_resources(&self, limit: i64) -> Result<Vec<PendingTerminationResource>> {
+        let rows = sqlx::query_as::<_, PendingTerminationResource>(
             r#"
-            SELECT 
+            SELECT
                 cr.id, cr.external_id, cr.external_ssh_key_id,
-                ca.backend_type, ca.credentials_encrypted
+                ca.backend_type, ca.credentials_encrypted,
+                cr.gateway_slug, cr.location
             FROM cloud_resources cr
             JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
             WHERE cr.status = 'deleting'
               AND ca.is_valid = true
-              AND (cr.provisioning_locked_at IS NULL 
+              AND (cr.provisioning_locked_at IS NULL
                    OR cr.provisioning_locked_at < NOW() - INTERVAL '10 minutes')
             ORDER BY cr.updated_at ASC
             LIMIT $1
@@ -503,6 +503,87 @@ impl Database {
         Ok(rows_affected > 0)
     }
 
+    /// Find and expire active cloud contracts past their end_timestamp_ns.
+    /// For each: marks contract as 'expired' and its cloud_resource as 'deleting'.
+    /// Returns the number of contracts expired.
+    pub async fn expire_and_cleanup_cloud_contracts(&self) -> Result<u64> {
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+        // Find active contracts with cloud resources that are past expiration
+        let expired_contracts: Vec<(Vec<u8>,)> = sqlx::query_as(
+            r#"
+            SELECT DISTINCT csr.contract_id
+            FROM contract_sign_requests csr
+            JOIN cloud_resources cr ON cr.contract_id = csr.contract_id
+            WHERE csr.status = 'active'
+              AND csr.end_timestamp_ns > 0
+              AND csr.end_timestamp_ns < $1
+              AND cr.status NOT IN ('deleting', 'deleted', 'failed')
+              AND cr.terminated_at IS NULL
+            "#,
+        )
+        .bind(now_ns)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if expired_contracts.is_empty() {
+            return Ok(0);
+        }
+
+        let mut count = 0u64;
+        let expired_status = dcc_common::ContractStatus::Expired.to_string();
+
+        for (contract_id,) in &expired_contracts {
+            let mut tx = self.pool.begin().await?;
+
+            // Update contract status to expired
+            sqlx::query(
+                r#"UPDATE contract_sign_requests
+                   SET status = $1, status_updated_at_ns = $2
+                   WHERE contract_id = $3 AND status = 'active'"#,
+            )
+            .bind(&expired_status)
+            .bind(now_ns)
+            .bind(contract_id)
+            .execute(&mut *tx)
+            .await?;
+
+            // Record status history
+            let system_actor: &[u8] = b"system";
+            sqlx::query(
+                "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, 'active', $2, $3, $4, 'Contract expired (end_timestamp_ns reached)')",
+            )
+            .bind(contract_id)
+            .bind(&expired_status)
+            .bind(system_actor)
+            .bind(now_ns)
+            .execute(&mut *tx)
+            .await?;
+
+            // Mark cloud resource for deletion
+            sqlx::query(
+                r#"UPDATE cloud_resources
+                   SET status = 'deleting', updated_at = NOW()
+                   WHERE contract_id = $1
+                     AND status NOT IN ('deleting', 'deleted', 'failed')
+                     AND terminated_at IS NULL"#,
+            )
+            .bind(contract_id)
+            .execute(&mut *tx)
+            .await?;
+
+            tx.commit().await?;
+
+            tracing::info!(
+                contract_id = %hex::encode(contract_id),
+                "Expired cloud contract and marked resource for deletion"
+            );
+            count += 1;
+        }
+
+        Ok(count)
+    }
+
     /// Find the Hetzner cloud_account for a provider pubkey.
     /// Looks up: provider_pubkey → account_id → cloud_accounts (backend_type='hetzner').
     pub async fn find_hetzner_cloud_account_for_provider(
@@ -528,6 +609,18 @@ impl Database {
 
         Ok(row.map(|r| r.0))
     }
+}
+
+/// Row returned by `get_pending_termination_resources`.
+#[derive(Debug, FromRow)]
+pub struct PendingTerminationResource {
+    pub id: Uuid,
+    pub external_id: String,
+    pub external_ssh_key_id: Option<String>,
+    pub backend_type: String,
+    pub credentials_encrypted: String,
+    pub gateway_slug: Option<String>,
+    pub location: String,
 }
 
 /// Row returned by `get_pending_provisioning_resources`.
@@ -764,5 +857,136 @@ mod tests {
             Some("#!/bin/bash\necho setup")
         );
         assert_eq!(pending[0].name, "dc-recipe-pending");
+    }
+
+    #[tokio::test]
+    async fn test_expire_and_cleanup_cloud_contracts() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("expire_test", &[10u8; 32], "expire@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "expire-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xDDu8; 32];
+        let past_end_ns = 1_000_000i64; // far in the past
+
+        // Insert an active contract with end_timestamp_ns in the past
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 1, $4, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[11u8; 32][..])
+        .bind(&[10u8; 32][..])
+        .bind(past_end_ns)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Create a running cloud resource linked to the contract
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-expire-test",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Mark resource as running (simulate successful provision)
+        db.update_cloud_resource_provisioned(
+            &resource_id, "ext-123", "1.2.3.4", "key-1", "abc123", 22, 22, 22,
+        )
+        .await
+        .unwrap();
+
+        // Run expiration
+        let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
+        assert_eq!(count, 1, "Should expire exactly one contract");
+
+        // Verify contract status changed to expired
+        let status: (String,) = sqlx::query_as(
+            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(status.0, "expired");
+
+        // Verify cloud resource is now deleting
+        let resource = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        assert_eq!(resource.resource.status, "deleting");
+
+        // Running again should find nothing
+        let count2 = db.expire_and_cleanup_cloud_contracts().await.unwrap();
+        assert_eq!(count2, 0, "No contracts to expire on second run");
+    }
+
+    #[tokio::test]
+    async fn test_expire_skips_future_contracts() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("future_test", &[12u8; 32], "future@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "future-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xEEu8; 32];
+        let future_end_ns = i64::MAX; // far in the future
+
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 1, $4, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[13u8; 32][..])
+        .bind(&[12u8; 32][..])
+        .bind(future_end_ns)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        db.create_cloud_resource_for_contract(
+            &contract_id,
+            &cloud_account_uuid,
+            "dc-future-test",
+            "cx22",
+            "nbg1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA test",
+            None,
+        )
+        .await
+        .unwrap();
+
+        let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
+        assert_eq!(count, 0, "Should not expire future contracts");
     }
 }

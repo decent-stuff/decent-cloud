@@ -2052,6 +2052,9 @@ impl Database {
         &self,
         contract_id: &[u8],
         instance_details: &str,
+        gateway_slug: Option<&str>,
+        gateway_subdomain: Option<&str>,
+        gateway_ssh_port: Option<i32>,
     ) -> Result<()> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let new_status = ContractStatus::Active.to_string();
@@ -2075,23 +2078,31 @@ impl Database {
                SET status = $1,
                    status_updated_at_ns = $2,
                    provisioning_instance_details = $3,
-                   provisioning_completed_at_ns = $4
-               WHERE contract_id = $5"#,
+                   provisioning_completed_at_ns = $4,
+                   gateway_slug = $5,
+                   gateway_subdomain = $6,
+                   gateway_ssh_port = $7
+               WHERE contract_id = $8"#,
         )
         .bind(&new_status)
         .bind(now_ns)
         .bind(instance_details)
         .bind(now_ns)
+        .bind(gateway_slug)
+        .bind(gateway_subdomain)
+        .bind(gateway_ssh_port)
         .bind(contract_id)
         .execute(&mut *tx)
         .await?;
 
+        let system_actor: &[u8] = b"system";
         sqlx::query(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(contract_id)
         .bind(&old_status)
         .bind(&new_status)
+        .bind(system_actor)
         .bind(now_ns)
         .bind("Cloud resource provisioned by api-server")
         .execute(&mut *tx)

@@ -15,13 +15,13 @@
 
 **E2E verified locally:** add-account → provision (cx23/nbg1) → VM running (real IP, SSH reachable) → delete → Hetzner fully cleaned up (server + SSH key deleted).
 
-### Cloud Provisioning — Must Fix Before Prod
+### Cloud Provisioning — Completed
 
-1. **Set gateway fields on cloud-provisioned contracts** — `update_contract_provisioned_by_cloud_resource()` writes `provisioning_instance_details` JSON but does NOT set `gateway_subdomain`, `gateway_ssh_port`, `gateway_port_range_start`, or `gateway_port_range_end` on the contract row. These must be set for gateway routing to work (like dc-agent's `mark_contract_provisioned_for_agent()` does).
-2. **Contract expiration → resource deletion** — Cancel triggers cleanup, but contract expiration (`end_timestamp_ns` reached) does not. Add a background job to `cleanup_service.rs` that finds expired contracts and calls `mark_contract_resource_for_deletion`.
-3. **Gateway DNS + routing not wired** — `cloud_provisioning_service` generates a random `gateway_slug` and hardcoded port range but never creates DNS records, Caddy config, or acme-dns bindings. The gateway fields on cloud resources are cosmetic. For self-provisioned Hetzner VMs to be reachable via the gateway, the provisioning service needs to call the Cloudflare DNS API (like dc-agent does).
-4. **Automated E2E test** — No automated provisioning test exists. Add `api-cli e2e cloud-provision` that creates an account, provisions a VM, verifies SSH reachability, deletes, and confirms Hetzner cleanup. Must use cheapest server type and always clean up.
-5. **Remaining `let _ =` in providers.rs:1749** — `let _ = db.clear_password_reset_request(...)` silently ignores failure. Not in provisioning path but violates project rules.
+1. ~~**Set gateway fields on cloud-provisioned contracts**~~ — Done: `update_contract_provisioned_by_cloud_resource()` now sets `gateway_slug`, `gateway_subdomain`, `gateway_ssh_port` on the contract row. SSH port = 22 (direct), no port range (public IP VMs).
+2. ~~**Contract expiration → resource deletion**~~ — Done: `cleanup_service.rs` calls `expire_and_cleanup_cloud_contracts()` which finds expired active contracts with cloud resources and marks them for deletion.
+3. ~~**Gateway DNS + routing not wired**~~ — Done: `cloud_provisioning_service` creates DNS A records via Cloudflare on provision, deletes them on termination. DNS failure is non-fatal.
+4. ~~**Automated E2E test**~~ — Done: `api-cli e2e cloud-provision` tests full lifecycle (add account → provision cx22 → verify SSH → delete → cleanup).
+5. ~~**Remaining `let _ =` violations**~~ — Done: Fixed in `providers.rs`, `gateway.rs`, `main.rs`.
 
 ### Cloud Provisioning — Known Limitations
 

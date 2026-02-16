@@ -1313,9 +1313,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(60);
 
     let db_for_cloud = ctx.database.clone();
+    let cf_dns_for_cloud = ctx.cloudflare_dns.clone();
     let cloud_provisioning_task = tokio::spawn(async move {
         let cloud_provisioning_service = CloudProvisioningService::new(
             db_for_cloud,
+            cf_dns_for_cloud,
             cloud_provisioning_interval_secs,
             cloud_termination_interval_secs,
         );

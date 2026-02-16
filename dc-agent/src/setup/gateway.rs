@@ -203,7 +203,9 @@ impl GatewaySetup {
         }
 
         // Load br_netfilter module (required for bridge-nf-call-iptables)
-        let _ = self.execute("modprobe br_netfilter");
+        if let Err(e) = self.execute("modprobe br_netfilter") {
+            tracing::warn!("Failed to load br_netfilter module: {:#} — bridge netfilter may not work", e);
+        }
 
         // Enable IP forwarding
         if !ip_forward_enabled {
@@ -236,9 +238,11 @@ net.bridge.bridge-nf-call-iptables = 1
         }
 
         // Ensure br_netfilter module loads on boot
-        let _ = self.execute(
+        if let Err(e) = self.execute(
             "echo 'br_netfilter' >> /etc/modules-load.d/br_netfilter.conf 2>/dev/null || true",
-        );
+        ) {
+            tracing::warn!("Failed to persist br_netfilter module load: {:#}", e);
+        }
 
         println!("  [ok] IP forwarding and bridge netfilter enabled");
         Ok(())

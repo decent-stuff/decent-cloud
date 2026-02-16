@@ -1746,7 +1746,13 @@ impl ProvidersApi {
         {
             Ok(_) => {
                 // Clear any pending password reset request
-                let _ = db.clear_password_reset_request(&contract_id).await;
+                if let Err(e) = db.clear_password_reset_request(&contract_id).await {
+                    tracing::warn!(
+                        contract_id = %hex::encode(&contract_id),
+                        "Failed to clear password reset request after password update: {:#}",
+                        e
+                    );
+                }
                 Json(ApiResponse {
                     success: true,
                     data: Some("Password updated successfully".to_string()),

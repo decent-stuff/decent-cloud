@@ -2903,11 +2903,9 @@ WantedBy=multi-user.target
     }
 
     #[test]
-    fn test_is_service_installed_returns_false_for_nonexistent() {
-        // When the service file doesn't exist, should return false
-        // This test relies on the fact that /etc/systemd/system/dc-agent.service
-        // typically doesn't exist in test environments
-        // We can't guarantee this, so we just test the function doesn't panic
-        let _ = is_service_installed();
+    fn test_is_service_installed_returns_false_in_test_env() {
+        // dc-agent.service should not be installed in test environments
+        let result = is_service_installed();
+        assert!(!result, "dc-agent.service should not be installed in test environment");
     }
 }
