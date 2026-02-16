@@ -967,6 +967,122 @@ impl Database {
         Ok(deleted)
     }
 
+    /// Purge terminal contracts older than `retention_days`.
+    ///
+    /// Deletes contracts in terminal states (rejected, cancelled, expired) whose
+    /// `status_updated_at_ns` is older than the retention period, along with all
+    /// related data across 15+ tables.
+    ///
+    /// Safety: skips contracts with active cloud resources or unreported billing usage.
+    pub async fn purge_terminal_contracts(&self, retention_days: i64) -> Result<u64> {
+        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            - (retention_days * 24 * 60 * 60 * 1_000_000_000);
+
+        let terminal_statuses = [
+            ContractStatus::Rejected.to_string(),
+            ContractStatus::Cancelled.to_string(),
+            ContractStatus::Expired.to_string(),
+        ];
+
+        // Find purgeable contract IDs
+        let purgeable: Vec<(Vec<u8>,)> = sqlx::query_as(
+            r#"
+            SELECT csr.contract_id
+            FROM contract_sign_requests csr
+            WHERE csr.status = ANY($1)
+              AND csr.status_updated_at_ns IS NOT NULL
+              AND csr.status_updated_at_ns < $2
+              -- Skip contracts with active cloud resources
+              AND NOT EXISTS (
+                  SELECT 1 FROM cloud_resources cr
+                  WHERE cr.contract_id = csr.contract_id
+                    AND cr.status NOT IN ('deleted', 'failed')
+              )
+              -- Skip contracts with unreported usage (billing must complete first)
+              AND NOT EXISTS (
+                  SELECT 1 FROM contract_usage cu
+                  WHERE cu.contract_id = csr.contract_id
+                    AND cu.reported_to_stripe = FALSE
+              )
+            "#,
+        )
+        .bind(&terminal_statuses[..])
+        .bind(cutoff_ns)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if purgeable.is_empty() {
+            return Ok(0);
+        }
+
+        let contract_ids: Vec<Vec<u8>> = purgeable.into_iter().map(|(id,)| id).collect();
+        let count = contract_ids.len() as u64;
+
+        // Hex-encoded IDs for TEXT-typed contract_id columns
+        let hex_ids: Vec<String> = contract_ids.iter().map(hex::encode).collect();
+
+        let mut tx = self.pool.begin().await?;
+
+        // Delete from non-cascading tables (order matters: child tables first)
+        // tax_tracking references invoices.id, must go before invoices
+        sqlx::query(
+            "DELETE FROM tax_tracking WHERE invoice_id IN (SELECT id FROM invoices WHERE contract_id = ANY($1))",
+        )
+        .bind(&contract_ids)
+        .execute(&mut *tx)
+        .await
+        .context("purge: tax_tracking")?;
+
+        // Non-cascading BYTEA contract_id tables
+        let bytea_tables = [
+            "contract_usage_events",
+            "contract_usage",
+            "contract_health_checks",
+            "invoices",
+            "cloud_resources",
+            "escrow",
+            "reseller_commissions",
+            "reseller_orders",
+            "receipt_tracking",
+            "pending_stripe_receipts",
+        ];
+        for table in bytea_tables {
+            sqlx::query(&format!(
+                "DELETE FROM {} WHERE contract_id = ANY($1)",
+                table
+            ))
+            .bind(&contract_ids)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| format!("purge: {}", table))?;
+        }
+
+        // TEXT-typed contract_id tables (hex-encoded strings)
+        let text_tables = ["chatwoot_message_events", "bandwidth_history"];
+        for table in text_tables {
+            sqlx::query(&format!(
+                "DELETE FROM {} WHERE contract_id = ANY($1)",
+                table
+            ))
+            .bind(&hex_ids)
+            .execute(&mut *tx)
+            .await
+            .with_context(|| format!("purge: {}", table))?;
+        }
+
+        // Delete from main table (cascades: contract_provisioning_details,
+        // contract_status_history, contract_payment_entries, contract_sign_replies,
+        // contract_extensions, payment_releases, contract_feedback)
+        sqlx::query("DELETE FROM contract_sign_requests WHERE contract_id = ANY($1)")
+            .bind(&contract_ids)
+            .execute(&mut *tx)
+            .await
+            .context("purge: contract_sign_requests")?;
+
+        tx.commit().await?;
+        Ok(count)
+    }
+
     /// Get encrypted credentials for a contract (only returns if not expired)
     pub async fn get_encrypted_credentials(&self, contract_id: &[u8]) -> Result<Option<String>> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);

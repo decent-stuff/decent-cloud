@@ -105,6 +105,27 @@ impl CleanupService {
             }
         }
 
+        // Purge terminal contracts older than retention period
+        match self
+            .database
+            .purge_terminal_contracts(self.retention_days)
+            .await
+        {
+            Ok(count) if count > 0 => {
+                tracing::info!(
+                    "Purged {} terminal contracts older than {} days",
+                    count,
+                    self.retention_days
+                );
+            }
+            Ok(_) => {
+                tracing::debug!("No terminal contracts to purge");
+            }
+            Err(e) => {
+                tracing::error!("Failed to purge terminal contracts: {:#}", e);
+            }
+        }
+
         // Expire cloud contracts past their end_timestamp_ns
         match self.database.expire_and_cleanup_cloud_contracts().await {
             Ok(count) if count > 0 => {

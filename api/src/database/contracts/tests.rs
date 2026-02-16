@@ -2791,3 +2791,235 @@ async fn test_update_contract_provisioned_by_cloud_resource_sets_gateway_fields(
     );
     assert_eq!(row.2, Some(22));
 }
+
+// --- purge_terminal_contracts tests ---
+
+/// Helper to insert a terminal contract with a specific status_updated_at_ns
+async fn insert_terminal_contract(
+    db: &Database,
+    contract_id: &[u8],
+    status: &str,
+    status_updated_at_ns: i64,
+) {
+    let requester = vec![10u8; 32];
+    let provider = vec![11u8; 32];
+    insert_contract_request(db, contract_id, &requester, &provider, "off-1", 0, status).await;
+    sqlx::query("UPDATE contract_sign_requests SET status_updated_at_ns = $1 WHERE contract_id = $2")
+        .bind(status_updated_at_ns)
+        .bind(contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+}
+
+fn old_timestamp_ns(days_ago: i64) -> i64 {
+    chrono::Utc::now().timestamp_nanos_opt().unwrap() - (days_ago * 24 * 60 * 60 * 1_000_000_000)
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_deletes_old_expired() {
+    let db = setup_test_db().await;
+    let contract_id = vec![50u8; 32];
+
+    // 200-day-old expired contract
+    insert_terminal_contract(&db, &contract_id, "expired", old_timestamp_ns(200)).await;
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 1);
+
+    // Verify contract is gone
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_sign_requests WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(count.0, 0);
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_preserves_recent() {
+    let db = setup_test_db().await;
+    let old_id = vec![51u8; 32];
+    let recent_id = vec![52u8; 32];
+
+    insert_terminal_contract(&db, &old_id, "cancelled", old_timestamp_ns(200)).await;
+    insert_terminal_contract(&db, &recent_id, "cancelled", old_timestamp_ns(10)).await;
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 1);
+
+    // Recent contract survives
+    let count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_sign_requests WHERE contract_id = $1")
+            .bind(&recent_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(count.0, 1);
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_preserves_active() {
+    let db = setup_test_db().await;
+    let active_id = vec![53u8; 32];
+
+    // Active contract with old timestamp should NOT be purged
+    insert_terminal_contract(&db, &active_id, "active", old_timestamp_ns(200)).await;
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 0);
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_skips_unreported_usage() {
+    let db = setup_test_db().await;
+    let contract_id = vec![54u8; 32];
+
+    insert_terminal_contract(&db, &contract_id, "expired", old_timestamp_ns(200)).await;
+
+    // Add unreported usage
+    sqlx::query(
+        "INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, reported_to_stripe) VALUES ($1, 0, 100, FALSE)",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 0, "should skip contracts with unreported usage");
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_cleans_related_tables() {
+    let db = setup_test_db().await;
+    let contract_id = vec![55u8; 32];
+    let hex_id = hex::encode(&contract_id);
+
+    insert_terminal_contract(&db, &contract_id, "rejected", old_timestamp_ns(200)).await;
+
+    // Insert data in non-cascading tables
+    sqlx::query(
+        "INSERT INTO contract_usage (contract_id, billing_period_start, billing_period_end, reported_to_stripe) VALUES ($1, 0, 100, TRUE)",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_usage_events (contract_id, event_type) VALUES ($1, 'heartbeat')",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_health_checks (contract_id, checked_at, status) VALUES ($1, 0, 'healthy')",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query("INSERT INTO escrow (contract_id, payer_pubkey, payee_pubkey, amount_e9s, status, created_at_ns) VALUES ($1, $2, $3, 100, 'held', 0)")
+        .bind(&contract_id)
+        .bind(vec![10u8; 32])
+        .bind(vec![11u8; 32])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO bandwidth_history (contract_id, gateway_slug, provider_pubkey, recorded_at_ns) VALUES ($1, 'slug', 'provider', 0)",
+    )
+    .bind(&hex_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Also insert cascading data to verify it's cleaned too
+    sqlx::query(
+        "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns) VALUES ($1, 'active', 'rejected', $2, 0)",
+    )
+    .bind(&contract_id)
+    .bind(vec![10u8; 32])
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 1);
+
+    // Verify all related data is gone
+    let usage_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_usage WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(usage_count.0, 0, "contract_usage should be purged");
+
+    let events_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_usage_events WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(events_count.0, 0, "contract_usage_events should be purged");
+
+    let health_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_health_checks WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(health_count.0, 0, "contract_health_checks should be purged");
+
+    let escrow_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM escrow WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(escrow_count.0, 0, "escrow should be purged");
+
+    let bw_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM bandwidth_history WHERE contract_id = $1")
+            .bind(&hex_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(bw_count.0, 0, "bandwidth_history should be purged");
+
+    let history_count: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM contract_status_history WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(history_count.0, 0, "contract_status_history should be purged");
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_all_terminal_statuses() {
+    let db = setup_test_db().await;
+    let ids: Vec<Vec<u8>> = (0..3).map(|i| vec![60 + i; 32]).collect();
+
+    insert_terminal_contract(&db, &ids[0], "rejected", old_timestamp_ns(200)).await;
+    insert_terminal_contract(&db, &ids[1], "cancelled", old_timestamp_ns(200)).await;
+    insert_terminal_contract(&db, &ids[2], "expired", old_timestamp_ns(200)).await;
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 3, "all three terminal statuses should be purged");
+}
+
+#[tokio::test]
+async fn test_purge_terminal_contracts_none_to_purge() {
+    let db = setup_test_db().await;
+
+    let purged = db.purge_terminal_contracts(180).await.unwrap();
+    assert_eq!(purged, 0);
+}

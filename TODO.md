@@ -57,12 +57,6 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ---
 
-## Rental State Machine
-
-- [ ] **Contract archival** — Old contracts stay in DB indefinitely. Expiration and cleanup service runs, but expired contract records are never archived or purged. *(Single-session candidate. Cleanup service exists in `cleanup_service.rs`. Terminal states: Rejected/Cancelled/Expired. Needs: retention policy decision, archive/purge SQL, new cleanup task. 10+ related tables to handle: `contract_provisioning_details`, `contract_status_history`, `contract_extensions`, `contract_usage`, `contract_usage_events`, `contract_payment_entries`, `contract_sign_replies`, `payment_releases`, `contract_health_checks`, `cloud_resources`.)*
-
----
-
 ## Architectural Issues Requiring Review
 
 ### Hardcoded Token Value ($1 USD)
