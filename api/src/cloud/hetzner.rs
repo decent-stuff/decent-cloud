@@ -200,6 +200,52 @@ struct HetznerImage {
     description: Option<String>,
 }
 
+/// Resolved Hetzner provisioner config with all three fields populated.
+#[derive(Debug)]
+pub struct HetznerProvisionerConfig {
+    pub server_type: String,
+    pub location: String,
+    pub image: String,
+}
+
+/// Resolve Hetzner provisioner config from offering fields, applying fallback logic.
+///
+/// Priority for each field:
+/// - `server_type`: provisioner_config JSON > default "cx22"
+/// - `location`: provisioner_config JSON > lowercase datacenter_city
+/// - `image`: provisioner_config JSON > template_name > default "ubuntu-24.04"
+pub fn resolve_provisioner_config(
+    provisioner_config: Option<&str>,
+    datacenter_city: &str,
+    template_name: Option<&str>,
+) -> anyhow::Result<HetznerProvisionerConfig> {
+    let config: serde_json::Value = provisioner_config
+        .map(serde_json::from_str)
+        .transpose()
+        .context("Invalid provisioner_config JSON")?
+        .unwrap_or(serde_json::json!({}));
+
+    let server_type = config["server_type"]
+        .as_str()
+        .unwrap_or("cx22")
+        .to_string();
+    let location = config["location"]
+        .as_str()
+        .unwrap_or(&datacenter_city.to_lowercase())
+        .to_string();
+    let image = config["image"]
+        .as_str()
+        .or(template_name)
+        .unwrap_or("ubuntu-24.04")
+        .to_string();
+
+    Ok(HetznerProvisionerConfig {
+        server_type,
+        location,
+        image,
+    })
+}
+
 /// Check that `server_type` exists in the catalog and is available in `location`.
 /// Pure function for testability — the caller fetches the catalog from the API.
 fn check_server_type_location(
@@ -241,7 +287,73 @@ fn check_server_type_location(
     Ok(())
 }
 
+/// Check that `image` exists in the Hetzner image catalog.
+/// Pure function for testability — the caller fetches the catalog from the API.
+fn check_image_exists(images: &[HetznerImage], image_name: &str) -> anyhow::Result<()> {
+    let found = images.iter().any(|img| {
+        img.name.as_deref() == Some(image_name)
+            && img.status == "available"
+            && img.type_.as_deref() != Some("backup")
+    });
+
+    if !found {
+        let known: Vec<&str> = images
+            .iter()
+            .filter(|img| img.status == "available" && img.type_.as_deref() != Some("backup"))
+            .filter_map(|img| img.name.as_deref())
+            .collect();
+        anyhow::bail!(
+            "Unknown Hetzner image '{}'. Available images: {}",
+            image_name,
+            if known.is_empty() {
+                "(none)".to_string()
+            } else {
+                known.join(", ")
+            }
+        );
+    }
+
+    Ok(())
+}
+
 impl HetznerBackend {
+    /// Validate server_type, location, and image against the live Hetzner catalog.
+    pub async fn validate_offering_config(
+        &self,
+        config: &HetznerProvisionerConfig,
+    ) -> anyhow::Result<()> {
+        // Fetch server types (filtered by name for efficiency)
+        let st_response = self
+            .request_builder(reqwest::Method::GET, "/server_types")
+            .query(&[("name", &config.server_type)])
+            .send()
+            .await
+            .context("Failed to query Hetzner server types")?;
+
+        if !st_response.status().is_success() {
+            return Err(self.handle_error(st_response).await);
+        }
+
+        let st_data: ServerTypesResponse = st_response.json().await?;
+        check_server_type_location(&st_data.server_types, &config.server_type, &config.location)?;
+
+        // Fetch images and validate
+        let img_response = self
+            .request_builder(reqwest::Method::GET, "/images?type=system")
+            .send()
+            .await
+            .context("Failed to query Hetzner images")?;
+
+        if !img_response.status().is_success() {
+            return Err(self.handle_error(img_response).await);
+        }
+
+        let img_data: ImagesResponse = img_response.json().await?;
+        check_image_exists(&img_data.images, &config.image)?;
+
+        Ok(())
+    }
+
     fn convert_server(&self, s: HetznerServer) -> Server {
         let status = match s.status.as_str() {
             "initializing" | "starting" | "rebuilding" | "migrating" => ServerStatus::Provisioning,
@@ -323,30 +435,6 @@ impl HetznerBackend {
                     .map(|s| s.trim_end_matches('.').to_string())
             }),
         })
-    }
-
-    /// Validate that `server_type` is available in `location` by querying the Hetzner API.
-    /// Prevents cryptic 422 errors from Hetzner when a server type isn't offered in a location.
-    async fn validate_server_type_in_location(
-        &self,
-        server_type: &str,
-        location: &str,
-    ) -> anyhow::Result<()> {
-        let response = self
-            .request_builder(
-                reqwest::Method::GET,
-                &format!("/server_types?name={}", server_type),
-            )
-            .send()
-            .await
-            .context("Failed to query Hetzner server types")?;
-
-        if !response.status().is_success() {
-            return Err(self.handle_error(response).await);
-        }
-
-        let data: ServerTypesResponse = response.json().await?;
-        check_server_type_location(&data.server_types, server_type, location)
     }
 
     async fn wait_for_ssh_reachable(&self, ip: &str, timeout_secs: u64) -> anyhow::Result<bool> {
@@ -492,10 +580,14 @@ impl CloudBackend for HetznerBackend {
     }
 
     async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<ProvisionResult> {
-        // Validate server_type + location before creating any resources.
+        // Validate server_type, location, and image before creating any resources.
         // This prevents cryptic Hetzner 422 errors and avoids orphaned SSH keys.
-        self.validate_server_type_in_location(&req.server_type, &req.location)
-            .await?;
+        self.validate_offering_config(&HetznerProvisionerConfig {
+            server_type: req.server_type.clone(),
+            location: req.location.clone(),
+            image: req.image.clone(),
+        })
+        .await?;
 
         let ssh_key_response = self
             .request_builder(reqwest::Method::POST, "/ssh_keys")
@@ -955,6 +1047,126 @@ mod tests {
         assert!(
             err.contains("(none)"),
             "empty catalog should say (none): {err}"
+        );
+    }
+
+    #[test]
+    fn test_resolve_provisioner_config_explicit() {
+        let config = resolve_provisioner_config(
+            Some(r#"{"server_type":"cpx31","location":"nbg1","image":"debian-12"}"#),
+            "Falkenstein",
+            Some("ubuntu-22.04"),
+        )
+        .unwrap();
+        assert_eq!(config.server_type, "cpx31");
+        assert_eq!(config.location, "nbg1");
+        assert_eq!(config.image, "debian-12");
+    }
+
+    #[test]
+    fn test_resolve_provisioner_config_fallbacks() {
+        let config =
+            resolve_provisioner_config(None, "Falkenstein", Some("ubuntu-22.04")).unwrap();
+        assert_eq!(config.server_type, "cx22");
+        assert_eq!(config.location, "falkenstein");
+        assert_eq!(config.image, "ubuntu-22.04");
+    }
+
+    #[test]
+    fn test_resolve_provisioner_config_empty() {
+        let config = resolve_provisioner_config(None, "Falkenstein", None).unwrap();
+        assert_eq!(config.server_type, "cx22");
+        assert_eq!(config.location, "falkenstein");
+        assert_eq!(config.image, "ubuntu-24.04");
+    }
+
+    #[test]
+    fn test_resolve_provisioner_config_invalid_json() {
+        let err = resolve_provisioner_config(Some("not json"), "fsn1", None).unwrap_err();
+        assert!(
+            err.to_string().contains("Invalid provisioner_config JSON"),
+            "unexpected error: {err}"
+        );
+    }
+
+    fn make_test_images() -> Vec<HetznerImage> {
+        vec![
+            HetznerImage {
+                id: 1,
+                name: Some("ubuntu-24.04".to_string()),
+                os_flavor: "ubuntu".to_string(),
+                status: "available".to_string(),
+                type_: Some("system".to_string()),
+                description: Some("Ubuntu 24.04".to_string()),
+            },
+            HetznerImage {
+                id: 2,
+                name: Some("debian-12".to_string()),
+                os_flavor: "debian".to_string(),
+                status: "available".to_string(),
+                type_: Some("system".to_string()),
+                description: Some("Debian 12".to_string()),
+            },
+            HetznerImage {
+                id: 3,
+                name: Some("old-image".to_string()),
+                os_flavor: "ubuntu".to_string(),
+                status: "deprecated".to_string(),
+                type_: Some("system".to_string()),
+                description: None,
+            },
+            HetznerImage {
+                id: 4,
+                name: Some("my-backup".to_string()),
+                os_flavor: "ubuntu".to_string(),
+                status: "available".to_string(),
+                type_: Some("backup".to_string()),
+                description: None,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_check_image_exists_valid() {
+        let images = make_test_images();
+        assert!(check_image_exists(&images, "ubuntu-24.04").is_ok());
+        assert!(check_image_exists(&images, "debian-12").is_ok());
+    }
+
+    #[test]
+    fn test_check_image_exists_invalid() {
+        let images = make_test_images();
+        let err = check_image_exists(&images, "nonexistent")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Unknown Hetzner image 'nonexistent'"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.contains("ubuntu-24.04") && err.contains("debian-12"),
+            "error should list available images: {err}"
+        );
+        // Deprecated and backup images should NOT appear in the list
+        assert!(
+            !err.contains("old-image"),
+            "deprecated images should not be listed: {err}"
+        );
+        assert!(
+            !err.contains("my-backup"),
+            "backup images should not be listed: {err}"
+        );
+    }
+
+    #[test]
+    fn test_check_image_exists_deprecated_rejected() {
+        let images = make_test_images();
+        let err = check_image_exists(&images, "old-image")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Unknown Hetzner image 'old-image'"),
+            "deprecated image should be rejected: {err}"
         );
     }
 }

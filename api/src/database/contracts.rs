@@ -2157,24 +2157,11 @@ impl Database {
                 )
             })?;
 
-        // Parse provisioner_config for server_type, location, image
-        let config: serde_json::Value = offering
-            .provisioner_config
-            .as_deref()
-            .map(serde_json::from_str)
-            .transpose()?
-            .unwrap_or(serde_json::json!({}));
-
-        let server_type = config["server_type"].as_str().unwrap_or("cx22").to_string();
-        let location = config["location"]
-            .as_str()
-            .unwrap_or(&offering.datacenter_city.to_lowercase())
-            .to_string();
-        let image = config["image"]
-            .as_str()
-            .or(offering.template_name.as_deref())
-            .unwrap_or("ubuntu-24.04")
-            .to_string();
+        let resolved = crate::cloud::hetzner::resolve_provisioner_config(
+            offering.provisioner_config.as_deref(),
+            &offering.datacenter_city,
+            offering.template_name.as_deref(),
+        )?;
 
         let name = format!("dc-recipe-{}", &hex::encode(contract_id)[..12]);
 
@@ -2182,9 +2169,9 @@ impl Database {
             contract_id,
             &cloud_account_id,
             &name,
-            &server_type,
-            &location,
-            &image,
+            &resolved.server_type,
+            &resolved.location,
+            &resolved.image,
             &contract.requester_ssh_pubkey,
             offering.post_provision_script.as_deref(),
         )

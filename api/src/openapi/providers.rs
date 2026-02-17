@@ -39,6 +39,57 @@ pub fn normalize_provisioning_details(
     Ok(sanitized)
 }
 
+/// Validate Hetzner offering config against the live Hetzner catalog.
+/// No-op for non-Hetzner offerings.
+async fn validate_hetzner_offering(
+    db: &Database,
+    offering: &crate::database::offerings::Offering,
+    pubkey_bytes: &[u8],
+) -> Result<(), String> {
+    if offering.provisioner_type.as_deref() != Some("hetzner") {
+        return Ok(());
+    }
+
+    let config = crate::cloud::hetzner::resolve_provisioner_config(
+        offering.provisioner_config.as_deref(),
+        &offering.datacenter_city,
+        offering.template_name.as_deref(),
+    )
+    .map_err(|e| format!("Invalid provisioner config: {e:#}"))?;
+
+    let cloud_account_id = db
+        .find_hetzner_cloud_account_for_provider(pubkey_bytes)
+        .await
+        .map_err(|e| format!("Failed to look up Hetzner cloud account: {e:#}"))?
+        .ok_or_else(|| {
+            "No Hetzner cloud account configured for this provider. \
+             Add a Hetzner cloud account before creating Hetzner offerings."
+                .to_string()
+        })?;
+
+    let (_account_id, _backend_type, credentials_encrypted) = db
+        .get_cloud_account_credentials(&cloud_account_id)
+        .await
+        .map_err(|e| format!("Failed to get cloud account credentials: {e:#}"))?
+        .ok_or_else(|| "Cloud account credentials not found".to_string())?;
+
+    let encryption_key = crate::crypto::ServerEncryptionKey::from_env()
+        .map_err(|e| format!("Server credential encryption not configured: {e:#}"))?;
+
+    let token = crate::crypto::decrypt_server_credential(&credentials_encrypted, &encryption_key)
+        .map_err(|e| format!("Failed to decrypt Hetzner credentials: {e:#}"))?;
+
+    let backend = crate::cloud::hetzner::HetznerBackend::new(token)
+        .map_err(|e| format!("Failed to create Hetzner client: {e:#}"))?;
+
+    backend
+        .validate_offering_config(&config)
+        .await
+        .map_err(|e| format!("Hetzner offering validation failed: {e:#}"))?;
+
+    Ok(())
+}
+
 pub struct ProvidersApi;
 
 #[OpenApi]
@@ -811,6 +862,14 @@ impl ProvidersApi {
         params.id = None;
         params.pubkey = hex::encode(&pubkey_bytes);
 
+        if let Err(e) = validate_hetzner_offering(&db, &params, &pubkey_bytes).await {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
         match db.create_offering(&pubkey_bytes, params).await {
             Ok(id) => {
                 // Note: Chatwoot resources (inbox/team/portal) are created when
@@ -868,6 +927,14 @@ impl ProvidersApi {
 
         let mut params = offering.0;
         params.pubkey = hex::encode(&pubkey_bytes);
+
+        if let Err(e) = validate_hetzner_offering(&db, &params, &pubkey_bytes).await {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
 
         match db.update_offering(&pubkey_bytes, id.0, params).await {
             Ok(_) => Json(ApiResponse {
