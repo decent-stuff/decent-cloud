@@ -19,6 +19,37 @@ const SCRIPT_TIMEOUT: Duration = Duration::from_secs(300);
 /// Maximum password reset execution time
 const PASSWORD_RESET_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Result of executing a script on a remote VM.
+///
+/// `Ok(ScriptResult)` means SSH and script execution infrastructure worked.
+/// `Err(_)` means infrastructure failure (SSH unreachable, timeout, etc.).
+#[derive(Debug, Clone)]
+pub struct ScriptResult {
+    /// Whether the script exited with code 0.
+    pub success: bool,
+    /// The script's exit code (-1 if the process was killed).
+    pub exit_code: i32,
+    /// Combined stdout and stderr log.
+    pub log: String,
+}
+
+impl ScriptResult {
+    fn from_output(stdout: &str, stderr: &str, exit_code: i32) -> Self {
+        let log = if stderr.is_empty() {
+            stdout.to_string()
+        } else if stdout.is_empty() {
+            format!("--- stderr ---\n{stderr}")
+        } else {
+            format!("{stdout}\n--- stderr ---\n{stderr}")
+        };
+        Self {
+            success: exit_code == 0,
+            exit_code,
+            log,
+        }
+    }
+}
+
 /// Execute a post-provision script on a remote VM via SSH.
 ///
 /// The script should include a shebang line to specify the interpreter.
@@ -31,14 +62,14 @@ const PASSWORD_RESET_TIMEOUT: Duration = Duration::from_secs(30);
 /// * `context_id` - For logging purposes (contract ID or resource ID)
 ///
 /// # Returns
-/// * `Ok(())` if script executed successfully (exit code 0)
-/// * `Err(_)` if script failed or couldn't be executed
+/// * `Ok(ScriptResult)` with stdout/stderr and exit code (script ran, may have failed)
+/// * `Err(_)` if SSH infrastructure failed (unreachable, timeout, etc.)
 pub async fn execute_post_provision_script(
     ip_address: &str,
     ssh_port: u16,
     script: &str,
     context_id: &str,
-) -> Result<()> {
+) -> Result<ScriptResult> {
     info!(
         context_id = %context_id,
         ip_address = %ip_address,
@@ -131,7 +162,7 @@ async fn execute_script_via_ssh(
     ssh_port: u16,
     script: &str,
     context_id: &str,
-) -> Result<()> {
+) -> Result<ScriptResult> {
     let script_with_shebang = ensure_shebang(script);
 
     // Create the remote command that:
@@ -185,8 +216,11 @@ exit $EXIT_CODE
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    let exit_code = output.status.code().unwrap_or(-1);
 
-    if output.status.success() {
+    let result = ScriptResult::from_output(&stdout, &stderr, exit_code);
+
+    if result.success {
         info!(
             context_id = %context_id,
             exit_code = 0,
@@ -196,9 +230,7 @@ exit $EXIT_CODE
         if !stdout.is_empty() {
             debug!(context_id = %context_id, stdout = %stdout, "Script stdout");
         }
-        Ok(())
     } else {
-        let exit_code = output.status.code().unwrap_or(-1);
         warn!(
             context_id = %context_id,
             exit_code = exit_code,
@@ -206,8 +238,9 @@ exit $EXIT_CODE
             stdout = %stdout,
             "Post-provision script failed"
         );
-        anyhow::bail!("Script exited with code {}: {}", exit_code, stderr)
     }
+
+    Ok(result)
 }
 
 /// Build a safe password reset command that uses chpasswd.
@@ -323,5 +356,32 @@ mod tests {
         let cmd = build_password_reset_command("Pass'with\"quotes$and`backticks");
         assert!(cmd.contains("chpasswd"));
         assert!(cmd.contains("Pass'with\"quotes$and`backticks"));
+    }
+
+    #[test]
+    fn test_script_result_success() {
+        let result = ScriptResult::from_output("hello world\n", "", 0);
+        assert!(result.success);
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.log, "hello world\n");
+    }
+
+    #[test]
+    fn test_script_result_failure_with_stderr() {
+        let result = ScriptResult::from_output("partial output", "something broke", 1);
+        assert!(!result.success);
+        assert_eq!(result.exit_code, 1);
+        assert!(result.log.contains("partial output"));
+        assert!(result.log.contains("--- stderr ---"));
+        assert!(result.log.contains("something broke"));
+    }
+
+    #[test]
+    fn test_script_result_stderr_only() {
+        let result = ScriptResult::from_output("", "error only", 2);
+        assert!(!result.success);
+        assert_eq!(result.exit_code, 2);
+        assert!(result.log.starts_with("--- stderr ---"));
+        assert!(result.log.contains("error only"));
     }
 }

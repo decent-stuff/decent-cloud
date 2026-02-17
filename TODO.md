@@ -20,9 +20,13 @@
 - **Marketplace billing for listed resources** — Platform fee for marketplace-listed self-provisioned resources. *(Needs product decisions on fee structure.)*
 - **Marketplace rental fulfillment for self-provisioned** — When a tenant rents a self-provisioned offering, the contract is created but the VM access handoff (credential sharing) is manual. Needs: automated credential sharing mechanism, stock tracking (one VM = stock of 1). *(Single session once billing decisions are made.)*
 
-### Longer-term
+### Done
 
-- **Recipe marketplace UI** — Website needs UI for browsing/purchasing recipe offerings and viewing provisioned recipe instances with connection details. *(Multi-week epic: new frontend pages, API integration, design work.)*
+- **Recipe execution log capture** — `execute_post_provision_script` returns `ScriptResult` with stdout/stderr/exit_code. Logs stored in `cloud_resources.recipe_log` (migration 018). Exposed via `GET /contracts/:id/recipe-log`. Frontend shows collapsible "Recipe Output" on contract detail page. Marketplace shows "Recipe" badge on offerings with scripts.
+
+### Remaining (Recipes)
+
+- **Recipe marketplace browsing UI** — Dedicated page for browsing/purchasing recipe offerings with filtering, search, and recipe-specific details (script description, author info). *(Multi-week epic: new frontend pages, API integration, design work.)*
 - **Recipe script versioning** — Scripts are snapshotted at contract creation. Consider a `recipe_versions` table so authors can update scripts and buyers can upgrade. *(Multi-week: new DB table, migration logic, UI for version management.)*
 
 ---

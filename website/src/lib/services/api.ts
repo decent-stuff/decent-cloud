@@ -1128,6 +1128,35 @@ export async function getContractUsage(
 
 export { type ContractUsage };
 
+/**
+ * Get recipe execution log for a contract
+ */
+export async function getContractRecipeLog(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<string | null> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/recipe-log`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null;
+		}
+		throw new Error(`Failed to fetch recipe log: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string | null>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch recipe log');
+	}
+
+	return payload.data ?? null;
+}
+
 export async function getProviderOnboarding(pubkey: string): Promise<ProviderOnboarding | null> {
 	const pubkeyHex = normalizePubkey(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/onboarding`;

@@ -1203,6 +1203,74 @@ impl ContractsApi {
         }
     }
 
+    /// Get recipe execution log for a contract
+    ///
+    /// Returns the combined stdout/stderr from the post-provision script execution.
+    /// User must be the requester or provider.
+    #[oai(
+        path = "/contracts/:id/recipe-log",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn get_recipe_log(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<Option<String>>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".into()),
+            });
+        }
+
+        match db.get_recipe_log_for_contract(&contract_id).await {
+            Ok(log) => Json(ApiResponse {
+                success: true,
+                data: Some(log),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get feedback for a contract
     ///
     /// Returns the feedback submitted for a specific contract, if any.

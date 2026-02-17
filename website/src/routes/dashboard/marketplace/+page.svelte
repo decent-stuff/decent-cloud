@@ -844,6 +844,12 @@
 													><Icon name="repeat" size={20} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
 												>
 											{/if}
+											{#if offering.post_provision_script}
+												<span
+													class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
+													>Recipe</span
+												>
+											{/if}
 										</div>
 										<a
 											href="/dashboard/reputation/{offering.owner_username ||

@@ -1920,19 +1920,26 @@ async fn poll_and_provision(
                                     )
                                     .await
                                     {
-                                        Ok(()) => {
-                                            info!(
-                                                contract_id = %contract.contract_id,
-                                                "Post-provision script completed successfully"
-                                            );
+                                        Ok(result) => {
+                                            if result.success {
+                                                info!(
+                                                    contract_id = %contract.contract_id,
+                                                    "Post-provision script completed successfully"
+                                                );
+                                            } else {
+                                                warn!(
+                                                    contract_id = %contract.contract_id,
+                                                    exit_code = result.exit_code,
+                                                    log = %result.log,
+                                                    "Post-provision script failed - VM is still accessible"
+                                                );
+                                            }
                                         }
                                         Err(e) => {
-                                            // Script failed - log but continue
-                                            // VM is still usable, just custom setup didn't work
                                             warn!(
                                                 contract_id = %contract.contract_id,
                                                 error = ?e,
-                                                "Post-provision script failed - VM is still accessible"
+                                                "Post-provision script infrastructure failure - VM is still accessible"
                                             );
                                         }
                                     }

@@ -9,6 +9,7 @@
 		downloadContractInvoice,
 		getContractUsage,
 		getContractCredentials,
+		getContractRecipeLog,
 		requestPasswordReset,
 		type Contract,
 		type ContractUsage,
@@ -45,6 +46,9 @@
 	let passwordResetLoading = $state(false);
 	let passwordResetSuccess = $state(false);
 	let passwordResetError = $state<string | null>(null);
+
+	// Recipe log state
+	let recipeLog = $state<string | null>(null);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -202,6 +206,18 @@
 				} catch (e) {
 					// Usage not available is not an error
 					console.debug("No usage data for contract:", e);
+				}
+
+				// Try to fetch recipe log
+				try {
+					const logHeaders = (await signRequest(
+						signingIdentityInfo.identity as any,
+						"GET",
+						`/api/v1/contracts/${contractId}/recipe-log`,
+					)).headers;
+					recipeLog = await getContractRecipeLog(contractId, logHeaders);
+				} catch (e) {
+					console.debug("No recipe log for contract:", e);
 				}
 
 				// Try to fetch and decrypt credentials for provisioned contracts
@@ -841,6 +857,14 @@
 						Refunds typically appear on your original payment method within 5-10 business days.
 					</p>
 				</div>
+			{/if}
+
+			<!-- Recipe execution log (shown when available) -->
+			{#if recipeLog}
+				<details class="bg-slate-500/10 border border-slate-500/30 p-4 mt-4">
+					<summary class="text-slate-400 font-semibold cursor-pointer select-none">Recipe Output</summary>
+					<pre class="mt-3 p-3 bg-black/40 rounded text-xs text-neutral-300 font-mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{recipeLog}</pre>
+				</details>
 			{/if}
 
 			<!-- Usage information (shown for contracts with usage tracking) -->

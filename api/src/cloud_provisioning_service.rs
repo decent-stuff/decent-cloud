@@ -195,18 +195,34 @@ async fn provision_one(
             .map(hex::encode)
             .unwrap_or_else(|| resource_id.to_string());
 
-        if let Err(e) =
+        let script_result =
             dcc_common::ssh_exec::execute_post_provision_script(&public_ip, 22, script, &context_id)
-                .await
+                .await?;
+
+        // Always store the log
+        if let Err(e) = database
+            .store_recipe_log(&resource_id, &script_result.log)
+            .await
         {
-            tracing::error!(
+            tracing::warn!(
                 resource_id = %resource_id,
-                "Post-provision script failed, cleaning up VM: {:#}",
+                "Failed to store recipe log: {:#}",
                 e
             );
-            // Cleanup: delete VM + SSH key on script failure
+        }
+
+        if !script_result.success {
+            tracing::error!(
+                resource_id = %resource_id,
+                exit_code = script_result.exit_code,
+                "Post-provision script failed (exit {}), cleaning up VM",
+                script_result.exit_code
+            );
             cleanup_failed_provision(&*backend, &result.server.id, &ssh_key_id).await;
-            return Err(e.context("Post-provision script failed"));
+            return Err(anyhow::anyhow!(
+                "Recipe script failed (exit {})",
+                script_result.exit_code
+            ));
         }
     }
 

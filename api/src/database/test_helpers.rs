@@ -330,6 +330,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/015_cloud_ssh_key_tracking.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/016_recipe_provisioning.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/017_cloud_resource_error_message.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/018_recipe_log.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -555,6 +556,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "017_cloud_resource_error_message.sql",
                     include_str!("../../migrations_pg/017_cloud_resource_error_message.sql"),
+                ),
+                (
+                    "018_recipe_log.sql",
+                    include_str!("../../migrations_pg/018_recipe_log.sql"),
                 ),
             ];
 

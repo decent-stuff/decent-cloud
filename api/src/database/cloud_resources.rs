@@ -764,6 +764,46 @@ impl Database {
         Ok(())
     }
 
+    /// Store the recipe execution log for a cloud resource.
+    pub async fn store_recipe_log(&self, id: &Uuid, log: &str) -> Result<()> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources
+            SET recipe_log = $2, updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .bind(log)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(anyhow!("Cloud resource not found"));
+        }
+
+        Ok(())
+    }
+
+    /// Get the recipe execution log for a contract's cloud resource.
+    pub async fn get_recipe_log_for_contract(&self, contract_id: &[u8]) -> Result<Option<String>> {
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            r#"
+            SELECT recipe_log
+            FROM cloud_resources
+            WHERE contract_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.and_then(|r| r.0))
+    }
+
     /// Unlist a marketplace resource back to personal mode.
     /// Returns the old offering_id so the caller can delete the offering.
     pub async fn unlist_from_marketplace(
@@ -1096,6 +1136,82 @@ mod tests {
             Some("#!/bin/bash\necho setup")
         );
         assert_eq!(pending[0].name, "dc-recipe-pending");
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_recipe_log() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("recipe_log_test", &[20u8; 32], "recipe@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "recipe-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+
+        let contract_id = vec![0xAAu8; 32];
+
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[21u8; 32][..])
+        .bind(&[20u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-recipe-log",
+                "cx22",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                Some("#!/bin/bash\necho hello"),
+            )
+            .await
+            .unwrap();
+
+        // No log initially
+        let log = db
+            .get_recipe_log_for_contract(&contract_id)
+            .await
+            .unwrap();
+        assert!(log.is_none());
+
+        // Store log
+        let test_log = "hello world\n--- stderr ---\nsome warning";
+        db.store_recipe_log(&resource_id, test_log).await.unwrap();
+
+        // Retrieve log
+        let log = db
+            .get_recipe_log_for_contract(&contract_id)
+            .await
+            .unwrap();
+        assert_eq!(log.as_deref(), Some(test_log));
+    }
+
+    #[tokio::test]
+    async fn test_get_recipe_log_nonexistent_contract() {
+        let db = setup_test_db().await;
+
+        let log = db
+            .get_recipe_log_for_contract(&[0xFFu8; 32])
+            .await
+            .unwrap();
+        assert!(log.is_none());
     }
 
     #[tokio::test]
