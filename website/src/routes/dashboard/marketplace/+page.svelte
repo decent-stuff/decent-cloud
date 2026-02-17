@@ -36,6 +36,7 @@
 	let minTrust = $state<number | null>(null);
 	let showDemoOfferings = $state(true);
 	let showOfflineOfferings = $state(false);
+	let recipesOnly = $state(false);
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -191,6 +192,11 @@
 			result = result.filter((o) => o.provider_online);
 		}
 
+		// Recipes only filter
+		if (recipesOnly) {
+			result = result.filter((o) => !!o.post_provision_script);
+		}
+
 		// Sort by price
 		result.sort((a, b) => {
 			const priceA = a.monthly_price ?? Infinity;
@@ -271,6 +277,7 @@
 		minTrust = null;
 		showDemoOfferings = true;
 		showOfflineOfferings = false;
+		recipesOnly = false;
 		searchQuery = "";
 		fetchOfferings();
 	}
@@ -705,6 +712,23 @@
 							>
 						</label>
 					</div>
+
+					<!-- Recipes Only Filter -->
+					<div>
+						<label
+							class="flex items-center gap-2 cursor-pointer group"
+						>
+							<input
+								type="checkbox"
+								bind:checked={recipesOnly}
+								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+							/>
+							<span
+								class="text-sm text-neutral-400 group-hover:text-white"
+								>Recipes only</span
+							>
+						</label>
+					</div>
 				</div>
 			</div>
 		</aside>
@@ -931,6 +955,12 @@
 														{offering.description ||
 															"No description"}
 													</div>
+													{#if offering.post_provision_script}
+														<details class="mt-3">
+															<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View recipe script</summary>
+															<pre class="mt-2 p-3 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
+														</details>
+													{/if}
 												</div>
 												<div class="space-y-2">
 													{#if offering.processor_name || offering.processor_brand}
@@ -1163,6 +1193,12 @@
 												><Icon name="repeat" size={20} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
 											>
 										{/if}
+										{#if offering.post_provision_script}
+											<span
+												class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
+												>Recipe</span
+											>
+										{/if}
 									</div>
 									<div class="flex items-center gap-1 text-xs text-neutral-400">
 										<Icon name={getTypeIcon(offering.product_type)} size={20} />
@@ -1237,6 +1273,12 @@
 										{offering.description ||
 											"No description"}
 									</div>
+									{#if offering.post_provision_script}
+										<details class="mt-1">
+											<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View recipe script</summary>
+											<pre class="mt-2 p-2 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-36 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
+										</details>
+									{/if}
 									<div class="grid grid-cols-2 gap-2 text-xs">
 										{#if offering.processor_name || offering.processor_brand}
 											<div>
