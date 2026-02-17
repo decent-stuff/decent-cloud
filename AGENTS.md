@@ -55,7 +55,7 @@ Every task follows this exact sequence. No exceptions.
 ### 1. Verify Prerequisites
 
 Before writing any code, confirm you have everything needed:
-- Access to required services (APIs, databases, external accounts)
+- Access to required services (APIs, databases, external accounts). STOP AND ASK if you don't have everything you need. YOU MUST HAVE everything you need to do your job properly.
 - Environment variables and credentials (check `cf/.env.dev`, `api/.env`)
 - Required infrastructure running (DB, external services)
 
@@ -63,6 +63,7 @@ Before writing any code, confirm you have everything needed:
 
 ### 2. Build a Working PoC
 
+THIS IS NOT SKIPPABLE! IT'S MANDATORY! :
 Build the smallest thing that proves the feature works end-to-end against **real services**:
 - Start the API server locally if needed (`cargo build -p api --bin api-server && ./target/debug/api-server serve`)
 - Use real API endpoints, real databases, real external services
@@ -79,18 +80,30 @@ Run the PoC and **show evidence** that it works:
 
 ### 4. Write Failing Tests
 
+CRITICALLY IMPORTANT! CANNOT BE SKIPPED!
 Now that you know the feature works, write tests that codify the behavior:
 - Write tests BEFORE refactoring or cleaning up the PoC code
 - Tests must fail without your changes (verify this if possible)
 - Cover both positive and negative paths
 - No overlap with existing tests
 
-### 5. Write Production Code
+### 5. Evaluate your confidence in successful implementation
+
+Based on the codebase analysis and your PoC, provide user with an estimate 1-10 how confident you are that your implementation will be ready for production.
+If an estimate is below 8/10, STOP AND ASK user for additional instructions and permission to proceed.
+
+### 6. Write Production Code
 
 Finalize the implementation:
 - Clean up the PoC into production-quality code
 - Ensure clippy is clean, all tests pass
 - Follow all project rules (DRY, YAGNI, fail-fast, etc.)
+
+### 7. Provide user with the list of next steps
+
+- Provide a completion estimate, e.g. 80% done.
+- Add a list of all items that are NOT YET fully done but are necessary for the completion to TODO.md
+- Clean up (remove) all items that ARE fully done from TODO.md, to reduce noise.
 
 ## Running the API Server Locally
 
