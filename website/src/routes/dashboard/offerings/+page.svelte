@@ -256,6 +256,20 @@
 			<p class="text-neutral-500">Manage your cloud service offerings</p>
 		</div>
 		<div class="flex gap-3">
+			<a
+				href="/dashboard/offerings/create"
+				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+			>
+				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M12 4v16m8-8H4"
+					/>
+				</svg>
+				Create Offering
+			</a>
 			<button
 				onclick={() => (showTemplateDialog = true)}
 				class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
@@ -273,7 +287,7 @@
 			</button>
 			<button
 				onclick={openEditor}
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+				class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
 			>
 				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path
@@ -451,12 +465,12 @@
 				</div>
 				<h3 class="text-2xl font-bold text-white mb-2">No Offerings Yet</h3>
 				<p class="text-neutral-500 mb-6">Create your first cloud service offering to get started</p>
-				<button
-					onclick={openEditor}
-					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all"
+				<a
+					href="/dashboard/offerings/create"
+					class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all"
 				>
 					Create Your First Offering
-				</button>
+				</a>
 			</div>
 		{/if}
 	{/if}

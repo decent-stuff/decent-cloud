@@ -26,7 +26,7 @@
 
 ### Remaining (Recipes)
 
-- **Recipe marketplace browsing UI** — Dedicated page for browsing/purchasing recipe offerings with filtering, search, and recipe-specific details (script description, author info). *(Multi-week epic: new frontend pages, API integration, design work.)*
+- **Recipe marketplace filters** — Add recipe-specific filtering to marketplace browsing: search by recipe type, author, script keywords. *(Single session: frontend filter UI + existing API query params.)*
 - **Recipe script versioning** — Scripts are snapshotted at contract creation. Consider a `recipe_versions` table so authors can update scripts and buyers can upgrade. *(Multi-week: new DB table, migration logic, UI for version management.)*
 
 ---
