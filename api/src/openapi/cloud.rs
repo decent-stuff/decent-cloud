@@ -7,6 +7,7 @@ use crate::auth::ApiAuthenticatedUser;
 use crate::cloud::types::BackendCatalog;
 use crate::cloud::{hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, CloudBackend};
 use crate::crypto::{decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey};
+use crate::database::offerings::Offering;
 use crate::database::{CloudAccount, CloudResourceWithDetails, Database};
 use anyhow::Context;
 use poem::web::Data;
@@ -38,6 +39,16 @@ pub struct ProvisionResourceRequest {
     pub location: String,
     pub image: String,
     pub ssh_pubkey: String,
+}
+
+#[derive(Debug, Deserialize, Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ListOnMarketplaceRequest {
+    pub offer_name: String,
+    pub monthly_price: f64,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Object, TS)]
@@ -714,6 +725,17 @@ impl CloudApi {
             }
         };
 
+        // Auto-unlist from marketplace if listed
+        if let Ok(Some(resource)) = db.get_cloud_resource(&uuid, &account_id).await {
+            if resource.resource.listing_mode == "marketplace" {
+                if let Ok(old_offering_id) = db.unlist_from_marketplace(&uuid, &account_id).await {
+                    if let Err(e) = db.delete_offering(&user.pubkey, old_offering_id).await {
+                        tracing::warn!(resource_id = %uuid, offering_id = old_offering_id, "Failed to delete offering during resource deletion: {e:#}");
+                    }
+                }
+            }
+        }
+
         match db.delete_cloud_resource(&uuid, &account_id).await {
             Ok(true) => Json(ApiResponse {
                 success: true,
@@ -845,6 +867,14 @@ impl CloudApi {
             });
         }
 
+        if ctx.listing_mode == "marketplace" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Cannot stop a marketplace-listed resource. Unlist it first.".to_string()),
+            });
+        }
+
         let credentials = match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
             Ok(c) => c,
             Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
@@ -937,5 +967,209 @@ impl CloudApi {
             Ok(None) => Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found after update".to_string()) }),
             Err(e) => Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
         }
+    }
+
+    /// List cloud resource on marketplace
+    ///
+    /// Creates a marketplace offering from a running personal resource, making it
+    /// discoverable by other users. The resource must be running and not already listed.
+    #[oai(
+        path = "/cloud-resources/:id/list-on-marketplace",
+        method = "post",
+        tag = "ApiTags::Cloud"
+    )]
+    async fn list_on_marketplace(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<ListOnMarketplaceRequest>,
+    ) -> Json<ApiResponse<Offering>> {
+        let account_id = match resolve_account_id(&db, &user).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+        };
+
+        let uuid = match id.0.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+        };
+
+        let encryption_key = match get_encryption_key() {
+            Ok(key) => key,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        };
+
+        // Fetch resource to validate state and get server_type/location
+        let resource = match db.get_cloud_resource(&uuid, &account_id).await {
+            Ok(Some(r)) => r,
+            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+        };
+
+        if resource.resource.status != "running" {
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Resource must be running to list (current status: '{}')", resource.resource.status)) });
+        }
+        if resource.resource.listing_mode != "personal" {
+            return Json(ApiResponse { success: false, data: None, error: Some("Resource is already listed on the marketplace".to_string()) });
+        }
+
+        // Get credentials and catalog to populate offering hardware specs
+        let cloud_account_uuid = match resource.resource.cloud_account_id.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid cloud account ID in resource".to_string()) }),
+        };
+
+        let (_owner_id, backend_type, credentials_encrypted) =
+            match db.get_cloud_account_credentials(&cloud_account_uuid).await {
+                Ok(Some(row)) => row,
+                Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found".to_string()) }),
+                Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            };
+
+        let credentials = match decrypt_server_credential(&credentials_encrypted, &encryption_key) {
+            Ok(c) => c,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+        };
+
+        let backend = match create_backend(&backend_type, &credentials).await {
+            Ok(b) => b,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+        };
+
+        let catalog = match backend.get_catalog().await {
+            Ok(c) => c,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to get catalog: {e}")) }),
+        };
+
+        // Find server type and location in catalog
+        let server_type = catalog.server_types.iter().find(|st| st.id == resource.resource.server_type);
+        let location = catalog.locations.iter().find(|l| l.id == resource.resource.location);
+
+        let resource_id_str = resource.resource.id.clone();
+        let offering_id_str = format!("self-{}", &resource_id_str[..8.min(resource_id_str.len())]);
+
+        let offering = Offering {
+            id: None,
+            pubkey: hex::encode(&user.pubkey),
+            offering_id: offering_id_str,
+            offer_name: req.offer_name.clone(),
+            description: req.description.clone(),
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: req.monthly_price,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "VPS".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            billing_unit: "month".to_string(),
+            pricing_model: None,
+            price_per_unit: None,
+            included_units: None,
+            overage_price_per_unit: None,
+            stripe_metered_price_id: None,
+            is_subscription: false,
+            subscription_interval_days: None,
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: server_type.map(|st| st.cores as i64),
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: server_type.map(|st| format!("{} GB", st.memory_gb)),
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: None,
+            total_ssd_capacity: server_type.map(|st| format!("{} GB", st.disk_gb)),
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: None,
+            datacenter_country: location.map(|l| l.country.clone()).unwrap_or_default(),
+            datacenter_city: location.map(|l| l.city.clone()).unwrap_or_default(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            gpu_count: None,
+            gpu_memory_gb: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
+            trust_score: None,
+            has_critical_flags: None,
+            is_example: false,
+            offering_source: Some("self_provisioned".to_string()),
+            external_checkout_url: None,
+            reseller_name: None,
+            reseller_commission_percent: None,
+            owner_username: None,
+            provisioner_type: None,
+            provisioner_config: None,
+            template_name: None,
+            agent_pool_id: None,
+            post_provision_script: None,
+            provider_online: None,
+            resolved_pool_id: None,
+            resolved_pool_name: None,
+        };
+
+        let offering_db_id = match db.create_offering(&user.pubkey, offering).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create offering: {e}")) }),
+        };
+
+        if let Err(e) = db.list_on_marketplace(&uuid, &account_id, offering_db_id).await {
+            // Rollback: delete the offering we just created
+            let _ = db.delete_offering(&user.pubkey, offering_db_id).await;
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to list on marketplace: {e}")) });
+        }
+
+        match db.get_offering(offering_db_id).await {
+            Ok(Some(offering)) => Json(ApiResponse { success: true, data: Some(offering), error: None }),
+            Ok(None) => Json(ApiResponse { success: false, data: None, error: Some("Offering created but not found".to_string()) }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+        }
+    }
+
+    /// Unlist cloud resource from marketplace
+    ///
+    /// Removes the marketplace offering and returns the resource to personal mode.
+    #[oai(
+        path = "/cloud-resources/:id/unlist-from-marketplace",
+        method = "post",
+        tag = "ApiTags::Cloud"
+    )]
+    async fn unlist_from_marketplace(
+        &self,
+        db: Data<&Arc<Database>>,
+        user: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        let account_id = match resolve_account_id(&db, &user).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+        };
+
+        let uuid = match id.0.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+        };
+
+        let old_offering_id = match db.unlist_from_marketplace(&uuid, &account_id).await {
+            Ok(id) => id,
+            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to unlist: {e}")) }),
+        };
+
+        if let Err(e) = db.delete_offering(&user.pubkey, old_offering_id).await {
+            tracing::error!(offering_id = old_offering_id, "Resource unlisted but offering deletion failed: {e:#}");
+            return Json(ApiResponse { success: false, data: None, error: Some(format!("Unlisted but failed to delete offering: {e}")) });
+        }
+
+        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
     }
 }

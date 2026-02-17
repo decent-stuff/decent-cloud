@@ -2621,3 +2621,46 @@ export async function validateCloudAccount(
 
 	return payload.data;
 }
+
+export async function listOnMarketplace(
+	resourceId: string,
+	request: { offerName: string; monthlyPrice: number; description?: string },
+	headers: SignedRequestHeaders
+): Promise<unknown> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources/${resourceId}/list-on-marketplace`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify(request)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to list on marketplace: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to list on marketplace');
+	}
+
+	return payload.data;
+}
+
+export async function unlistFromMarketplace(
+	resourceId: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/cloud-resources/${resourceId}/unlist-from-marketplace`;
+	const response = await fetch(url, { method: 'POST', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to unlist from marketplace: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to unlist from marketplace');
+	}
+}

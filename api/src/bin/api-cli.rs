@@ -645,6 +645,33 @@ enum CloudAction {
         #[arg(long)]
         id: String,
     },
+    /// List a running resource on the marketplace
+    ListOnMarketplace {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud resource ID (UUID)
+        #[arg(long)]
+        resource_id: String,
+        /// Monthly price in USD
+        #[arg(long)]
+        price: f64,
+        /// Offering name (defaults to resource name)
+        #[arg(long)]
+        name: Option<String>,
+        /// Offering description
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Unlist a resource from the marketplace
+    UnlistFromMarketplace {
+        /// Identity to use for signing
+        #[arg(long)]
+        identity: String,
+        /// Cloud resource ID (UUID)
+        #[arg(long)]
+        resource_id: String,
+    },
 }
 
 // =============================================================================
@@ -2704,6 +2731,14 @@ struct ProvisionResourceRequest {
     ssh_pubkey: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ListOnMarketplaceRequest {
+    offer_name: String,
+    monthly_price: f64,
+    description: Option<String>,
+}
+
 async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
     match action {
         CloudAction::ListAccounts { identity } => {
@@ -2953,6 +2988,38 @@ async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
             if let Some(err) = &account.validation_error {
                 println!("  Error: {}", err);
             }
+        }
+        CloudAction::ListOnMarketplace {
+            identity,
+            resource_id,
+            price,
+            name,
+            description,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let request = ListOnMarketplaceRequest {
+                offer_name: name.unwrap_or_else(|| format!("VM {}", &resource_id[..8.min(resource_id.len())])),
+                monthly_price: price,
+                description,
+            };
+
+            let path = format!("/cloud-resources/{}/list-on-marketplace", resource_id);
+            let offering: serde_json::Value = client.post_api(&path, &request).await?;
+            println!("Resource listed on marketplace:");
+            println!("{}", serde_json::to_string_pretty(&offering)?);
+        }
+        CloudAction::UnlistFromMarketplace {
+            identity,
+            resource_id,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+
+            let path = format!("/cloud-resources/{}/unlist-from-marketplace", resource_id);
+            let _: serde_json::Value = client.post_api(&path, &()).await?;
+            println!("Resource {} unlisted from marketplace.", resource_id);
         }
     }
     Ok(())

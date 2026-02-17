@@ -368,6 +368,7 @@ impl Database {
             SELECT
                 cr.external_id,
                 cr.status,
+                cr.listing_mode,
                 ca.backend_type,
                 ca.credentials_encrypted
             FROM cloud_resources cr
@@ -723,6 +724,101 @@ impl Database {
 
         Ok(row.map(|r| r.0))
     }
+
+    /// List a running personal resource on the marketplace.
+    /// Atomic CAS: only succeeds if listing_mode='personal' AND status='running'.
+    pub async fn list_on_marketplace(
+        &self,
+        resource_id: &Uuid,
+        account_id: &[u8],
+        offering_id: i64,
+    ) -> Result<()> {
+        let rows_affected = sqlx::query(
+            r#"
+            UPDATE cloud_resources cr
+            SET listing_mode = 'marketplace',
+                offering_id = $3,
+                updated_at = NOW()
+            FROM cloud_accounts ca
+            WHERE cr.id = $1
+              AND cr.cloud_account_id = ca.id
+              AND ca.account_id = $2
+              AND cr.listing_mode = 'personal'
+              AND cr.status = 'running'
+              AND cr.terminated_at IS NULL
+            "#,
+        )
+        .bind(resource_id)
+        .bind(account_id)
+        .bind(offering_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+
+        if rows_affected == 0 {
+            return Err(anyhow!(
+                "Resource not found, not running, or already listed on marketplace"
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Unlist a marketplace resource back to personal mode.
+    /// Returns the old offering_id so the caller can delete the offering.
+    pub async fn unlist_from_marketplace(
+        &self,
+        resource_id: &Uuid,
+        account_id: &[u8],
+    ) -> Result<i64> {
+        let mut tx = self.pool.begin().await?;
+
+        let row: Option<(Option<i64>,)> = sqlx::query_as(
+            r#"
+            SELECT cr.offering_id
+            FROM cloud_resources cr
+            JOIN cloud_accounts ca ON cr.cloud_account_id = ca.id
+            WHERE cr.id = $1
+              AND ca.account_id = $2
+              AND cr.listing_mode = 'marketplace'
+              AND cr.terminated_at IS NULL
+            "#,
+        )
+        .bind(resource_id)
+        .bind(account_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let offering_id = match row {
+            Some((Some(id),)) => id,
+            Some((None,)) => {
+                return Err(anyhow!(
+                    "Resource is listed on marketplace but has no offering_id"
+                ))
+            }
+            None => {
+                return Err(anyhow!(
+                    "Resource not found or not listed on marketplace"
+                ))
+            }
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE cloud_resources
+            SET listing_mode = 'personal',
+                offering_id = NULL,
+                updated_at = NOW()
+            WHERE id = $1
+            "#,
+        )
+        .bind(resource_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(offering_id)
+    }
 }
 
 /// Row returned by `get_pending_termination_resources`.
@@ -760,6 +856,7 @@ pub struct PendingProvisioningResource {
 pub struct CloudResourceActionContext {
     pub external_id: String,
     pub status: String,
+    pub listing_mode: String,
     pub backend_type: String,
     pub credentials_encrypted: String,
 }
@@ -1342,6 +1439,7 @@ mod tests {
 
         assert_eq!(ctx.external_id, "hetzner-12345");
         assert_eq!(ctx.status, "running");
+        assert_eq!(ctx.listing_mode, "personal");
         assert_eq!(ctx.backend_type, "hetzner");
         assert_eq!(ctx.credentials_encrypted, "encrypted-token-xyz");
 
@@ -1351,5 +1449,258 @@ mod tests {
             .await
             .unwrap();
         assert!(other.is_none());
+    }
+
+    /// Insert a minimal provider_offerings row and return its id.
+    async fn create_test_offering(db: &crate::database::types::Database, pubkey: &[u8]) -> i64 {
+        let offering = crate::database::offerings::Offering {
+            id: None,
+            pubkey: hex::encode(pubkey),
+            offering_id: format!("test-{}", uuid::Uuid::new_v4()),
+            offer_name: "Test Offering".to_string(),
+            description: None,
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 9.99,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "VPS".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            billing_unit: "month".to_string(),
+            pricing_model: None,
+            price_per_unit: None,
+            included_units: None,
+            overage_price_per_unit: None,
+            stripe_metered_price_id: None,
+            is_subscription: false,
+            subscription_interval_days: None,
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: None,
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: None,
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: None,
+            total_ssd_capacity: None,
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: None,
+            datacenter_country: "US".to_string(),
+            datacenter_city: "".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            gpu_count: None,
+            gpu_memory_gb: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
+            trust_score: None,
+            has_critical_flags: None,
+            is_example: false,
+            offering_source: Some("self_provisioned".to_string()),
+            external_checkout_url: None,
+            reseller_name: None,
+            reseller_commission_percent: None,
+            owner_username: None,
+            provisioner_type: None,
+            provisioner_config: None,
+            template_name: None,
+            agent_pool_id: None,
+            post_provision_script: None,
+            provider_online: None,
+            resolved_pool_id: None,
+            resolved_pool_name: None,
+        };
+        db.create_offering(pubkey, offering).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_list_on_marketplace_success() {
+        let db = setup_test_db().await;
+
+        let pubkey = [40u8; 32];
+        let account = db
+            .create_account("list_test", &pubkey, "list@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "list-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(&ca_uuid, "ext-list", "list-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        // Must be running to list
+        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+
+        let updated = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        assert_eq!(updated.resource.listing_mode, "marketplace");
+        assert_eq!(updated.resource.offering_id, Some(offering_id));
+    }
+
+    #[tokio::test]
+    async fn test_list_on_marketplace_rejects_non_running() {
+        let db = setup_test_db().await;
+
+        let pubkey = [41u8; 32];
+        let account = db
+            .create_account("list_nr_test", &pubkey, "listnr@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "listnr-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(&ca_uuid, "ext-nr", "nr-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        // Resource is in 'provisioning' status — should fail
+        let err = db.list_on_marketplace(&resource_id, &account.id, 1).await.unwrap_err();
+        assert!(err.to_string().contains("not running"), "Expected not-running error, got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_list_on_marketplace_rejects_already_listed() {
+        let db = setup_test_db().await;
+
+        let pubkey = [42u8; 32];
+        let account = db
+            .create_account("list_dup_test", &pubkey, "listdup@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "listdup-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(&ca_uuid, "ext-dup", "dup-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+
+        // Second listing should fail
+        let offering_id2 = create_test_offering(&db, &pubkey).await;
+        let err = db.list_on_marketplace(&resource_id, &account.id, offering_id2).await.unwrap_err();
+        assert!(err.to_string().contains("already listed"), "Expected already-listed error, got: {err}");
+    }
+
+    #[tokio::test]
+    async fn test_unlist_from_marketplace_success() {
+        let db = setup_test_db().await;
+
+        let pubkey = [43u8; 32];
+        let account = db
+            .create_account("unlist_test", &pubkey, "unlist@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "unlist-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(&ca_uuid, "ext-unlist", "unlist-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+
+        let old_id = db.unlist_from_marketplace(&resource_id, &account.id).await.unwrap();
+        assert_eq!(old_id, offering_id);
+
+        let updated = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        assert_eq!(updated.resource.listing_mode, "personal");
+        assert!(updated.resource.offering_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_unlist_from_marketplace_rejects_personal() {
+        let db = setup_test_db().await;
+
+        let pubkey = [44u8; 32];
+        let account = db
+            .create_account("unlistp_test", &pubkey, "unlistp@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "unlistp-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(&ca_uuid, "ext-up", "up-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+
+        // Resource is personal — unlist should fail
+        let err = db.unlist_from_marketplace(&resource_id, &account.id).await.unwrap_err();
+        assert!(err.to_string().contains("not listed"), "Expected not-listed error, got: {err}");
     }
 }

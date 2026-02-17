@@ -821,6 +821,11 @@
 														offering,
 													)}</span
 												>
+											{:else if offering.offering_source === "self_provisioned"}
+												<span
+													class="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded"
+													>Self-Hosted</span
+												>
 											{:else if offering.offering_source === "seeded"}
 												<span
 													class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
@@ -1128,6 +1133,11 @@
 												>{getResellerBadgeText(
 													offering,
 												)}</span
+											>
+										{:else if offering.offering_source === "self_provisioned"}
+											<span
+												class="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded"
+												>Self-Hosted</span
 											>
 										{:else if offering.offering_source === "seeded"}
 											<span

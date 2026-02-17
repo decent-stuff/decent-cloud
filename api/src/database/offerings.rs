@@ -537,15 +537,12 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool
-        // Offerings without pools have provider_online = Some(false) due to has_pool = false
+        // Filter to only include offerings that have a matching pool or are self-provisioned
         let filtered: Vec<Offering> = with_status
             .into_iter()
             .filter(|o| {
-                // Include if provider_online is Some(true) OR Some(false) where the pool exists but is offline
-                // Exclude if provider_online is Some(false) and has_pool was false (no pool)
-                // We can detect "no pool" by checking if resolved_pool_id is None
                 o.resolved_pool_id.is_some()
+                    || o.offering_source.as_deref() == Some("self_provisioned")
             })
             .take(params.limit as usize)
             .collect();
@@ -612,6 +609,13 @@ impl Database {
 
             // Update all offerings with pool-specific online status
             for mut offering in provider_offerings {
+                // Self-provisioned offerings are always "online" — the VM is already running
+                if offering.offering_source.as_deref() == Some("self_provisioned") {
+                    offering.provider_online = Some(true);
+                    result.push(offering);
+                    continue;
+                }
+
                 let (has_pool, pool_is_online, resolved_pool) = if let Some(pool_id) =
                     &offering.agent_pool_id
                 {
@@ -882,10 +886,13 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool
+        // Filter to only include offerings that have a matching pool or are self-provisioned
         let filtered: Vec<Offering> = with_status
             .into_iter()
-            .filter(|o| o.resolved_pool_id.is_some())
+            .filter(|o| {
+                o.resolved_pool_id.is_some()
+                    || o.offering_source.as_deref() == Some("self_provisioned")
+            })
             .collect();
 
         Ok(filtered)

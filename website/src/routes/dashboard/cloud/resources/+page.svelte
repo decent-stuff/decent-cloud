@@ -10,6 +10,8 @@
 		startCloudResource,
 		stopCloudResource,
 		getCloudAccountCatalog,
+		listOnMarketplace,
+		unlistFromMarketplace,
 		type CloudResourceWithDetails,
 		type CloudAccount,
 		type ServerType,
@@ -45,6 +47,15 @@
 	let deleting = $state(false);
 	let actionInProgress = $state<string | null>(null);
 	let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+	let showListModal = $state(false);
+	let listResourceId = $state<string | null>(null);
+	let listOfferName = $state("");
+	let listMonthlyPrice = $state<number | string>("");
+	let listDescription = $state("");
+	let listing = $state(false);
+	let listError = $state<string | null>(null);
+	let unlisting = $state<string | null>(null);
 
 	const POLL_INTERVAL_MS = 10_000;
 	const TRANSIENT_STATUSES = ['provisioning', 'deleting'];
@@ -234,6 +245,74 @@
 		}
 	}
 
+	function openListModal(resource: CloudResourceWithDetails) {
+		listResourceId = resource.id;
+		listOfferName = resource.name;
+		listMonthlyPrice = "";
+		listDescription = "";
+		listError = null;
+		showListModal = true;
+	}
+
+	function closeListModal() {
+		showListModal = false;
+		listResourceId = null;
+		listOfferName = "";
+		listMonthlyPrice = "";
+		listDescription = "";
+		listError = null;
+	}
+
+	async function handleList() {
+		if (!currentIdentity || !listResourceId) return;
+		const price = typeof listMonthlyPrice === 'string' ? parseFloat(listMonthlyPrice) : listMonthlyPrice;
+		if (!listOfferName.trim() || isNaN(price) || price <= 0) {
+			listError = "Please provide a name and a valid price";
+			return;
+		}
+
+		listing = true;
+		listError = null;
+		try {
+			const body = {
+				offerName: listOfferName.trim(),
+				monthlyPrice: price,
+				description: listDescription.trim() || undefined
+			};
+			const { headers } = await signRequest(
+				currentIdentity.identity,
+				"POST",
+				`/api/v1/cloud-resources/${listResourceId}/list-on-marketplace`,
+				body
+			);
+			await listOnMarketplace(listResourceId, body, headers);
+			closeListModal();
+			await loadData();
+		} catch (e) {
+			listError = e instanceof Error ? e.message : "Failed to list on marketplace";
+		} finally {
+			listing = false;
+		}
+	}
+
+	async function handleUnlist(resourceId: string) {
+		if (!currentIdentity) return;
+		unlisting = resourceId;
+		try {
+			const { headers } = await signRequest(
+				currentIdentity.identity,
+				"POST",
+				`/api/v1/cloud-resources/${resourceId}/unlist-from-marketplace`
+			);
+			await unlistFromMarketplace(resourceId, headers);
+			await loadData();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to unlist from marketplace";
+		} finally {
+			unlisting = null;
+		}
+	}
+
 	function closeProvisionModal() {
 		showProvisionModal = false;
 		provisionAccountId = "";
@@ -347,6 +426,11 @@
 									<span class="px-2 py-0.5 text-xs {getStatusColor(resource.status)}">
 										{resource.status}
 									</span>
+									{#if resource.listingMode === 'marketplace'}
+										<span class="px-2 py-0.5 text-xs bg-emerald-900/50 text-emerald-400">
+											Listed
+										</span>
+									{/if}
 								</div>
 								<div class="text-sm text-neutral-400 mt-1">
 									{resource.cloudAccountName} &middot; {resource.serverType} &middot; {resource.location}
@@ -373,19 +457,43 @@
 								{#if resource.status === 'provisioning'}
 									<span class="text-xs text-yellow-400">Setting up...</span>
 								{:else if resource.status === 'running'}
-									<button
-										type="button"
-										onclick={() => handleStopResource(resource.id)}
-										disabled={actionInProgress === resource.id}
-										class="p-2 text-neutral-400 hover:text-yellow-400 transition-colors disabled:opacity-50"
-										title="Stop"
-									>
-										{#if actionInProgress === resource.id}
-											<span class="text-xs">Stopping...</span>
-										{:else}
-											<Icon name="pause" size={18} />
-										{/if}
-									</button>
+									{#if resource.listingMode === 'marketplace'}
+										<button
+											type="button"
+											onclick={() => handleUnlist(resource.id)}
+											disabled={unlisting === resource.id}
+											class="p-2 text-neutral-400 hover:text-yellow-400 transition-colors disabled:opacity-50"
+											title="Unlist from marketplace"
+										>
+											{#if unlisting === resource.id}
+												<span class="text-xs">Unlisting...</span>
+											{:else}
+												<Icon name="x" size={18} />
+											{/if}
+										</button>
+									{:else}
+										<button
+											type="button"
+											onclick={() => openListModal(resource)}
+											class="p-2 text-neutral-400 hover:text-emerald-400 transition-colors"
+											title="List on marketplace"
+										>
+											<Icon name="globe" size={18} />
+										</button>
+										<button
+											type="button"
+											onclick={() => handleStopResource(resource.id)}
+											disabled={actionInProgress === resource.id}
+											class="p-2 text-neutral-400 hover:text-yellow-400 transition-colors disabled:opacity-50"
+											title="Stop"
+										>
+											{#if actionInProgress === resource.id}
+												<span class="text-xs">Stopping...</span>
+											{:else}
+												<Icon name="pause" size={18} />
+											{/if}
+										</button>
+									{/if}
 									<button
 										type="button"
 										onclick={() => (deleteResourceId = resource.id)}
@@ -553,6 +661,67 @@
 					{deleting ? "Terminating..." : "Terminate"}
 				</button>
 			</div>
+		</div>
+	</div>
+{/if}
+
+{#if showListModal}
+	<div class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 overflow-y-auto py-8" role="dialog" aria-modal="true">
+		<div class="bg-surface border border-neutral-700 w-full max-w-lg mx-4 my-auto">
+			<div class="p-4 border-b border-neutral-700">
+				<h2 class="text-lg font-semibold text-white">List on Marketplace</h2>
+			</div>
+			<form onsubmit={(e) => { e.preventDefault(); handleList(); }} class="p-4 space-y-4">
+				{#if listError}
+					<div class="p-3 bg-red-900/30 border border-red-700 text-red-300 text-sm">
+						{listError}
+					</div>
+				{/if}
+				<div>
+					<label for="listOfferName" class="block text-sm font-medium text-neutral-300 mb-1">Offering Name</label>
+					<input
+						id="listOfferName"
+						type="text"
+						bind:value={listOfferName}
+						placeholder="My VPS"
+						class="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 text-white placeholder-neutral-500"
+					/>
+				</div>
+				<div>
+					<label for="listPrice" class="block text-sm font-medium text-neutral-300 mb-1">Monthly Price (USD)</label>
+					<input
+						id="listPrice"
+						type="number"
+						step="0.01"
+						min="0.01"
+						bind:value={listMonthlyPrice}
+						placeholder="9.99"
+						class="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 text-white placeholder-neutral-500"
+					/>
+				</div>
+				<div>
+					<label for="listDescription" class="block text-sm font-medium text-neutral-300 mb-1">Description (optional)</label>
+					<textarea
+						id="listDescription"
+						bind:value={listDescription}
+						placeholder="Describe your offering..."
+						rows="3"
+						class="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 text-white placeholder-neutral-500"
+					></textarea>
+				</div>
+				<div class="flex justify-end gap-3 pt-2">
+					<button type="button" onclick={closeListModal} class="px-4 py-2 text-neutral-400 hover:text-white">
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={listing}
+						class="px-4 py-2 bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-50"
+					>
+						{listing ? "Listing..." : "List on Marketplace"}
+					</button>
+				</div>
+			</form>
 		</div>
 	</div>
 {/if}
