@@ -1,4 +1,5 @@
 use super::*;
+use client::{ChatwootClient, ChatwootPlatformClient};
 use serial_test::serial;
 
 // =============================================================================
@@ -346,4 +347,316 @@ fn test_profile_response_deserialize() {
 
     let response: ProfileResponse = serde_json::from_str(json).unwrap();
     assert_eq!(response.id, 42);
+}
+
+// =============================================================================
+// HTTP mock tests - ChatwootPlatformClient
+// =============================================================================
+
+#[tokio::test]
+async fn test_create_user_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/platform/api/v1/users")
+        .match_header("api_access_token", "test-platform-token")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"id": 77, "email": "new@example.com"}"#)
+        .create_async()
+        .await;
+
+    let client =
+        ChatwootPlatformClient::new_for_test(server.url(), "test-platform-token".into(), 1);
+    let user = client
+        .create_user("new@example.com", "New User", "s3cret")
+        .await
+        .unwrap();
+
+    assert_eq!(user.id, 77);
+    assert_eq!(user.email, "new@example.com");
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_create_user_api_error() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/platform/api/v1/users")
+        .with_status(422)
+        .with_body(r#"{"error": "Email has already been taken"}"#)
+        .create_async()
+        .await;
+
+    let client =
+        ChatwootPlatformClient::new_for_test(server.url(), "test-platform-token".into(), 1);
+    let err = client
+        .create_user("dup@example.com", "Dup", "pass")
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().contains("422"), "Expected 422 in error: {err}");
+    assert!(
+        err.to_string().contains("Email has already been taken"),
+        "Expected body in error: {err}"
+    );
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_configure_agent_bot_creates_new() {
+    let mut server = mockito::Server::new_async().await;
+
+    // GET returns empty list (no existing bot)
+    let list_mock = server
+        .mock("GET", "/platform/api/v1/agent_bots")
+        .match_header("api_access_token", "plat-tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("[]")
+        .create_async()
+        .await;
+
+    // POST creates the bot
+    let create_mock = server
+        .mock("POST", "/platform/api/v1/agent_bots")
+        .match_header("api_access_token", "plat-tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"id": 5, "name": "dc-bot", "account_id": 1}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootPlatformClient::new_for_test(server.url(), "plat-tok".into(), 1);
+    let bot_id = client
+        .configure_agent_bot("dc-bot", "https://example.com/webhook")
+        .await
+        .unwrap();
+
+    assert_eq!(bot_id, 5);
+    list_mock.assert_async().await;
+    create_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_configure_agent_bot_updates_existing() {
+    let mut server = mockito::Server::new_async().await;
+
+    // GET returns a matching bot for this account
+    let list_mock = server
+        .mock("GET", "/platform/api/v1/agent_bots")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"id": 9, "name": "dc-bot", "account_id": 1}]"#)
+        .create_async()
+        .await;
+
+    // PATCH updates the bot
+    let update_mock = server
+        .mock("PATCH", "/platform/api/v1/agent_bots/9")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"id": 9, "name": "dc-bot", "account_id": 1}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootPlatformClient::new_for_test(server.url(), "plat-tok".into(), 1);
+    let bot_id = client
+        .configure_agent_bot("dc-bot", "https://new-url.com/webhook")
+        .await
+        .unwrap();
+
+    assert_eq!(bot_id, 9);
+    list_mock.assert_async().await;
+    update_mock.assert_async().await;
+}
+
+// =============================================================================
+// HTTP mock tests - ChatwootClient
+// =============================================================================
+
+#[tokio::test]
+async fn test_list_inboxes_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/inboxes")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"payload": [{"id": 10}, {"id": 20}]}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let ids = client.list_inboxes().await.unwrap();
+
+    assert_eq!(ids, vec![10, 20]);
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_list_inboxes_api_error() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/inboxes")
+        .with_status(500)
+        .with_body("Internal Server Error")
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let err = client.list_inboxes().await.unwrap_err();
+
+    assert!(err.to_string().contains("500"), "Expected 500 in: {err}");
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_find_or_create_inbox_existing() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/inboxes")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"payload": [
+                {"id": 3, "name": "Other", "channel_type": "api"},
+                {"id": 7, "name": "Provider-X", "channel_type": "api"}
+            ]}"#,
+        )
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let inbox = client.find_or_create_inbox("Provider-X").await.unwrap();
+
+    assert_eq!(inbox.id, 7);
+    assert_eq!(inbox.name, "Provider-X");
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_send_message_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/api/v1/accounts/1/conversations/42/messages")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"id": 999}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    client
+        .send_message(42, "Hello from test")
+        .await
+        .unwrap();
+
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_fetch_conversation_messages_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/conversations/10/messages")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"payload": [
+                {"content": "Hi there", "message_type": 0},
+                {"content": "Hello!", "message_type": 1},
+                {"content": null, "message_type": 0},
+                {"content": "  ", "message_type": 1}
+            ]}"#,
+        )
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let messages = client.fetch_conversation_messages(10).await.unwrap();
+
+    // null and whitespace-only messages are filtered out
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0], ("customer".to_string(), "Hi there".to_string()));
+    assert_eq!(messages[1], ("bot".to_string(), "Hello!".to_string()));
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_list_articles_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/portals/my-portal/articles")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"payload": [
+                {"id": 1, "title": "First", "content": "<p>One</p>", "slug": "first"},
+                {"id": 2, "title": "Second", "content": "<p>Two</p>", "slug": "second"}
+            ]}"#,
+        )
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let articles = client.list_articles("my-portal").await.unwrap();
+
+    assert_eq!(articles.len(), 2);
+    assert_eq!(articles[0].id, 1);
+    assert_eq!(articles[0].title, "First");
+    assert_eq!(articles[0].slug, "first");
+    assert_eq!(articles[1].id, 2);
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_list_portals_filters_archived() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("GET", "/api/v1/accounts/1/portals")
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{"payload": [
+                {"slug": "active-portal", "archived": false},
+                {"slug": "dead-portal", "archived": true}
+            ]}"#,
+        )
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let slugs = client.list_portals().await.unwrap();
+
+    assert_eq!(slugs, vec!["active-portal"]);
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_update_conversation_status_success() {
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock(
+            "POST",
+            "/api/v1/accounts/1/conversations/55/toggle_status",
+        )
+        .match_header("api_access_token", "tok")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"status": "open"}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    client
+        .update_conversation_status(55, "open")
+        .await
+        .unwrap();
+
+    mock.assert_async().await;
 }

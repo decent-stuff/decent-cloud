@@ -92,9 +92,9 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 The following areas have zero test coverage and handle critical functionality:
 
-- **OpenAPI endpoint handlers** — 19 files (~10K lines) in `api/src/openapi/` have no tests: providers.rs, contracts.rs, agents.rs, cloud.rs, accounts.rs, admin.rs, chatwoot.rs, invoices.rs, offerings.rs, resellers.rs, stats.rs, subscriptions.rs, system.rs, transfers.rs, users.rs, validators.rs, vat.rs, webhooks.rs. *(Multi-week: each file needs integration test setup with DB fixtures.)*
-- **Chatwoot client** — `chatwoot/client.rs` has 20+ public async functions with no tests. *(Single session per function group.)*
-- **Database reputation/rewards** — `database/reputation.rs` and `database/rewards.rs` lack tests. *(Single session each.)*
+- **OpenAPI endpoint handlers** — 16 files (~10K lines) in `api/src/openapi/` have no tests: providers.rs, contracts.rs, cloud.rs, accounts.rs, admin.rs, chatwoot.rs, invoices.rs, offerings.rs, resellers.rs, stats.rs, subscriptions.rs, system.rs, transfers.rs, users.rs, validators.rs, common.rs. (3 files have tests: agents.rs, vat.rs, webhooks.rs.) *(Multi-week: each file needs integration test setup with DB fixtures.)*
+- ~~**Chatwoot client** — `chatwoot/client.rs` has 20+ public async functions with no tests.~~ Fixed: 12 HTTP mock tests added using mockito covering both ChatwootPlatformClient (create_user, configure_agent_bot) and ChatwootClient (list_inboxes, find_or_create_inbox, send_message, fetch_conversation_messages, list_articles, list_portals, update_conversation_status). Test constructors (`new_for_test`) added to both client structs.
+- ~~**Database reputation/rewards** — `database/reputation.rs` and `database/rewards.rs` lack tests.~~ Fixed: 6 tests for reputation (positive/negative changes, batch, malformed borsh, aging valid/malformed) and 4 tests for rewards (timestamp-in-value, short-value fallback, placeholder zeros, batch).
 
 ### Receipt TODO (Completed)
 

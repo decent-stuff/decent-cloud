@@ -71,6 +71,16 @@ struct UpdateUserPasswordRequest<'a> {
 }
 
 impl ChatwootPlatformClient {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(base_url: String, platform_token: String, account_id: u32) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+            platform_token,
+            account_id,
+        }
+    }
+
     /// Creates a new Platform client from environment variables.
     pub fn from_env() -> Result<Self> {
         let base_url = std::env::var("CHATWOOT_BASE_URL").context("CHATWOOT_BASE_URL not set")?;
@@ -474,6 +484,17 @@ pub struct HelpCenterArticle {
 }
 
 impl ChatwootClient {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(base_url: String, api_token: String, account_id: u32) -> Self {
+        Self {
+            client: Client::new(),
+            frontend_url: base_url.clone(),
+            base_url,
+            api_token,
+            account_id,
+        }
+    }
+
     /// Creates a new Chatwoot client from environment variables.
     pub fn from_env() -> Result<Self> {
         let base_url = std::env::var("CHATWOOT_BASE_URL").context("CHATWOOT_BASE_URL not set")?;
