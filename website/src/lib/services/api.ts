@@ -272,6 +272,23 @@ export async function getActiveValidators(days: number = 1): Promise<Validator[]
 	}));
 }
 
+export async function getOffering(id: number): Promise<Offering> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${id}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const errorData = await response.json().catch(() => null);
+		throw new Error(errorData?.error || `Failed to fetch offering: ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingRaw>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error || 'Offering not found');
+	}
+
+	return { ...payload.data, pubkey: normalizePubkey(payload.data.pubkey) } as unknown as Offering;
+}
+
 export async function getProviderOfferings(pubkey: string | Uint8Array): Promise<Offering[]> {
 	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;

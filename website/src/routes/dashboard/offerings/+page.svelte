@@ -453,6 +453,17 @@
 							<div class="text-neutral-500 text-xs mt-3 line-clamp-2">{offering.description}</div>
 						{/if}
 					</div>
+
+					<!-- Edit link -->
+					<div class="mt-4 pt-3 border-t border-neutral-800">
+						<a
+							href="/dashboard/offerings/{offering.id}/edit"
+							onclick={(e) => e.stopPropagation()}
+							class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+						>
+							Edit full details
+						</a>
+					</div>
 				</div>
 			{/each}
 		</div>

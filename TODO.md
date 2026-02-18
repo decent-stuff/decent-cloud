@@ -23,11 +23,17 @@
 ### Done
 
 - **Recipe execution log capture** — `execute_post_provision_script` returns `ScriptResult` with stdout/stderr/exit_code. Logs stored in `cloud_resources.recipe_log` (migration 018). Exposed via `GET /contracts/:id/recipe-log`. Frontend shows collapsible "Recipe Output" on contract detail page. Marketplace shows "Recipe" badge on offerings with scripts.
+- **Edit Offering page** — Full edit page at `/dashboard/offerings/[id]/edit` for modifying offering details, pricing, and recipe scripts. Linked from offering cards on the My Offerings page.
+- **Offering detail page** — Dedicated marketplace detail page at `/dashboard/marketplace/[id]` showing full specs, description, recipe script preview, and rent button. Linked from offering names in the marketplace table.
+- **Recipe starter templates** — Create and Edit pages include a "Start from template" selector with ready-made scripts for Docker, Docker Compose, Podman, Node.js, and Caddy static sites.
 
 ### Remaining (Recipes)
 
-- **Recipe marketplace filters** — Add recipe-specific filtering to marketplace browsing: search by recipe type, author, script keywords. *(Single session: frontend filter UI + existing API query params.)*
-- **Recipe script versioning** — Scripts are snapshotted at contract creation. Consider a `recipe_versions` table so authors can update scripts and buyers can upgrade. *(Multi-week: new DB table, migration logic, UI for version management.)*
+- **Author notifications on recipe failure** — When a buyer's recipe execution fails (script error, VM setup failure), the recipe author has no visibility. Add email/Telegram/in-app notification to the offering owner when `cloud_resources.recipe_log` indicates a non-zero exit code. *(Single session: hook into `CloudProvisioningService` failure path, reuse existing notification infra.)*
+- **API-level recipe filtering** — The marketplace "Recipes only" toggle filters client-side. Add `has_recipe=true` query param to `GET /offerings` search endpoint for server-side filtering. *(Single session: add SQL WHERE clause + API param.)*
+- **Recipe script versioning** — Scripts are snapshotted at contract creation. Consider a `recipe_versions` table so authors can update scripts and buyers can opt-in to upgrades. *(Multi-week: new DB table, migration logic, UI for version management.)*
+- **Recipe validation / dry-run** — No way to test a recipe without creating a real contract. Consider: syntax check (shellcheck), dry-run mode that provisions a VM, runs the script, reports results, and tears down. *(Multi-session: needs a dedicated test-run flow distinct from purchase.)*
+- **Standalone recipe entity** — Recipes are currently a text field on offerings. A `recipes` table would enable: reuse across multiple offerings, community browsing/forking, ratings, and independent authorship. *(Architectural change — needs design discussion.)*
 
 ---
 

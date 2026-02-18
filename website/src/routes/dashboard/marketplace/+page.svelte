@@ -851,8 +851,11 @@
 								>
 									<td class="py-3 pr-4">
 										<div class="flex items-center gap-2">
-											<span class="font-medium text-white"
-												>{offering.offer_name}</span
+											<a
+												href="/dashboard/marketplace/{offering.id}"
+												onclick={(e) => e.stopPropagation()}
+												class="font-medium text-white hover:text-primary-400 transition-colors"
+											>{offering.offer_name}</a
 											>
 											{#if !offering.provider_online}
 												<span
@@ -1195,8 +1198,11 @@
 							<div class="flex items-start justify-between mb-2">
 								<div>
 									<div class="flex items-center gap-2 flex-wrap">
-										<span class="font-medium text-white"
-											>{offering.offer_name}</span
+										<a
+											href="/dashboard/marketplace/{offering.id}"
+											onclick={(e) => e.stopPropagation()}
+											class="font-medium text-white hover:text-primary-400 transition-colors"
+										>{offering.offer_name}</a
 										>
 										{#if !offering.provider_online}
 											<span
