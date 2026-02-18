@@ -99,7 +99,7 @@
 			<button
 				type="button"
 				onclick={() => chooseMode('generate')}
-				class="p-6 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500  text-left transition-all group"
+				class="p-6 bg-surface-elevated border border-primary-500/50 hover:border-primary-400 text-left transition-all group"
 			>
 				<div class="mb-2">
 					<Icon name="sparkles" size={28} class="text-white" />

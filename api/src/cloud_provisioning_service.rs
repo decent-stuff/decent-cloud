@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 pub struct CloudProvisioningService {
     database: Arc<Database>,
+    email_service: Option<Arc<email_utils::EmailService>>,
     cloudflare_dns: Option<Arc<CloudflareDns>>,
     poll_interval: Duration,
     termination_poll_interval: Duration,
@@ -26,12 +27,14 @@ pub struct CloudProvisioningService {
 impl CloudProvisioningService {
     pub fn new(
         database: Arc<Database>,
+        email_service: Option<Arc<email_utils::EmailService>>,
         cloudflare_dns: Option<Arc<CloudflareDns>>,
         poll_interval_secs: u64,
         termination_poll_interval_secs: u64,
     ) -> Self {
         Self {
             database,
+            email_service,
             cloudflare_dns,
             poll_interval: Duration::from_secs(poll_interval_secs),
             termination_poll_interval: Duration::from_secs(termination_poll_interval_secs),
@@ -69,6 +72,7 @@ impl CloudProvisioningService {
         let lock_holder = self.lock_holder.clone();
         let key = encryption_key.clone();
         let cf_dns = self.cloudflare_dns.clone();
+        let email_svc = self.email_service.clone();
 
         let prov_interval = self.poll_interval;
         let provision_task = tokio::spawn(async move {
@@ -76,7 +80,7 @@ impl CloudProvisioningService {
             loop {
                 interval.tick().await;
                 if let Err(e) =
-                    provision_pending_resources(&db, &lock_holder, &key, cf_dns.as_deref()).await
+                    provision_pending_resources(&db, &lock_holder, &key, cf_dns.as_deref(), email_svc.as_ref()).await
                 {
                     tracing::error!("Cloud provisioning failed: {:#}", e);
                 }
@@ -112,6 +116,7 @@ async fn provision_pending_resources(
     lock_holder: &str,
     encryption_key: &ServerEncryptionKey,
     cloudflare_dns: Option<&CloudflareDns>,
+    email_service: Option<&Arc<email_utils::EmailService>>,
 ) -> anyhow::Result<()> {
     let pending = database.get_pending_provisioning_resources(5).await?;
 
@@ -137,7 +142,7 @@ async fn provision_pending_resources(
         }
 
         let resource_id = resource.id;
-        let result = provision_one(database, resource, encryption_key, cloudflare_dns).await;
+        let result = provision_one(database, resource, encryption_key, cloudflare_dns, email_service).await;
 
         if let Err(e) = database.release_cloud_resource_lock(&resource_id).await {
             tracing::error!("Failed to release lock for resource {}: {}", resource_id, e);
@@ -163,6 +168,7 @@ async fn provision_one(
     resource: PendingProvisioningResource,
     encryption_key: &ServerEncryptionKey,
     cloudflare_dns: Option<&CloudflareDns>,
+    email_service: Option<&Arc<email_utils::EmailService>>,
 ) -> anyhow::Result<()> {
     let resource_id = resource.id;
     tracing::info!("Provisioning resource {} ({})", resource_id, resource.name);
@@ -219,6 +225,20 @@ async fn provision_one(
                 script_result.exit_code
             );
             cleanup_failed_provision(&*backend, &result.server.id, &ssh_key_id).await;
+
+            // Notify the offering owner about recipe failure
+            if let Some(contract_id) = &resource.contract_id {
+                if let Err(e) = crate::rental_notifications::notify_offering_owner_recipe_failure(
+                    database,
+                    email_service,
+                    contract_id,
+                    script_result.exit_code,
+                    &script_result.log,
+                ).await {
+                    tracing::warn!("Failed to send recipe failure notification: {:#}", e);
+                }
+            }
+
             return Err(anyhow::anyhow!(
                 "Recipe script failed (exit {})",
                 script_result.exit_code

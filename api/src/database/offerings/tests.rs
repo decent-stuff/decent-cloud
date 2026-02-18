@@ -197,6 +197,7 @@ async fn test_search_offerings_no_filters() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,
@@ -241,6 +242,7 @@ async fn test_search_offerings_excludes_private() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,
@@ -271,6 +273,7 @@ async fn test_search_offerings_by_country() {
             product_type: None,
             country: Some("US"),
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 10,
@@ -295,6 +298,7 @@ async fn test_search_offerings_price_range() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,
@@ -323,6 +327,7 @@ async fn test_search_offerings_min_price_filter() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: Some(100.0),
             max_price_monthly: None,
             limit: 100,
@@ -349,6 +354,7 @@ async fn test_search_offerings_max_price_filter() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: Some(200.0),
             limit: 100,
@@ -375,6 +381,7 @@ async fn test_search_offerings_price_range_both() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: Some(100.0),
             max_price_monthly: Some(200.0),
             limit: 100,
@@ -384,6 +391,61 @@ async fn test_search_offerings_price_range_both() {
         .expect("Failed to search offerings with price range filter");
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].monthly_price, 150.0);
+}
+
+#[tokio::test]
+async fn test_search_offerings_has_recipe_filter() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let pubkey_a = [10u8; 32];
+    let pubkey_b = [11u8; 32];
+
+    // Insert two regular offerings (no recipe)
+    insert_test_offering(&db, 1, &pubkey_a, "US", 50.0).await;
+    insert_test_offering(&db, 2, &pubkey_b, "US", 100.0).await;
+
+    // Add a recipe script to offering 2 only
+    let db_id = test_id_to_db_id(2);
+    sqlx::query("UPDATE provider_offerings SET post_provision_script = 'echo hello' WHERE id = $1")
+        .bind(db_id)
+        .execute(&db.pool)
+        .await
+        .expect("Failed to set post_provision_script");
+
+    // Without has_recipe filter: both offerings returned
+    let all = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .expect("search without has_recipe filter failed");
+    assert_eq!(all.len(), 2);
+
+    // With has_recipe filter: only offering with script returned
+    let recipes = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: true,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+        })
+        .await
+        .expect("search with has_recipe filter failed");
+    assert_eq!(recipes.len(), 1);
+    assert_eq!(recipes[0].offering_id, "off-2");
+    assert!(recipes[0].post_provision_script.is_some());
 }
 
 #[tokio::test]
@@ -417,6 +479,7 @@ async fn test_search_offerings_pagination() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,
@@ -436,6 +499,7 @@ async fn test_search_offerings_pagination() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 3,
@@ -2255,6 +2319,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,
@@ -2554,6 +2619,7 @@ async fn test_get_subscription_offering_fields() {
             product_type: None,
             country: None,
             in_stock_only: false,
+            has_recipe: false,
             min_price_monthly: None,
             max_price_monthly: None,
             limit: 100,

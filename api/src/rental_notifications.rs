@@ -484,6 +484,193 @@ async fn send_provisioned_email_fallback(
     Ok(())
 }
 
+/// Notify offering owner when a buyer's recipe script fails during provisioning.
+pub async fn notify_offering_owner_recipe_failure(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    contract_id: &[u8],
+    exit_code: i32,
+    log_excerpt: &str,
+) -> Result<()> {
+    let contract_id_hex = hex::encode(contract_id);
+    let contract = db
+        .get_contract(contract_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Contract not found: {}", contract_id_hex))?;
+
+    // The offering owner is the provider
+    let provider_pubkey =
+        hex::decode(&contract.provider_pubkey).context("Invalid provider pubkey hex")?;
+
+    let config = db
+        .get_user_notification_config(&provider_pubkey)
+        .await
+        .context("Failed to get provider notification config")?;
+
+    let Some(config) = config else {
+        tracing::debug!(
+            "No notification config for provider {}, skipping recipe failure notification",
+            contract.provider_pubkey
+        );
+        return Ok(());
+    };
+
+    let provider_id = &contract.provider_pubkey;
+    let mut channels_sent = Vec::new();
+    let mut errors = Vec::new();
+
+    let log_truncated = truncate_log(log_excerpt, 500);
+
+    // Telegram
+    if config.notify_telegram {
+        if let Some(chat_id) = &config.telegram_chat_id {
+            match send_telegram_recipe_failure(chat_id, &contract_id_hex, exit_code, &log_truncated)
+                .await
+            {
+                Ok(()) => {
+                    if let Err(e) = db.increment_notification_usage(provider_id, "telegram").await {
+                        tracing::error!(
+                            "Failed to increment telegram usage for {}: {:#}",
+                            provider_id,
+                            e
+                        );
+                    }
+                    channels_sent.push("telegram");
+                }
+                Err(e) => errors.push(format!("telegram: {}", e)),
+            }
+        }
+    }
+
+    // Email
+    if config.notify_email {
+        match send_email_recipe_failure(
+            db,
+            email_service,
+            &provider_pubkey,
+            &contract_id_hex,
+            exit_code,
+            &log_truncated,
+        )
+        .await
+        {
+            Ok(()) => {
+                if let Err(e) = db.increment_notification_usage(provider_id, "email").await {
+                    tracing::error!(
+                        "Failed to increment email usage for {}: {:#}",
+                        provider_id,
+                        e
+                    );
+                }
+                channels_sent.push("email");
+            }
+            Err(e) => errors.push(format!("email: {}", e)),
+        }
+    }
+
+    if !channels_sent.is_empty() || !errors.is_empty() {
+        tracing::info!(
+            "Recipe failure notification for contract {} - sent: [{}], errors: [{}]",
+            &contract_id_hex[..16],
+            channels_sent.join(", "),
+            errors.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+async fn send_telegram_recipe_failure(
+    chat_id: &str,
+    contract_id: &str,
+    exit_code: i32,
+    log_excerpt: &str,
+) -> Result<()> {
+    use crate::notifications::telegram::TelegramClient;
+
+    if !TelegramClient::is_configured() {
+        anyhow::bail!("TELEGRAM_BOT_TOKEN not configured");
+    }
+
+    let telegram = TelegramClient::from_env()?;
+
+    let message = format!(
+        "*Recipe Script Failed*\n\n\
+        Contract: `{}`\n\
+        Exit code: {}\n\n\
+        ```\n{}\n```\n\n\
+        Check the contract details in your dashboard.",
+        &contract_id[..32],
+        exit_code,
+        log_excerpt
+    );
+
+    telegram.send_message(chat_id, &message).await?;
+    Ok(())
+}
+
+async fn send_email_recipe_failure(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    provider_pubkey: &[u8],
+    contract_id: &str,
+    exit_code: i32,
+    log_excerpt: &str,
+) -> Result<()> {
+    let email_svc = email_service.ok_or_else(|| {
+        anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)")
+    })?;
+
+    let account_id = db
+        .get_account_id_by_public_key(provider_pubkey)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No account found for provider pubkey"))?;
+
+    let account = db
+        .get_account(&account_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
+
+    let email_addr = account
+        .email
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No email on provider account"))?;
+
+    let email_body = format!(
+        "A recipe script failed during VM provisioning.\n\n\
+        Contract ID: {}\n\
+        Exit Code: {}\n\n\
+        Script Output:\n{}\n\n\
+        Please check the contract details in your dashboard.",
+        contract_id, exit_code, log_excerpt
+    );
+
+    let from_addr =
+        std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+
+    email_svc
+        .send_email(
+            &from_addr,
+            email_addr,
+            "Recipe Script Failed - Decent Cloud",
+            &email_body,
+            false,
+        )
+        .await
+        .context("Failed to send recipe failure email")?;
+
+    Ok(())
+}
+
+/// Truncate a log string to `max_len` characters, appending "...(truncated)" if needed.
+fn truncate_log(log: &str, max_len: usize) -> String {
+    if log.len() > max_len {
+        format!("{}...(truncated)", &log[..max_len])
+    } else {
+        log.to_string()
+    }
+}
+
 /// Format amount from e9s to human-readable string
 fn format_amount(amount_e9s: i64, currency: &str) -> String {
     let amount = amount_e9s as f64 / 1_000_000_000.0;
@@ -521,5 +708,28 @@ mod tests {
         assert_eq!(format_duration(168), "1 weeks");
         assert_eq!(format_duration(720), "1 months");
         assert_eq!(format_duration(2160), "3 months");
+    }
+
+    #[test]
+    fn test_truncate_log_short() {
+        let short = "short log";
+        let result = truncate_log(short, 500);
+        assert_eq!(result, "short log");
+    }
+
+    #[test]
+    fn test_truncate_log_long() {
+        let long = "x".repeat(600);
+        let result = truncate_log(&long, 500);
+        assert_eq!(result.len(), 500 + "...(truncated)".len());
+        assert!(result.ends_with("...(truncated)"));
+        assert!(result.starts_with(&"x".repeat(500)));
+    }
+
+    #[test]
+    fn test_truncate_log_exact_boundary() {
+        let exact = "y".repeat(500);
+        let result = truncate_log(&exact, 500);
+        assert_eq!(result, exact);
     }
 }

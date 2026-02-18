@@ -193,11 +193,6 @@
 			result = result.filter((o) => o.provider_online);
 		}
 
-		// Recipes only filter
-		if (recipesOnly) {
-			result = result.filter((o) => !!o.post_provision_script);
-		}
-
 		// Sort by price
 		result.sort((a, b) => {
 			const priceA = a.monthly_price ?? Infinity;
@@ -219,10 +214,9 @@
 			offerings = await searchOfferings({
 				limit: 100,
 				in_stock_only: true,
+				has_recipe: recipesOnly || undefined,
 				q: searchQuery.trim() || undefined,
 				country: selectedCountry || undefined,
-				// null → undefined → omitted from API call → no constraint
-				// (effectively 0 for min, Infinity for max)
 				min_price_monthly: minPrice ?? undefined,
 				max_price_monthly: maxPrice ?? undefined,
 			});
@@ -753,6 +747,7 @@
 							<input
 								type="checkbox"
 								bind:checked={recipesOnly}
+								onchange={handleFilterChange}
 								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span

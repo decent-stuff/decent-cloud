@@ -424,6 +424,7 @@ async fn test_offerings_with_pools_included_in_search() {
         product_type: None,
         country: None,
         in_stock_only: false,
+        has_recipe: false,
         min_price_monthly: None,
         max_price_monthly: None,
         limit: 100,

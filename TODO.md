@@ -1,7 +1,5 @@
 # TODO
 
-- Login buttons for Google login vs seed phrase (create new + import) are inconsistent — improve consistency, design, and UX *(UI polish — no backend design needed)*
-
 **Specs:**
 - [docs/specs/2026-02-14-decent-recipes.md](docs/specs/2026-02-14-decent-recipes.md)
 - ~~[docs/specs/2026-02-14-hetzner-provisioner.md](docs/specs/2026-02-14-hetzner-provisioner.md)~~ — Complete (offering validation, provisioning, termination, polling all implemented).
@@ -26,11 +24,12 @@
 - **Edit Offering page** — Full edit page at `/dashboard/offerings/[id]/edit` for modifying offering details, pricing, and recipe scripts. Linked from offering cards on the My Offerings page.
 - **Offering detail page** — Dedicated marketplace detail page at `/dashboard/marketplace/[id]` showing full specs, description, recipe script preview, and rent button. Linked from offering names in the marketplace table.
 - **Recipe starter templates** — Create and Edit pages include a "Start from template" selector with ready-made scripts for Docker, Docker Compose, Podman, Node.js, and Caddy static sites.
+- **Author notifications on recipe failure** — `CloudProvisioningService` sends Telegram/email notification to offering owner when recipe script fails (exit code != 0). Uses existing notification infra via `rental_notifications::notify_offering_owner_recipe_failure`. Log truncated to 500 chars.
+- **API-level recipe filtering** — `GET /offerings?has_recipe=true` server-side filter. Frontend marketplace "Recipes only" toggle triggers API re-fetch instead of client-side filtering.
+- **Login button UX consistency** — Google Sign-In button restyled from white Material Design to dark Industrial Luxe theme. Seed phrase "Generate New" button changed from gradient to flat surface with copper-gold border accent. All three login options now share unified dark-surface visual language.
 
 ### Remaining (Recipes)
 
-- **Author notifications on recipe failure** — When a buyer's recipe execution fails (script error, VM setup failure), the recipe author has no visibility. Add email/Telegram/in-app notification to the offering owner when `cloud_resources.recipe_log` indicates a non-zero exit code. *(Single session: hook into `CloudProvisioningService` failure path, reuse existing notification infra.)*
-- **API-level recipe filtering** — The marketplace "Recipes only" toggle filters client-side. Add `has_recipe=true` query param to `GET /offerings` search endpoint for server-side filtering. *(Single session: add SQL WHERE clause + API param.)*
 - **Recipe script versioning** — Scripts are snapshotted at contract creation. Consider a `recipe_versions` table so authors can update scripts and buyers can opt-in to upgrades. *(Multi-week: new DB table, migration logic, UI for version management.)*
 - **Recipe validation / dry-run** — No way to test a recipe without creating a real contract. Consider: syntax check (shellcheck), dry-run mode that provisions a VM, runs the script, reports results, and tears down. *(Multi-session: needs a dedicated test-run flow distinct from purchase.)*
 - **Standalone recipe entity** — Recipes are currently a text field on offerings. A `recipes` table would enable: reuse across multiple offerings, community browsing/forking, ratings, and independent authorship. *(Architectural change — needs design discussion.)*

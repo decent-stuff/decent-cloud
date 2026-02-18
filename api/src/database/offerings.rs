@@ -451,6 +451,7 @@ pub struct SearchOfferingsParams<'a> {
     pub product_type: Option<&'a str>,
     pub country: Option<&'a str>,
     pub in_stock_only: bool,
+    pub has_recipe: bool,
     pub min_price_monthly: Option<f64>,
     pub max_price_monthly: Option<f64>,
     pub limit: i64,
@@ -486,6 +487,9 @@ impl Database {
         if params.in_stock_only {
             idx += 1;
             query.push_str(&format!(" AND o.stock_status = ${}", idx));
+        }
+        if params.has_recipe {
+            query.push_str(" AND o.post_provision_script IS NOT NULL");
         }
         if params.min_price_monthly.is_some() {
             idx += 1;
