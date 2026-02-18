@@ -1411,7 +1411,7 @@ impl Database {
     }
 
     /// Get offering by offering_id string
-    async fn get_offering_by_id(
+    pub async fn get_offering_by_id(
         &self,
         offering_id: &str,
     ) -> Result<Option<crate::database::offerings::Offering>> {

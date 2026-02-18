@@ -877,19 +877,11 @@ impl AccountsApi {
     ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
         // Validate email format
         let email = req.email.trim();
-        if email.is_empty() {
+        if let Err(e) = crate::validation::validate_email(email) {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Email address is required".to_string()),
-            });
-        }
-        let email_pattern = regex::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap();
-        if !email_pattern.is_match(email) {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Invalid email address format".to_string()),
+                error: Some(e.to_string()),
             });
         }
 

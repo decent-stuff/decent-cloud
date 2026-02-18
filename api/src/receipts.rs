@@ -97,10 +97,22 @@ pub async fn send_payment_receipt(
 
     let receipt_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    // TODO: Get offering name and provider name from database
-    // For now use placeholders - will be implemented when needed
-    let offering_name = format!("Offering {}", contract.offering_id);
-    let provider_name = "Provider"; // Will fetch from provider_profiles table
+    let offering_name = match db.get_offering_by_id(&contract.offering_id).await {
+        Ok(Some(offering)) => offering.offer_name,
+        Ok(None) => format!("Offering {}", contract.offering_id),
+        Err(e) => {
+            tracing::warn!("Failed to fetch offering name for receipt: {e:#}");
+            format!("Offering {}", contract.offering_id)
+        }
+    };
+
+    let provider_name = match hex::decode(&contract.provider_pubkey) {
+        Ok(pubkey_bytes) => match db.get_provider_profile(&pubkey_bytes).await {
+            Ok(Some(profile)) => profile.name,
+            _ => contract.provider_pubkey[..16].to_string(),
+        },
+        Err(_) => contract.provider_pubkey[..16].to_string(),
+    };
 
     // Try to generate invoice PDF if email service is available
     let invoice_pdf = if email_service.is_some() {

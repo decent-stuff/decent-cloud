@@ -1125,7 +1125,9 @@ impl CloudApi {
 
         if let Err(e) = db.list_on_marketplace(&uuid, &account_id, offering_db_id).await {
             // Rollback: delete the offering we just created
-            let _ = db.delete_offering(&user.pubkey, offering_db_id).await;
+            if let Err(rollback_err) = db.delete_offering(&user.pubkey, offering_db_id).await {
+                tracing::error!("Failed to rollback offering {} after marketplace listing failure: {rollback_err:#}", offering_db_id);
+            }
             return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to list on marketplace: {e}")) });
         }
 

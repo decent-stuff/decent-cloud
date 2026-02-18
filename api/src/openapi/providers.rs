@@ -1318,7 +1318,27 @@ impl ProvidersApi {
             .import_offerings_csv(&pubkey_bytes, &csv_data.0, upsert.0)
             .await
         {
-            Ok((success_count, errors)) => {
+            Ok((success_count, mut errors)) => {
+                // Post-import: validate Hetzner offerings against live catalog
+                if let Ok(offerings) = db.get_provider_offerings(&pubkey_bytes).await {
+                    for offering in offerings
+                        .iter()
+                        .filter(|o| o.provisioner_type.as_deref() == Some("hetzner"))
+                    {
+                        if let Err(e) =
+                            validate_hetzner_offering(&db, offering, &pubkey_bytes).await
+                        {
+                            errors.push((
+                                0,
+                                format!(
+                                    "Hetzner validation failed for offering '{}': {}",
+                                    offering.offering_id, e
+                                ),
+                            ));
+                        }
+                    }
+                }
+
                 let result = CsvImportResult {
                     success_count,
                     errors: errors

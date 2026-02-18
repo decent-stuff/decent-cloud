@@ -1,3 +1,4 @@
+use anyhow::Context;
 use crate::database::email::{calculate_backoff_secs, EmailType};
 use crate::database::Database;
 use crate::email_service::{EmailService, EmailServiceExt};
@@ -537,8 +538,8 @@ impl EmailProcessor {
                 "{}/dashboard/rentals/{}",
                 self.frontend_url, breach.contract_id
             );
-            let support_url =
-                std::env::var("CHATWOOT_FRONTEND_URL").expect("CHATWOOT_FRONTEND_URL must be set");
+            let support_url = std::env::var("CHATWOOT_FRONTEND_URL")
+                .context("CHATWOOT_FRONTEND_URL not set — cannot send SLA breach alerts")?;
 
             let body = format!(
                 r#"<html>
