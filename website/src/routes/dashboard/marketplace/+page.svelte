@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, tick } from "svelte";
+	import { page } from "$app/stores";
 	import { searchOfferings, type Offering } from "$lib/services/api";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -244,7 +245,18 @@
 		}
 	}
 
-	onMount(() => fetchOfferings());
+	onMount(async () => {
+		await fetchOfferings();
+		const offeringParam = $page.url.searchParams.get("offering");
+		if (offeringParam) {
+			const id = parseInt(offeringParam, 10);
+			if (!isNaN(id)) {
+				expandedRow = id;
+				await tick();
+				document.getElementById(`offering-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+			}
+		}
+	});
 
 	function handleSearchInput() {
 		if (debounceTimer) clearTimeout(debounceTimer);
@@ -291,9 +303,29 @@
 		selectedOffering = offering;
 	}
 
+	let copyLinkFeedback = $state<number | null>(null);
+
 	function toggleRow(id: number | undefined) {
 		if (id === undefined) return;
 		expandedRow = expandedRow === id ? null : id;
+		// Sync URL query param without navigation
+		const url = new URL(window.location.href);
+		if (expandedRow !== null) {
+			url.searchParams.set("offering", String(expandedRow));
+		} else {
+			url.searchParams.delete("offering");
+		}
+		history.replaceState(history.state, "", url.toString());
+	}
+
+	function copyOfferingLink(offeringId: number, event: Event) {
+		event.stopPropagation();
+		const url = new URL(window.location.href);
+		url.search = "";
+		url.searchParams.set("offering", String(offeringId));
+		navigator.clipboard.writeText(url.toString());
+		copyLinkFeedback = offeringId;
+		setTimeout(() => { copyLinkFeedback = null; }, 2000);
 	}
 
 	function toggleSort() {
@@ -813,6 +845,7 @@
 								{@const isExpanded =
 									expandedRow === offering.id}
 								<tr
+									id="offering-{offering.id}"
 									class="border-b border-neutral-800/60 hover:bg-surface-elevated cursor-pointer transition-colors"
 									onclick={() => toggleRow(offering.id)}
 								>
@@ -1128,6 +1161,16 @@
 														</div>
 													{/if}
 												</div>
+												<button
+													onclick={(e) => copyOfferingLink(offering.id, e)}
+													class="mt-3 inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+												>
+													{#if copyLinkFeedback === offering.id}
+														<Icon name="check" size={14} class="text-green-400" /> Copied!
+													{:else}
+														<Icon name="link" size={14} /> Copy link
+													{/if}
+												</button>
 											</div>
 										</td>
 									</tr>
@@ -1141,6 +1184,7 @@
 				<div class="md:hidden space-y-3">
 					{#each filteredOfferings as offering (offering.id)}
 						<div
+							id="offering-{offering.id}"
 							role="button"
 							tabindex="0"
 							class="bg-surface-elevated  p-4 border border-neutral-800"
@@ -1366,6 +1410,16 @@
 											</div>
 										{/if}
 									</div>
+									<button
+										onclick={(e) => copyOfferingLink(offering.id, e)}
+										class="mt-2 inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+									>
+										{#if copyLinkFeedback === offering.id}
+											<Icon name="check" size={14} class="text-green-400" /> Copied!
+										{:else}
+											<Icon name="link" size={14} /> Copy link
+										{/if}
+									</button>
 								</div>
 							{/if}
 						</div>
