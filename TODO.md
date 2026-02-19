@@ -74,4 +74,18 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### Test Coverage Gaps
 
-- **OpenAPI endpoint handlers** — 15 files (~10K lines) in `api/src/openapi/` have limited or no tests: providers.rs, contracts.rs, cloud.rs, accounts.rs, admin.rs, chatwoot.rs, invoices.rs, offerings.rs, resellers.rs, stats.rs, subscriptions.rs, system.rs, transfers.rs, users.rs, validators.rs. (4 files have tests: agents.rs, vat.rs, webhooks.rs, common.rs.) *(Multi-week: each file needs integration test setup with DB fixtures.)*
+- **OpenAPI endpoint handlers** — 15 files (~10K lines) in `api/src/openapi/`. 11 files have unit tests: agents.rs, vat.rs, webhooks.rs, common.rs, offerings.rs, subscriptions.rs, invoices.rs, stats.rs, resellers.rs, chatwoot.rs, system.rs. 4 files still need tests: providers.rs, contracts.rs, cloud.rs, accounts.rs, admin.rs, transfers.rs, users.rs, validators.rs. *(These remaining files need integration test setup with DB fixtures.)*
+
+### Flaky DB Tests
+
+- **Contract DB tests** — `test_get_contract_returns_end_timestamp_for_expired`, `test_get_recent_health_checks_respects_limit`, `test_get_contract_returns_end_timestamp_for_active` fail intermittently when run as part of the full suite (DB concurrency/template contention) but pass in isolation. Needs investigation into test DB isolation.
+
+---
+
+## UX Improvements
+
+### Existing API data not surfaced in UI
+
+- **Invoice history page** — `GET /api/v1/invoices/{pubkey}` returns full invoice history with metadata, but there's no dedicated invoice browsing page. Currently only accessible through individual contract views.
+- **Transfer history page** — `GET /api/v1/transfers/{pubkey}` returns token transfer history. No dedicated page exists; data only shown on the reputation profile page.
+- **User activity timeline** — `GET /api/v1/users/{pubkey}/activity` returns activity events. Only used on the reputation page. Could be surfaced on user's own dashboard.

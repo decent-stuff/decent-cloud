@@ -465,3 +465,105 @@ impl SubscriptionsApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checkout_url_response_serialization() {
+        let resp = CheckoutUrlResponse {
+            checkout_url: "https://checkout.stripe.com/session_123".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(
+            json["checkout_url"],
+            "https://checkout.stripe.com/session_123"
+        );
+    }
+
+    #[test]
+    fn test_checkout_url_response_uses_snake_case() {
+        let resp = CheckoutUrlResponse {
+            checkout_url: "https://example.com".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(
+            json.contains("\"checkout_url\""),
+            "Expected snake_case key, got: {json}"
+        );
+        assert!(
+            !json.contains("\"checkoutUrl\""),
+            "Must not use camelCase, got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_portal_url_response_serialization() {
+        let resp = PortalUrlResponse {
+            portal_url: "https://billing.stripe.com/portal_abc".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(
+            json["portal_url"],
+            "https://billing.stripe.com/portal_abc"
+        );
+    }
+
+    #[test]
+    fn test_portal_url_response_uses_snake_case() {
+        let resp = PortalUrlResponse {
+            portal_url: "https://example.com".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(
+            json.contains("\"portal_url\""),
+            "Expected snake_case key, got: {json}"
+        );
+    }
+
+    #[test]
+    fn test_create_subscription_checkout_request_deserialization() {
+        let json = r#"{"plan_id":"pro"}"#;
+        let req: CreateSubscriptionCheckoutRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.plan_id, "pro");
+    }
+
+    #[test]
+    fn test_create_subscription_checkout_request_missing_plan_id_fails() {
+        let json = r#"{}"#;
+        let result = serde_json::from_str::<CreateSubscriptionCheckoutRequest>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cancel_subscription_request_at_period_end_true() {
+        let json = r#"{"at_period_end":true}"#;
+        let req: CancelSubscriptionRequest = serde_json::from_str(json).unwrap();
+        assert!(req.at_period_end);
+    }
+
+    #[test]
+    fn test_cancel_subscription_request_at_period_end_false() {
+        let json = r#"{"at_period_end":false}"#;
+        let req: CancelSubscriptionRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.at_period_end);
+    }
+
+    #[test]
+    fn test_cancel_subscription_request_missing_field_fails() {
+        let json = r#"{}"#;
+        let result = serde_json::from_str::<CancelSubscriptionRequest>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_checkout_url_response_roundtrip() {
+        let original = CheckoutUrlResponse {
+            checkout_url: "https://checkout.stripe.com/pay/cs_test_abc".to_string(),
+        };
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: CheckoutUrlResponse = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(original.checkout_url, deserialized.checkout_url);
+    }
+}

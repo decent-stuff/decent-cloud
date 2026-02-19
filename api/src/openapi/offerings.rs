@@ -5,6 +5,64 @@ use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
 
+/// CSV template column headers for offerings export/import
+pub const CSV_HEADERS: &[&str] = &[
+    "offering_id",
+    "offer_name",
+    "description",
+    "product_page_url",
+    "currency",
+    "monthly_price",
+    "setup_fee",
+    "visibility",
+    "product_type",
+    "virtualization_type",
+    "billing_interval",
+    "stock_status",
+    "processor_brand",
+    "processor_amount",
+    "processor_cores",
+    "processor_speed",
+    "processor_name",
+    "memory_error_correction",
+    "memory_type",
+    "memory_amount",
+    "hdd_amount",
+    "total_hdd_capacity",
+    "ssd_amount",
+    "total_ssd_capacity",
+    "unmetered_bandwidth",
+    "uplink_speed",
+    "traffic",
+    "datacenter_country",
+    "datacenter_city",
+    "datacenter_latitude",
+    "datacenter_longitude",
+    "control_panel",
+    "gpu_name",
+    "gpu_count",
+    "gpu_memory_gb",
+    "min_contract_hours",
+    "max_contract_hours",
+    "payment_methods",
+    "features",
+    "operating_systems",
+    "agent_pool_id",
+];
+
+/// Map a product type key to a human-readable label with icon
+pub fn product_type_label(key: &str) -> &str {
+    match key {
+        "compute" => "\u{1f4bb} Compute / VPS",
+        "dedicated" => "\u{1f5a5}\u{fe0f} Dedicated Server",
+        "gpu" => "\u{1f3ae} GPU / AI",
+        "network" => "\u{1f310} Network / CDN",
+        "storage" => "\u{1f4be} Storage",
+        // Unknown types pass through as-is
+        _ => key,
+    }
+}
+
 pub struct OfferingsApi;
 
 #[OpenApi]
@@ -151,49 +209,7 @@ impl OfferingsApi {
         let mut csv_writer = csv::Writer::from_writer(vec![]);
 
         // Write header
-        if let Err(e) = csv_writer.write_record([
-            "offering_id",
-            "offer_name",
-            "description",
-            "product_page_url",
-            "currency",
-            "monthly_price",
-            "setup_fee",
-            "visibility",
-            "product_type",
-            "virtualization_type",
-            "billing_interval",
-            "stock_status",
-            "processor_brand",
-            "processor_amount",
-            "processor_cores",
-            "processor_speed",
-            "processor_name",
-            "memory_error_correction",
-            "memory_type",
-            "memory_amount",
-            "hdd_amount",
-            "total_hdd_capacity",
-            "ssd_amount",
-            "total_ssd_capacity",
-            "unmetered_bandwidth",
-            "uplink_speed",
-            "traffic",
-            "datacenter_country",
-            "datacenter_city",
-            "datacenter_latitude",
-            "datacenter_longitude",
-            "control_panel",
-            "gpu_name",
-            "gpu_count",
-            "gpu_memory_gb",
-            "min_contract_hours",
-            "max_contract_hours",
-            "payment_methods",
-            "features",
-            "operating_systems",
-            "agent_pool_id",
-        ]) {
+        if let Err(e) = csv_writer.write_record(CSV_HEADERS) {
             return poem_openapi::payload::PlainText(format!("CSV header write error: {}", e));
         }
 
@@ -322,15 +338,7 @@ impl OfferingsApi {
         let product_types: Vec<serde_json::Value> = product_type_keys
             .iter()
             .map(|key| {
-                let label = match key.as_str() {
-                    "compute" => "💻 Compute / VPS",
-                    "dedicated" => "🖥️ Dedicated Server",
-                    "gpu" => "🎮 GPU / AI",
-                    "network" => "🌐 Network / CDN",
-                    "storage" => "💾 Storage",
-                    // If new types are added to DB, show them with generic label
-                    _ => key.as_str(),
-                };
+                let label = product_type_label(key);
                 serde_json::json!({"key": key, "label": label})
             })
             .collect();
@@ -340,5 +348,51 @@ impl OfferingsApi {
             data: Some(product_types),
             error: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_csv_headers_count() {
+        assert_eq!(CSV_HEADERS.len(), 41);
+    }
+
+    #[test]
+    fn test_csv_headers_start_with_offering_id() {
+        assert_eq!(CSV_HEADERS[0], "offering_id");
+    }
+
+    #[test]
+    fn test_csv_headers_end_with_agent_pool_id() {
+        assert_eq!(CSV_HEADERS[CSV_HEADERS.len() - 1], "agent_pool_id");
+    }
+
+    #[test]
+    fn test_csv_headers_no_duplicates() {
+        let mut seen = std::collections::HashSet::new();
+        for header in CSV_HEADERS {
+            assert!(seen.insert(header), "Duplicate CSV header: {header}");
+        }
+    }
+
+    #[test]
+    fn test_product_type_label_known_types() {
+        assert_eq!(product_type_label("compute"), "\u{1f4bb} Compute / VPS");
+        assert_eq!(
+            product_type_label("dedicated"),
+            "\u{1f5a5}\u{fe0f} Dedicated Server"
+        );
+        assert_eq!(product_type_label("gpu"), "\u{1f3ae} GPU / AI");
+        assert_eq!(product_type_label("network"), "\u{1f310} Network / CDN");
+        assert_eq!(product_type_label("storage"), "\u{1f4be} Storage");
+    }
+
+    #[test]
+    fn test_product_type_label_unknown_passes_through() {
+        assert_eq!(product_type_label("quantum"), "quantum");
+        assert_eq!(product_type_label(""), "");
     }
 }

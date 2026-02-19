@@ -255,6 +255,19 @@
 					<span class="text-sm">My Offerings</span>
 				</a>
 
+				<!-- Earnings -->
+				{@const earningsActive =
+					currentPath === '/dashboard/provider/earnings' ||
+					currentPath.startsWith('/dashboard/provider/earnings')}
+				<a
+					href="/dashboard/provider/earnings"
+					onclick={closeSidebar}
+					class="nav-item {earningsActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name="trending-up" size={20} />
+					<span class="text-sm">Earnings</span>
+				</a>
+
 				{#each providerOnboardedItems as item}
 					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 					<a

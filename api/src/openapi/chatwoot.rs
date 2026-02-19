@@ -363,3 +363,75 @@ impl ChatwootApi {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chatwoot_identity_response_camel_case_serialization() {
+        let resp = ChatwootIdentityResponse {
+            identifier: "abc123".to_string(),
+            identifier_hash: "hash456".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["identifier"], "abc123");
+        assert_eq!(json["identifierHash"], "hash456");
+    }
+
+    #[test]
+    fn test_support_portal_status_serializes_all_fields() {
+        let status = SupportPortalStatus {
+            has_account: true,
+            user_id: Some(42),
+            email: Some("test@example.com".to_string()),
+            login_url: "https://support.example.com/app/login".to_string(),
+            portal_slug: Some("my-portal".to_string()),
+            inbox_id: Some(7),
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["hasAccount"], true);
+        assert_eq!(json["userId"], 42);
+        assert_eq!(json["email"], "test@example.com");
+        assert_eq!(json["loginUrl"], "https://support.example.com/app/login");
+        assert_eq!(json["portalSlug"], "my-portal");
+        assert_eq!(json["inboxId"], 7);
+    }
+
+    #[test]
+    fn test_support_portal_status_none_fields_serialize_as_null() {
+        let status = SupportPortalStatus {
+            has_account: false,
+            user_id: None,
+            email: None,
+            login_url: "https://x.com/app/login".to_string(),
+            portal_slug: None,
+            inbox_id: None,
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["hasAccount"], false);
+        assert!(json["userId"].is_null());
+        assert!(json["email"].is_null());
+        assert!(json["portalSlug"].is_null());
+        assert!(json["inboxId"].is_null());
+    }
+
+    #[test]
+    fn test_password_reset_response_login_url_format() {
+        let resp = PasswordResetResponse {
+            password: "secret".to_string(),
+            login_url: format!("{}/app/login", "https://support.example.com"),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["password"], "secret");
+        assert_eq!(json["loginUrl"], "https://support.example.com/app/login");
+    }
+
+    #[test]
+    fn test_chatwoot_identity_response_deserialization() {
+        let json = r#"{"identifier":"pubhex","identifierHash":"hmachex"}"#;
+        let resp: ChatwootIdentityResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.identifier, "pubhex");
+        assert_eq!(resp.identifier_hash, "hmachex");
+    }
+}

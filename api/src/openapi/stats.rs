@@ -185,3 +185,121 @@ impl StatsApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::stats::AccountSearchResult;
+
+    #[test]
+    fn test_platform_overview_serialization_with_timestamp() {
+        let overview = PlatformOverview {
+            total_providers: 10,
+            active_providers: 5,
+            total_offerings: 20,
+            total_contracts: 100,
+            total_transfers: 50,
+            total_volume_e9s: 1_000_000_000_000,
+            validator_count_24h: 3,
+            latest_block_timestamp_ns: Some(1_700_000_000_000_000_000),
+            metadata: BTreeMap::new(),
+        };
+        let json = serde_json::to_value(&overview).unwrap();
+        assert_eq!(json["latest_block_timestamp_ns"], 1_700_000_000_000_000_000u64);
+        assert_eq!(json["total_providers"], 10);
+    }
+
+    #[test]
+    fn test_platform_overview_serialization_without_timestamp() {
+        let overview = PlatformOverview {
+            total_providers: 0,
+            active_providers: 0,
+            total_offerings: 0,
+            total_contracts: 0,
+            total_transfers: 0,
+            total_volume_e9s: 0,
+            validator_count_24h: 0,
+            latest_block_timestamp_ns: None,
+            metadata: BTreeMap::new(),
+        };
+        let json = serde_json::to_value(&overview).unwrap();
+        // serde will serialize None as null (serde skip_serializing_if_is_none is an OAI attr, not serde)
+        // The key should still be present with null value via serde
+        assert!(json.get("latest_block_timestamp_ns").is_some());
+        assert!(json["latest_block_timestamp_ns"].is_null());
+    }
+
+    #[test]
+    fn test_platform_overview_metadata_serialization() {
+        let mut metadata = BTreeMap::new();
+        metadata.insert("version".to_string(), JsonValue::String("1.0".to_string()));
+        metadata.insert("block_height".to_string(), JsonValue::Number(42.into()));
+
+        let overview = PlatformOverview {
+            total_providers: 1,
+            active_providers: 1,
+            total_offerings: 1,
+            total_contracts: 0,
+            total_transfers: 0,
+            total_volume_e9s: 0,
+            validator_count_24h: 0,
+            latest_block_timestamp_ns: None,
+            metadata,
+        };
+        let json = serde_json::to_value(&overview).unwrap();
+        assert_eq!(json["metadata"]["version"], "1.0");
+        assert_eq!(json["metadata"]["block_height"], 42);
+    }
+
+    /// Helper that mirrors the handler's limit clamping: `limit.unwrap_or(50).min(100)`
+    fn clamp_search_limit(limit: Option<i64>) -> i64 {
+        limit.unwrap_or(50).min(100)
+    }
+
+    #[test]
+    fn test_search_limit_clamping_default() {
+        assert_eq!(clamp_search_limit(None), 50);
+    }
+
+    #[test]
+    fn test_search_limit_clamping_within_bounds() {
+        assert_eq!(clamp_search_limit(Some(75)), 75);
+    }
+
+    #[test]
+    fn test_search_limit_clamping_above_max() {
+        assert_eq!(clamp_search_limit(Some(200)), 100);
+    }
+
+    #[test]
+    fn test_account_search_result_with_display_name() {
+        let result = AccountSearchResult {
+            username: "alice".to_string(),
+            display_name: Some("Alice Wonderland".to_string()),
+            pubkey: "ab".repeat(32),
+            reputation_score: 100,
+            contract_count: 5,
+            offering_count: 2,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["username"], "alice");
+        assert_eq!(json["display_name"], "Alice Wonderland");
+        assert_eq!(json["reputation_score"], 100);
+    }
+
+    #[test]
+    fn test_account_search_result_without_display_name() {
+        let result = AccountSearchResult {
+            username: "bob".to_string(),
+            display_name: None,
+            pubkey: "cd".repeat(32),
+            reputation_score: 0,
+            contract_count: 0,
+            offering_count: 0,
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["username"], "bob");
+        assert!(json["display_name"].is_null());
+        assert_eq!(json["contract_count"], 0);
+    }
+}

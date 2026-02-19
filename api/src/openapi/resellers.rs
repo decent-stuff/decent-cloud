@@ -404,3 +404,115 @@ impl ResellersApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_relationship_response_hex_encodes_pubkeys() {
+        let reseller_bytes = vec![0xab; 32];
+        let provider_bytes = vec![0xcd; 32];
+        let rel = ResellerRelationship {
+            id: 1,
+            reseller_pubkey: reseller_bytes,
+            external_provider_pubkey: provider_bytes,
+            commission_percent: 15,
+            status: "active".to_string(),
+            created_at_ns: 1_000_000,
+            updated_at_ns: None,
+        };
+        let resp = ResellerRelationshipResponse::from(rel);
+        assert_eq!(resp.reseller_pubkey, "ab".repeat(32));
+        assert_eq!(resp.external_provider_pubkey, "cd".repeat(32));
+    }
+
+    #[test]
+    fn test_relationship_response_preserves_scalar_fields() {
+        let rel = ResellerRelationship {
+            id: 42,
+            reseller_pubkey: vec![0; 32],
+            external_provider_pubkey: vec![0; 32],
+            commission_percent: 20,
+            status: "pending".to_string(),
+            created_at_ns: 999,
+            updated_at_ns: Some(1234),
+        };
+        let resp = ResellerRelationshipResponse::from(rel);
+        assert_eq!(resp.id, 42);
+        assert_eq!(resp.commission_percent, 20);
+        assert_eq!(resp.status, "pending");
+        assert_eq!(resp.created_at_ns, 999);
+        assert_eq!(resp.updated_at_ns, Some(1234));
+    }
+
+    #[test]
+    fn test_order_response_hex_encodes_all_binary_fields() {
+        let order = ResellerOrder {
+            id: 7,
+            contract_id: vec![0x11; 32],
+            reseller_pubkey: vec![0x22; 32],
+            external_provider_pubkey: vec![0x33; 32],
+            offering_id: 5,
+            base_price_e9s: 1_000_000_000,
+            commission_e9s: 100_000_000,
+            total_paid_e9s: 1_100_000_000,
+            external_order_id: Some("ext-123".to_string()),
+            external_order_details: None,
+            status: "pending".to_string(),
+            created_at_ns: 5000,
+            fulfilled_at_ns: None,
+        };
+        let resp = ResellerOrderResponse::from(order);
+        assert_eq!(resp.contract_id, "11".repeat(32));
+        assert_eq!(resp.reseller_pubkey, "22".repeat(32));
+        assert_eq!(resp.external_provider_pubkey, "33".repeat(32));
+    }
+
+    #[test]
+    fn test_order_response_preserves_optional_fields() {
+        let order = ResellerOrder {
+            id: 1,
+            contract_id: vec![0; 32],
+            reseller_pubkey: vec![0; 32],
+            external_provider_pubkey: vec![0; 32],
+            offering_id: 10,
+            base_price_e9s: 500,
+            commission_e9s: 50,
+            total_paid_e9s: 550,
+            external_order_id: None,
+            external_order_details: Some("details".to_string()),
+            status: "fulfilled".to_string(),
+            created_at_ns: 100,
+            fulfilled_at_ns: Some(200),
+        };
+        let resp = ResellerOrderResponse::from(order);
+        assert!(resp.external_order_id.is_none());
+        assert_eq!(resp.external_order_details.as_deref(), Some("details"));
+        assert_eq!(resp.fulfilled_at_ns, Some(200));
+    }
+
+    #[test]
+    fn test_create_reseller_relationship_request_deserialization() {
+        let json = r#"{"externalProviderPubkey":"aa","commissionPercent":10}"#;
+        let req: CreateResellerRelationshipRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.external_provider_pubkey, "aa");
+        assert_eq!(req.commission_percent, 10);
+    }
+
+    #[test]
+    fn test_update_reseller_relationship_request_partial() {
+        let json = r#"{"commissionPercent":25}"#;
+        let req: UpdateResellerRelationshipRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.commission_percent, Some(25));
+        assert!(req.status.is_none());
+    }
+
+    #[test]
+    fn test_fulfill_reseller_order_request_minimal() {
+        let json = r#"{"externalOrderId":"ord-456"}"#;
+        let req: FulfillResellerOrderRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.external_order_id, "ord-456");
+        assert!(req.external_order_details.is_none());
+    }
+}

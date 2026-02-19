@@ -2160,6 +2160,63 @@ export async function cancelSubscription(
 	return payload.data;
 }
 
+// ==================== Provider Stats & Feedback API ====================
+
+import type { ProviderFeedbackStats as ProviderFeedbackStatsRaw } from '$lib/types/generated/ProviderFeedbackStats';
+
+export type ProviderFeedbackStats = ConvertNullToUndefined<ProviderFeedbackStatsRaw>;
+
+export interface ProviderStats {
+	total_contracts: number;
+	pending_contracts: number;
+	total_revenue_e9s: number;
+	offerings_count: number;
+}
+
+/**
+ * Get provider stats (contracts, revenue, offerings count).
+ * Public endpoint - no authentication required.
+ */
+export async function getProviderStats(pubkeyHex: string): Promise<ProviderStats> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/stats`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch provider stats: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderStats>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider stats');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Get aggregated feedback stats for a provider.
+ * Public endpoint - no authentication required.
+ */
+export async function getProviderFeedbackStats(pubkeyHex: string): Promise<ProviderFeedbackStats> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/feedback-stats`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch feedback stats: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderFeedbackStats>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider feedback stats');
+	}
+
+	return payload.data;
+}
+
 // ==================== Bandwidth Stats API ====================
 
 import type { BandwidthStatsResponse } from '$lib/types/generated/BandwidthStatsResponse';
