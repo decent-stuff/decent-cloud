@@ -265,30 +265,6 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ApiAuthenticatedUser {
     }
 }
 
-/// DEPRECATED: Get admin public keys from environment variable
-/// This function is deprecated and no longer used for admin authentication.
-/// Admin access is now controlled by the is_admin flag in the accounts table.
-/// Kept for backward compatibility only - will be removed in a future version.
-#[deprecated(
-    since = "0.1.0",
-    note = "Admin authentication now uses is_admin database flag instead of ADMIN_PUBLIC_KEYS env var"
-)]
-#[allow(dead_code)]
-pub(crate) fn get_admin_pubkeys() -> Vec<Vec<u8>> {
-    std::env::var("ADMIN_PUBLIC_KEYS")
-        .ok()
-        .and_then(|keys_str| {
-            let keys: Result<Vec<Vec<u8>>, _> = keys_str
-                .split(',')
-                .map(|k| k.trim())
-                .filter(|k| !k.is_empty())
-                .map(hex::decode)
-                .collect();
-            keys.ok()
-        })
-        .unwrap_or_default()
-}
-
 impl<'a> poem_openapi::ApiExtractor<'a> for AdminAuthenticatedUser {
     const TYPES: &'static [poem_openapi::ApiExtractorType] =
         &[poem_openapi::ApiExtractorType::RequestObject];

@@ -696,3 +696,177 @@ pub enum ApiTags {
     /// Cloud self-provisioning endpoints
     Cloud,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_pubkey_valid_32_bytes() {
+        let result = decode_pubkey(&"a".repeat(64));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_decode_pubkey_invalid_hex() {
+        let result = decode_pubkey("not-valid-hex!");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Invalid pubkey hex"), "Got: {err}");
+    }
+
+    #[test]
+    fn test_decode_pubkey_wrong_length() {
+        let result = decode_pubkey("abcd"); // 2 bytes, not 32
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("must be 32 bytes"), "Got: {err}");
+    }
+
+    #[test]
+    fn test_check_authorization_matching() {
+        let pubkey = vec![1u8; 32];
+        let user = ApiAuthenticatedUser {
+            pubkey: pubkey.clone(),
+        };
+        assert!(check_authorization(&pubkey, &user).is_ok());
+    }
+
+    #[test]
+    fn test_check_authorization_mismatch() {
+        let pubkey = vec![1u8; 32];
+        let user = ApiAuthenticatedUser {
+            pubkey: vec![2u8; 32],
+        };
+        let result = check_authorization(&pubkey, &user);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unauthorized"), "Got: {err}");
+    }
+
+    #[test]
+    fn test_default_limit_returns_50() {
+        assert_eq!(default_limit(), 50);
+    }
+
+    #[test]
+    fn test_default_false_returns_false() {
+        assert!(!default_false());
+    }
+
+    #[test]
+    fn test_api_response_success_serialization() {
+        let resp = ApiResponse::<String> {
+            success: true,
+            data: Some("hello".to_string()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"], "hello");
+    }
+
+    #[test]
+    fn test_api_response_error_serialization() {
+        let resp = ApiResponse::<String> {
+            success: false,
+            data: None,
+            error: Some("something failed".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "something failed");
+    }
+
+    #[test]
+    fn test_health_response_camel_case() {
+        let resp = HealthResponse {
+            success: true,
+            message: "ok".to_string(),
+            environment: "test".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"success\""));
+        assert!(json.contains("\"message\""));
+        assert!(json.contains("\"environment\""));
+    }
+
+    #[test]
+    fn test_register_account_request_deserialization() {
+        let json = r#"{"username":"alice","publicKey":"abc123","email":"a@b.com"}"#;
+        let req: RegisterAccountRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.username, "alice");
+        assert_eq!(req.public_key, "abc123");
+        assert_eq!(req.email, "a@b.com");
+    }
+
+    #[test]
+    fn test_record_health_check_request_deserialization() {
+        let json = r#"{"checkedAt":1234567890,"status":"healthy","latencyMs":42,"details":null}"#;
+        let req: RecordHealthCheckRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.checked_at, 1234567890);
+        assert_eq!(req.status, "healthy");
+        assert_eq!(req.latency_ms, Some(42));
+        assert!(req.details.is_none());
+    }
+
+    #[test]
+    fn test_record_health_check_request_minimal() {
+        let json = r#"{"checkedAt":0,"status":"unknown"}"#;
+        let req: RecordHealthCheckRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.checked_at, 0);
+        assert_eq!(req.status, "unknown");
+        assert!(req.latency_ms.is_none());
+    }
+
+    #[test]
+    fn test_rental_response_request_accept() {
+        let json = r#"{"accept":true,"memo":"looks good"}"#;
+        let req: RentalResponseRequest = serde_json::from_str(json).unwrap();
+        assert!(req.accept);
+        assert_eq!(req.memo.unwrap(), "looks good");
+    }
+
+    #[test]
+    fn test_rental_response_request_reject() {
+        let json = r#"{"accept":false,"memo":null}"#;
+        let req: RentalResponseRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.accept);
+        assert!(req.memo.is_none());
+    }
+
+    #[test]
+    fn test_extend_contract_response_serialization() {
+        let resp = ExtendContractResponse {
+            extension_payment_e9s: 1_000_000_000,
+            new_end_timestamp_ns: 1700000000000000000,
+            message: "Extended".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("extensionPaymentE9s"));
+        assert!(json.contains("newEndTimestampNs"));
+    }
+
+    #[test]
+    fn test_generate_offerings_request_defaults() {
+        let json = r#"{"pricing":{"small":{"monthlyPrice":5.0,"currency":"USD"}}}"#;
+        let req: GenerateOfferingsRequest = serde_json::from_str(json).unwrap();
+        assert!(req.tiers.is_empty());
+        assert_eq!(req.visibility, "public");
+        assert!(!req.dry_run);
+        assert_eq!(req.pricing["small"].monthly_price, 5.0);
+    }
+
+    #[test]
+    fn test_reconcile_request_deserialization() {
+        let json = r#"{"runningInstances":[{"externalId":"vm-100","contractId":"c-123"}]}"#;
+        let req: ReconcileRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.running_instances.len(), 1);
+        assert_eq!(req.running_instances[0].external_id, "vm-100");
+        assert_eq!(
+            req.running_instances[0].contract_id.as_deref(),
+            Some("c-123")
+        );
+    }
+}

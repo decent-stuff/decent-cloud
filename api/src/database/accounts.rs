@@ -1235,32 +1235,27 @@ impl Database {
             .execute(&mut *tx)
             .await?;
 
-        // Delete account contacts, socials, external keys (if tables exist)
-        // These have ON DELETE CASCADE but we're explicit
+        // Delete account contacts, socials, external keys
         sqlx::query("DELETE FROM account_contacts WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
-            .await
-            .ok(); // Ignore if table doesn't exist
+            .await?;
 
         sqlx::query("DELETE FROM account_socials WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
-            .await
-            .ok();
+            .await?;
 
         sqlx::query("DELETE FROM account_external_keys WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
-            .await
-            .ok();
+            .await?;
 
         // Delete recovery tokens
         sqlx::query("DELETE FROM recovery_tokens WHERE account_id = $1")
             .bind(account_id)
             .execute(&mut *tx)
-            .await
-            .ok();
+            .await?;
 
         // Delete signature audit records (FK without cascade)
         sqlx::query("DELETE FROM signature_audit WHERE account_id = $1")

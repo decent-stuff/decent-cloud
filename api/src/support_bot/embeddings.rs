@@ -49,7 +49,9 @@ pub async fn get_embedding(text: &str) -> Result<Vec<f32>> {
 
     // Check cache first
     {
-        let cache = EMBEDDING_CACHE.read().unwrap();
+        let cache = EMBEDDING_CACHE
+            .read()
+            .map_err(|e| anyhow::anyhow!("Embedding cache lock poisoned: {}", e))?;
         if let Some(ref map) = *cache {
             if let Some(cached) = map.get(&cache_key) {
                 if cached.created_at.elapsed() < Duration::from_secs(CACHE_TTL_SECS) {
@@ -64,7 +66,9 @@ pub async fn get_embedding(text: &str) -> Result<Vec<f32>> {
 
     // Store in cache
     {
-        let mut cache = EMBEDDING_CACHE.write().unwrap();
+        let mut cache = EMBEDDING_CACHE
+            .write()
+            .map_err(|e| anyhow::anyhow!("Embedding cache lock poisoned: {}", e))?;
         if cache.is_none() {
             *cache = Some(HashMap::new());
         }
@@ -138,7 +142,9 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 #[allow(dead_code)] // Test utility function
 pub fn clear_cache() {
-    let mut cache = EMBEDDING_CACHE.write().unwrap();
+    let mut cache = EMBEDDING_CACHE
+        .write()
+        .expect("Embedding cache lock poisoned in test");
     *cache = None;
 }
 

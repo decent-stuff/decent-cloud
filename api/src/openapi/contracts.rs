@@ -459,26 +459,62 @@ impl ContractsApi {
         }
 
         // Check subscription rental limits
-        if let Some(account_id) = db
-            .get_account_id_by_public_key(&auth.pubkey)
-            .await
-            .ok()
-            .flatten()
-        {
-            let has_unlimited = db
+        let account_id = match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::error!("Failed to look up account by pubkey: {:#?}", e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Internal error looking up account".to_string()),
+                });
+            }
+        };
+        if let Some(account_id) = account_id {
+            let has_unlimited = match db
                 .account_has_feature(&account_id, "unlimited_rentals")
                 .await
-                .unwrap_or(false);
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::error!("Failed to check account features: {:#?}", e);
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Internal error checking subscription".to_string()),
+                    });
+                }
+            };
             if !has_unlimited {
-                let has_one_rental = db
+                let has_one_rental = match db
                     .account_has_feature(&account_id, "one_rental")
                     .await
-                    .unwrap_or(false);
+                {
+                    Ok(v) => v,
+                    Err(e) => {
+                        tracing::error!("Failed to check account features: {:#?}", e);
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some("Internal error checking subscription".to_string()),
+                        });
+                    }
+                };
                 if has_one_rental {
-                    let active_count = db
+                    let active_count = match db
                         .count_active_contracts_for_account(&account_id)
                         .await
-                        .unwrap_or(0);
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::error!("Failed to count active contracts: {:#?}", e);
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some("Internal error checking rental limits".to_string()),
+                            });
+                        }
+                    };
                     if active_count >= 1 {
                         return Json(ApiResponse {
                             success: false,
@@ -487,7 +523,6 @@ impl ContractsApi {
                         });
                     }
                 } else {
-                    // No rental feature at all - shouldn't happen but fail safe
                     return Json(ApiResponse {
                         success: false,
                         data: None,
@@ -496,7 +531,7 @@ impl ContractsApi {
                 }
             }
         }
-        // If no account found, allow rental (legacy behavior for users without accounts)
+        // If no account found (None), allow rental for users without accounts
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
