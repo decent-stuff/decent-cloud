@@ -17,6 +17,7 @@
 /// - `dynamic_shared_memory_type=mmap` - Use mmap instead of POSIX shm
 /// - `fsync=off`, `synchronous_commit=off` - Speed optimizations for tests
 use super::Database;
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::io::Write;
 use std::net::TcpListener;
@@ -175,6 +176,8 @@ unix_socket_directories = '{}'
 fsync = off
 synchronous_commit = off
 full_page_writes = off
+# Allow enough connections for concurrent test processes (8 threads x ~4 connections each)
+max_connections = 200
 # Balanced shared_buffers: large enough for concurrent operations, small enough for /tmp
 # With 4MB we can handle ~100 concurrent CREATE DATABASE operations
 shared_buffers = 4MB
@@ -345,9 +348,11 @@ async fn ensure_template_db(base_url: &str) -> String {
         }
     }
 
-    // Connect to postgres database
+    // Connect to postgres database (limit to 2 connections to avoid exhausting PostgreSQL)
     let admin_url = format!("{}/postgres", base_url);
-    let admin_pool = PgPool::connect(&admin_url)
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&admin_url)
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
@@ -482,9 +487,11 @@ async fn ensure_template_db(base_url: &str) -> String {
 
         // Only run migrations if we created the database
         if created_by_us {
-            // Connect to template and run migrations
+            // Connect to template and run migrations (single connection sufficient)
             let template_url = format!("{}/{}", base_url, template_name);
-            let template_pool = PgPool::connect(&template_url)
+            let template_pool = PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&template_url)
                 .await
                 .expect("Failed to connect to template database");
 
@@ -751,6 +758,68 @@ fn start_or_wait_for_shared_postgres() -> String {
     }
 }
 
+/// Clean up stale test databases from previous runs.
+///
+/// Drops any `test_db_*` databases that are not templates and not the current process's databases.
+/// This prevents unbounded growth of the PostgreSQL data directory.
+async fn cleanup_stale_test_dbs(admin_pool: &PgPool) {
+    // Find all non-template test databases
+    let stale_dbs: Vec<String> = match sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'test_db_%' AND datistemplate = FALSE",
+    )
+    .fetch_all(admin_pool)
+    .await
+    {
+        Ok(dbs) => dbs,
+        Err(e) => {
+            eprintln!("Warning: Failed to query stale test databases: {:#?}", e);
+            return;
+        }
+    };
+
+    let current_prefix = format!("test_db_{}_", std::process::id());
+
+    for db_name in stale_dbs {
+        // Skip databases belonging to the current process
+        if db_name.starts_with(&current_prefix) {
+            continue;
+        }
+
+        // Check if the owning process is still alive by extracting PID from name
+        // Format: test_db_{pid}_{counter}
+        let is_orphaned = db_name
+            .strip_prefix("test_db_")
+            .and_then(|rest| rest.split('_').next())
+            .and_then(|pid_str| pid_str.parse::<u32>().ok())
+            .map(|pid| !Path::new(&format!("/proc/{}", pid)).exists())
+            .unwrap_or(true); // If we can't parse the PID, assume orphaned
+
+        if !is_orphaned {
+            continue;
+        }
+
+        // Terminate connections to the stale database
+        sqlx::query(&format!(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
+            db_name
+        ))
+        .execute(admin_pool)
+        .await
+        .ok();
+
+        // Drop the stale database
+        if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\"", db_name))
+            .execute(admin_pool)
+            .await
+        {
+            eprintln!(
+                "Warning: Failed to drop stale test database '{}': {:#?}",
+                db_name, e
+            );
+        }
+    }
+}
+
 /// Set up a test database with all migrations applied
 ///
 /// Automatically starts an ephemeral PostgreSQL server if TEST_DATABASE_URL is not set.
@@ -768,11 +837,20 @@ pub async fn setup_test_db() -> Database {
     let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
     let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
 
-    // Connect to postgres database
+    // Connect to postgres database (limit to 2 connections to avoid exhausting PostgreSQL)
     let admin_url = format!("{}/postgres", base_url);
-    let admin_pool = PgPool::connect(&admin_url)
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&admin_url)
         .await
         .expect("Failed to connect to PostgreSQL admin database");
+
+    // Clean up stale test databases from crashed/previous test runs (first test only)
+    static CLEANUP_DONE: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+    if !CLEANUP_DONE.swap(true, Ordering::SeqCst) {
+        cleanup_stale_test_dbs(&admin_pool).await;
+    }
 
     // Drop if exists (cleanup from previous failed runs)
     sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
@@ -791,9 +869,11 @@ pub async fn setup_test_db() -> Database {
 
     admin_pool.close().await;
 
-    // Connect to new test database
+    // Connect to new test database (limit to 2 connections - tests are single-threaded)
     let test_url = format!("{}/{}", base_url, db_name);
-    let pool = PgPool::connect(&test_url)
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&test_url)
         .await
         .expect("Failed to connect to test database");
 
