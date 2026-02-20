@@ -312,7 +312,8 @@
 		history.replaceState(history.state, "", url.toString());
 	}
 
-	function copyOfferingLink(offeringId: number, event: Event) {
+	function copyOfferingLink(offeringId: number | undefined, event: Event) {
+		if (offeringId === undefined) return;
 		event.stopPropagation();
 		const url = new URL(window.location.href);
 		url.search = "";

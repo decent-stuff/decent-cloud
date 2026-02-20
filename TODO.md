@@ -70,19 +70,6 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ---
 
-## Code Quality
-
-### TypeScript Type Errors (Pre-existing)
-
-24 pre-existing TypeScript errors in 3 frontend files:
-- `website/src/routes/dashboard/marketplace/+page.svelte` — 2 errors (`ResourceInventory` unknown type, `number | undefined` arg)
-- `website/src/routes/dashboard/offerings/create/+page.svelte` — 22 errors (`null` not assignable to `string | undefined`)
-
-These are pre-existing and unrelated to recent changes. Need fixing to keep the codebase clean.
-*(Single-session: investigate proper null handling for optional Offering fields.)*
-
----
-
 ## UX Improvements
 
 ### API data not yet surfaced in UI
