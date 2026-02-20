@@ -129,7 +129,7 @@ pub struct AgentStatus {
     #[ts(type = "number")]
     pub active_contracts: i64,
     /// Hardware resource inventory (JSONB)
-    #[ts(type = "ResourceInventory | null")]
+    #[ts(as = "Option<dcc_common::api_types::ResourceInventory>")]
     pub resources: Option<serde_json::Value>,
 }
 

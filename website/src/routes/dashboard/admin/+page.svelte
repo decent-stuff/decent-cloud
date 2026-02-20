@@ -20,6 +20,9 @@
 		type AdminAccountInfo,
 		type AccountDeletionSummary,
 		type AdminAccountListResponse,
+		listPendingPaymentReleases,
+		processPayout,
+		type PendingReleaseInfo,
 	} from "$lib/services/admin-api";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -64,6 +67,18 @@
 	let togglingAdminFor = $state<string | null>(null);
 	const ACCOUNTS_PER_PAGE = 20;
 
+	// Payment releases state
+	let pendingReleases = $state<PendingReleaseInfo[]>([]);
+	let loadingReleases = $state(false);
+	let releasesError = $state<string | null>(null);
+	let payoutForm = $state({
+		pubkey: "",
+		walletAddress: "",
+		submitting: false,
+		result: "",
+		error: "",
+	});
+
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
 	onMount(() => {
@@ -72,6 +87,7 @@
 			if (value?.account?.isAdmin) {
 				loadData();
 				loadAccounts();
+				loadReleases();
 			}
 		});
 	});
@@ -330,6 +346,51 @@
 		expandedAccountUsername = null;
 		expandedAccountInfo = null;
 		loadAccounts();
+	}
+
+	async function loadReleases() {
+		if (!currentIdentity?.identity) return;
+
+		loadingReleases = true;
+		releasesError = null;
+
+		try {
+			pendingReleases = await listPendingPaymentReleases(currentIdentity.identity);
+		} catch (err) {
+			releasesError = err instanceof Error ? err.message : "Failed to load payment releases";
+		} finally {
+			loadingReleases = false;
+		}
+	}
+
+	function startPayout(pubkey: string) {
+		payoutForm = { pubkey, walletAddress: "", submitting: false, result: "", error: "" };
+	}
+
+	function cancelPayout() {
+		payoutForm = { pubkey: "", walletAddress: "", submitting: false, result: "", error: "" };
+	}
+
+	async function handleProcessPayout() {
+		if (!currentIdentity?.identity || !payoutForm.pubkey || !payoutForm.walletAddress.trim()) return;
+
+		payoutForm = { ...payoutForm, submitting: true, result: "", error: "" };
+
+		try {
+			const result = await processPayout(
+				currentIdentity.identity,
+				payoutForm.pubkey,
+				payoutForm.walletAddress.trim()
+			);
+			payoutForm = { pubkey: "", walletAddress: "", submitting: false, result, error: "" };
+			await loadReleases();
+		} catch (err) {
+			payoutForm = {
+				...payoutForm,
+				submitting: false,
+				error: err instanceof Error ? err.message : "Failed to process payout",
+			};
+		}
 	}
 </script>
 
@@ -697,6 +758,96 @@
 							</button>
 						</div>
 					{/if}
+				{/if}
+			</div>
+
+
+			<!-- Payment Releases -->
+			<div class="card p-6 border border-neutral-800">
+				<h2 class="text-2xl font-bold text-white mb-4">Payment Releases</h2>
+
+				{#if payoutForm.result}
+					<div class="mb-4 p-3 bg-green-500/20 border border-green-500/30 text-green-200 text-sm">
+						Payout processed: {payoutForm.result}
+					</div>
+				{/if}
+
+				{#if releasesError}
+					<div class="mb-4 p-3 bg-red-500/20 border border-red-500/30 text-red-200 text-sm">
+						{releasesError}
+					</div>
+				{/if}
+
+				{#if loadingReleases}
+					<p class="text-neutral-500 text-center py-8">Loading...</p>
+				{:else if pendingReleases.length === 0}
+					<p class="text-neutral-500 text-center py-8">No pending payment releases</p>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-white/90">
+							<thead class="text-neutral-400 border-b border-neutral-800">
+								<tr>
+									<th class="pb-3 px-2">Provider</th>
+									<th class="pb-3 px-2">Total Pending</th>
+									<th class="pb-3 px-2">Releases</th>
+									<th class="pb-3 px-2">Action</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each pendingReleases as release}
+									<tr class="border-b border-neutral-800 hover:bg-surface-elevated">
+										<td class="py-3 px-2 font-mono text-sm">
+											{release.providerPubkeyHex.slice(0, 12)}...
+										</td>
+										<td class="py-3 px-2">
+											{(release.totalPendingE9s / 1e9).toFixed(4)} tokens
+										</td>
+										<td class="py-3 px-2">{release.releaseCount}</td>
+										<td class="py-3 px-2">
+											{#if payoutForm.pubkey === release.providerPubkeyHex}
+												<div class="flex flex-col gap-2">
+													<input
+														type="text"
+														bind:value={payoutForm.walletAddress}
+														placeholder="Wallet address"
+														class="px-2 py-1 bg-surface-elevated border border-neutral-700 text-white text-sm w-64"
+													/>
+													{#if payoutForm.error}
+														<p class="text-red-400 text-xs">{payoutForm.error}</p>
+													{/if}
+													<div class="flex gap-2">
+														<button
+															type="button"
+															onclick={handleProcessPayout}
+															disabled={payoutForm.submitting || !payoutForm.walletAddress.trim()}
+															class="px-3 py-1 bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+														>
+															{payoutForm.submitting ? "Processing..." : "Confirm"}
+														</button>
+														<button
+															type="button"
+															onclick={cancelPayout}
+															class="px-3 py-1 bg-neutral-700 text-white text-sm hover:bg-neutral-600 transition-colors"
+														>
+															Cancel
+														</button>
+													</div>
+												</div>
+											{:else}
+												<button
+													type="button"
+													onclick={() => startPayout(release.providerPubkeyHex)}
+													class="px-3 py-1 bg-yellow-600 text-white text-sm hover:bg-yellow-700 transition-colors"
+												>
+													Process Payout
+												</button>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
 				{/if}
 			</div>
 

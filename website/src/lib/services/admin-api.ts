@@ -270,3 +270,39 @@ export async function setAdminStatus(
 		{ isAdmin }
 	);
 }
+
+/**
+ * Pending payment release info for a provider
+ */
+export interface PendingReleaseInfo {
+	providerPubkeyHex: string;
+	totalPendingE9s: number;
+	releaseCount: number;
+}
+
+/**
+ * List all providers with pending payment releases
+ */
+export async function listPendingPaymentReleases(
+	identity: Ed25519KeyIdentity
+): Promise<PendingReleaseInfo[]> {
+	return authenticatedFetch<PendingReleaseInfo[]>(
+		identity,
+		'GET',
+		'/api/v1/admin/payment-releases'
+	);
+}
+
+/**
+ * Process payout for a provider
+ */
+export async function processPayout(
+	identity: Ed25519KeyIdentity,
+	providerPubkey: string,
+	walletAddress: string
+): Promise<string> {
+	return authenticatedFetch<string>(identity, 'POST', '/api/v1/admin/payouts', {
+		providerPubkey,
+		walletAddress
+	});
+}

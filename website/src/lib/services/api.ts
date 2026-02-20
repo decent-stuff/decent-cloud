@@ -12,6 +12,7 @@ import type { ContractUsage } from '$lib/types/generated/ContractUsage';
 import type { PoolCapabilities } from '$lib/types/generated/PoolCapabilities';
 import type { OfferingSuggestion } from '$lib/types/generated/OfferingSuggestion';
 import type { UnavailableTier } from '$lib/types/generated/UnavailableTier';
+import type { ContractHealthCheck } from '$lib/types/generated/ContractHealthCheck';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
@@ -668,6 +669,30 @@ export async function getContractExtensions(
 	return payload.data ?? [];
 }
 
+export async function getContractHealthChecks(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractHealthCheck[]> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/health`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to fetch health checks: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractHealthCheck[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch health checks');
+	}
+
+	return payload.data ?? [];
+}
+
 export async function requestPasswordReset(
 	contractId: string,
 	headers: SignedRequestHeaders
@@ -1223,6 +1248,7 @@ export async function getContractUsage(
 }
 
 export { type ContractUsage };
+export { type ContractHealthCheck };
 
 /**
  * Get recipe execution log for a contract

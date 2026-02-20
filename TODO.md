@@ -74,8 +74,4 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### API data not yet surfaced in UI
 
-- **Contract health status** — `GET /api/v1/contracts/:id/health` not displayed in contract detail page.
-- **Provider bandwidth dashboard** — `GET /providers/:pubkey/bandwidth` endpoints exist but no UI dashboard. Could be a chart on provider earnings page.
-- **Provider contacts management** — `GET/POST/DELETE /providers/:pubkey/contacts` has no UI. Could be added to provider setup page.
-- **Admin email management** — 6 admin endpoints for email queue management, stats, retry. No UI page for admin to manage emails. *(Admin section needs a dedicated email management sub-page.)*
-- **Admin payment management** — `GET /admin/payment-releases` and `GET /admin/payouts` have no UI. *(Admin section needs payment management sub-page.)*
+- **Provider contacts management** — `GET /providers/:pubkey/contacts` is read-only (no POST/DELETE in API). Contacts shown on provider profile but no management UI exists. *(Needs backend CRUD endpoints first.)*

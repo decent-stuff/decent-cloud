@@ -13,9 +13,11 @@
 		requestPasswordReset,
 		extendContract,
 		getContractExtensions,
+		getContractHealthChecks,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
+		type ContractHealthCheck,
 		hexEncode,
 	} from "$lib/services/api";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
@@ -58,6 +60,7 @@
 	let extendSuccess = $state<string | null>(null);
 	let extendError = $state<string | null>(null);
 	let extensions = $state<ContractExtension[]>([]);
+	let healthChecks = $state<ContractHealthCheck[]>([]);
 
 	// Recipe log state
 	let recipeLog = $state<string | null>(null);
@@ -239,6 +242,7 @@
 			
 				// Load extension history
 				await loadExtensions(signingIdentityInfo);
+				await loadHealthChecks(signingIdentityInfo);
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -387,6 +391,19 @@
 			extensions = await getContractExtensions(contractId, headers);
 		} catch {
 			// Extensions not available is not an error
+		}
+	}
+
+	async function loadHealthChecks(signingIdentityInfo: any) {
+		try {
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/health`,
+			);
+			healthChecks = await getContractHealthChecks(contractId, headers);
+		} catch {
+			// Health checks not available is not an error
 		}
 	}
 
@@ -998,6 +1015,56 @@
 						{/if}
 					</div>
 				{/each}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Health Status -->
+	{#if healthChecks.length > 0}
+		<div class="card p-6 border border-neutral-800">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-3">Health Status ({healthChecks.length})</h3>
+			<div class="flex items-center gap-2 mb-4">
+				<span class="text-xs text-neutral-400">Latest:</span>
+				{#if healthChecks[0].status === 'healthy'}
+					<span class="px-2 py-0.5 rounded text-xs font-medium bg-green-900 text-green-300">healthy</span>
+				{:else if healthChecks[0].status === 'unhealthy'}
+					<span class="px-2 py-0.5 rounded text-xs font-medium bg-red-900 text-red-300">unhealthy</span>
+				{:else}
+					<span class="px-2 py-0.5 rounded text-xs font-medium bg-neutral-700 text-neutral-300">unknown</span>
+				{/if}
+				{#if healthChecks[0].latencyMs !== undefined}
+					<span class="text-xs text-neutral-500">{healthChecks[0].latencyMs}ms</span>
+				{/if}
+			</div>
+			<div class="overflow-x-auto">
+				<table class="w-full text-xs">
+					<thead>
+						<tr class="text-neutral-500 border-b border-neutral-800">
+							<th class="text-left py-1 pr-4">Time</th>
+							<th class="text-left py-1 pr-4">Status</th>
+							<th class="text-left py-1 pr-4">Latency</th>
+							<th class="text-left py-1">Details</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each healthChecks as hc (hc.id)}
+							<tr class="border-b border-neutral-800/50">
+								<td class="py-1 pr-4 text-neutral-400 whitespace-nowrap">{new Date(hc.checkedAt / 1_000_000).toLocaleString()}</td>
+								<td class="py-1 pr-4">
+									{#if hc.status === 'healthy'}
+										<span class="px-1.5 py-0.5 rounded text-xs bg-green-900 text-green-300">healthy</span>
+									{:else if hc.status === 'unhealthy'}
+										<span class="px-1.5 py-0.5 rounded text-xs bg-red-900 text-red-300">unhealthy</span>
+									{:else}
+										<span class="px-1.5 py-0.5 rounded text-xs bg-neutral-700 text-neutral-300">{hc.status}</span>
+									{/if}
+								</td>
+								<td class="py-1 pr-4 text-neutral-400">{hc.latencyMs !== undefined ? `${hc.latencyMs}ms` : '—'}</td>
+								<td class="py-1 text-neutral-400">{hc.details ?? '—'}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		</div>
 	{/if}

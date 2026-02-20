@@ -787,6 +787,74 @@ impl ContractsApi {
         }
     }
 
+    /// Get contract health checks
+    ///
+    /// Returns the most recent health check results for a contract.
+    /// Both the requester and provider can view health checks for their contract.
+    #[oai(
+        path = "/contracts/:id/health",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn get_contract_health(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractHealthCheck>>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".into()),
+            });
+        }
+
+        match db.get_recent_health_checks(&contract_id, 20).await {
+            Ok(checks) => Json(ApiResponse {
+                success: true,
+                data: Some(checks),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Update ICPay transaction ID
     ///
     /// Updates the ICPay transaction ID for a contract after payment (requires authentication)
@@ -1770,5 +1838,43 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["paymentStatus"], "succeeded");
+    }
+
+    #[test]
+    fn test_contract_health_check_serialization() {
+        use crate::database::contracts::ContractHealthCheck;
+        let check = ContractHealthCheck {
+            id: 1,
+            contract_id: "abc123".to_string(),
+            checked_at: 1_700_000_000_000_000_000i64,
+            status: "healthy".to_string(),
+            latency_ms: Some(42),
+            details: None,
+            created_at: 1_700_000_000_000_000_001i64,
+        };
+        let v = serde_json::to_value(&check).unwrap();
+        assert_eq!(v["status"], "healthy");
+        assert_eq!(v["latencyMs"], 42);
+        assert_eq!(v["contractId"], "abc123");
+        // details is None: field should be absent or null per skip_serializing_if_is_none
+        assert!(v.get("details").is_none_or(|d| d.is_null()));
+    }
+
+    #[test]
+    fn test_contract_health_check_unhealthy_serialization() {
+        use crate::database::contracts::ContractHealthCheck;
+        let check = ContractHealthCheck {
+            id: 2,
+            contract_id: "def456".to_string(),
+            checked_at: 1_700_000_001_000_000_000i64,
+            status: "unhealthy".to_string(),
+            latency_ms: None,
+            details: Some(r#"{"error":"timeout"}"#.to_string()),
+            created_at: 1_700_000_001_000_000_001i64,
+        };
+        let v = serde_json::to_value(&check).unwrap();
+        assert_eq!(v["status"], "unhealthy");
+        assert!(v.get("latencyMs").is_none_or(|d| d.is_null()));
+        assert_eq!(v["details"], r#"{"error":"timeout"}"#);
     }
 }

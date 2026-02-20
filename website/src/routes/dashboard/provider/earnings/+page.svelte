@@ -5,15 +5,20 @@
 	import {
 		getProviderStats,
 		getProviderFeedbackStats,
+		getProviderBandwidthStats,
 		hexEncode,
 		type ProviderStats,
 		type ProviderFeedbackStats,
+		type BandwidthStatsResponse,
 	} from "$lib/services/api";
 	import { getAccountBalance } from "$lib/services/api-reputation";
+	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
+	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
 	let stats = $state<ProviderStats | null>(null);
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
+	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
 	let tokenBalance = $state<number>(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -26,6 +31,17 @@
 
 	function formatBalance(e9s: number): string {
 		return (e9s / 1_000_000_000).toFixed(4);
+	}
+
+	function formatBytes(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+		if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+		return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+	}
+
+	function formatNsTimestamp(ns: number): string {
+		return new Date(ns / 1_000_000).toLocaleString();
 	}
 
 	onMount(() => {
@@ -52,6 +68,16 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
+			const bandwidthStats_ = await (async () => {
+				if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
+				const signed = await signRequest(
+					info.identity,
+					"GET",
+					`/api/v1/providers/${providerHex}/bandwidth`,
+				);
+				return getProviderBandwidthStats(providerHex, signed.headers).catch(() => []);
+			})();
+
 			const [providerStats, feedback, balance] = await Promise.all([
 				getProviderStats(providerHex),
 				getProviderFeedbackStats(providerHex).catch(() => null),
@@ -61,6 +87,7 @@
 			stats = providerStats;
 			feedbackStats = feedback;
 			tokenBalance = balance;
+			bandwidthStats = bandwidthStats_;
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load earnings data";
 		} finally {
@@ -149,6 +176,43 @@
 					<p class="text-neutral-500 text-sm">Total Offerings</p>
 					<p class="text-3xl font-bold text-white mt-1">{stats.offerings_count}</p>
 				</div>
+			</section>
+
+			<!-- Bandwidth Usage -->
+			<section class="space-y-4">
+				<h2 class="text-xl font-semibold text-white">Bandwidth Usage</h2>
+				{#if bandwidthStats.length === 0}
+					<div class="bg-surface-elevated border border-neutral-800 p-6 text-neutral-500 text-sm">
+						No bandwidth data
+					</div>
+				{:else}
+					<div class="bg-surface-elevated border border-neutral-800 overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-neutral-800">
+									<th class="text-left text-neutral-500 font-medium px-4 py-3">Contract</th>
+									<th class="text-left text-neutral-500 font-medium px-4 py-3">Gateway</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">In</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Out</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Last Updated</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each bandwidthStats as row}
+									<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+										<td class="px-4 py-3 font-mono text-neutral-300">
+											{row.contractId.slice(0, 8)}...
+										</td>
+										<td class="px-4 py-3 text-neutral-300">{row.gatewaySlug}</td>
+										<td class="px-4 py-3 text-right text-neutral-300">{formatBytes(row.bytesIn)}</td>
+										<td class="px-4 py-3 text-right text-neutral-300">{formatBytes(row.bytesOut)}</td>
+										<td class="px-4 py-3 text-right text-neutral-400 text-xs">{formatNsTimestamp(row.lastUpdatedNs)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			</section>
 
 			<!-- Customer Feedback -->

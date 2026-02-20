@@ -5,7 +5,6 @@ use super::common::{
 };
 use crate::{
     auth::AdminAuthenticatedUser,
-    database::contracts::ProviderPendingReleases,
     database::email::{EmailQueueEntry, EmailStats},
     database::Database,
     email_service::EmailService,
@@ -41,6 +40,16 @@ pub struct AdminAccountListResponse {
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
+}
+
+/// Response type for pending payment releases, with provider pubkey as hex string
+#[derive(Debug, Serialize, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct PendingReleaseInfo {
+    pub provider_pubkey_hex: String,
+    pub total_pending_e9s: i64,
+    pub release_count: i64,
 }
 
 pub struct AdminApi;
@@ -640,11 +649,20 @@ impl AdminApi {
         &self,
         db: Data<&Arc<Database>>,
         _admin: AdminAuthenticatedUser,
-    ) -> Json<ApiResponse<Vec<ProviderPendingReleases>>> {
+    ) -> Json<ApiResponse<Vec<PendingReleaseInfo>>> {
         match db.get_providers_with_pending_releases().await {
             Ok(providers) => Json(ApiResponse {
                 success: true,
-                data: Some(providers),
+                data: Some(
+                    providers
+                        .into_iter()
+                        .map(|p| PendingReleaseInfo {
+                            provider_pubkey_hex: hex::encode(&p.provider_pubkey),
+                            total_pending_e9s: p.total_pending_e9s,
+                            release_count: p.release_count,
+                        })
+                        .collect(),
+                ),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1103,6 +1121,21 @@ mod tests {
         let req: AdminProcessPayoutRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.provider_pubkey, "aabb1122");
         assert_eq!(req.wallet_address, "wallet-xyz");
+    }
+
+    // ---- PendingReleaseInfo ----
+
+    #[test]
+    fn test_pending_release_info_serialization() {
+        let info = super::PendingReleaseInfo {
+            provider_pubkey_hex: "deadbeef".to_string(),
+            total_pending_e9s: 1_000_000_000,
+            release_count: 3,
+        };
+        let v = serde_json::to_value(&info).unwrap();
+        assert_eq!(v["providerPubkeyHex"], "deadbeef");
+        assert_eq!(v["totalPendingE9s"], 1_000_000_000i64);
+        assert_eq!(v["releaseCount"], 3);
     }
 
     // ---- AdminSetAccountEmailRequest ----
