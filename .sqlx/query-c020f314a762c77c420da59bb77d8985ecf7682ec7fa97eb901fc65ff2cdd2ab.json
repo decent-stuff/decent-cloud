@@ -1,15 +1,20 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1",
+  "query": "SELECT id as \"id!\", contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
         "name": "contact_type",
         "type_info": "Text"
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "contact_value",
         "type_info": "Text"
       }
@@ -21,8 +26,9 @@
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "ebff7d31932c9eaf1bd44f924773fca2780f41d1c9c9846e1823018e967a58af"
+  "hash": "c020f314a762c77c420da59bb77d8985ecf7682ec7fa97eb901fc65ff2cdd2ab"
 }

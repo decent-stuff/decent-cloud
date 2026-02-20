@@ -182,4 +182,36 @@ describe('UserApiClient', () => {
 			);
 		});
 	});
+
+	describe('addProviderContact', () => {
+		it('calls POST with provider pubkey and contact data', async () => {
+			const pubkeyHex = 'a'.repeat(64);
+			const contact = { contactType: 'telegram', contactValue: '@alice' };
+
+			await client.addProviderContact(pubkeyHex, contact);
+
+			expect(authApi.signRequest).toHaveBeenCalledWith(
+				mockIdentity,
+				'POST',
+				`/api/v1/providers/${pubkeyHex}/contacts`,
+				contact
+			);
+		});
+	});
+
+	describe('deleteProviderContact', () => {
+		it('calls DELETE with provider pubkey and contact ID', async () => {
+			const pubkeyHex = 'b'.repeat(64);
+			const contactId = 42;
+
+			await client.deleteProviderContact(pubkeyHex, contactId);
+
+			expect(authApi.signRequest).toHaveBeenCalledWith(
+				mockIdentity,
+				'DELETE',
+				`/api/v1/providers/${pubkeyHex}/contacts/${contactId}`,
+				undefined
+			);
+		});
+	});
 });

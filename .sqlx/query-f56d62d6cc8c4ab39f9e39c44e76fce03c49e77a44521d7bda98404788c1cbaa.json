@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM provider_profiles_contacts WHERE provider_pubkey = $1 AND id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f56d62d6cc8c4ab39f9e39c44e76fce03c49e77a44521d7bda98404788c1cbaa"
+}

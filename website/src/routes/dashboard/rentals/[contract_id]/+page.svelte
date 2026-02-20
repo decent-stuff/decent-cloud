@@ -65,6 +65,16 @@
 	// Recipe log state
 	let recipeLog = $state<string | null>(null);
 
+	// SSH copy state
+	let copiedSsh = $state(false);
+
+	function copySSHCommand(command: string) {
+		navigator.clipboard.writeText(command).then(() => {
+			copiedSsh = true;
+			setTimeout(() => { copiedSsh = false; }, 2000);
+		});
+	}
+
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
 	let autoRefreshEnabled = $state(true);
@@ -709,6 +719,23 @@
 				</div>
 			{/if}
 
+			<!-- Rejected/Cancelled CTA -->
+			{#if contract.status.toLowerCase() === 'rejected' || contract.status.toLowerCase() === 'cancelled'}
+				<div class="mb-4 p-4 bg-surface-elevated border border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+					<p class="text-neutral-400 text-sm">
+						{contract.status.toLowerCase() === 'rejected'
+							? 'Provider rejected this request. You can try another provider.'
+							: 'This rental has been cancelled.'}
+					</p>
+					<a
+						href="/dashboard/marketplace"
+						class="px-4 py-2 text-sm bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 transition-all whitespace-nowrap"
+					>
+						Browse Marketplace
+					</a>
+				</div>
+			{/if}
+
 			<!-- Contract details grid -->
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 				<div class="bg-surface-elevated  p-3 border border-neutral-800">
@@ -766,7 +793,16 @@
 						<!-- Gateway-accessible VM -->
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
-								<div class="text-neutral-500 text-xs mb-1">SSH Command</div>
+								<div class="flex items-center justify-between mb-1">
+									<div class="text-neutral-500 text-xs">SSH Command</div>
+									<button
+										onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+										class="text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors"
+										title="Copy SSH command"
+									>
+										{copiedSsh ? 'Copied!' : '📋 Copy'}
+									</button>
+								</div>
 								<code class="text-green-300 text-sm font-mono break-all select-all">
 									ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}
 								</code>
@@ -793,7 +829,16 @@
 						<!-- Direct IP access VM -->
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
-								<div class="text-neutral-500 text-xs mb-1">SSH Command</div>
+								<div class="flex items-center justify-between mb-1">
+									<div class="text-neutral-500 text-xs">SSH Command</div>
+									<button
+										onclick={() => copySSHCommand(`ssh root@${instanceDetails.ip_address}`)}
+										class="text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors"
+										title="Copy SSH command"
+									>
+										{copiedSsh ? 'Copied!' : '📋 Copy'}
+									</button>
+								</div>
 								<code class="text-green-300 text-sm font-mono break-all select-all">
 									ssh root@{instanceDetails.ip_address}
 								</code>

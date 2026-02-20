@@ -60,8 +60,17 @@ pub struct ProviderCheckIn {
     pub block_timestamp_ns: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(
+    export,
+    export_to = "../../website/src/lib/types/generated/",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
 pub struct ProviderContact {
+    #[ts(type = "number")]
+    pub id: i64,
     pub contact_type: String,
     pub contact_value: String,
 }
@@ -178,13 +187,49 @@ impl Database {
     pub async fn get_provider_contacts(&self, pubkey: &[u8]) -> Result<Vec<ProviderContact>> {
         let contacts = sqlx::query_as!(
             ProviderContact,
-            "SELECT contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1",
+            r#"SELECT id as "id!", contact_type, contact_value FROM provider_profiles_contacts WHERE provider_pubkey = $1"#,
             pubkey
         )
         .fetch_all(&self.pool)
         .await?;
 
         Ok(contacts)
+    }
+
+    /// Add provider contact
+    pub async fn add_provider_contact(
+        &self,
+        provider_pubkey: &[u8],
+        contact_type: &str,
+        contact_value: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES ($1, $2, $3)",
+            provider_pubkey,
+            contact_type,
+            contact_value
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Delete provider contact by ID
+    pub async fn delete_provider_contact(
+        &self,
+        provider_pubkey: &[u8],
+        contact_id: i64,
+    ) -> Result<()> {
+        sqlx::query!(
+            "DELETE FROM provider_profiles_contacts WHERE provider_pubkey = $1 AND id = $2",
+            provider_pubkey,
+            contact_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
     }
 
     /// Get recent check-ins for a provider

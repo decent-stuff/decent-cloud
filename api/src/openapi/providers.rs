@@ -1,14 +1,14 @@
 use super::common::{
-    check_authorization, decode_pubkey, default_limit, AllowlistAddRequest, ApiResponse, ApiTags,
-    AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest, CreatePoolRequest,
-    CreateSetupTokenRequest, CsvImportError, CsvImportResult, DuplicateOfferingRequest,
-    GenerateOfferingsRequest, GenerateOfferingsResponse, HelpcenterSyncResponse, LockResponse,
-    NotificationConfigResponse, NotificationUsageResponse, OfferingSuggestionsResponse,
-    OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
-    ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
-    ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
-    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest,
-    UpdatePoolRequest,
+    check_authorization, decode_pubkey, default_limit, AddAccountContactRequest, AllowlistAddRequest,
+    ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest,
+    CreatePoolRequest, CreateSetupTokenRequest, CsvImportError, CsvImportResult,
+    DuplicateOfferingRequest, GenerateOfferingsRequest, GenerateOfferingsResponse,
+    HelpcenterSyncResponse, LockResponse, NotificationConfigResponse, NotificationUsageResponse,
+    OfferingSuggestionsResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
+    ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
+    ReconcileUnknownInstance, RentalResponseRequest, ResponseMetricsResponse,
+    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
+    UpdateNotificationConfigRequest, UpdatePasswordRequest, UpdatePoolRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
@@ -216,6 +216,126 @@ impl ProvidersApi {
             Ok(contacts) => Json(ApiResponse {
                 success: true,
                 data: Some(contacts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Add provider contact
+    ///
+    /// Adds a new contact to a provider profile (requires authentication as that provider)
+    #[oai(
+        path = "/providers/:pubkey/contacts",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn add_provider_contact(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        req: Json<AddAccountContactRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        if let Err(e) = crate::validation::validate_contact_type(&req.contact_type) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        if let Err(e) =
+            crate::validation::validate_contact_value(&req.contact_type, &req.contact_value)
+        {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            });
+        }
+
+        match db
+            .add_provider_contact(&pubkey_bytes, &req.contact_type, &req.contact_value)
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Contact added successfully".to_string()),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete provider contact
+    ///
+    /// Deletes a contact from a provider profile (requires authentication as that provider)
+    #[oai(
+        path = "/providers/:pubkey/contacts/:contact_id",
+        method = "delete",
+        tag = "ApiTags::Providers"
+    )]
+    async fn delete_provider_contact(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        contact_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db
+            .delete_provider_contact(&pubkey_bytes, contact_id.0)
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some("Contact deleted successfully".to_string()),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

@@ -37,6 +37,47 @@
 	let autoAcceptEnabled = $state(false),
 		autoAcceptUpdating = $state(false);
 
+	// Auto-refresh state
+	let refreshInterval: ReturnType<typeof setInterval> | null = null;
+	let autoRefreshEnabled = $state(true);
+	let lastRefresh = $state<number>(Date.now());
+	const REFRESH_INTERVAL_MS = 15_000; // 15 seconds
+
+	function startAutoRefresh() {
+		stopAutoRefresh();
+		if (autoRefreshEnabled && isAuthenticated) {
+			refreshInterval = setInterval(() => {
+				refreshData();
+			}, REFRESH_INTERVAL_MS);
+		}
+	}
+
+	function stopAutoRefresh() {
+		if (refreshInterval) {
+			clearInterval(refreshInterval);
+			refreshInterval = null;
+		}
+	}
+
+	function toggleAutoRefresh() {
+		autoRefreshEnabled = !autoRefreshEnabled;
+		if (autoRefreshEnabled) {
+			startAutoRefresh();
+		} else {
+			stopAutoRefresh();
+		}
+	}
+
+	async function refreshData() {
+		if (!isAuthenticated || loading) return;
+		try {
+			await loadData();
+			lastRefresh = Date.now();
+		} catch (e) {
+			console.error("Error refreshing provider requests:", e);
+		}
+	}
+
 	// Format bytes to human readable
 	function formatBytes(bytes: number): string {
 		if (bytes === 0) return "0 B";
@@ -58,8 +99,10 @@
 			isAuthenticated = isAuth;
 			if (isAuth) {
 				loadData();
+				startAutoRefresh();
 			} else {
 				loading = false;
+				stopAutoRefresh();
 			}
 		});
 	});
@@ -127,6 +170,7 @@
 			bandwidthStats = await getProviderBandwidthStats(providerHex, bandwidthSigned.headers);
 			// Load auto-accept setting
 			autoAcceptEnabled = await getAutoAcceptSetting(normalizedIdentity.identity);
+			lastRefresh = Date.now();
 		} catch (e) {
 			error =
 				e instanceof Error
@@ -250,17 +294,43 @@
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
+		stopAutoRefresh();
 	});
 </script>
 
 <div class="space-y-8">
-	<header>
-		<h1 class="text-2xl font-bold text-white tracking-tight">Provider Requests</h1>
-		<p class="text-neutral-500">
-			Review new rental submissions and keep provisioning progress up to
-			date
-		</p>
-	</header>
+	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+		<div>
+			<h1 class="text-2xl font-bold text-white tracking-tight mb-2">Provider Requests</h1>
+			<p class="text-neutral-500">
+				Review new rental submissions and keep provisioning progress up to date
+			</p>
+		</div>
+		{#if isAuthenticated}
+			<div class="flex items-center gap-3">
+				<button
+					onclick={toggleAutoRefresh}
+					class="flex items-center gap-2 px-3 py-1.5 text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}"
+					title={autoRefreshEnabled ? 'Auto-refresh enabled (15s)' : 'Auto-refresh disabled'}
+				>
+					<span class="relative flex h-2 w-2">
+						{#if autoRefreshEnabled}
+							<span class="animate-ping absolute inline-flex h-full w-full bg-emerald-400 opacity-75"></span>
+						{/if}
+						<span class="relative inline-flex h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+					</span>
+					Auto-refresh
+				</button>
+				<button
+					onclick={refreshData}
+					class="px-3 py-1.5 text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:bg-surface-elevated transition-colors"
+					title="Refresh now"
+				>
+					↻ Refresh
+				</button>
+			</div>
+		{/if}
+	</div>
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->

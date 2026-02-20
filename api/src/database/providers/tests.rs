@@ -196,3 +196,112 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
     );
     assert_eq!(profile.support_hours, Some("Business hours".to_string()));
 }
+
+async fn insert_provider_profile(db: &super::Database, pubkey: &[u8]) {
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
+    )
+    .bind(pubkey)
+    .bind("Test Provider")
+    .bind("v1")
+    .bind("1.0")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_add_and_get_provider_contacts() {
+    let db = setup_test_db().await;
+    let pubkey = vec![50u8; 32];
+    insert_provider_profile(&db, &pubkey).await;
+
+    // Initially empty
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    assert!(contacts.is_empty());
+
+    // Add two contacts
+    db.add_provider_contact(&pubkey, "telegram", "@alice")
+        .await
+        .unwrap();
+    db.add_provider_contact(&pubkey, "phone", "+1234567890")
+        .await
+        .unwrap();
+
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    assert_eq!(contacts.len(), 2);
+
+    // Verify each contact has a valid id and correct fields
+    let telegram = contacts
+        .iter()
+        .find(|c| c.contact_type == "telegram")
+        .unwrap();
+    assert_eq!(telegram.contact_value, "@alice");
+    assert!(telegram.id > 0);
+
+    let phone = contacts
+        .iter()
+        .find(|c| c.contact_type == "phone")
+        .unwrap();
+    assert_eq!(phone.contact_value, "+1234567890");
+    assert!(phone.id > 0);
+}
+
+#[tokio::test]
+async fn test_delete_provider_contact() {
+    let db = setup_test_db().await;
+    let pubkey = vec![51u8; 32];
+    insert_provider_profile(&db, &pubkey).await;
+
+    db.add_provider_contact(&pubkey, "telegram", "@bob")
+        .await
+        .unwrap();
+    db.add_provider_contact(&pubkey, "phone", "+9876543210")
+        .await
+        .unwrap();
+
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    assert_eq!(contacts.len(), 2);
+    let telegram_id = contacts
+        .iter()
+        .find(|c| c.contact_type == "telegram")
+        .unwrap()
+        .id;
+
+    // Delete the telegram contact
+    db.delete_provider_contact(&pubkey, telegram_id)
+        .await
+        .unwrap();
+
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    assert_eq!(contacts.len(), 1);
+    assert_eq!(contacts[0].contact_type, "phone");
+}
+
+#[tokio::test]
+async fn test_delete_provider_contact_wrong_pubkey_is_noop() {
+    let db = setup_test_db().await;
+    let pubkey = vec![52u8; 32];
+    let other_pubkey = vec![53u8; 32];
+    insert_provider_profile(&db, &pubkey).await;
+    insert_provider_profile(&db, &other_pubkey).await;
+
+    db.add_provider_contact(&pubkey, "telegram", "@carol")
+        .await
+        .unwrap();
+
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    let contact_id = contacts[0].id;
+
+    // Delete with wrong pubkey — should be a no-op (no rows deleted, no error)
+    db.delete_provider_contact(&other_pubkey, contact_id)
+        .await
+        .unwrap();
+
+    // Contact should still exist for the correct provider
+    let contacts = db.get_provider_contacts(&pubkey).await.unwrap();
+    assert_eq!(contacts.len(), 1);
+    assert_eq!(contacts[0].contact_value, "@carol");
+}

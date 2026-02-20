@@ -532,26 +532,19 @@
 						<p class="text-sm text-neutral-500">
 							You will be redirected to Stripe's secure checkout
 							page to complete your payment. Tax will be
-							calculated automatically based on your location.<br
-							/>
-							While the platform is in test mode, you can use the following
-							test cards:<br />
-							A card number of 4242 4242 4242 4242 results in a successful
-							payment that is immediately processed and does not require
-							authentication.<br />
-							The card number 4000 0025 0000 3155 requires 3D Secure
-							2 authentication for the payment to succeed.<br />
-							A payment using the card number 4000 0000 0000 9995 is
-							declined with the code insufficient_funds, simulating
-							a lack of available funds.<br />
-							The card number 4000 0000 0000 0002 is used to simulate
-							a declined payment, often resulting in a generic decline.<br
-							/>
-							A card number of 4000 0000 0000 0069 simulates an expired
-							card, leading to a decline.<br />
-							The card number 4000 0000 0000 0127 is used to test an
-							incorrect CVC input, resulting in a decline.
+							calculated automatically based on your location.
 						</p>
+						{#if import.meta.env.DEV}
+							<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300 space-y-1">
+								<p class="font-semibold">Test mode — sample card numbers:</p>
+								<p>4242 4242 4242 4242 — succeeds immediately, no authentication</p>
+								<p>4000 0025 0000 3155 — requires 3D Secure 2 authentication</p>
+								<p>4000 0000 0000 9995 — declined: insufficient_funds</p>
+								<p>4000 0000 0000 0002 — declined: generic</p>
+								<p>4000 0000 0000 0069 — declined: expired card</p>
+								<p>4000 0000 0000 0127 — declined: incorrect CVC</p>
+							</div>
+						{/if}
 					</div>
 				{/if}
 

@@ -38,6 +38,15 @@
 	let activity = $state<UserActivity | null>(null);
 	let activityLoading = $state(false);
 
+	// Getting Started card
+	const GETTING_STARTED_KEY = 'dc-getting-started-dismissed';
+	let gettingStartedDismissed = $state(false);
+
+	function dismissGettingStarted() {
+		gettingStartedDismissed = true;
+		if (browser) localStorage.setItem(GETTING_STARTED_KEY, '1');
+	}
+
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
 			trustMetrics = null;
@@ -122,6 +131,8 @@
 	onMount(() => {
 		if (!browser) return;
 
+		gettingStartedDismissed = localStorage.getItem(GETTING_STARTED_KEY) === '1';
+
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
@@ -204,6 +215,45 @@
 		<h1 class="text-2xl font-bold text-white tracking-tight">Dashboard</h1>
 		<p class="text-neutral-500 text-sm mt-1">Marketplace statistics and quick actions</p>
 	</div>
+
+	<!-- Getting Started card: shown to new users with no contracts and no offerings -->
+	{#if currentIdentity && !gettingStartedDismissed && !activityLoading && !myOfferingsLoading && myOfferings.length === 0 && (activity === null || (activity.rentals_as_requester.length === 0 && activity.offerings_provided.length === 0))}
+		<div class="card p-5 border-primary-500/30 bg-primary-500/5 relative">
+			<button
+				type="button"
+				onclick={dismissGettingStarted}
+				class="absolute top-3 right-3 text-neutral-500 hover:text-white transition-colors"
+				aria-label="Dismiss"
+			>
+				<Icon name="x" size={16} />
+			</button>
+			<div class="flex items-start gap-4">
+				<div class="icon-box-accent shrink-0">
+					<Icon name="star" size={20} />
+				</div>
+				<div class="flex-1 min-w-0">
+					<h2 class="text-base font-semibold text-white mb-1">Get Started with Decent Cloud</h2>
+					<p class="text-sm text-neutral-400 mb-4">Choose your path: rent a VM from the marketplace or become a provider and earn by sharing your infrastructure.</p>
+					<div class="flex flex-wrap gap-3">
+						<a
+							href="/dashboard/marketplace"
+							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
+						>
+							<Icon name="cart" size={16} />
+							<span>Rent a VM</span>
+						</a>
+						<a
+							href="/dashboard/provider/support"
+							class="inline-flex items-center gap-2 px-4 py-2 bg-surface-elevated border border-neutral-700 hover:border-neutral-600 text-white text-sm font-medium transition-colors"
+						>
+							<Icon name="server" size={16} />
+							<span>Become a Provider</span>
+						</a>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	{#if error}
 		<div class="bg-danger/10 border border-danger/20 p-4">

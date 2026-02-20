@@ -202,7 +202,7 @@
 
 			<!-- Cloud section -->
 			<div class="pt-5 pb-2 px-3">
-				<div class="section-label">Self-Hosting</div>
+				<div class="section-label">My Cloud</div>
 			</div>
 			{#each cloudItems as item}
 				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
@@ -318,16 +318,6 @@
 	<!-- User Section -->
 	<div class="p-3 border-t border-neutral-800/80 space-y-1">
 		{#if isAuthenticated}
-			{#if currentIdentity?.account}
-				<a
-					href="/dashboard/account"
-					onclick={closeSidebar}
-					class="block px-3 py-2 text-center text-neutral-400 hover:text-white border-b border-neutral-800/60 mb-2 transition-colors"
-					title="View account settings"
-				>
-					<span class="text-xs font-medium">@{currentIdentity.account.username}</span>
-				</a>
-			{/if}
 			<a
 				href="/dashboard/account"
 				onclick={closeSidebar}

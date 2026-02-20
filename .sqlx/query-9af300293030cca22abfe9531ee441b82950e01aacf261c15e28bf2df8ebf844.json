@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_profiles_contacts (provider_pubkey, contact_type, contact_value) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9af300293030cca22abfe9531ee441b82950e01aacf261c15e28bf2df8ebf844"
+}

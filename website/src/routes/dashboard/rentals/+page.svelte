@@ -7,6 +7,7 @@
 		getUserContracts,
 		cancelRentalRequest,
 		downloadContractInvoice,
+		getOffering,
 		type Contract,
 		hexEncode,
 	} from "$lib/services/api";
@@ -20,6 +21,8 @@
 	import { signRequest } from "$lib/services/auth-api";
 
 	let contracts = $state<Contract[]>([]);
+	let offeringNames = $state<Map<number, string>>(new Map());
+	let activeTab = $state<'all' | 'active' | 'pending' | 'cancelled'>('all');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
@@ -33,6 +36,19 @@
 	let autoRefreshEnabled = $state(true);
 	let lastRefresh = $state<number>(Date.now());
 	const REFRESH_INTERVAL_MS = 15_000; // 15 seconds
+
+	const PENDING_STATUSES = new Set(['requested', 'pending', 'accepted', 'provisioning', 'provisioned']);
+	const CANCELLED_STATUSES = new Set(['cancelled', 'rejected', 'failed']);
+
+	let filteredContracts = $derived(
+		activeTab === 'all'
+			? contracts
+			: activeTab === 'active'
+				? contracts.filter((c) => c.status.toLowerCase() === 'active')
+				: activeTab === 'pending'
+					? contracts.filter((c) => PENDING_STATUSES.has(c.status.toLowerCase()))
+					: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase())),
+	);
 
 	// Lifecycle stages for progress indicator
 	const LIFECYCLE_STAGES = [
@@ -92,6 +108,20 @@
 		return null;
 	}
 
+	async function fetchOfferingNames(contractList: Contract[]) {
+		const ids = [...new Set(contractList.map((c) => parseInt(c.offering_id, 10)).filter((id) => !isNaN(id) && !offeringNames.has(id)))];
+		if (ids.length === 0) return;
+		const results = await Promise.allSettled(ids.map((id) => getOffering(id)));
+		const updated = new Map(offeringNames);
+		results.forEach((result, i) => {
+			if (result.status === 'fulfilled') {
+				const o = result.value;
+				updated.set(ids[i], o.offer_name);
+			}
+		});
+		offeringNames = updated;
+	}
+
 	function startAutoRefresh() {
 		stopAutoRefresh();
 		if (autoRefreshEnabled && isAuthenticated) {
@@ -129,11 +159,13 @@
 				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`,
 			);
 
-			contracts = await getUserContracts(
+			const updated = await getUserContracts(
 				headers,
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
+			contracts = updated;
 			lastRefresh = Date.now();
+			await fetchOfferingNames(updated);
 		} catch (e) {
 			console.error("Error refreshing contracts:", e);
 		}
@@ -161,11 +193,13 @@
 				`/api/v1/users/${hexEncode(signingIdentityInfo.publicKeyBytes)}/contracts`,
 			);
 
-			contracts = await getUserContracts(
+			const loaded = await getUserContracts(
 				headers,
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
+			contracts = loaded;
 			lastRefresh = Date.now();
+			await fetchOfferingNames(loaded);
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
@@ -246,7 +280,9 @@
 				"GET",
 				`/api/v1/users/${pubkeyHex}/contracts`,
 			);
-			contracts = await getUserContracts(getHeaders, pubkeyHex);
+			const afterCancel = await getUserContracts(getHeaders, pubkeyHex);
+			contracts = afterCancel;
+			await fetchOfferingNames(afterCancel);
 		} catch (e) {
 			error =
 				e instanceof Error
@@ -402,8 +438,27 @@
 			</a>
 		</div>
 	{:else}
+		<!-- Status filter tab bar -->
+		<div class="flex gap-1 border-b border-neutral-800 mb-2">
+			{#each [
+				{ key: 'all', label: 'All', count: contracts.length },
+				{ key: 'active', label: 'Active', count: contracts.filter((c) => c.status.toLowerCase() === 'active').length },
+				{ key: 'pending', label: 'Pending', count: contracts.filter((c) => PENDING_STATUSES.has(c.status.toLowerCase())).length },
+				{ key: 'cancelled', label: 'Cancelled / Failed', count: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase())).length },
+			] as tab}
+				<button
+					onclick={() => { activeTab = tab.key as typeof activeTab; }}
+					class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px {activeTab === tab.key ? 'border-primary-400 text-white' : 'border-transparent text-neutral-500 hover:text-neutral-300'}"
+				>
+					{tab.label}
+					{#if tab.count > 0}
+						<span class="ml-1.5 px-1.5 py-0.5 text-xs rounded-full {activeTab === tab.key ? 'bg-primary-500/30 text-primary-300' : 'bg-neutral-800 text-neutral-500'}">{tab.count}</span>
+					{/if}
+				</button>
+			{/each}
+		</div>
 		<div class="space-y-4">
-			{#each contracts as contract}
+			{#each filteredContracts as contract}
 				{@const statusBadge = getStatusBadge(contract.status, contract.payment_status)}
 				{@const isHighlighted = highlightedContractId === contract.contract_id}
 				{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
@@ -419,7 +474,7 @@
 						<div class="flex-1">
 							<div class="flex items-center gap-3 mb-2">
 								<h3 class="text-xl font-bold text-white">
-									{contract.offering_id}
+									{offeringNames.get(parseInt(contract.offering_id, 10)) ?? contract.offering_id}
 								</h3>
 								<span
 									class="inline-flex items-center gap-1 px-3 py-1  text-xs font-medium border {statusBadge.class}"

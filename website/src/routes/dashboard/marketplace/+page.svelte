@@ -806,7 +806,13 @@
 					<div class="flex justify-center mb-3">
 						<Icon name="search" size={48} class="text-neutral-600" />
 					</div>
-					<p class="text-neutral-500">No offerings found</p>
+					<p class="text-neutral-500 mb-2">No offerings found</p>
+					{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || !showDemoOfferings || showOfflineOfferings || recipesOnly || searchQuery}
+						<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
+						<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
+							Clear all filters
+						</button>
+					{/if}
 				</div>
 			{:else}
 				<!-- Desktop Table -->
@@ -957,6 +963,8 @@
 												class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
 												>Visit Provider <Icon name="external" size={20} class="text-white" /></a
 											>
+										{:else if offering.is_example}
+											<span title="Demo only — not available for rent" class="px-3 py-1.5 bg-neutral-700 text-neutral-500 rounded text-xs font-medium cursor-not-allowed whitespace-nowrap">Demo only</span>
 										{:else}
 											<button
 												onclick={(e) =>
@@ -964,8 +972,7 @@
 														e,
 														offering,
 													)}
-												disabled={offering.is_example}
-												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
 												>Rent</button
 											>
 										{/if}
@@ -1301,12 +1308,13 @@
 										class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
 										>Visit Provider <Icon name="external" size={20} class="text-white" /></a
 									>
+								{:else if offering.is_example}
+									<span title="Demo only — not available for rent" class="px-3 py-1.5 bg-neutral-700 text-neutral-500 rounded text-xs font-medium cursor-not-allowed">Demo only</span>
 								{:else}
 									<button
 										onclick={(e) =>
 											handleRentClick(e, offering)}
-										disabled={offering.is_example}
-										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium disabled:opacity-50"
+										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
 										>Rent</button
 									>
 								{/if}

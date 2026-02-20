@@ -10,15 +10,17 @@
 		id: number;
 		contactType: string;
 		contactValue: string;
-		verified: boolean;
+		verified?: boolean;
 	}
 
 	interface Props {
 		username: string;
 		apiClient: UserApiClient;
+		/** When set, manages provider contacts instead of account contacts */
+		providerPubkeyHex?: string;
 	}
 
-	let { username, apiClient }: Props = $props();
+	let { username, apiClient, providerPubkeyHex }: Props = $props();
 
 	let contacts = $state<Contact[]>([]);
 	let newContact = $state({ type: "phone", value: "" });
@@ -32,9 +34,10 @@
 
 	async function loadContacts() {
 		try {
-			const res = await fetch(
-				`${API_BASE_URL}/api/v1/accounts/${username}/contacts`,
-			);
+			const url = providerPubkeyHex
+				? `${API_BASE_URL}/api/v1/providers/${providerPubkeyHex}/contacts`
+				: `${API_BASE_URL}/api/v1/accounts/${username}/contacts`;
+			const res = await fetch(url);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && data.data) {
@@ -54,10 +57,15 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.upsertContact(username, {
-				contactType: newContact.type,
-				contactValue: newContact.value,
-			});
+			const res = providerPubkeyHex
+				? await apiClient.addProviderContact(providerPubkeyHex, {
+						contactType: newContact.type,
+						contactValue: newContact.value,
+					})
+				: await apiClient.upsertContact(username, {
+						contactType: newContact.type,
+						contactValue: newContact.value,
+					});
 
 			if (!res.ok) {
 				await handleApiResponse(res);
@@ -90,7 +98,9 @@
 		successMessage = null;
 
 		try {
-			const res = await apiClient.deleteContact(username, id);
+			const res = providerPubkeyHex
+				? await apiClient.deleteProviderContact(providerPubkeyHex, id)
+				: await apiClient.deleteContact(username, id);
 
 			if (!res.ok) {
 				await handleApiResponse(res);

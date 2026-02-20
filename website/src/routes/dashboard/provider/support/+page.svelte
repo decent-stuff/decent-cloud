@@ -25,6 +25,9 @@
 		createSupportPortalAccount,
 		type SupportPortalStatus,
 	} from "$lib/services/chatwoot-api";
+	import { UserApiClient } from "$lib/services/user-api";
+	import ContactsEditor from "$lib/components/ContactsEditor.svelte";
+	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 
 	interface CommonIssue {
 		question: string;
@@ -35,6 +38,17 @@
 	let isAuthenticated = $state(false);
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
+
+	const providerApiClient = $derived(
+		currentIdentity?.identity
+			? new UserApiClient(currentIdentity.identity as Ed25519KeyIdentity)
+			: null,
+	);
+	const providerPubkeyHex = $derived(
+		currentIdentity?.publicKeyBytes
+			? hexEncode(currentIdentity.publicKeyBytes)
+			: null,
+	);
 
 	// Support portal URLs - base URL from env, specific paths from portalStatus
 	const CHATWOOT_BASE_URL =
@@ -776,6 +790,15 @@
 				</div>
 			</details>
 		</section>
+
+		<!-- Provider Contacts Section -->
+		{#if providerApiClient && providerPubkeyHex}
+			<ContactsEditor
+				username=""
+				apiClient={providerApiClient}
+				{providerPubkeyHex}
+			/>
+		{/if}
 
 		<!-- Notifications Section -->
 		<section

@@ -460,6 +460,39 @@ export async function updateProviderOffering(
 	}
 }
 
+export async function duplicateProviderOffering(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	body: string,
+	headers: SignedRequestHeaders
+): Promise<number> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}/duplicate`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to duplicate offering: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<number>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to duplicate offering');
+	}
+
+	if (payload.data === null || payload.data === undefined) {
+		throw new Error('Duplicate offering response did not include new offering ID');
+	}
+
+	return payload.data;
+}
+
 // Visibility Allowlist API functions
 export interface AllowlistEntry {
 	id: number;

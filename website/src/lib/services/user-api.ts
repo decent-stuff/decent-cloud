@@ -125,4 +125,21 @@ export class UserApiClient {
 		const path = `/api/v1/accounts/${username}/external-keys/${keyId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
+
+	// Provider Contacts
+	async addProviderContact(
+		pubkeyHex: string,
+		contact: {
+			contactType: string;
+			contactValue: string;
+		}
+	) {
+		const path = `/api/v1/providers/${pubkeyHex}/contacts`;
+		return this.authenticatedFetch('POST', path, contact);
+	}
+
+	async deleteProviderContact(pubkeyHex: string, contactId: number) {
+		const path = `/api/v1/providers/${pubkeyHex}/contacts/${contactId}`;
+		return this.authenticatedFetch('DELETE', path);
+	}
 }
