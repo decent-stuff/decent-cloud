@@ -1175,3 +1175,299 @@ impl CloudApi {
         Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::database::cloud_accounts::CloudAccount;
+    use crate::database::cloud_resources::{CloudResource, CloudResourceWithDetails};
+    use crate::openapi::common::ApiResponse;
+
+    use super::{
+        AddCloudAccountRequest, CloudAccountListResponse, CloudResourceListResponse,
+        ListOnMarketplaceRequest, ProvisionResourceRequest,
+    };
+
+    fn sample_cloud_account() -> CloudAccount {
+        CloudAccount {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            account_id: "aabbcc".to_string(),
+            backend_type: "hetzner".to_string(),
+            name: "my-hetzner".to_string(),
+            config: None,
+            is_valid: true,
+            last_validated_at: Some("2024-01-01T00:00:00+00:00".to_string()),
+            validation_error: None,
+            created_at: "2024-01-01T00:00:00+00:00".to_string(),
+            updated_at: "2024-01-01T00:00:00+00:00".to_string(),
+        }
+    }
+
+    fn sample_cloud_resource() -> CloudResource {
+        CloudResource {
+            id: "660e8400-e29b-41d4-a716-446655440001".to_string(),
+            cloud_account_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            external_id: "hetzner-12345".to_string(),
+            name: "my-vm".to_string(),
+            server_type: "cx22".to_string(),
+            location: "nbg1".to_string(),
+            image: "ubuntu-24.04".to_string(),
+            ssh_pubkey: "ssh-ed25519 AAAA test".to_string(),
+            status: "running".to_string(),
+            public_ip: Some("1.2.3.4".to_string()),
+            ssh_port: 22,
+            ssh_username: "root".to_string(),
+            external_ssh_key_id: None,
+            gateway_slug: Some("abc123".to_string()),
+            gateway_subdomain: Some("abc123.dc1.gw.decent-cloud.org".to_string()),
+            gateway_ssh_port: Some(20000),
+            gateway_port_range_start: Some(20000),
+            gateway_port_range_end: Some(20009),
+            offering_id: None,
+            listing_mode: "personal".to_string(),
+            error_message: None,
+            platform_fee_e9s: 0,
+            created_at: "2024-01-01T00:00:00+00:00".to_string(),
+            updated_at: "2024-01-01T00:00:00+00:00".to_string(),
+            terminated_at: None,
+        }
+    }
+
+    fn sample_cloud_resource_with_details() -> CloudResourceWithDetails {
+        CloudResourceWithDetails {
+            resource: sample_cloud_resource(),
+            cloud_account_name: "my-hetzner".to_string(),
+            cloud_account_backend: "hetzner".to_string(),
+        }
+    }
+
+    // --- AddCloudAccountRequest ---
+
+    #[test]
+    fn test_add_cloud_account_request_camel_case_deserialization() {
+        let json = r#"{"backendType":"hetzner","name":"my-account","credentials":"token-abc","config":null}"#;
+        let req: AddCloudAccountRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.backend_type, "hetzner");
+        assert_eq!(req.name, "my-account");
+        assert_eq!(req.credentials, "token-abc");
+        assert!(req.config.is_none());
+    }
+
+    #[test]
+    fn test_add_cloud_account_request_with_config() {
+        let json = r#"{"backendType":"proxmox_api","name":"prox","credentials":"{}","config":"{\"host\":\"10.0.0.1\"}"}"#;
+        let req: AddCloudAccountRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.backend_type, "proxmox_api");
+        assert!(req.config.is_some());
+    }
+
+    // --- ProvisionResourceRequest ---
+
+    #[test]
+    fn test_provision_resource_request_camel_case_deserialization() {
+        let json = r#"{"cloudAccountId":"550e8400-e29b-41d4-a716-446655440000","name":"my-vm","serverType":"cx22","location":"nbg1","image":"ubuntu-24.04","sshPubkey":"ssh-ed25519 AAAA test"}"#;
+        let req: ProvisionResourceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.cloud_account_id, "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(req.name, "my-vm");
+        assert_eq!(req.server_type, "cx22");
+        assert_eq!(req.location, "nbg1");
+        assert_eq!(req.image, "ubuntu-24.04");
+        assert_eq!(req.ssh_pubkey, "ssh-ed25519 AAAA test");
+    }
+
+    // --- ListOnMarketplaceRequest ---
+
+    #[test]
+    fn test_list_on_marketplace_request_with_description() {
+        let json = r#"{"offerName":"Small VPS","monthlyPrice":9.99,"description":"A small server"}"#;
+        let req: ListOnMarketplaceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.offer_name, "Small VPS");
+        assert_eq!(req.monthly_price, 9.99);
+        assert_eq!(req.description.as_deref(), Some("A small server"));
+    }
+
+    #[test]
+    fn test_list_on_marketplace_request_without_description() {
+        let json = r#"{"offerName":"Basic","monthlyPrice":4.50,"description":null}"#;
+        let req: ListOnMarketplaceRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.offer_name, "Basic");
+        assert_eq!(req.monthly_price, 4.50);
+        assert!(req.description.is_none());
+    }
+
+    // --- CloudAccount serialization ---
+
+    #[test]
+    fn test_cloud_account_serialization_field_names() {
+        let account = sample_cloud_account();
+        let json = serde_json::to_value(&account).unwrap();
+        assert_eq!(json["id"], "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(json["backendType"], "hetzner");
+        assert_eq!(json["name"], "my-hetzner");
+        assert_eq!(json["isValid"], true);
+        assert!(json["validationError"].is_null());
+        assert!(json["lastValidatedAt"].is_string());
+    }
+
+    #[test]
+    fn test_cloud_account_invalid_state_serialization() {
+        let account = CloudAccount {
+            is_valid: false,
+            last_validated_at: Some("2024-06-01T00:00:00+00:00".to_string()),
+            validation_error: Some("Token expired".to_string()),
+            ..sample_cloud_account()
+        };
+        let json = serde_json::to_value(&account).unwrap();
+        assert_eq!(json["isValid"], false);
+        assert_eq!(json["validationError"], "Token expired");
+    }
+
+    // --- CloudResourceWithDetails serialization ---
+
+    #[test]
+    fn test_cloud_resource_with_details_serialization_flattens_resource() {
+        let r = sample_cloud_resource_with_details();
+        let json = serde_json::to_value(&r).unwrap();
+        // Flattened fields from CloudResource appear at top level
+        assert_eq!(json["id"], "660e8400-e29b-41d4-a716-446655440001");
+        assert_eq!(json["serverType"], "cx22");
+        assert_eq!(json["status"], "running");
+        assert_eq!(json["listingMode"], "personal");
+        assert_eq!(json["platformFeeE9s"], 0);
+        // Extra fields from the wrapper
+        assert_eq!(json["cloudAccountName"], "my-hetzner");
+        assert_eq!(json["cloudAccountBackend"], "hetzner");
+    }
+
+    #[test]
+    fn test_cloud_resource_optional_fields_null_when_absent() {
+        let r = sample_cloud_resource_with_details();
+        let json = serde_json::to_value(&r).unwrap();
+        assert!(json["errorMessage"].is_null());
+        assert!(json["terminatedAt"].is_null());
+        assert!(json["externalSshKeyId"].is_null());
+        assert!(json["offeringId"].is_null());
+    }
+
+    // --- CloudAccountListResponse ---
+
+    #[test]
+    fn test_cloud_account_list_response_serialization() {
+        let resp = CloudAccountListResponse {
+            accounts: vec![sample_cloud_account()],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        let accounts = json["accounts"].as_array().unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0]["backendType"], "hetzner");
+    }
+
+    #[test]
+    fn test_cloud_account_list_response_empty() {
+        let resp = CloudAccountListResponse { accounts: vec![] };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["accounts"].as_array().unwrap().len(), 0);
+    }
+
+    // --- CloudResourceListResponse ---
+
+    #[test]
+    fn test_cloud_resource_list_response_serialization() {
+        let resp = CloudResourceListResponse {
+            resources: vec![sample_cloud_resource_with_details()],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        let resources = json["resources"].as_array().unwrap();
+        assert_eq!(resources.len(), 1);
+        assert_eq!(resources[0]["serverType"], "cx22");
+        assert_eq!(resources[0]["cloudAccountName"], "my-hetzner");
+    }
+
+    // --- ApiResponse wrappers ---
+
+    #[test]
+    fn test_api_response_cloud_account_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(sample_cloud_account()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"]["backendType"], "hetzner");
+        assert_eq!(json["data"]["isValid"], true);
+    }
+
+    #[test]
+    fn test_api_response_cloud_account_error() {
+        let resp: ApiResponse<CloudAccount> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Cloud account not found".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["data"].is_null());
+        assert_eq!(json["error"], "Cloud account not found");
+    }
+
+    #[test]
+    fn test_api_response_cloud_resource_with_details_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(sample_cloud_resource_with_details()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["status"], "running");
+        assert_eq!(json["data"]["cloudAccountBackend"], "hetzner");
+    }
+
+    #[test]
+    fn test_api_response_cloud_resource_invalid_id_error() {
+        let resp: ApiResponse<CloudResourceWithDetails> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Invalid resource ID".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "Invalid resource ID");
+    }
+
+    #[test]
+    fn test_api_response_cloud_account_list_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(CloudAccountListResponse {
+                accounts: vec![sample_cloud_account(), {
+                    let mut a = sample_cloud_account();
+                    a.name = "second-account".to_string();
+                    a
+                }],
+            }),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["accounts"].as_array().unwrap().len(), 2);
+        assert_eq!(json["data"]["accounts"][1]["name"], "second-account");
+    }
+
+    #[test]
+    fn test_api_response_cloud_resource_list_error() {
+        let resp: ApiResponse<CloudResourceListResponse> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to list cloud resources: connection refused".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["data"].is_null());
+        assert!(json["error"]
+            .as_str()
+            .unwrap()
+            .contains("connection refused"));
+    }
+}

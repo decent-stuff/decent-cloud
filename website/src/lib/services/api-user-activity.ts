@@ -10,23 +10,29 @@ export interface UserActivity {
 	rentals_as_provider: Contract[];
 }
 
-export async function getUserActivity(pubkeyHex: string): Promise<UserActivity> {
+export async function getUserActivity(
+	pubkeyHex: string,
+	headers?: Record<string, string>
+): Promise<UserActivity | null> {
 	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/activity`;
 
-	const response = await fetch(url);
+	const response = await fetch(url, headers ? { headers } : undefined);
 
 	if (!response.ok) {
+		if (response.status === 401 || response.status === 403) {
+			return null;
+		}
 		throw new Error(`Failed to fetch user activity: ${response.status} ${response.statusText}`);
 	}
 
 	const payload = (await response.json()) as ApiResponse<UserActivity>;
 
 	if (!payload.success) {
-		throw new Error(payload.error ?? 'Failed to fetch user activity');
+		return null;
 	}
 
 	if (!payload.data) {
-		throw new Error('User activity response did not include data');
+		return null;
 	}
 
 	// Normalize pubkey fields in all nested objects

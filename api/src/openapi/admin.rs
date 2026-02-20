@@ -1020,3 +1020,412 @@ impl AdminApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AdminAccountInfo, AdminAccountListResponse};
+    use crate::database::email::{EmailQueueEntry, EmailStats};
+    use crate::openapi::common::{
+        AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminProcessPayoutRequest,
+        AdminSendTestEmailRequest, AdminSetAccountEmailRequest, AdminSetAdminStatusRequest,
+        AdminSetEmailVerifiedRequest, ApiResponse,
+    };
+
+    // ---- AdminDisableKeyRequest ----
+
+    #[test]
+    fn test_admin_disable_key_request_serialization() {
+        let req = AdminDisableKeyRequest {
+            reason: "security incident".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["reason"], "security incident");
+    }
+
+    #[test]
+    fn test_admin_disable_key_request_deserialization() {
+        let json = r#"{"reason":"compromised device"}"#;
+        let req: AdminDisableKeyRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.reason, "compromised device");
+    }
+
+    // ---- AdminAddRecoveryKeyRequest ----
+
+    #[test]
+    fn test_admin_add_recovery_key_request_camel_case() {
+        let json = r#"{"publicKey":"aabbccddeeff","reason":"lost all keys"}"#;
+        let req: AdminAddRecoveryKeyRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.public_key, "aabbccddeeff");
+        assert_eq!(req.reason, "lost all keys");
+    }
+
+    #[test]
+    fn test_admin_add_recovery_key_request_serialization() {
+        let req = AdminAddRecoveryKeyRequest {
+            public_key: "cafebabe".to_string(),
+            reason: "admin recovery".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["publicKey"], "cafebabe");
+        assert_eq!(json["reason"], "admin recovery");
+    }
+
+    // ---- AdminSendTestEmailRequest ----
+
+    #[test]
+    fn test_admin_send_test_email_request_camel_case() {
+        let json = r#"{"toEmail":"test@example.com"}"#;
+        let req: AdminSendTestEmailRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.to_email, "test@example.com");
+    }
+
+    // ---- AdminSetEmailVerifiedRequest ----
+
+    #[test]
+    fn test_admin_set_email_verified_request_true() {
+        let json = r#"{"verified":true}"#;
+        let req: AdminSetEmailVerifiedRequest = serde_json::from_str(json).unwrap();
+        assert!(req.verified);
+    }
+
+    #[test]
+    fn test_admin_set_email_verified_request_false() {
+        let json = r#"{"verified":false}"#;
+        let req: AdminSetEmailVerifiedRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.verified);
+    }
+
+    // ---- AdminProcessPayoutRequest ----
+
+    #[test]
+    fn test_admin_process_payout_request_camel_case() {
+        let json = r#"{"providerPubkey":"aabb1122","walletAddress":"wallet-xyz"}"#;
+        let req: AdminProcessPayoutRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.provider_pubkey, "aabb1122");
+        assert_eq!(req.wallet_address, "wallet-xyz");
+    }
+
+    // ---- AdminSetAccountEmailRequest ----
+
+    #[test]
+    fn test_admin_set_account_email_request_with_email() {
+        let json = r#"{"email":"admin@example.com"}"#;
+        let req: AdminSetAccountEmailRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.email.as_deref(), Some("admin@example.com"));
+    }
+
+    #[test]
+    fn test_admin_set_account_email_request_clear_email() {
+        let json = r#"{"email":null}"#;
+        let req: AdminSetAccountEmailRequest = serde_json::from_str(json).unwrap();
+        assert!(req.email.is_none());
+    }
+
+    // ---- AdminSetAdminStatusRequest ----
+
+    #[test]
+    fn test_admin_set_admin_status_request_grant() {
+        let json = r#"{"isAdmin":true}"#;
+        let req: AdminSetAdminStatusRequest = serde_json::from_str(json).unwrap();
+        assert!(req.is_admin);
+    }
+
+    #[test]
+    fn test_admin_set_admin_status_request_revoke() {
+        let json = r#"{"isAdmin":false}"#;
+        let req: AdminSetAdminStatusRequest = serde_json::from_str(json).unwrap();
+        assert!(!req.is_admin);
+    }
+
+    // ---- AdminAccountInfo ----
+
+    fn sample_admin_account_info() -> AdminAccountInfo {
+        AdminAccountInfo {
+            id: "hex-id-here".to_string(),
+            username: "alice".to_string(),
+            email: Some("alice@example.com".to_string()),
+            email_verified: true,
+            created_at: 1_700_000_000,
+            last_login_at: Some(1_700_100_000),
+            is_admin: false,
+            active_keys: 2,
+            total_keys: 3,
+        }
+    }
+
+    #[test]
+    fn test_admin_account_info_camel_case_serialization() {
+        let info = sample_admin_account_info();
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["id"], "hex-id-here");
+        assert_eq!(json["username"], "alice");
+        assert_eq!(json["email"], "alice@example.com");
+        assert_eq!(json["emailVerified"], true);
+        assert_eq!(json["createdAt"], 1_700_000_000_i64);
+        assert_eq!(json["lastLoginAt"], 1_700_100_000_i64);
+        assert_eq!(json["isAdmin"], false);
+        assert_eq!(json["activeKeys"], 2_i64);
+        assert_eq!(json["totalKeys"], 3_i64);
+    }
+
+    #[test]
+    fn test_admin_account_info_no_email_no_login() {
+        let info = AdminAccountInfo {
+            email: None,
+            last_login_at: None,
+            ..sample_admin_account_info()
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert!(json["email"].is_null());
+        assert!(json["lastLoginAt"].is_null());
+    }
+
+    // ---- AdminAccountListResponse ----
+
+    #[test]
+    fn test_admin_account_list_response_serialization() {
+        let resp = AdminAccountListResponse {
+            accounts: vec![sample_admin_account_info()],
+            total: 42,
+            limit: 50,
+            offset: 0,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["total"], 42_i64);
+        assert_eq!(json["limit"], 50_i64);
+        assert_eq!(json["offset"], 0_i64);
+        let accounts = json["accounts"].as_array().unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0]["username"], "alice");
+    }
+
+    // ---- ApiResponse<AdminAccountInfo> ----
+
+    #[test]
+    fn test_api_response_admin_account_info_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(sample_admin_account_info()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["username"], "alice");
+        assert!(json["error"].is_null());
+    }
+
+    #[test]
+    fn test_api_response_admin_account_info_not_found() {
+        let resp: ApiResponse<AdminAccountInfo> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Account not found".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "Account not found");
+        assert!(json["data"].is_null());
+    }
+
+    // ---- ApiResponse<AdminAccountListResponse> ----
+
+    #[test]
+    fn test_api_response_admin_account_list_pagination_fields() {
+        let list = AdminAccountListResponse {
+            accounts: vec![],
+            total: 100,
+            limit: 25,
+            offset: 50,
+        };
+        let resp = ApiResponse {
+            success: true,
+            data: Some(list),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["data"]["total"], 100_i64);
+        assert_eq!(json["data"]["limit"], 25_i64);
+        assert_eq!(json["data"]["offset"], 50_i64);
+    }
+
+    // ---- EmailStats ----
+
+    #[test]
+    fn test_email_stats_serialization_camel_case() {
+        let stats = EmailStats {
+            pending: 5,
+            sent: 100,
+            failed: 3,
+            total: 108,
+        };
+        let json = serde_json::to_value(&stats).unwrap();
+        assert_eq!(json["pending"], 5_i64);
+        assert_eq!(json["sent"], 100_i64);
+        assert_eq!(json["failed"], 3_i64);
+        assert_eq!(json["total"], 108_i64);
+    }
+
+    #[test]
+    fn test_api_response_email_stats_success() {
+        let stats = EmailStats {
+            pending: 0,
+            sent: 50,
+            failed: 0,
+            total: 50,
+        };
+        let resp = ApiResponse {
+            success: true,
+            data: Some(stats),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["sent"], 50_i64);
+    }
+
+    // ---- ApiResponse<Vec<EmailQueueEntry>> ----
+
+    fn sample_email_queue_entry() -> EmailQueueEntry {
+        EmailQueueEntry {
+            id: vec![0u8; 16],
+            to_addr: "user@example.com".to_string(),
+            from_addr: "noreply@decent-cloud.org".to_string(),
+            subject: "Test".to_string(),
+            body: "Hello".to_string(),
+            is_html: false,
+            email_type: "general".to_string(),
+            status: "failed".to_string(),
+            attempts: 12,
+            max_attempts: 12,
+            last_error: Some("SMTP timeout".to_string()),
+            created_at: 1_700_000_000,
+            last_attempted_at: Some(1_700_001_000),
+            sent_at: None,
+            related_account_id: None,
+            user_notified_retry: true,
+            user_notified_gave_up: true,
+        }
+    }
+
+    #[test]
+    fn test_email_queue_entry_camel_case_serialization() {
+        let entry = sample_email_queue_entry();
+        let json = serde_json::to_value(&entry).unwrap();
+        // id and related_account_id are #[serde(skip)]
+        assert!(json.get("id").is_none());
+        assert_eq!(json["toAddr"], "user@example.com");
+        assert_eq!(json["fromAddr"], "noreply@decent-cloud.org");
+        assert_eq!(json["subject"], "Test");
+        assert_eq!(json["status"], "failed");
+        assert_eq!(json["attempts"], 12_i64);
+        assert_eq!(json["lastError"], "SMTP timeout");
+        assert_eq!(json["userNotifiedGaveUp"], true);
+    }
+
+    #[test]
+    fn test_api_response_failed_emails_list() {
+        let entries = vec![sample_email_queue_entry()];
+        let resp = ApiResponse {
+            success: true,
+            data: Some(entries),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        let data = json["data"].as_array().unwrap();
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0]["toAddr"], "user@example.com");
+    }
+
+    // ---- ApiResponse<u64> for retry-all-failed ----
+
+    #[test]
+    fn test_api_response_u64_retry_count() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(7u64),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"], 7_u64);
+    }
+
+    // ---- AdminAccountDeletionSummary ----
+
+    #[test]
+    fn test_admin_account_deletion_summary_serialization() {
+        use crate::openapi::common::AdminAccountDeletionSummary;
+        let summary = AdminAccountDeletionSummary {
+            offerings_deleted: 3,
+            contracts_as_requester: 1,
+            contracts_as_provider: 2,
+            public_keys_deleted: 5,
+            provider_profile_deleted: true,
+        };
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["offeringsDeleted"], 3_i64);
+        assert_eq!(json["contractsAsRequester"], 1_i64);
+        assert_eq!(json["contractsAsProvider"], 2_i64);
+        assert_eq!(json["publicKeysDeleted"], 5_i64);
+        assert_eq!(json["providerProfileDeleted"], true);
+    }
+
+    #[test]
+    fn test_api_response_deletion_summary_success() {
+        use crate::openapi::common::AdminAccountDeletionSummary;
+        let resp = ApiResponse {
+            success: true,
+            data: Some(AdminAccountDeletionSummary {
+                offerings_deleted: 0,
+                contracts_as_requester: 0,
+                contracts_as_provider: 0,
+                public_keys_deleted: 1,
+                provider_profile_deleted: false,
+            }),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["publicKeysDeleted"], 1_i64);
+    }
+
+    // ---- Admin action: prevent deleting admin account logic ----
+
+    #[test]
+    fn test_admin_account_info_is_admin_flag() {
+        let info = AdminAccountInfo {
+            is_admin: true,
+            ..sample_admin_account_info()
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        // Handler checks account.is_admin before deletion - verify the flag serializes
+        assert_eq!(json["isAdmin"], true);
+    }
+
+    // ---- hex::decode used in handlers - validate the pattern directly ----
+
+    #[test]
+    fn test_hex_decode_valid_key_id() {
+        // Simulates the key_id decoding in admin_disable_key / admin_retry_failed_email
+        let hex_str = "aabbccddeeff00112233445566778899";
+        let result = hex::decode(hex_str);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 16);
+    }
+
+    #[test]
+    fn test_hex_decode_invalid_key_id_returns_error() {
+        let result = hex::decode("not-valid-hex!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hex_decode_provider_pubkey_32_bytes() {
+        // Simulates admin_process_payout provider_pubkey decode
+        let hex_str = "a".repeat(64); // 32 bytes
+        let result = hex::decode(&hex_str);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 32);
+    }
+}

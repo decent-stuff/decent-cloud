@@ -591,6 +591,83 @@ export async function getContractCredentials(
 	return payload.data ?? null;
 }
 
+// ============ Contract Extension Endpoints ============
+
+export interface ExtendContractRequest {
+	extensionHours: number;
+	memo?: string;
+}
+
+export interface ExtendContractResult {
+	extensionPaymentE9s: number;
+	newEndTimestampNs: number;
+	message: string;
+}
+
+export interface ContractExtension {
+	id: number;
+	extension_hours: number;
+	extension_payment_e9s: number;
+	previous_end_timestamp_ns: number;
+	new_end_timestamp_ns: number;
+	extension_memo?: string;
+	created_at_ns: number;
+}
+
+export async function extendContract(
+	contractId: string,
+	params: ExtendContractRequest,
+	headers: SignedRequestHeaders
+): Promise<ExtendContractResult> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/extend`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(params)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to extend contract: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ExtendContractResult>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to extend contract');
+	}
+
+	if (!payload.data) {
+		throw new Error('Extend contract response did not include data');
+	}
+
+	return payload.data;
+}
+
+export async function getContractExtensions(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractExtension[]> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/extensions`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to fetch contract extensions: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractExtension[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch contract extensions');
+	}
+
+	return payload.data ?? [];
+}
+
 export async function requestPasswordReset(
 	contractId: string,
 	headers: SignedRequestHeaders

@@ -3786,3 +3786,501 @@ pub struct BandwidthHistoryResponse {
     #[ts(type = "number")]
     pub recorded_at_ns: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{BandwidthHistoryResponse, BandwidthStatsResponse};
+    use crate::openapi::common::{
+        ApiResponse, AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest,
+        CreatePoolRequest, CreateSetupTokenRequest, CsvImportError, CsvImportResult,
+        DuplicateOfferingRequest, HelpcenterSyncResponse, NotificationConfigResponse,
+        NotificationUsageResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
+        ReconcileRequest, RentalResponseRequest, ResponseMetricsResponse,
+        ResponseTimeDistributionResponse, TestNotificationResponse, UpdatePoolRequest,
+    };
+    use dcc_common::api_types::{
+        LockResponse, ReconcileKeepInstance, ReconcileResponse, ReconcileTerminateInstance,
+        ReconcileUnknownInstance,
+    };
+
+    // ── normalize_provisioning_details ──────────────────────────────────────
+
+    #[test]
+    fn test_normalize_provisioning_details_provisioned_with_details() {
+        let result = super::normalize_provisioning_details(
+            "provisioned",
+            Some("  192.168.1.1 root/pass  ".to_string()),
+        );
+        assert_eq!(result, Ok(Some("192.168.1.1 root/pass".to_string())));
+    }
+
+    #[test]
+    fn test_normalize_provisioning_details_provisioned_no_details_fails() {
+        let result = super::normalize_provisioning_details("provisioned", None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Instance details are required"));
+    }
+
+    #[test]
+    fn test_normalize_provisioning_details_provisioned_empty_string_fails() {
+        // Whitespace-only trims to empty, treated as None — must fail for "provisioned"
+        let result =
+            super::normalize_provisioning_details("provisioned", Some("   ".to_string()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_normalize_provisioning_details_other_status_no_details_ok() {
+        let result = super::normalize_provisioning_details("provisioning", None);
+        assert_eq!(result, Ok(None));
+    }
+
+    #[test]
+    fn test_normalize_provisioning_details_other_status_empty_string_returns_none() {
+        let result =
+            super::normalize_provisioning_details("provisioning", Some("  ".to_string()));
+        assert_eq!(result, Ok(None));
+    }
+
+    // ── BandwidthStatsResponse ───────────────────────────────────────────────
+
+    #[test]
+    fn test_bandwidth_stats_response_camelcase_field_names() {
+        let resp = BandwidthStatsResponse {
+            contract_id: "abc".to_string(),
+            gateway_slug: "k7m2p4".to_string(),
+            bytes_in: 1024,
+            bytes_out: 2048,
+            last_updated_ns: 1_700_000_000_000_000_000,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["contractId"], "abc");
+        assert_eq!(json["gatewaySlug"], "k7m2p4");
+        assert_eq!(json["bytesIn"], 1024_u64);
+        assert_eq!(json["bytesOut"], 2048_u64);
+        assert_eq!(json["lastUpdatedNs"], 1_700_000_000_000_000_000_i64);
+    }
+
+    // ── BandwidthHistoryResponse ─────────────────────────────────────────────
+
+    #[test]
+    fn test_bandwidth_history_response_camelcase_field_names() {
+        let resp = BandwidthHistoryResponse {
+            bytes_in: 512,
+            bytes_out: 256,
+            recorded_at_ns: 9_000_000_000,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["bytesIn"], 512_u64);
+        assert_eq!(json["bytesOut"], 256_u64);
+        assert_eq!(json["recordedAtNs"], 9_000_000_000_i64);
+    }
+
+    // ── ResponseMetricsResponse ──────────────────────────────────────────────
+
+    #[test]
+    fn test_response_metrics_response_optional_fields_null() {
+        let dist = ResponseTimeDistributionResponse {
+            within_1h_pct: 50.0,
+            within_4h_pct: 70.0,
+            within_12h_pct: 85.0,
+            within_24h_pct: 90.0,
+            within_72h_pct: 95.0,
+            total_responses: 42,
+        };
+        let metrics = ResponseMetricsResponse {
+            avg_response_seconds: None,
+            avg_response_hours: None,
+            sla_compliance_percent: 88.5,
+            breach_count_30d: 3,
+            total_inquiries_30d: 100,
+            distribution: dist,
+        };
+        let json = serde_json::to_value(&metrics).unwrap();
+        assert!(json["avgResponseSeconds"].is_null());
+        assert!(json["avgResponseHours"].is_null());
+        assert_eq!(json["slaCompliancePercent"], 88.5_f64);
+        assert_eq!(json["breachCount30d"], 3_i64);
+        assert_eq!(json["distribution"]["within1hPct"], 50.0_f64);
+        assert_eq!(json["distribution"]["totalResponses"], 42_i64);
+    }
+
+    #[test]
+    fn test_response_metrics_response_with_values() {
+        let dist = ResponseTimeDistributionResponse {
+            within_1h_pct: 0.0,
+            within_4h_pct: 0.0,
+            within_12h_pct: 0.0,
+            within_24h_pct: 0.0,
+            within_72h_pct: 0.0,
+            total_responses: 0,
+        };
+        let metrics = ResponseMetricsResponse {
+            avg_response_seconds: Some(3600.0),
+            avg_response_hours: Some(1.0),
+            sla_compliance_percent: 100.0,
+            breach_count_30d: 0,
+            total_inquiries_30d: 0,
+            distribution: dist,
+        };
+        let json = serde_json::to_value(&metrics).unwrap();
+        assert_eq!(json["avgResponseSeconds"], 3600.0_f64);
+        assert_eq!(json["avgResponseHours"], 1.0_f64);
+    }
+
+    // ── NotificationConfigResponse ───────────────────────────────────────────
+
+    #[test]
+    fn test_notification_config_response_optional_fields_absent_when_none() {
+        let config = NotificationConfigResponse {
+            notify_telegram: false,
+            notify_email: true,
+            notify_sms: false,
+            telegram_chat_id: None,
+            notify_phone: None,
+            notify_email_address: None,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["notifyTelegram"], false);
+        assert_eq!(json["notifyEmail"], true);
+        // None fields serialise as null through serde (skip_serializing_if is poem-specific)
+        assert!(
+            json.get("telegramChatId").is_none_or(|v| v.is_null()),
+            "telegramChatId should be absent or null"
+        );
+    }
+
+    #[test]
+    fn test_notification_config_response_with_all_fields() {
+        let config = NotificationConfigResponse {
+            notify_telegram: true,
+            notify_email: true,
+            notify_sms: true,
+            telegram_chat_id: Some("123456789".to_string()),
+            notify_phone: Some("+1555000".to_string()),
+            notify_email_address: Some("a@b.com".to_string()),
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["telegramChatId"], "123456789");
+        assert_eq!(json["notifyPhone"], "+1555000");
+        assert_eq!(json["notifyEmailAddress"], "a@b.com");
+    }
+
+    // ── NotificationUsageResponse ────────────────────────────────────────────
+
+    #[test]
+    fn test_notification_usage_response_field_names() {
+        let usage = NotificationUsageResponse {
+            telegram_count: 5,
+            sms_count: 2,
+            email_count: 10,
+            telegram_limit: 50,
+            sms_limit: 10,
+        };
+        let json = serde_json::to_value(&usage).unwrap();
+        assert_eq!(json["telegramCount"], 5_i64);
+        assert_eq!(json["smsCount"], 2_i64);
+        assert_eq!(json["emailCount"], 10_i64);
+        assert_eq!(json["telegramLimit"], 50_i64);
+        assert_eq!(json["smsLimit"], 10_i64);
+    }
+
+    // ── TestNotificationResponse ─────────────────────────────────────────────
+
+    #[test]
+    fn test_notification_test_response_sent_true() {
+        let resp = TestNotificationResponse {
+            sent: true,
+            message: "Telegram message delivered".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["sent"], true);
+        assert_eq!(json["message"], "Telegram message delivered");
+    }
+
+    #[test]
+    fn test_notification_test_response_sent_false() {
+        let resp = TestNotificationResponse {
+            sent: false,
+            message: "Bot token not configured".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["sent"], false);
+        assert!(!json["message"].as_str().unwrap().is_empty());
+    }
+
+    // ── AutoAcceptRequest / AutoAcceptResponse ───────────────────────────────
+
+    #[test]
+    fn test_auto_accept_response_serialization() {
+        let resp = AutoAcceptResponse {
+            auto_accept_rentals: true,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["autoAcceptRentals"], true);
+    }
+
+    #[test]
+    fn test_auto_accept_request_deserialization() {
+        let raw = r#"{"autoAcceptRentals": false}"#;
+        let req: AutoAcceptRequest = serde_json::from_str(raw).unwrap();
+        assert!(!req.auto_accept_rentals);
+    }
+
+    // ── OnboardingUpdateResponse ─────────────────────────────────────────────
+
+    #[test]
+    fn test_onboarding_update_response_field_name() {
+        let resp = OnboardingUpdateResponse {
+            onboarding_completed_at: 1_700_000_000_000_000_000,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        // This field has an explicit #[serde(rename = "onboarding_completed_at")]
+        assert_eq!(
+            json["onboarding_completed_at"],
+            1_700_000_000_000_000_000_i64
+        );
+    }
+
+    // ── HelpcenterSyncResponse ───────────────────────────────────────────────
+
+    #[test]
+    fn test_helpcenter_sync_response_field_names() {
+        let resp = HelpcenterSyncResponse {
+            article_url: "https://example.com/article".to_string(),
+            action: "created".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["articleUrl"], "https://example.com/article");
+        assert_eq!(json["action"], "created");
+    }
+
+    // ── CsvImportResult / CsvImportError ────────────────────────────────────
+
+    #[test]
+    fn test_csv_import_result_with_errors() {
+        let result = CsvImportResult {
+            success_count: 3,
+            errors: vec![
+                CsvImportError {
+                    row: 2,
+                    message: "Missing required field".to_string(),
+                },
+                CsvImportError {
+                    row: 5,
+                    message: "Invalid price".to_string(),
+                },
+            ],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["successCount"], 3_i64);
+        let errors = json["errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 2);
+        assert_eq!(errors[0]["row"], 2_i64);
+        assert_eq!(errors[0]["message"], "Missing required field");
+    }
+
+    #[test]
+    fn test_csv_import_result_no_errors() {
+        let result = CsvImportResult {
+            success_count: 10,
+            errors: vec![],
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["successCount"], 10_i64);
+        assert_eq!(json["errors"].as_array().unwrap().len(), 0);
+    }
+
+    // ── ReconcileRequest / ReconcileResponse ─────────────────────────────────
+
+    #[test]
+    fn test_reconcile_response_all_buckets_camelcase() {
+        let resp = ReconcileResponse {
+            keep: vec![ReconcileKeepInstance {
+                external_id: "vm-1".to_string(),
+                contract_id: "c-1".to_string(),
+                ends_at: 9_999_999,
+            }],
+            terminate: vec![ReconcileTerminateInstance {
+                external_id: "vm-2".to_string(),
+                contract_id: "c-2".to_string(),
+                reason: "cancelled".to_string(),
+            }],
+            unknown: vec![ReconcileUnknownInstance {
+                external_id: "vm-3".to_string(),
+                message: "No contract found".to_string(),
+            }],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["keep"][0]["externalId"], "vm-1");
+        assert_eq!(json["keep"][0]["endsAt"], 9_999_999_i64);
+        assert_eq!(json["terminate"][0]["reason"], "cancelled");
+        assert_eq!(json["unknown"][0]["message"], "No contract found");
+    }
+
+    #[test]
+    fn test_reconcile_request_deserialization() {
+        let raw = r#"{"runningInstances":[{"externalId":"vm-5","contractId":"abc"}]}"#;
+        let req: ReconcileRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.running_instances.len(), 1);
+        assert_eq!(req.running_instances[0].external_id, "vm-5");
+        assert_eq!(
+            req.running_instances[0].contract_id.as_deref(),
+            Some("abc")
+        );
+    }
+
+    // ── CreatePoolRequest / UpdatePoolRequest / CreateSetupTokenRequest ───────
+
+    #[test]
+    fn test_create_pool_request_deserialization() {
+        let raw =
+            r#"{"name":"eu-proxmox","location":"europe","provisionerType":"proxmox"}"#;
+        let req: CreatePoolRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.name, "eu-proxmox");
+        assert_eq!(req.location, "europe");
+        assert_eq!(req.provisioner_type, "proxmox");
+    }
+
+    #[test]
+    fn test_update_pool_request_all_optional_none() {
+        let raw = r#"{}"#;
+        let req: UpdatePoolRequest = serde_json::from_str(raw).unwrap();
+        assert!(req.name.is_none());
+        assert!(req.location.is_none());
+        assert!(req.provisioner_type.is_none());
+    }
+
+    #[test]
+    fn test_create_setup_token_request_defaults() {
+        let raw = r#"{}"#;
+        let req: CreateSetupTokenRequest = serde_json::from_str(raw).unwrap();
+        assert!(req.label.is_none());
+        assert!(req.expires_in_hours.is_none());
+    }
+
+    #[test]
+    fn test_create_setup_token_request_with_values() {
+        let raw = r#"{"label":"worker-01","expiresInHours":48}"#;
+        let req: CreateSetupTokenRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.label.as_deref(), Some("worker-01"));
+        assert_eq!(req.expires_in_hours, Some(48));
+    }
+
+    // ── LockResponse ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_lock_response_acquired_camelcase() {
+        let resp = LockResponse {
+            acquired: true,
+            expires_at_ns: 1_700_000_300_000_000_000,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["acquired"], true);
+        assert_eq!(
+            json["expiresAtNs"],
+            1_700_000_300_000_000_000_i64
+        );
+    }
+
+    #[test]
+    fn test_lock_response_not_acquired() {
+        let resp = LockResponse {
+            acquired: false,
+            expires_at_ns: 0,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["acquired"], false);
+    }
+
+    // ── RentalResponseRequest / ProvisioningStatusRequest ────────────────────
+
+    #[test]
+    fn test_rental_response_request_accept_with_memo() {
+        let raw = r#"{"accept":true,"memo":"Looks good"}"#;
+        let req: RentalResponseRequest = serde_json::from_str(raw).unwrap();
+        assert!(req.accept);
+        assert_eq!(req.memo.as_deref(), Some("Looks good"));
+    }
+
+    #[test]
+    fn test_rental_response_request_reject_no_memo() {
+        let raw = r#"{"accept":false}"#;
+        let req: RentalResponseRequest = serde_json::from_str(raw).unwrap();
+        assert!(!req.accept);
+        assert!(req.memo.is_none());
+    }
+
+    #[test]
+    fn test_provisioning_status_request_with_details() {
+        let raw = r#"{"status":"provisioned","instanceDetails":"192.0.2.1 root/secret"}"#;
+        let req: ProvisioningStatusRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.status, "provisioned");
+        assert_eq!(
+            req.instance_details.as_deref(),
+            Some("192.0.2.1 root/secret")
+        );
+    }
+
+    #[test]
+    fn test_provisioning_status_request_without_details() {
+        let raw = r#"{"status":"provisioning"}"#;
+        let req: ProvisioningStatusRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.status, "provisioning");
+        assert!(req.instance_details.is_none());
+    }
+
+    // ── BulkUpdateStatusRequest / DuplicateOfferingRequest ───────────────────
+
+    #[test]
+    fn test_bulk_update_status_request_deserialization() {
+        let raw = r#"{"offeringIds":[1,2,3],"stockStatus":"out_of_stock"}"#;
+        let req: BulkUpdateStatusRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.offering_ids, vec![1_i64, 2, 3]);
+        assert_eq!(req.stock_status, "out_of_stock");
+    }
+
+    #[test]
+    fn test_duplicate_offering_request_deserialization() {
+        let raw = r#"{"newOfferingId":"offer-clone-01"}"#;
+        let req: DuplicateOfferingRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.new_offering_id, "offer-clone-01");
+    }
+
+    // ── ApiResponse wrapping provider-specific types ─────────────────────────
+
+    #[test]
+    fn test_api_response_bandwidth_stats_success() {
+        let stats = vec![BandwidthStatsResponse {
+            contract_id: "cid1".to_string(),
+            gateway_slug: "abc123".to_string(),
+            bytes_in: 4096,
+            bytes_out: 8192,
+            last_updated_ns: 1_000,
+        }];
+        let resp = ApiResponse {
+            success: true,
+            data: Some(stats),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"][0]["bytesIn"], 4096_u64);
+    }
+
+    #[test]
+    fn test_api_response_invalid_pubkey_format_error() {
+        let resp: ApiResponse<BandwidthStatsResponse> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Invalid pubkey format".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["data"].is_null());
+        assert_eq!(json["error"], "Invalid pubkey format");
+    }
+}

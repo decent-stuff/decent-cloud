@@ -2118,3 +2118,441 @@ impl AccountsApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::database::accounts::{AccountWithKeys, BillingSettings, PublicKeyInfo};
+    use crate::openapi::common::{
+        AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
+        AddAccountSocialRequest, ApiResponse, CompleteRecoveryRequest, RegisterAccountRequest,
+        RequestRecoveryRequest, UpdateAccountEmailRequest, UpdateAccountProfileRequest,
+        UpdateDeviceNameRequest, VerifyEmailRequest,
+    };
+
+    // ---- RegisterAccountRequest ----
+
+    #[test]
+    fn test_register_account_request_camel_case_deserialization() {
+        let json =
+            r#"{"username":"alice42","publicKey":"aabbcc","email":"alice@example.com"}"#;
+        let req: RegisterAccountRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.username, "alice42");
+        assert_eq!(req.public_key, "aabbcc");
+        assert_eq!(req.email, "alice@example.com");
+    }
+
+    #[test]
+    fn test_register_account_request_serialization_round_trip() {
+        let req = RegisterAccountRequest {
+            username: "bob99".to_string(),
+            public_key: "deadbeef".to_string(),
+            email: "bob@example.com".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        // serde uses camelCase
+        assert_eq!(json["username"], "bob99");
+        assert_eq!(json["publicKey"], "deadbeef");
+        assert_eq!(json["email"], "bob@example.com");
+    }
+
+    // ---- UpdateAccountProfileRequest ----
+
+    #[test]
+    fn test_update_account_profile_request_all_fields() {
+        let json = r#"{"displayName":"Alice","bio":"A bio","avatarUrl":"https://example.com/a.png"}"#;
+        let req: UpdateAccountProfileRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.display_name.as_deref(), Some("Alice"));
+        assert_eq!(req.bio.as_deref(), Some("A bio"));
+        assert_eq!(
+            req.avatar_url.as_deref(),
+            Some("https://example.com/a.png")
+        );
+    }
+
+    #[test]
+    fn test_update_account_profile_request_all_none() {
+        let json = r#"{"displayName":null,"bio":null,"avatarUrl":null}"#;
+        let req: UpdateAccountProfileRequest = serde_json::from_str(json).unwrap();
+        assert!(req.display_name.is_none());
+        assert!(req.bio.is_none());
+        assert!(req.avatar_url.is_none());
+    }
+
+    // ---- UpdateAccountEmailRequest ----
+
+    #[test]
+    fn test_update_account_email_request_deserialization() {
+        let json = r#"{"email":"new@example.com"}"#;
+        let req: UpdateAccountEmailRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.email, "new@example.com");
+    }
+
+    // ---- AddAccountKeyRequest ----
+
+    #[test]
+    fn test_add_account_key_request_camel_case() {
+        let json = r#"{"newPublicKey":"cafebabe"}"#;
+        let req: AddAccountKeyRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.new_public_key, "cafebabe");
+    }
+
+    // ---- AddAccountExternalKeyRequest ----
+
+    #[test]
+    fn test_add_account_external_key_request_full() {
+        let json = r#"{"keyType":"ssh-ed25519","keyData":"ssh-ed25519 AAAA...","keyFingerprint":"SHA256:abc","label":"laptop"}"#;
+        let req: AddAccountExternalKeyRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.key_type, "ssh-ed25519");
+        assert_eq!(req.key_data, "ssh-ed25519 AAAA...");
+        assert_eq!(req.key_fingerprint.as_deref(), Some("SHA256:abc"));
+        assert_eq!(req.label.as_deref(), Some("laptop"));
+    }
+
+    #[test]
+    fn test_add_account_external_key_request_optional_fields_none() {
+        let json = r#"{"keyType":"gpg","keyData":"-----BEGIN PGP PUBLIC KEY BLOCK-----"}"#;
+        let req: AddAccountExternalKeyRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.key_type, "gpg");
+        assert!(req.key_fingerprint.is_none());
+        assert!(req.label.is_none());
+    }
+
+    // ---- AddAccountSocialRequest ----
+
+    #[test]
+    fn test_add_account_social_request_with_url() {
+        let json = r#"{"platform":"github","username":"alice","profileUrl":"https://github.com/alice"}"#;
+        let req: AddAccountSocialRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.platform, "github");
+        assert_eq!(req.username, "alice");
+        assert_eq!(
+            req.profile_url.as_deref(),
+            Some("https://github.com/alice")
+        );
+    }
+
+    #[test]
+    fn test_add_account_social_request_no_url() {
+        let json = r#"{"platform":"twitter","username":"alice_tw"}"#;
+        let req: AddAccountSocialRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.platform, "twitter");
+        assert!(req.profile_url.is_none());
+    }
+
+    // ---- AddAccountContactRequest ----
+
+    #[test]
+    fn test_add_account_contact_request_verified_default_false() {
+        // `verified` has #[oai(default = "default_false")] but serde default is not set
+        // so it must be provided explicitly in JSON
+        let json = r#"{"contactType":"telegram","contactValue":"@alice","verified":false}"#;
+        let req: AddAccountContactRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.contact_type, "telegram");
+        assert_eq!(req.contact_value, "@alice");
+        assert!(!req.verified);
+    }
+
+    #[test]
+    fn test_add_account_contact_request_verified_true() {
+        let json = r#"{"contactType":"phone","contactValue":"+1234567890","verified":true}"#;
+        let req: AddAccountContactRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.contact_type, "phone");
+        assert!(req.verified);
+    }
+
+    // ---- VerifyEmailRequest ----
+
+    #[test]
+    fn test_verify_email_request_deserialization() {
+        let json = r#"{"token":"deadbeefcafe"}"#;
+        let req: VerifyEmailRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.token, "deadbeefcafe");
+    }
+
+    // ---- RequestRecoveryRequest ----
+
+    #[test]
+    fn test_request_recovery_request_deserialization() {
+        let json = r#"{"email":"user@example.com"}"#;
+        let req: RequestRecoveryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.email, "user@example.com");
+    }
+
+    // ---- CompleteRecoveryRequest ----
+
+    #[test]
+    fn test_complete_recovery_request_deserialization() {
+        let json = r#"{"token":"aabbccdd","publicKey":"eeff0011"}"#;
+        let req: CompleteRecoveryRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.token, "aabbccdd");
+        assert_eq!(req.public_key, "eeff0011");
+    }
+
+    // ---- UpdateDeviceNameRequest ----
+
+    #[test]
+    fn test_update_device_name_request_with_name() {
+        let json = r#"{"deviceName":"My Laptop"}"#;
+        let req: UpdateDeviceNameRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.device_name.as_deref(), Some("My Laptop"));
+    }
+
+    #[test]
+    fn test_update_device_name_request_clear() {
+        let json = r#"{"deviceName":null}"#;
+        let req: UpdateDeviceNameRequest = serde_json::from_str(json).unwrap();
+        assert!(req.device_name.is_none());
+    }
+
+    // ---- ApiResponse<AccountWithKeys> ----
+
+    fn sample_account_with_keys() -> AccountWithKeys {
+        AccountWithKeys {
+            id: "aabbccdd".to_string(),
+            username: "alice".to_string(),
+            created_at: 1_700_000_000,
+            updated_at: 1_700_000_001,
+            display_name: Some("Alice".to_string()),
+            bio: None,
+            avatar_url: None,
+            profile_updated_at: None,
+            public_keys: vec![PublicKeyInfo {
+                id: "key001".to_string(),
+                public_key: "deadbeef".to_string(),
+                added_at: 1_700_000_000,
+                is_active: true,
+                device_name: Some("Laptop".to_string()),
+                disabled_at: None,
+                disabled_by_key_id: None,
+            }],
+            is_admin: false,
+            email_verified: true,
+            email: Some("alice@example.com".to_string()),
+        }
+    }
+
+    #[test]
+    fn test_api_response_account_with_keys_success_serialization() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(sample_account_with_keys()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["username"], "alice");
+        assert_eq!(json["data"]["emailVerified"], true);
+        let keys = json["data"]["publicKeys"].as_array().unwrap();
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys[0]["isActive"], true);
+        assert_eq!(keys[0]["deviceName"], "Laptop");
+    }
+
+    #[test]
+    fn test_api_response_account_with_keys_error() {
+        let resp: ApiResponse<AccountWithKeys> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Account not found".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "Account not found");
+        assert!(json["data"].is_null());
+    }
+
+    // ---- ApiResponse<()> for void endpoints ----
+
+    #[test]
+    fn test_api_response_string_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some("Contact added successfully".to_string()),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"], "Contact added successfully");
+    }
+
+    #[test]
+    fn test_api_response_string_error() {
+        let resp: ApiResponse<String> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Unauthorized: Cannot modify another user's contacts".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["error"]
+            .as_str()
+            .unwrap()
+            .contains("Unauthorized"));
+    }
+
+    // ---- BillingSettings ----
+
+    #[test]
+    fn test_billing_settings_serialization_camel_case() {
+        let settings = BillingSettings {
+            billing_address: Some("123 Main St".to_string()),
+            billing_vat_id: Some("VAT123".to_string()),
+            billing_country_code: Some("US".to_string()),
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        assert_eq!(json["billingAddress"], "123 Main St");
+        assert_eq!(json["billingVatId"], "VAT123");
+        assert_eq!(json["billingCountryCode"], "US");
+    }
+
+    #[test]
+    fn test_billing_settings_all_none() {
+        let settings = BillingSettings {
+            billing_address: None,
+            billing_vat_id: None,
+            billing_country_code: None,
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        assert!(json["billingAddress"].is_null());
+        assert!(json["billingVatId"].is_null());
+        assert!(json["billingCountryCode"].is_null());
+    }
+
+    // ---- PublicKeyInfo ----
+
+    #[test]
+    fn test_public_key_info_inactive_key_serialization() {
+        let key = PublicKeyInfo {
+            id: "keyid".to_string(),
+            public_key: "pubkey".to_string(),
+            added_at: 1_700_000_000,
+            is_active: false,
+            device_name: None,
+            disabled_at: Some(1_700_001_000),
+            disabled_by_key_id: Some("otherid".to_string()),
+        };
+        let json = serde_json::to_value(&key).unwrap();
+        assert_eq!(json["isActive"], false);
+        assert_eq!(json["disabledAt"], 1_700_001_000_i64);
+        assert_eq!(json["disabledByKeyId"], "otherid");
+    }
+
+    // ---- Validation functions (called inline in handler, tested here) ----
+
+    #[test]
+    fn test_validate_account_username_valid() {
+        let result = crate::validation::validate_account_username("alice99");
+        assert!(result.is_ok(), "Valid username should pass: {:?}", result);
+        assert_eq!(result.unwrap(), "alice99");
+    }
+
+    #[test]
+    fn test_validate_account_username_too_short() {
+        let result = crate::validation::validate_account_username("ab");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("at least 3 characters"));
+    }
+
+    #[test]
+    fn test_validate_account_username_reserved() {
+        let result = crate::validation::validate_account_username("admin");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("reserved"));
+    }
+
+    #[test]
+    fn test_validate_email_valid() {
+        let result = crate::validation::validate_email("user@example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_email_invalid() {
+        let result = crate::validation::validate_email("not-an-email");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_contact_type_valid() {
+        for t in &["phone", "telegram", "discord", "signal"] {
+            assert!(
+                crate::validation::validate_contact_type(t).is_ok(),
+                "Expected {} to be valid",
+                t
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_contact_type_email_is_invalid() {
+        // email is explicitly NOT a valid contact type
+        let result = crate::validation::validate_contact_type("email");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_social_platform_valid() {
+        for p in &["twitter", "github", "discord", "linkedin", "reddit"] {
+            assert!(
+                crate::validation::validate_social_platform(p).is_ok(),
+                "Expected {} to be valid",
+                p
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_social_platform_invalid() {
+        let result = crate::validation::validate_social_platform("facebook");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_url_valid() {
+        let result = crate::validation::validate_url("https://example.com/profile");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_url_missing_scheme() {
+        let result = crate::validation::validate_url("example.com/profile");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_public_key_ssh_valid() {
+        let result = crate::validation::validate_public_key(
+            "ssh-ed25519",
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA my-key",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_public_key_ssh_missing_prefix() {
+        let result = crate::validation::validate_public_key("ssh-ed25519", "not-starting-with-ssh");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_public_key_gpg_valid() {
+        let result = crate::validation::validate_public_key(
+            "gpg",
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\ndata\n-----END PGP PUBLIC KEY BLOCK-----",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_public_key_gpg_missing_header() {
+        let result = crate::validation::validate_public_key("gpg", "just some random data");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("PGP public key block"));
+    }
+}

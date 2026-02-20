@@ -1374,3 +1374,401 @@ impl ContractsApi {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::database::contracts::{Contract, ContractExtension, ContractUsage};
+    use crate::database::stats::ContractFeedback;
+    use crate::openapi::common::{
+        CancelContractRequest, ExtendContractRequest, ExtendContractResponse, RecordUsageRequest,
+        RentalRequestResponse, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
+        VerifyCheckoutSessionResponse,
+    };
+    use crate::database::contracts::RentalRequestParams;
+    use crate::openapi::common::ApiResponse;
+
+    fn sample_contract() -> Contract {
+        Contract {
+            contract_id: "deadbeef".to_string(),
+            requester_pubkey: "aabbcc".to_string(),
+            requester_ssh_pubkey: "ssh-ed25519 AAAA test".to_string(),
+            requester_contact: "user@example.com".to_string(),
+            provider_pubkey: "ddeeff".to_string(),
+            offering_id: "offering-1".to_string(),
+            region_name: None,
+            instance_config: None,
+            payment_amount_e9s: 5_000_000_000,
+            start_timestamp_ns: Some(1_700_000_000_000_000_000),
+            end_timestamp_ns: Some(1_700_003_600_000_000_000),
+            duration_hours: Some(1),
+            original_duration_hours: Some(1),
+            request_memo: "test memo".to_string(),
+            created_at_ns: 1_699_990_000_000_000_000,
+            status: "requested".to_string(),
+            provisioning_instance_details: None,
+            provisioning_completed_at_ns: None,
+            payment_method: "stripe".to_string(),
+            stripe_payment_intent_id: None,
+            stripe_customer_id: None,
+            icpay_transaction_id: None,
+            payment_status: "pending".to_string(),
+            currency: "usd".to_string(),
+            refund_amount_e9s: None,
+            stripe_refund_id: None,
+            refund_created_at_ns: None,
+            status_updated_at_ns: None,
+            icpay_payment_id: None,
+            icpay_refund_id: None,
+            total_released_e9s: None,
+            last_release_at_ns: None,
+            tax_amount_e9s: None,
+            tax_rate_percent: None,
+            tax_type: None,
+            tax_jurisdiction: None,
+            customer_tax_id: None,
+            reverse_charge: None,
+            buyer_address: None,
+            stripe_invoice_id: None,
+            receipt_number: None,
+            receipt_sent_at_ns: None,
+            stripe_subscription_id: None,
+            subscription_status: None,
+            current_period_end_ns: None,
+            cancel_at_period_end: false,
+            gateway_slug: None,
+            gateway_subdomain: None,
+            gateway_ssh_port: None,
+            gateway_port_range_start: None,
+            gateway_port_range_end: None,
+        }
+    }
+
+    #[test]
+    fn test_extend_contract_request_deserialization_with_memo() {
+        let json = r#"{"extensionHours":24,"memo":"extend for a day"}"#;
+        let req: ExtendContractRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.extension_hours, 24);
+        assert_eq!(req.memo.as_deref(), Some("extend for a day"));
+    }
+
+    #[test]
+    fn test_extend_contract_request_deserialization_without_memo() {
+        let json = r#"{"extensionHours":48,"memo":null}"#;
+        let req: ExtendContractRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.extension_hours, 48);
+        assert!(req.memo.is_none());
+    }
+
+    #[test]
+    fn test_extend_contract_response_serialization_field_names() {
+        let resp = ExtendContractResponse {
+            extension_payment_e9s: 1_000_000_000,
+            new_end_timestamp_ns: 1_700_003_600_000_000_000,
+            message: "Contract extended by 1 hours".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        // camelCase from #[serde(rename_all = "camelCase")]
+        assert_eq!(json["extensionPaymentE9s"], 1_000_000_000_i64);
+        assert_eq!(json["newEndTimestampNs"], 1_700_003_600_000_000_000_i64);
+        assert_eq!(json["message"], "Contract extended by 1 hours");
+    }
+
+    #[test]
+    fn test_cancel_contract_request_with_memo() {
+        let json = r#"{"memo":"no longer needed"}"#;
+        let req: CancelContractRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.memo.as_deref(), Some("no longer needed"));
+    }
+
+    #[test]
+    fn test_cancel_contract_request_without_memo() {
+        let json = r#"{"memo":null}"#;
+        let req: CancelContractRequest = serde_json::from_str(json).unwrap();
+        assert!(req.memo.is_none());
+    }
+
+    #[test]
+    fn test_rental_request_response_with_checkout_url() {
+        let resp = RentalRequestResponse {
+            contract_id: "deadbeef".to_string(),
+            message: "Rental request created successfully".to_string(),
+            checkout_url: Some("https://checkout.stripe.com/pay/cs_test_abc".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["contractId"], "deadbeef");
+        assert_eq!(json["message"], "Rental request created successfully");
+        assert_eq!(
+            json["checkoutUrl"],
+            "https://checkout.stripe.com/pay/cs_test_abc"
+        );
+    }
+
+    #[test]
+    fn test_rental_request_response_without_checkout_url() {
+        let resp = RentalRequestResponse {
+            contract_id: "cafebabe".to_string(),
+            message: "Self-rental created successfully (no payment required)".to_string(),
+            checkout_url: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["contractId"], "cafebabe");
+        assert!(json["checkoutUrl"].is_null());
+    }
+
+    #[test]
+    fn test_api_response_contract_success() {
+        let contract = sample_contract();
+        let resp = ApiResponse {
+            success: true,
+            data: Some(contract),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"]["contract_id"], "deadbeef");
+        assert_eq!(json["data"]["status"], "requested");
+        assert_eq!(json["data"]["payment_amount_e9s"], 5_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_api_response_contract_error() {
+        let resp: ApiResponse<Contract> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Contract not found".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["data"].is_null());
+        assert_eq!(json["error"], "Contract not found");
+    }
+
+    #[test]
+    fn test_api_response_extend_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(ExtendContractResponse {
+                extension_payment_e9s: 500_000_000,
+                new_end_timestamp_ns: 1_700_007_200_000_000_000,
+                message: "Contract extended by 2 hours".to_string(),
+            }),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"]["extensionPaymentE9s"], 500_000_000_i64);
+    }
+
+    #[test]
+    fn test_api_response_extend_error() {
+        let resp: ApiResponse<ExtendContractResponse> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Invalid contract ID format".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert!(json["data"].is_null());
+        assert_eq!(json["error"], "Invalid contract ID format");
+    }
+
+    #[test]
+    fn test_contract_extension_serialization() {
+        let ext = ContractExtension {
+            id: 7,
+            contract_id: vec![0xde, 0xad],
+            extended_by_pubkey: vec![0xca, 0xfe],
+            extension_hours: 12,
+            extension_payment_e9s: 250_000_000,
+            previous_end_timestamp_ns: 1_700_000_000_000_000_000,
+            new_end_timestamp_ns: 1_700_043_200_000_000_000,
+            extension_memo: Some("extend overnight".to_string()),
+            created_at_ns: 1_699_990_000_000_000_000,
+        };
+        let json = serde_json::to_value(&ext).unwrap();
+        assert_eq!(json["id"], 7_i64);
+        assert_eq!(json["extension_hours"], 12_i64);
+        assert_eq!(json["extension_payment_e9s"], 250_000_000_i64);
+        assert_eq!(json["extension_memo"], "extend overnight");
+        assert_eq!(
+            json["previous_end_timestamp_ns"],
+            1_700_000_000_000_000_000_i64
+        );
+        assert_eq!(
+            json["new_end_timestamp_ns"],
+            1_700_043_200_000_000_000_i64
+        );
+        assert_eq!(json["created_at_ns"], 1_699_990_000_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_contract_extension_memo_none_serializes_as_null() {
+        let ext = ContractExtension {
+            id: 1,
+            contract_id: vec![],
+            extended_by_pubkey: vec![],
+            extension_hours: 1,
+            extension_payment_e9s: 0,
+            previous_end_timestamp_ns: 0,
+            new_end_timestamp_ns: 0,
+            extension_memo: None,
+            created_at_ns: 0,
+        };
+        let json = serde_json::to_value(&ext).unwrap();
+        assert!(
+            json["extension_memo"].is_null(),
+            "None memo should serialize as null"
+        );
+    }
+
+    #[test]
+    fn test_contract_usage_serialization() {
+        let usage = ContractUsage {
+            id: 3,
+            contract_id: "deadbeef".to_string(),
+            billing_period_start: 1_700_000_000,
+            billing_period_end: 1_700_003_600,
+            units_used: 1.5,
+            units_included: Some(10.0),
+            overage_units: 0.0,
+            estimated_charge_cents: Some(50),
+            reported_to_stripe: false,
+            stripe_usage_record_id: None,
+            created_at: 1_700_000_001,
+            updated_at: 1_700_003_601,
+            billing_unit: "hour".to_string(),
+        };
+        let json = serde_json::to_value(&usage).unwrap();
+        assert_eq!(json["id"], 3_i64);
+        assert_eq!(json["contract_id"], "deadbeef");
+        assert_eq!(json["units_used"], 1.5_f64);
+        assert_eq!(json["units_included"], 10.0_f64);
+        assert_eq!(json["overage_units"], 0.0_f64);
+        assert_eq!(json["estimated_charge_cents"], 50_i64);
+        assert_eq!(json["reported_to_stripe"], false);
+        assert!(json["stripe_usage_record_id"].is_null());
+        assert_eq!(json["billing_unit"], "hour");
+    }
+
+    #[test]
+    fn test_feedback_input_deserialization() {
+        // SubmitFeedbackInput has no serde rename, so field names are snake_case
+        let json = r#"{"service_matched_description":true,"would_rent_again":false}"#;
+        let input: crate::database::stats::SubmitFeedbackInput =
+            serde_json::from_str(json).unwrap();
+        assert!(input.service_matched_description);
+        assert!(!input.would_rent_again);
+    }
+
+    #[test]
+    fn test_contract_feedback_serialization() {
+        let feedback = ContractFeedback {
+            contract_id: "deadbeef".to_string(),
+            provider_pubkey: "aabbcc".to_string(),
+            service_matched_description: true,
+            would_rent_again: true,
+            created_at_ns: 1_700_000_000_000_000_000,
+        };
+        let json = serde_json::to_value(&feedback).unwrap();
+        assert_eq!(json["contract_id"], "deadbeef");
+        assert_eq!(json["provider_pubkey"], "aabbcc");
+        assert_eq!(json["service_matched_description"], true);
+        assert_eq!(json["would_rent_again"], true);
+        assert_eq!(json["created_at_ns"], 1_700_000_000_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_api_response_contract_feedback_success() {
+        let feedback = ContractFeedback {
+            contract_id: "cafebabe".to_string(),
+            provider_pubkey: "112233".to_string(),
+            service_matched_description: false,
+            would_rent_again: false,
+            created_at_ns: 0,
+        };
+        let resp = ApiResponse {
+            success: true,
+            data: Some(feedback),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["contract_id"], "cafebabe");
+        assert_eq!(json["data"]["service_matched_description"], false);
+    }
+
+    #[test]
+    fn test_verify_checkout_session_request_deserialization() {
+        let json = r#"{"sessionId":"cs_test_abc123"}"#;
+        let req: VerifyCheckoutSessionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.session_id, "cs_test_abc123");
+    }
+
+    #[test]
+    fn test_verify_checkout_session_response_serialization() {
+        let resp = VerifyCheckoutSessionResponse {
+            contract_id: "deadbeef".to_string(),
+            payment_status: "succeeded".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["contractId"], "deadbeef");
+        assert_eq!(json["paymentStatus"], "succeeded");
+    }
+
+    #[test]
+    fn test_update_icpay_transaction_request_deserialization() {
+        let json = r#"{"transactionId":"tx-001"}"#;
+        let req: UpdateIcpayTransactionRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.transaction_id, "tx-001");
+    }
+
+    #[test]
+    fn test_record_usage_request_deserialization_all_fields() {
+        let json = r#"{"eventType":"heartbeat","unitsDelta":1.0,"heartbeatAt":1700000000,"source":"agent-01","metadata":"{}"}"#;
+        let req: RecordUsageRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.event_type, "heartbeat");
+        assert_eq!(req.units_delta, Some(1.0));
+        assert_eq!(req.heartbeat_at, Some(1_700_000_000));
+        assert_eq!(req.source.as_deref(), Some("agent-01"));
+        assert_eq!(req.metadata.as_deref(), Some("{}"));
+    }
+
+    #[test]
+    fn test_record_usage_request_deserialization_minimal() {
+        let json = r#"{"eventType":"session_start"}"#;
+        let req: RecordUsageRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.event_type, "session_start");
+        assert!(req.units_delta.is_none());
+        assert!(req.heartbeat_at.is_none());
+        assert!(req.source.is_none());
+        assert!(req.metadata.is_none());
+    }
+
+    #[test]
+    fn test_rental_request_params_deserialization() {
+        // RentalRequestParams has no serde rename, so field names are snake_case
+        let json = r#"{"offering_db_id":42,"ssh_pubkey":"ssh-ed25519 AAAA test","payment_method":"stripe","duration_hours":24}"#;
+        let params: RentalRequestParams = serde_json::from_str(json).unwrap();
+        assert_eq!(params.offering_db_id, 42);
+        assert_eq!(params.ssh_pubkey.as_deref(), Some("ssh-ed25519 AAAA test"));
+        assert_eq!(params.payment_method.as_deref(), Some("stripe"));
+        assert_eq!(params.duration_hours, Some(24));
+    }
+
+    #[test]
+    fn test_api_response_verify_checkout_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(VerifyCheckoutSessionResponse {
+                contract_id: "abc".to_string(),
+                payment_status: "succeeded".to_string(),
+            }),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["paymentStatus"], "succeeded");
+    }
+}

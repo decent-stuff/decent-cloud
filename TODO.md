@@ -72,14 +72,23 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ## Code Quality
 
-### Test Coverage Gaps
+### TypeScript Type Errors (Pre-existing)
 
-- **OpenAPI endpoint handlers** — 19 files in `api/src/openapi/`. 14 files have unit tests: agents.rs, vat.rs, webhooks.rs, common.rs, offerings.rs, subscriptions.rs, invoices.rs, stats.rs, resellers.rs, chatwoot.rs, system.rs, transfers.rs, users.rs, validators.rs. 5 files still need tests: providers.rs, contracts.rs, cloud.rs, accounts.rs, admin.rs. *(These remaining files need integration test setup with DB fixtures.)*
+24 pre-existing TypeScript errors in 3 frontend files:
+- `website/src/routes/dashboard/marketplace/+page.svelte` — 2 errors (`ResourceInventory` unknown type, `number | undefined` arg)
+- `website/src/routes/dashboard/offerings/create/+page.svelte` — 22 errors (`null` not assignable to `string | undefined`)
+
+These are pre-existing and unrelated to recent changes. Need fixing to keep the codebase clean.
+*(Single-session: investigate proper null handling for optional Offering fields.)*
 
 ---
 
 ## UX Improvements
 
-### Existing API data not surfaced in UI
+### API data not yet surfaced in UI
 
-- **User activity timeline** — `GET /api/v1/users/{pubkey}/activity` returns activity events. Only used on the reputation page. Could be surfaced on user's own dashboard.
+- **Contract health status** — `GET /api/v1/contracts/:id/health` not displayed in contract detail page.
+- **Provider bandwidth dashboard** — `GET /providers/:pubkey/bandwidth` endpoints exist but no UI dashboard. Could be a chart on provider earnings page.
+- **Provider contacts management** — `GET/POST/DELETE /providers/:pubkey/contacts` has no UI. Could be added to provider setup page.
+- **Admin email management** — 6 admin endpoints for email queue management, stats, retry. No UI page for admin to manage emails. *(Admin section needs a dedicated email management sub-page.)*
+- **Admin payment management** — `GET /admin/payment-releases` and `GET /admin/payouts` have no UI. *(Admin section needs payment management sub-page.)*

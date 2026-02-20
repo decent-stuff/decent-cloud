@@ -7,6 +7,7 @@
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey } from "$lib/utils/contract-format";
 	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
+	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
@@ -32,6 +33,10 @@
 	let myOfferingsLoading = $state(false);
 	let myOfferingsError = $state<string | null>(null);
 	let selectedOfferingForRental = $state<Offering | null>(null);
+
+	// Recent Activity state
+	let activity = $state<UserActivity | null>(null);
+	let activityLoading = $state(false);
 
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
@@ -90,6 +95,24 @@
 		}
 	}
 
+	async function loadActivity(identity: IdentityInfo | null) {
+		if (!identity) {
+			activity = null;
+			return;
+		}
+
+		activityLoading = true;
+		try {
+			const pubkeyHex = computePubkey(identity.publicKeyBytes!);
+			const { headers } = await signRequest(identity.identity, 'GET', `/api/v1/users/${pubkeyHex}/activity`, '');
+			activity = await getUserActivity(pubkeyHex, headers);
+		} catch {
+			activity = null;
+		} finally {
+			activityLoading = false;
+		}
+	}
+
 	function handleRentalSuccess(contractId: string) {
 		selectedOfferingForRental = null;
 		// Redirect to rentals page to see the new contract
@@ -109,6 +132,7 @@
 			currentIdentity = value;
 			loadTrustMetrics(value?.publicKeyBytes ?? null);
 			loadMyOfferings(value);
+			loadActivity(value);
 		});
 
 		dashboardStore.load();
@@ -395,6 +419,69 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Recent Activity -->
+		{#if activityLoading}
+			<div class="flex justify-center items-center p-4">
+				<div class="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
+			</div>
+		{:else if activity}
+			<div class="card p-5">
+				<div class="flex items-center justify-between mb-4">
+					<div>
+						<h2 class="text-base font-semibold text-white">Recent Activity</h2>
+						<p class="text-xs text-neutral-500 mt-1">Your latest contracts and offerings</p>
+					</div>
+					<a
+						href="/dashboard/rentals"
+						class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+					>
+						<span>View all rentals</span>
+						<Icon name="arrow-right" size={16} />
+					</a>
+				</div>
+				<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+					<div class="bg-surface-elevated border border-neutral-800 p-3">
+						<div class="text-xs text-neutral-500 mb-1">Rentals (requester)</div>
+						<div class="text-xl font-semibold text-white">{activity.rentals_as_requester.length}</div>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-3">
+						<div class="text-xs text-neutral-500 mb-1">Rentals (provider)</div>
+						<div class="text-xl font-semibold text-white">{activity.rentals_as_provider.length}</div>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-3">
+						<div class="text-xs text-neutral-500 mb-1">Offerings provided</div>
+						<div class="text-xl font-semibold text-white">{activity.offerings_provided.length}</div>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-3">
+						<div class="text-xs text-neutral-500 mb-1">Active contracts</div>
+						<div class="text-xl font-semibold text-white">{activity.rentals_as_requester.filter(c => ['active', 'provisioned'].includes(c.status)).length}</div>
+					</div>
+				</div>
+				{#if activity.rentals_as_requester.length > 0}
+					<div class="space-y-2">
+						<div class="text-xs text-neutral-500 font-medium mb-2">Recent contracts</div>
+						{#each activity.rentals_as_requester.slice(0, 3) as contract (contract.contract_id)}
+							<a
+								href="/dashboard/rentals/{contract.contract_id}"
+								class="flex items-center justify-between p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 transition-colors"
+							>
+								<div class="flex-1 min-w-0">
+									<div class="text-sm text-neutral-300 truncate font-mono">{contract.contract_id.slice(0, 16)}...</div>
+									<div class="text-xs text-neutral-500 mt-0.5">{contract.offering_id}</div>
+								</div>
+								<span class="ml-3 px-2 py-0.5 text-xs font-medium rounded-full
+									{contract.status === 'active' || contract.status === 'provisioned' ? 'bg-emerald-500/20 text-emerald-400' :
+									contract.status === 'cancelled' || contract.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+									'bg-neutral-700 text-neutral-300'}">{contract.status}</span>
+							</a>
+						{/each}
+					</div>
+				{:else}
+					<p class="text-xs text-neutral-600 text-center py-4">No activity yet</p>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </div>
 

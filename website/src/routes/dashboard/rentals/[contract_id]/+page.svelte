@@ -11,8 +11,11 @@
 		getContractCredentials,
 		getContractRecipeLog,
 		requestPasswordReset,
+		extendContract,
+		getContractExtensions,
 		type Contract,
 		type ContractUsage,
+		type ContractExtension,
 		hexEncode,
 	} from "$lib/services/api";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
@@ -46,6 +49,15 @@
 	let passwordResetLoading = $state(false);
 	let passwordResetSuccess = $state(false);
 	let passwordResetError = $state<string | null>(null);
+
+	// Extend contract state
+	let showExtendForm = $state(false);
+	let extendHours = $state(24);
+	let extendMemo = $state("");
+	let extending = $state(false);
+	let extendSuccess = $state<string | null>(null);
+	let extendError = $state<string | null>(null);
+	let extensions = $state<ContractExtension[]>([]);
 
 	// Recipe log state
 	let recipeLog = $state<string | null>(null);
@@ -224,6 +236,9 @@
 				if (contract.status === 'provisioned' || contract.status === 'active') {
 					await loadCredentials(signingIdentityInfo);
 				}
+			
+				// Load extension history
+				await loadExtensions(signingIdentityInfo);
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -312,6 +327,67 @@
 		return ["requested", "pending", "accepted", "provisioning", "provisioned", "active"].includes(
 			status.toLowerCase(),
 		);
+	}
+
+	function isExtendable(status: string): boolean {
+		return ["provisioned", "active", "accepted"].includes(status.toLowerCase());
+	}
+
+	async function handleExtendContract() {
+		if (!contract || !isExtendable(contract.status)) return;
+
+		try {
+			extending = true;
+			extendError = null;
+			extendSuccess = null;
+
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				extendError = "You must be authenticated to extend contracts";
+				return;
+			}
+
+			const body = { extensionHours: extendHours, memo: extendMemo || undefined };
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"POST",
+				`/api/v1/contracts/${contractId}/extend`,
+				body,
+			);
+
+			const result = await extendContract(contractId, body, headers);
+			extendSuccess = result.message;
+			showExtendForm = false;
+			extendMemo = "";
+
+			// Reload extensions list and refresh contract
+			const extHeaders = (await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/extensions`,
+			)).headers;
+			extensions = await getContractExtensions(contractId, extHeaders);
+
+			await refreshContract();
+		} catch (e) {
+			extendError = e instanceof Error ? e.message : "Failed to extend contract";
+		} finally {
+			extending = false;
+		}
+	}
+
+	async function loadExtensions(signingIdentityInfo: any) {
+		try {
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/extensions`,
+			);
+			extensions = await getContractExtensions(contractId, headers);
+		} catch {
+			// Extensions not available is not an error
+		}
 	}
 
 	async function handleCancelContract() {
@@ -902,6 +978,29 @@
 				</div>
 			{/if}
 		</div>
+
+	<!-- Extension History -->
+	{#if extensions.length > 0}
+		<div class="card p-6 border border-neutral-800">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-3">Extension History ({extensions.length})</h3>
+			<div class="space-y-2">
+				{#each extensions as ext (ext.id)}
+					<div class="bg-surface-elevated p-3 border border-neutral-800">
+						<div class="flex items-center justify-between">
+							<div class="text-sm text-white">+{ext.extension_hours}h extended</div>
+							<div class="text-xs text-neutral-500">{new Date(ext.created_at_ns / 1_000_000).toLocaleString()}</div>
+						</div>
+						<div class="text-xs text-neutral-500 mt-1">
+							New end: {new Date(ext.new_end_timestamp_ns / 1_000_000).toLocaleString()}
+						</div>
+						{#if ext.extension_memo}
+							<div class="text-xs text-neutral-400 mt-1 italic">{ext.extension_memo}</div>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 		<!-- Back link -->
 		<div>
