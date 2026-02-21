@@ -108,22 +108,22 @@
 		{
 			label: "Provider name",
 			done: !!providerProfile?.name,
-			href: "#helpcenter",
+			href: "/dashboard/account/profile",
 		},
 		{
 			label: "Description",
 			done: !!providerProfile?.description,
-			href: "#helpcenter",
+			href: "/dashboard/account/profile",
 		},
 		{
 			label: "Website URL",
 			done: !!providerProfile?.website_url,
-			href: "#helpcenter",
+			href: "/dashboard/account/profile",
 		},
 		{
 			label: "Logo / banner image",
 			done: !!providerProfile?.logo_url,
-			href: "#helpcenter",
+			href: "/dashboard/account/profile",
 		},
 		{
 			label: "Contact info",

@@ -1162,6 +1162,30 @@ export async function getProviderContracts(
 	return payload.data ?? [];
 }
 
+export async function getPendingPasswordResets(
+	providerPubkey: string,
+	headers: SignedRequestHeaders
+): Promise<Contract[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${providerPubkey}/contracts/pending-password-reset`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch pending password resets: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Contract[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch pending password resets');
+	}
+
+	return payload.data ?? [];
+}
+
 export async function getPendingProviderRequests(headers: SignedRequestHeaders): Promise<Contract[]> {
 	const url = `${API_BASE_URL}/api/v1/provider/rental-requests/pending`;
 

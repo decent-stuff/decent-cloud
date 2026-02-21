@@ -16,6 +16,7 @@
 		formatContractDate as formatDate,
 		formatContractPrice as formatPrice,
 		truncateContractHash as truncateHash,
+		formatTimeRemaining,
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
@@ -524,6 +525,10 @@
 				{@const isHighlighted = highlightedContractId === contract.contract_id}
 				{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
 				{@const nextStep = getNextStepInfo(contract.status, contract.payment_status)}
+				{@const expiryInfo = (() => {
+					const endNs = contract.end_timestamp_ns ?? contract.current_period_end_ns;
+					return ['active', 'provisioned'].includes(contract.status.toLowerCase()) ? formatTimeRemaining(endNs) : null;
+				})()}
 				<a
 					href="/dashboard/rentals/{contract.contract_id}"
 					id="contract-{contract.contract_id}"
@@ -543,6 +548,15 @@
 									<span>{statusBadge.icon}</span>
 									{statusBadge.text}
 								</span>
+								{#if expiryInfo}
+									<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded {
+										expiryInfo.urgency === 'critical' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+										expiryInfo.urgency === 'warning' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' :
+										'bg-neutral-800 text-neutral-400 border border-neutral-700'
+									}">
+										&#x23F1; {expiryInfo.text}
+									</span>
+								{/if}
 								<!-- Cancel button for cancelable contracts -->
 								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
 									<button

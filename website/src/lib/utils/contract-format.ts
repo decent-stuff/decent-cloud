@@ -90,6 +90,28 @@ export function formatRelativeTime(ns: number | null): string {
 }
 
 /**
+ * Format time remaining until a contract's end timestamp.
+ * Returns null if no end timestamp or if already expired.
+ * urgency: 'critical' (<24h), 'warning' (<7d), 'normal' (>=7d)
+ */
+export function formatTimeRemaining(
+	end_timestamp_ns: number | undefined
+): { text: string; urgency: 'critical' | 'warning' | 'normal' } | null {
+	if (!end_timestamp_ns) return null;
+	const remainingMs = end_timestamp_ns / 1_000_000 - Date.now();
+	if (remainingMs <= 0) return null;
+	const remainingH = remainingMs / (1000 * 60 * 60);
+	if (remainingH < 24) {
+		return { text: `${Math.ceil(remainingH)}h left`, urgency: 'critical' };
+	}
+	const remainingD = remainingH / 24;
+	if (remainingD < 7) {
+		return { text: `${Math.floor(remainingD)}d left`, urgency: 'warning' };
+	}
+	return { text: `${Math.floor(remainingD)}d left`, urgency: 'normal' };
+}
+
+/**
  * Format duration from nanoseconds to human-readable string.
  */
 export function formatDuration(duration_ns: number): string {

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { searchOfferings, fetchIcpPrice, type Offering } from "$lib/services/api";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -266,8 +267,62 @@
 		}
 	}
 
+	function readFiltersFromUrl(url: URL) {
+		const p = url.searchParams;
+		searchQuery = p.get('q') ?? '';
+		const typesStr = p.get('types');
+		selectedTypes = typesStr ? new Set(typesStr.split(',').filter(Boolean)) : new Set();
+		minPrice = p.has('minPrice') ? Number(p.get('minPrice')) : null;
+		maxPrice = p.has('maxPrice') ? Number(p.get('maxPrice')) : null;
+		selectedRegion = p.get('region') ?? '';
+		selectedCountry = p.get('country') ?? '';
+		selectedCity = p.get('city') ?? '';
+		minCores = p.has('minCores') ? Number(p.get('minCores')) : null;
+		minMemoryGb = p.has('minMemoryGb') ? Number(p.get('minMemoryGb')) : null;
+		minSsdGb = p.has('minSsdGb') ? Number(p.get('minSsdGb')) : null;
+		selectedVirt = p.get('virt') ?? '';
+		unmeteredOnly = p.get('unmetered') === '1';
+		minTrust = p.has('minTrust') ? Number(p.get('minTrust')) : null;
+		showDemoOfferings = p.get('demo') === '1';
+		showOfflineOfferings = p.get('offline') === '1';
+		recipesOnly = p.get('recipes') === '1';
+		sortField = (p.get('sort') as 'price' | 'trust' | 'newest') ?? 'price';
+		sortDir = (p.get('dir') as 'asc' | 'desc') ?? 'asc';
+		quickFilter = (p.get('quick') as 'newest' | 'trusted' | null) ?? null;
+		selectedPreset = (p.get('preset') as 'gpu' | 'budget' | 'na' | 'europe' | null) ?? null;
+	}
+
+	function syncFiltersToUrl() {
+		const params = new URLSearchParams();
+		if (searchQuery) params.set('q', searchQuery);
+		if (selectedTypes.size > 0) params.set('types', [...selectedTypes].join(','));
+		if (minPrice != null) params.set('minPrice', String(minPrice));
+		if (maxPrice != null) params.set('maxPrice', String(maxPrice));
+		if (selectedRegion) params.set('region', selectedRegion);
+		if (selectedCountry) params.set('country', selectedCountry);
+		if (selectedCity) params.set('city', selectedCity);
+		if (minCores != null) params.set('minCores', String(minCores));
+		if (minMemoryGb != null) params.set('minMemoryGb', String(minMemoryGb));
+		if (minSsdGb != null) params.set('minSsdGb', String(minSsdGb));
+		if (selectedVirt) params.set('virt', selectedVirt);
+		if (unmeteredOnly) params.set('unmetered', '1');
+		if (minTrust != null) params.set('minTrust', String(minTrust));
+		if (showDemoOfferings) params.set('demo', '1');
+		if (showOfflineOfferings) params.set('offline', '1');
+		if (recipesOnly) params.set('recipes', '1');
+		if (sortField !== 'price') params.set('sort', sortField);
+		if (sortDir !== 'asc') params.set('dir', sortDir);
+		if (quickFilter) params.set('quick', quickFilter);
+		if (selectedPreset) params.set('preset', selectedPreset);
+		// Preserve expanded offering deep-link if present
+		if (expandedRow !== null) params.set('offering', String(expandedRow));
+		const url = params.toString() ? `?${params.toString()}` : '/dashboard/marketplace';
+		goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
 	onMount(async () => {
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
+		readFiltersFromUrl($page.url);
 		[, icpPriceUsd] = await Promise.all([fetchOfferings(), fetchIcpPrice()]);
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
@@ -282,12 +337,13 @@
 
 	function handleSearchInput() {
 		if (debounceTimer) clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => fetchOfferings(), 300);
+		debounceTimer = setTimeout(() => { fetchOfferings(); syncFiltersToUrl(); }, 300);
 	}
 
 	function handleFilterChange() {
 		selectedPreset = null;
 		fetchOfferings();
+		syncFiltersToUrl();
 	}
 
 	function toggleType(type: string) {
@@ -296,6 +352,7 @@
 		else newSet.add(type);
 		selectedTypes = newSet;
 		selectedPreset = null;
+		syncFiltersToUrl();
 	}
 
 	function setPreset(preset: "gpu" | "budget" | "na" | "europe") {
@@ -305,6 +362,7 @@
 			if (preset === "gpu") selectedTypes = new Set();
 			else if (preset === "budget") { maxPrice = null; fetchOfferings(); }
 			else if (preset === "na" || preset === "europe") { selectedRegion = ""; selectedCountry = ""; selectedCity = ""; }
+			syncFiltersToUrl();
 			return;
 		}
 		// Clear all preset-controlled filters first, then apply
@@ -318,6 +376,7 @@
 		else if (preset === "na") selectedRegion = "na";
 		else if (preset === "europe") selectedRegion = "europe";
 		selectedPreset = preset;
+		syncFiltersToUrl();
 	}
 
 	function clearFilters() {
@@ -342,6 +401,7 @@
 		sortField = "price";
 		sortDir = "asc";
 		fetchOfferings();
+		syncFiltersToUrl();
 	}
 
 	function handleRentClick(e: Event, offering: Offering) {
@@ -381,14 +441,7 @@
 	function toggleRow(id: number | undefined) {
 		if (id === undefined) return;
 		expandedRow = expandedRow === id ? null : id;
-		// Sync URL query param without navigation
-		const url = new URL(window.location.href);
-		if (expandedRow !== null) {
-			url.searchParams.set("offering", String(expandedRow));
-		} else {
-			url.searchParams.delete("offering");
-		}
-		history.replaceState(history.state, "", url.toString());
+		syncFiltersToUrl();
 	}
 
 	function copyOfferingLink(offeringId: number | undefined, event: Event) {
@@ -406,11 +459,13 @@
 		sortField = "price";
 		sortDir = dir;
 		quickFilter = null;
+		syncFiltersToUrl();
 	}
 
 	function setSortTrust() {
 		sortField = "trust";
 		quickFilter = null;
+		syncFiltersToUrl();
 	}
 
 	function toggleQuickFilter(filter: "newest" | "trusted") {
@@ -422,6 +477,7 @@
 			quickFilter = filter;
 			sortField = filter === "newest" ? "newest" : "trust";
 		}
+		syncFiltersToUrl();
 	}
 
 	function handleRentalSuccess(contractId: string) {
@@ -557,20 +613,20 @@
 		for (const t of selectedTypes) {
 			const opt = typeOptions.find((o) => o.key === t);
 			const label = opt ? opt.label : t;
-			chips.push({ label, remove: () => { const s = new Set(selectedTypes); s.delete(t); selectedTypes = s; } });
+			chips.push({ label, remove: () => { const s = new Set(selectedTypes); s.delete(t); selectedTypes = s; syncFiltersToUrl(); } });
 		}
 		if (searchQuery) {
-			chips.push({ label: `Search: ${searchQuery}`, remove: () => { searchQuery = ""; fetchOfferings(); } });
+			chips.push({ label: `Search: ${searchQuery}`, remove: () => { searchQuery = ""; fetchOfferings(); syncFiltersToUrl(); } });
 		}
 		if (selectedRegion) {
 			const region = REGIONS.find((r) => r.code === selectedRegion);
-			chips.push({ label: `Region: ${region?.name ?? selectedRegion}`, remove: () => { selectedRegion = ""; selectedCountry = ""; selectedCity = ""; } });
+			chips.push({ label: `Region: ${region?.name ?? selectedRegion}`, remove: () => { selectedRegion = ""; selectedCountry = ""; selectedCity = ""; syncFiltersToUrl(); } });
 		}
 		if (selectedCountry) {
 			chips.push({ label: `Country: ${selectedCountry}`, remove: () => { selectedCountry = ""; selectedCity = ""; handleFilterChange(); } });
 		}
 		if (selectedCity) {
-			chips.push({ label: `City: ${selectedCity}`, remove: () => { selectedCity = ""; } });
+			chips.push({ label: `City: ${selectedCity}`, remove: () => { selectedCity = ""; syncFiltersToUrl(); } });
 		}
 		if (minPrice !== null) {
 			chips.push({ label: `Min price: ${minPrice} ICP`, remove: () => { minPrice = null; handleFilterChange(); } });
@@ -579,28 +635,28 @@
 			chips.push({ label: `Max price: ${maxPrice} ICP`, remove: () => { maxPrice = null; handleFilterChange(); } });
 		}
 		if (minCores !== null) {
-			chips.push({ label: `Min cores: ${minCores}`, remove: () => { minCores = null; } });
+			chips.push({ label: `Min cores: ${minCores}`, remove: () => { minCores = null; syncFiltersToUrl(); } });
 		}
 		if (minMemoryGb !== null) {
-			chips.push({ label: `Min RAM: ${minMemoryGb}GB`, remove: () => { minMemoryGb = null; } });
+			chips.push({ label: `Min RAM: ${minMemoryGb}GB`, remove: () => { minMemoryGb = null; syncFiltersToUrl(); } });
 		}
 		if (minSsdGb !== null) {
-			chips.push({ label: `Min SSD: ${minSsdGb}GB`, remove: () => { minSsdGb = null; } });
+			chips.push({ label: `Min SSD: ${minSsdGb}GB`, remove: () => { minSsdGb = null; syncFiltersToUrl(); } });
 		}
 		if (selectedVirt) {
-			chips.push({ label: `Virt: ${selectedVirt.toUpperCase()}`, remove: () => { selectedVirt = ""; } });
+			chips.push({ label: `Virt: ${selectedVirt.toUpperCase()}`, remove: () => { selectedVirt = ""; syncFiltersToUrl(); } });
 		}
 		if (unmeteredOnly) {
-			chips.push({ label: "Unmetered", remove: () => { unmeteredOnly = false; } });
+			chips.push({ label: "Unmetered", remove: () => { unmeteredOnly = false; syncFiltersToUrl(); } });
 		}
 		if (minTrust !== null) {
-			chips.push({ label: `Trust ≥ ${minTrust}`, remove: () => { minTrust = null; } });
+			chips.push({ label: `Trust ≥ ${minTrust}`, remove: () => { minTrust = null; syncFiltersToUrl(); } });
 		}
 		if (showDemoOfferings) {
-			chips.push({ label: "Showing demos", remove: () => { showDemoOfferings = false; } });
+			chips.push({ label: "Showing demos", remove: () => { showDemoOfferings = false; syncFiltersToUrl(); } });
 		}
 		if (showOfflineOfferings) {
-			chips.push({ label: "Showing offline", remove: () => { showOfflineOfferings = false; } });
+			chips.push({ label: "Showing offline", remove: () => { showOfflineOfferings = false; syncFiltersToUrl(); } });
 		}
 		if (recipesOnly) {
 			chips.push({ label: "Recipes only", remove: () => { recipesOnly = false; handleFilterChange(); } });
@@ -740,6 +796,7 @@
 								selectedCountry = "";
 								selectedCity = "";
 								selectedPreset = null;
+								syncFiltersToUrl();
 							}}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
@@ -781,6 +838,7 @@
 						</div>
 						<select
 							bind:value={selectedCity}
+							onchange={() => syncFiltersToUrl()}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
 							<option value="">All cities</option>
@@ -802,6 +860,7 @@
 							placeholder="e.g., 4"
 							bind:value={minCores}
 							min="1"
+							onchange={() => syncFiltersToUrl()}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
@@ -818,6 +877,7 @@
 							placeholder="e.g., 8"
 							bind:value={minMemoryGb}
 							min="1"
+							onchange={() => syncFiltersToUrl()}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
@@ -834,6 +894,7 @@
 							placeholder="e.g., 100"
 							bind:value={minSsdGb}
 							min="1"
+							onchange={() => syncFiltersToUrl()}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
@@ -848,6 +909,7 @@
 							</div>
 							<select
 								bind:value={selectedVirt}
+								onchange={() => syncFiltersToUrl()}
 								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							>
 								<option value="">All types</option>
@@ -871,6 +933,7 @@
 							bind:value={minTrust}
 							min="0"
 							max="100"
+							onchange={() => syncFiltersToUrl()}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						/>
 					</div>
@@ -883,6 +946,7 @@
 							<input
 								type="checkbox"
 								bind:checked={unmeteredOnly}
+								onchange={() => syncFiltersToUrl()}
 								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span
@@ -900,6 +964,7 @@
 							<input
 								type="checkbox"
 								bind:checked={showDemoOfferings}
+								onchange={() => syncFiltersToUrl()}
 								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span
@@ -917,6 +982,7 @@
 							<input
 								type="checkbox"
 								bind:checked={showOfflineOfferings}
+								onchange={() => syncFiltersToUrl()}
 								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 							/>
 							<span

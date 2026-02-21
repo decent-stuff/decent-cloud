@@ -5,8 +5,10 @@
 		getOffering,
 		fetchIcpPrice,
 		getProviderTrustMetrics,
+		getProviderProfile,
 		type Offering,
-		type ProviderTrustMetrics
+		type ProviderTrustMetrics,
+		type ProviderProfile
 	} from '$lib/services/api';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
@@ -19,6 +21,7 @@
 
 	let offering = $state<Offering | null>(null);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
+	let providerProfile = $state<ProviderProfile | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
@@ -36,7 +39,10 @@
 		try {
 			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
 			if (offering) {
-				trustMetrics = await getProviderTrustMetrics(offering.pubkey).catch(() => null);
+				[trustMetrics, providerProfile] = await Promise.all([
+					getProviderTrustMetrics(offering.pubkey).catch(() => null),
+					getProviderProfile(offering.pubkey).catch(() => null)
+				]);
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offering';
@@ -449,6 +455,31 @@
 					View Provider Profile
 					<Icon name="external" size={14} />
 				</a>
+
+				{#if providerProfile?.website_url || providerProfile?.support_email}
+					<div class="pt-3 mt-3 border-t border-neutral-800 space-y-2">
+						{#if providerProfile.website_url}
+							<a
+								href={providerProfile.website_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="flex items-center gap-2 text-xs text-neutral-400 hover:text-primary-400 transition-colors"
+							>
+								<Icon name="globe" size={14} />
+								Website
+							</a>
+						{/if}
+						{#if providerProfile.support_email}
+							<a
+								href="mailto:{providerProfile.support_email}"
+								class="flex items-center gap-2 text-xs text-neutral-400 hover:text-primary-400 transition-colors"
+							>
+								<Icon name="mail" size={14} />
+								{providerProfile.support_email}
+							</a>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 		</div>

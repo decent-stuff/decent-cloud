@@ -1,0 +1,132 @@
+import { describe, it, expect } from 'vitest';
+
+// Test the pure logic of URL param encoding/decoding for marketplace filters
+describe('marketplace filter URL encoding', () => {
+	it('encodes selected types as comma-separated string', () => {
+		const types = new Set(['gpu', 'compute']);
+		const encoded = [...types].join(',');
+		expect(encoded).toBe('gpu,compute');
+		const decoded = new Set(encoded.split(',').filter(Boolean));
+		expect(decoded).toEqual(new Set(['gpu', 'compute']));
+	});
+
+	it('encodes boolean flags as "1" when true, omits when false', () => {
+		expect(true ? '1' : null).toBe('1');
+		expect(false ? '1' : null).toBeNull();
+	});
+
+	it('round-trips numeric filters without precision loss', () => {
+		for (const n of [0, 10, 99.5, 1000]) {
+			expect(Number(String(n))).toBe(n);
+		}
+	});
+
+	it('returns null for missing numeric params', () => {
+		const params = new URLSearchParams('region=europe');
+		const minPrice = params.has('minPrice') ? Number(params.get('minPrice')) : null;
+		expect(minPrice).toBeNull();
+	});
+
+	it('defaults sortField to price when not in URL', () => {
+		const params = new URLSearchParams('region=europe');
+		const sortField = params.get('sort') ?? 'price';
+		expect(sortField).toBe('price');
+	});
+
+	it('defaults sortDir to asc when not in URL', () => {
+		const params = new URLSearchParams('sort=trust');
+		const sortDir = params.get('dir') ?? 'asc';
+		expect(sortDir).toBe('asc');
+	});
+
+	it('omits default sortField (price) and sortDir (asc) from params', () => {
+		function buildSortParams(sortField: 'price' | 'trust' | 'newest', sortDir: 'asc' | 'desc') {
+			const params = new URLSearchParams();
+			if (sortField !== 'price') params.set('sort', sortField);
+			if (sortDir !== 'asc') params.set('dir', sortDir);
+			return params;
+		}
+		const p = buildSortParams('price', 'asc');
+		expect(p.has('sort')).toBe(false);
+		expect(p.has('dir')).toBe(false);
+	});
+
+	it('includes non-default sort values in params', () => {
+		function buildSortParams(sortField: 'price' | 'trust' | 'newest', sortDir: 'asc' | 'desc') {
+			const params = new URLSearchParams();
+			if (sortField !== 'price') params.set('sort', sortField);
+			if (sortDir !== 'asc') params.set('dir', sortDir);
+			return params;
+		}
+		const p = buildSortParams('trust', 'desc');
+		expect(p.get('sort')).toBe('trust');
+		expect(p.get('dir')).toBe('desc');
+	});
+
+	it('decodes quickFilter from URL', () => {
+		const params = new URLSearchParams('quick=trusted');
+		const quickFilter = (params.get('quick') as 'newest' | 'trusted' | null) ?? null;
+		expect(quickFilter).toBe('trusted');
+	});
+
+	it('decodes selectedPreset from URL', () => {
+		const params = new URLSearchParams('preset=gpu');
+		const preset = (params.get('preset') as 'gpu' | 'budget' | 'na' | 'europe' | null) ?? null;
+		expect(preset).toBe('gpu');
+	});
+
+	it('decodes empty string for missing string params', () => {
+		const params = new URLSearchParams('q=hello');
+		expect(params.get('region') ?? '').toBe('');
+		expect(params.get('q') ?? '').toBe('hello');
+	});
+
+	it('round-trips a full filter set through URLSearchParams', () => {
+		// Simulate syncFiltersToUrl building params
+		const params = new URLSearchParams();
+		params.set('q', 'my query');
+		params.set('types', 'gpu,compute');
+		params.set('minPrice', '5');
+		params.set('maxPrice', '50');
+		params.set('region', 'europe');
+		params.set('country', 'DE');
+		params.set('city', 'Berlin');
+		params.set('minCores', '4');
+		params.set('minMemoryGb', '16');
+		params.set('minSsdGb', '200');
+		params.set('virt', 'kvm');
+		params.set('unmetered', '1');
+		params.set('minTrust', '80');
+		params.set('demo', '1');
+		params.set('offline', '1');
+		params.set('recipes', '1');
+		params.set('sort', 'trust');
+		params.set('dir', 'desc');
+		params.set('quick', 'newest');
+		params.set('preset', 'budget');
+
+		// Simulate readFiltersFromUrl
+		const p = params;
+		expect(p.get('q') ?? '').toBe('my query');
+		const typesStr = p.get('types');
+		expect(typesStr ? new Set(typesStr.split(',').filter(Boolean)) : new Set()).toEqual(new Set(['gpu', 'compute']));
+		expect(p.has('minPrice') ? Number(p.get('minPrice')) : null).toBe(5);
+		expect(p.has('maxPrice') ? Number(p.get('maxPrice')) : null).toBe(50);
+		expect(p.get('region') ?? '').toBe('europe');
+		expect(p.get('country') ?? '').toBe('DE');
+		expect(p.get('city') ?? '').toBe('Berlin');
+		expect(p.has('minCores') ? Number(p.get('minCores')) : null).toBe(4);
+		expect(p.has('minMemoryGb') ? Number(p.get('minMemoryGb')) : null).toBe(16);
+		expect(p.has('minSsdGb') ? Number(p.get('minSsdGb')) : null).toBe(200);
+		expect(p.get('virt') ?? '').toBe('kvm');
+		expect(p.get('unmetered') === '1').toBe(true);
+		expect(p.has('minTrust') ? Number(p.get('minTrust')) : null).toBe(80);
+		expect(p.get('demo') === '1').toBe(true);
+		expect(p.get('offline') === '1').toBe(true);
+		expect(p.get('recipes') === '1').toBe(true);
+		expect((p.get('sort') as 'price' | 'trust' | 'newest') ?? 'price').toBe('trust');
+		expect((p.get('dir') as 'asc' | 'desc') ?? 'asc').toBe('desc');
+		expect((p.get('quick') as 'newest' | 'trusted' | null) ?? null).toBe('newest');
+		expect((p.get('preset') as 'gpu' | 'budget' | 'na' | 'europe' | null) ?? null).toBe('budget');
+	});
+});

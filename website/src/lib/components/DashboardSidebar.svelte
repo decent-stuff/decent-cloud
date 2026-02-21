@@ -69,6 +69,7 @@
 	// Items locked until onboarding is complete
 	const providerOnboardedItems: NavItem[] = [
 		{ href: '/dashboard/provider/requests', icon: 'inbox', label: 'Rental Requests' },
+		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
 		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
 	];

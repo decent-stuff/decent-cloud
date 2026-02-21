@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime } from './contract-format';
+import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime, formatTimeRemaining } from './contract-format';
 
 describe('contract formatting helpers', () => {
 	it('formats timestamps into readable strings', () => {
@@ -117,6 +117,47 @@ describe('contract formatting helpers', () => {
 		it('formats fractional minutes clearly', () => {
 			const ninetySecondsNs = 90 * 1_000_000_000;
 			expect(formatDuration(ninetySecondsNs)).toBe('1.5min');
+		});
+	});
+
+	describe('formatTimeRemaining', () => {
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('returns null when no end timestamp', () => {
+			expect(formatTimeRemaining(undefined)).toBeNull();
+		});
+
+		it('returns null for past timestamps', () => {
+			const pastNs = (Date.now() - 1000) * 1_000_000;
+			expect(formatTimeRemaining(pastNs)).toBeNull();
+		});
+
+		it('shows hours for < 24 hours remaining with critical urgency', () => {
+			vi.setSystemTime(1_700_000_000_000);
+			const futureNs = (1_700_000_000_000 + 5 * 60 * 60 * 1000) * 1_000_000;
+			const result = formatTimeRemaining(futureNs);
+			expect(result).not.toBeNull();
+			expect(result!.text).toContain('5h');
+			expect(result!.urgency).toBe('critical');
+		});
+
+		it('shows days for 3 days remaining with warning urgency', () => {
+			vi.setSystemTime(1_700_000_000_000);
+			const futureNs = (1_700_000_000_000 + 3 * 24 * 60 * 60 * 1000) * 1_000_000;
+			const result = formatTimeRemaining(futureNs);
+			expect(result).not.toBeNull();
+			expect(result!.text).toContain('3d');
+			expect(result!.urgency).toBe('warning');
+		});
+
+		it('shows normal urgency for > 7 days remaining', () => {
+			vi.setSystemTime(1_700_000_000_000);
+			const futureNs = (1_700_000_000_000 + 10 * 24 * 60 * 60 * 1000) * 1_000_000;
+			const result = formatTimeRemaining(futureNs);
+			expect(result).not.toBeNull();
+			expect(result!.urgency).toBe('normal');
 		});
 	});
 });
