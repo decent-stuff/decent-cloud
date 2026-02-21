@@ -6,7 +6,7 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey, formatContractPrice } from "$lib/utils/contract-format";
-	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
+	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, getPendingProviderRequests, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
 	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
@@ -39,6 +39,9 @@
 	// Recent Activity state
 	let activity = $state<UserActivity | null>(null);
 	let activityLoading = $state(false);
+
+	// Pending provider requests
+	let pendingRequestsCount = $state(0);
 
 	// Getting Started card
 	const GETTING_STARTED_KEY = 'dc-getting-started-dismissed';
@@ -85,6 +88,7 @@
 		if (!identity) {
 			myOfferings = [];
 			myOfferingsError = null;
+			pendingRequestsCount = 0;
 			return;
 		}
 
@@ -94,6 +98,9 @@
 			const { headers } = await signRequest(identity.identity, 'GET', '/api/v1/provider/my-offerings', '');
 			const offerings = await getMyOfferings(headers);
 			myOfferings = offerings;
+			if (offerings.length > 0) {
+				loadPendingRequestsCount(identity);
+			}
 		} catch (err) {
 			console.error('Failed to load my offerings:', err);
 			myOfferings = [];
@@ -103,6 +110,16 @@
 			}
 		} finally {
 			myOfferingsLoading = false;
+		}
+	}
+
+	async function loadPendingRequestsCount(identity: IdentityInfo) {
+		try {
+			const { headers } = await signRequest(identity.identity, 'GET', '/api/v1/provider/rental-requests/pending', '');
+			const requests = await getPendingProviderRequests(headers);
+			pendingRequestsCount = requests.length;
+		} catch {
+			pendingRequestsCount = 0;
 		}
 	}
 
@@ -266,6 +283,24 @@
 				</div>
 			</div>
 		</div>
+	{/if}
+
+	{#if pendingRequestsCount > 0}
+		<a
+			href="/dashboard/provider/requests"
+			class="flex items-center gap-4 p-4 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/15 transition-colors"
+		>
+			<div class="w-9 h-9 shrink-0 bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+				<Icon name="inbox" size={18} class="text-amber-400" />
+			</div>
+			<div class="flex-1 min-w-0">
+				<p class="text-sm font-semibold text-amber-300">
+					{pendingRequestsCount} rental {pendingRequestsCount === 1 ? 'request requires' : 'requests require'} your action
+				</p>
+				<p class="text-xs text-amber-400/70 mt-0.5">Review and accept or reject pending rental requests</p>
+			</div>
+			<Icon name="arrow-right" size={16} class="text-amber-400 shrink-0" />
+		</a>
 	{/if}
 
 	{#if error}

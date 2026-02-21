@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
-	import { searchOfferings, type Offering } from "$lib/services/api";
+	import { searchOfferings, fetchIcpPrice, type Offering } from "$lib/services/api";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
 	import TrustBadge from "$lib/components/TrustBadge.svelte";
@@ -12,6 +12,7 @@
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let icpPriceUsd = $state<number | null>(null);
 	let searchQuery = $state("");
 	let selectedOffering = $state<Offering | null>(null);
 	let successMessage = $state<string | null>(null);
@@ -243,7 +244,7 @@
 
 	onMount(async () => {
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
-		await fetchOfferings();
+		[, icpPriceUsd] = await Promise.all([fetchOfferings(), fetchIcpPrice()]);
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
 			const id = parseInt(offeringParam, 10);
@@ -359,6 +360,18 @@
 		return "On request";
 	}
 
+	function formatUsdEquivalent(offering: Offering): string | null {
+		if (!icpPriceUsd || !offering.monthly_price) return null;
+		const currency = offering.currency?.toUpperCase();
+		if (currency !== "ICP") return null;
+		let price = offering.monthly_price;
+		if (offering.reseller_commission_percent) {
+			price += price * (offering.reseller_commission_percent / 100);
+		}
+		const usd = price * icpPriceUsd;
+		return `≈ $${usd.toFixed(2)}/mo`;
+	}
+
 	function hasReseller(offering: Offering): boolean {
 		return !!(
 			offering.reseller_name && offering.reseller_commission_percent
@@ -444,6 +457,64 @@
 		if (days <= 366) return "Yearly";
 		return `${days}d`;
 	}
+
+	let activeFilterChips = $derived.by(() => {
+		const chips: Array<{ label: string; remove: () => void }> = [];
+
+		for (const t of selectedTypes) {
+			const opt = typeOptions.find((o) => o.key === t);
+			const label = opt ? opt.label : t;
+			chips.push({ label, remove: () => { const s = new Set(selectedTypes); s.delete(t); selectedTypes = s; } });
+		}
+		if (searchQuery) {
+			chips.push({ label: `Search: ${searchQuery}`, remove: () => { searchQuery = ""; fetchOfferings(); } });
+		}
+		if (selectedRegion) {
+			const region = REGIONS.find((r) => r.code === selectedRegion);
+			chips.push({ label: `Region: ${region?.name ?? selectedRegion}`, remove: () => { selectedRegion = ""; selectedCountry = ""; selectedCity = ""; } });
+		}
+		if (selectedCountry) {
+			chips.push({ label: `Country: ${selectedCountry}`, remove: () => { selectedCountry = ""; selectedCity = ""; handleFilterChange(); } });
+		}
+		if (selectedCity) {
+			chips.push({ label: `City: ${selectedCity}`, remove: () => { selectedCity = ""; } });
+		}
+		if (minPrice !== null) {
+			chips.push({ label: `Min price: ${minPrice} ICP`, remove: () => { minPrice = null; handleFilterChange(); } });
+		}
+		if (maxPrice !== null) {
+			chips.push({ label: `Max price: ${maxPrice} ICP`, remove: () => { maxPrice = null; handleFilterChange(); } });
+		}
+		if (minCores !== null) {
+			chips.push({ label: `Min cores: ${minCores}`, remove: () => { minCores = null; } });
+		}
+		if (minMemoryGb !== null) {
+			chips.push({ label: `Min RAM: ${minMemoryGb}GB`, remove: () => { minMemoryGb = null; } });
+		}
+		if (minSsdGb !== null) {
+			chips.push({ label: `Min SSD: ${minSsdGb}GB`, remove: () => { minSsdGb = null; } });
+		}
+		if (selectedVirt) {
+			chips.push({ label: `Virt: ${selectedVirt.toUpperCase()}`, remove: () => { selectedVirt = ""; } });
+		}
+		if (unmeteredOnly) {
+			chips.push({ label: "Unmetered", remove: () => { unmeteredOnly = false; } });
+		}
+		if (minTrust !== null) {
+			chips.push({ label: `Trust ≥ ${minTrust}`, remove: () => { minTrust = null; } });
+		}
+		if (showDemoOfferings) {
+			chips.push({ label: "Showing demos", remove: () => { showDemoOfferings = false; } });
+		}
+		if (showOfflineOfferings) {
+			chips.push({ label: "Showing offline", remove: () => { showOfflineOfferings = false; } });
+		}
+		if (recipesOnly) {
+			chips.push({ label: "Recipes only", remove: () => { recipesOnly = false; handleFilterChange(); } });
+		}
+
+		return chips;
+	});
 </script>
 
 <div class="space-y-4">
@@ -791,12 +862,32 @@
 				</div>
 				<input
 					type="text"
-					placeholder="Search offerings (e.g., type:gpu, price:<=100)..."
+					placeholder="Search by name, description, or type..."
 					bind:value={searchQuery}
 					oninput={handleSearchInput}
 					class="w-full pl-11 pr-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-neutral-500 focus:outline-none focus:border-primary-400 transition-colors"
 				/>
 			</div>
+
+			<!-- Active Filter Chips -->
+			{#if activeFilterChips.length > 0}
+				<div class="flex flex-wrap items-center gap-2">
+					<span class="text-xs text-neutral-500 shrink-0">Active filters:</span>
+					{#each activeFilterChips as chip}
+						<button
+							onclick={chip.remove}
+							class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded hover:bg-primary-500/30 transition-colors"
+						>
+							{chip.label}
+							<span class="text-primary-300 hover:text-white transition-colors leading-none">&times;</span>
+						</button>
+					{/each}
+					<button
+						onclick={clearFilters}
+						class="text-xs text-neutral-500 hover:text-white transition-colors"
+					>Clear all</button>
+				</div>
+			{/if}
 
 			<!-- Results bar with count and sort -->
 			<div class="flex items-center justify-between">
@@ -960,9 +1051,12 @@
 									<td class="py-3 pr-4 text-neutral-300"
 										>{formatLocation(offering)}</td
 									>
-									<td class="py-3 pr-4 font-medium text-white"
-										>{formatPrice(offering)}</td
-									>
+									<td class="py-3 pr-4">
+										<div class="font-medium text-white">{formatPrice(offering)}</div>
+										{#if formatUsdEquivalent(offering)}
+											<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
+										{/if}
+									</td>
 									<td class="py-3">
 										{#if hasReseller(offering)}
 											<button
@@ -1318,6 +1412,9 @@
 									<div class="text-white font-medium">
 										{formatPrice(offering)}
 									</div>
+									{#if formatUsdEquivalent(offering)}
+										<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
+									{/if}
 									<div class="text-xs text-neutral-500">
 										{formatLocation(offering)}
 									</div>

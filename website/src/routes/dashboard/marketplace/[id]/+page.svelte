@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { getOffering, type Offering } from '$lib/services/api';
+	import { getOffering, fetchIcpPrice, type Offering } from '$lib/services/api';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
@@ -19,6 +19,7 @@
 	let showAuthModal = $state(false);
 	let successMessage = $state<string | null>(null);
 	let copyLinkFeedback = $state(false);
+	let icpPriceUsd = $state<number | null>(null);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -26,7 +27,7 @@
 
 	onMount(async () => {
 		try {
-			offering = await getOffering(offeringId);
+			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offering';
 		} finally {
@@ -72,6 +73,14 @@
 		}
 		if (o.monthly_price) return `${o.monthly_price.toFixed(2)} ${o.currency}`;
 		return 'On request';
+	}
+
+	function formatUsdEquivalent(o: Offering): string | null {
+		if (!icpPriceUsd || !o.monthly_price) return null;
+		if (o.currency?.toUpperCase() !== 'ICP') return null;
+		let price = o.monthly_price;
+		if (o.reseller_commission_percent) price += price * (o.reseller_commission_percent / 100);
+		return `≈ $${(price * icpPriceUsd).toFixed(2)}/mo`;
 	}
 
 	function formatBilling(o: Offering): string {
@@ -205,6 +214,9 @@
 				<div>
 					<span class="text-3xl font-bold text-white">{formatPrice(offering)}</span>
 					<span class="text-neutral-500 text-sm ml-2">/ month</span>
+					{#if formatUsdEquivalent(offering)}
+						<span class="text-neutral-500 text-sm ml-2">{formatUsdEquivalent(offering)}</span>
+					{/if}
 				</div>
 				{#if offering.setup_fee > 0}
 					<div class="text-neutral-400 text-sm">

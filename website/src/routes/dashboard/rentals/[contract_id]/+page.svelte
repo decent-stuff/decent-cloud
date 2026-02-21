@@ -73,6 +73,10 @@
 	// SSH copy state
 	let copiedSsh = $state(false);
 
+	// How to Connect guide state
+	let showConnectGuide = $state(false);
+	let connectGuideTab = $state<'unix' | 'win-terminal' | 'putty'>('unix');
+
 	// Feedback state
 	let feedback = $state<ContractFeedback | null>(null);
 	let feedbackLoading = $state(false);
@@ -913,6 +917,71 @@
 								<code class="text-green-300 text-sm font-mono break-all select-all">
 									ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}
 								</code>
+							</div>
+							<!-- How to Connect guide -->
+							<div class="bg-black/20 p-3">
+								<button
+									onclick={() => showConnectGuide = !showConnectGuide}
+									class="flex items-center gap-1 text-xs text-neutral-400 hover:text-white transition-colors w-full text-left"
+								>
+									<span class="inline-block transition-transform duration-200" style="transform: rotate({showConnectGuide ? '180deg' : '0deg'})">&#9660;</span>
+									How to Connect
+								</button>
+								{#if showConnectGuide}
+									<div class="mt-3">
+										<div class="flex gap-1 mb-3">
+											{#each ([['unix', 'Linux / macOS'], ['win-terminal', 'Windows (Terminal)'], ['putty', 'Windows (PuTTY)']] as const) as tab}
+												<button
+													onclick={() => connectGuideTab = tab[0]}
+													class="text-xs px-2 py-1 border transition-colors {connectGuideTab === tab[0] ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:text-white'}"
+												>
+													{tab[1]}
+												</button>
+											{/each}
+										</div>
+										{#if connectGuideTab === 'unix'}
+											<ol class="text-xs text-neutral-300 space-y-2 list-decimal list-inside">
+												<li>Open Terminal</li>
+												<li>
+													Run:
+													<div class="flex items-center justify-between mt-1 font-mono text-xs bg-black/30 px-3 py-2 rounded">
+														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}</code>
+														<button
+															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+															class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
+														>{copiedSsh ? 'Copied!' : '📋 Copy'}</button>
+													</div>
+												</li>
+												<li>If prompted about host authenticity, type <code class="font-mono text-green-300">yes</code></li>
+												<li>You're connected!</li>
+											</ol>
+										{:else if connectGuideTab === 'win-terminal'}
+											<ol class="text-xs text-neutral-300 space-y-2 list-decimal list-inside">
+												<li>Open Windows Terminal or PowerShell</li>
+												<li>
+													Run:
+													<div class="flex items-center justify-between mt-1 font-mono text-xs bg-black/30 px-3 py-2 rounded">
+														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}</code>
+														<button
+															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+															class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
+														>{copiedSsh ? 'Copied!' : '📋 Copy'}</button>
+													</div>
+												</li>
+												<li>If prompted about host authenticity, type <code class="font-mono text-green-300">yes</code></li>
+												<li>You're connected!</li>
+											</ol>
+										{:else}
+											<ol class="text-xs text-neutral-300 space-y-2 list-decimal list-inside">
+												<li>Download PuTTY from <a href="https://putty.org" target="_blank" rel="noopener" class="text-green-400 hover:underline">putty.org</a></li>
+												<li>Enter host: <code class="font-mono text-green-300">{contract.gateway_subdomain}</code></li>
+												<li>Enter port: <code class="font-mono text-green-300">{contract.gateway_ssh_port}</code></li>
+												<li>Click <strong>Open</strong></li>
+												<li>Login as: <code class="font-mono text-green-300">root</code></li>
+											</ol>
+										{/if}
+									</div>
+								{/if}
 							</div>
 							<div class="bg-black/20  p-3">
 								<div class="text-neutral-500 text-xs mb-1">Host</div>

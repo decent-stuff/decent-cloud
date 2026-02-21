@@ -62,11 +62,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ## Architectural Issues Requiring Review
 
-### Hardcoded Token Value ($1 USD)
+### Hardcoded Token Value ($1 USD) in IC canister
 
-**Issue:** Token USD value hardcoded instead of fetched from exchanges.
+**Issue:** The IC canister's `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). The api-server now fetches real ICP/USD price from CoinGecko for UI display (cached 5 min, `GET /api/v1/prices/icp`), but the on-chain canister price remains hardcoded. The canister uses ICP HTTP outcalls to fetch external data.
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
-**FIXME in code:** `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). Needs ICPSwap/KongSwap integration. *(Blocked on choosing exchange API. Single-session once decided.)*
+**Fix:** Use IC HTTP outcalls to fetch from ICPSwap or KongSwap. *(Blocked on choosing exchange API and implementing HTTP outcalls in the canister. Single-session once decided.)*
 
 ---
 
@@ -88,3 +88,8 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Rentals] Search/filter rentals list** ✅ (2026-02-21) — Text search input above the status tabs on `/dashboard/rentals`; client-side filters by contract ID or offering name. Clear button and contextual empty-state message included.
 - **[Marketplace] Default to hiding demo offerings** ✅ (2026-02-21) — `showDemoOfferings` default changed from `true` to `false`; `clearFilters()` also resets to `false`. Label already reads "Show demo offerings".
 - **[Dashboard] Personalized activity on home for authenticated users** ✅ (2026-02-21) — Recent Activity section now shows expiry dates (amber if <24 h) on active tenant contracts, plus a new "As Provider (last 3)" subsection with payment amounts and a link to the earnings page.
+- **[Pricing] Real ICP/USD price feed** ✅ (2026-02-21) — New `GET /api/v1/prices/icp` endpoint with 5-minute in-memory cache (`PriceCache` in `api/src/price_cache.rs`). Frontend shows "≈ $X.XX/mo" on marketplace offering cards and offering detail pages. Landing page stats show "≈ $X" USD hint for Total Volume.
+- **[Marketplace] Active filter chips row** ✅ (2026-02-21) — Dismissible chip row appears above results when any filter is active. Each chip shows the active filter and can be removed individually; "Clear all" resets all. Type multi-select, region/country/city cascade, price, specs, virt, trust, and boolean filters all supported.
+- **[Contracts] SSH connection guide on contract detail** ✅ (2026-02-21) — Collapsible "How to Connect" section with 3 tabs (Linux/macOS, Windows Terminal, PuTTY) on the contract detail page, shown only for provisioned/active gateway contracts.
+- **[Dashboard] Provider pending requests action banner** ✅ (2026-02-21) — Amber action banner on dashboard home shows count of pending rental requests when provider has offerings with unreviewed requests. Links to `/dashboard/provider/requests`.
+- **[Marketplace] Simplified search placeholder** ✅ (2026-02-21) — Changed from cryptic "e.g., type:gpu, price:<=100" to plain "Search by name, description, or type...".

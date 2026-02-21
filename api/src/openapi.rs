@@ -7,6 +7,7 @@ pub mod common;
 pub mod contracts;
 pub mod invoices;
 pub mod offerings;
+pub mod prices;
 pub mod providers;
 pub mod resellers;
 pub mod stats;
@@ -26,6 +27,7 @@ pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
 pub use invoices::InvoicesApi;
 pub use offerings::OfferingsApi;
+pub use prices::PricesApi;
 pub use providers::ProvidersApi;
 pub use resellers::ResellersApi;
 pub use stats::StatsApi;
@@ -61,6 +63,7 @@ pub fn create_combined_api() -> impl OpenApi {
             ResellersApi,
             SubscriptionsApi,
             VatApi,
+            PricesApi,
         ),
     )
 }

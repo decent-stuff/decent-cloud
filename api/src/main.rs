@@ -17,6 +17,7 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
+mod price_cache;
 mod notifications;
 mod oauth_simple;
 mod openapi;
@@ -43,6 +44,7 @@ use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
+use price_cache::PriceCache;
 use payment_release_service::PaymentReleaseService;
 use poem::web::{Data, Redirect};
 use poem::{
@@ -111,6 +113,7 @@ struct AppContext {
     ledger_client: Arc<LedgerClient>,
     sync_interval_secs: u64,
     metadata_cache: Arc<MetadataCache>,
+    price_cache: Arc<PriceCache>,
     email_service: Option<Arc<EmailService>>,
     cloudflare_dns: Option<Arc<cloudflare_dns::CloudflareDns>>,
 }
@@ -193,11 +196,15 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         );
     }
 
+    // Price cache setup (shares the existing reqwest client from the binary)
+    let price_cache = Arc::new(PriceCache::new(reqwest::Client::new()));
+
     Ok(AppContext {
         database,
         ledger_client,
         sync_interval_secs,
         metadata_cache,
+        price_cache,
         email_service,
         cloudflare_dns,
     })
@@ -1218,6 +1225,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         // NOTE: CSV operations are now included in OpenAPI schema above
         .data(ctx.database.clone())
         .data(ctx.metadata_cache.clone())
+        .data(ctx.price_cache.clone())
         .data(ctx.email_service.clone())
         .data(ctx.cloudflare_dns.clone())
         .with(CookieJarManager::new())

@@ -101,6 +101,21 @@ export async function fetchPlatformStats(): Promise<PlatformStats> {
 export { hexEncode };
 
 /**
+ * Fetches the current ICP/USD price from the server-side cache.
+ * Returns null if the price feed is unavailable (never throws).
+ */
+export async function fetchIcpPrice(): Promise<number | null> {
+	try {
+		const response = await fetch(`${API_BASE_URL}/api/v1/prices/icp`);
+		if (!response.ok) return null;
+		const data = (await response.json()) as { priceUsd?: number | null };
+		return data.priceUsd ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Helper to extract error message from response
  * Tries to read as JSON first, falls back to text
  */
