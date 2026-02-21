@@ -74,16 +74,8 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### Tenant (Renter) Experience
 
-- **[Rental flow] No SSH key onboarding before checkout** — A user who has never added an SSH key hits the RentalRequestDialog and must manually paste one. There is no "Generate a key pair" helper, no link to a guide, and the textarea offers zero affordance for first-timers. The save-to-profile flow exists in the profile/security pages but the rental dialog never links there. A first-timer will abandon. **Fix:** Add a "Save this key to your profile" checkbox in the rental dialog, and a one-click "How to generate an SSH key" inline guide. *(Impact: High. Effort: 0.5 day)*
-
----
+- **[Rental flow] Stripe path skips SSH key save to profile** — When paying via Stripe, the page navigates away immediately to Stripe Checkout, so the "save to profile" checkbox action is skipped. The ICPay and direct paths both save correctly. Resolving this requires either a post-payment webhook callback or a session-stored intent to save. *(Low priority: ICPay users are unaffected; Stripe users can add the key manually via Account > Security.)*
 
 ### Provider Experience
 
-- **[Provider onboarding] Gatekeeping is opaque and confusing** — "My Offerings" and "Rental Requests" are hidden from the sidebar until onboarding is complete. The only hint is a banner on the Provider Setup page. A provider who goes directly to `/dashboard/offerings` (e.g. from bookmarks or documentation links) gets silently redirected or sees an empty "authenticated" page. **Fix:** Show a locked/dimmed state in the sidebar for gated items with a tooltip "Complete Provider Setup to unlock", so the gate is visible rather than the items being invisible. *(Impact: High. Effort: 1 hour)*
-
-- **[Offerings] CSV-only bulk edit is not discoverable for non-technical users** — The primary way to create/edit offerings is a CSV spreadsheet modal. The "Create Offering" button leads to a form-based page, but the bulk-edit path (which is the only way to manage more than one offering) opens a raw CSV editor. There is no documentation inline about CSV format, column names, or required fields. **Fix:** Add a column reference guide (collapsible) directly above the CSV editor textarea. *(Impact: Medium. Effort: 2 hours)*
-
-- **[Offerings] No delete action on the offerings page** — The offerings grid shows cards with visibility/stock toggles and an "Edit full details" link, but there is no delete button anywhere visible on the offerings list or card. A provider who wants to remove an old offering must navigate into the edit page to find it. **Fix:** Add a delete action (with confirmation dialog) directly on each offering card. *(Impact: Medium. Effort: 2 hours)*
-
-- **[Offerings] "No pool" warning is shown but not actionable** — When offerings have no matching agent pool, an amber banner appears ("X offerings without matching pool — hidden from marketplace"). The banner explains the problem but provides no direct link to the Agents page where pools are configured. **Fix:** Add a "Configure Agents" button/link inside the warning banner. *(Impact: Medium. Effort: 15 minutes)*
+- **[Provider onboarding] Direct navigation to gated routes** — A provider who navigates directly to `/dashboard/offerings` before completing onboarding now sees sidebar items dimmed with "Complete Provider Setup to unlock" tooltip, but the page itself may still render an empty/confusing state. Consider adding a redirect or inline banner on those pages pointing to Provider Setup. *(Impact: Low. Effort: 1 hour.)*

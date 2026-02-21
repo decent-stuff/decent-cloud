@@ -5,6 +5,7 @@
 		exportProviderOfferingsCSV,
 		updateProviderOffering,
 		duplicateProviderOffering,
+		deleteProviderOffering,
 		type Offering,
 		type CsvImportResult,
 		getExampleOfferingsCSV,
@@ -31,6 +32,7 @@
 	let editorCsvContent = $state('');
 	let productTypes = $state<ProductType[]>([]);
 	let duplicatingId = $state<number | null>(null);
+	let deletingId = $state<number | null>(null);
 
 	async function loadOfferings() {
 		try {
@@ -102,6 +104,38 @@
 			console.error('Error duplicating offering:', e);
 		} finally {
 			duplicatingId = null;
+		}
+	}
+
+	async function handleDelete(offering: Offering, event: Event) {
+		event.stopPropagation();
+		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes || offering.id === undefined) {
+			error = 'Authentication or offering data missing';
+			return;
+		}
+
+		if (!confirm(`Delete offering '${offering.offer_name}'? This cannot be undone.`)) {
+			return;
+		}
+
+		deletingId = offering.id;
+		error = null;
+
+		try {
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const path = `/api/v1/providers/${pubkeyHex}/offerings/${offering.id}`;
+			const signed = await signRequest(currentIdentity.identity, 'DELETE', path);
+			await deleteProviderOffering(currentIdentity.publicKeyBytes, offering.id, signed.headers);
+			importSuccess = `Offering deleted successfully`;
+			setTimeout(() => {
+				importSuccess = null;
+			}, 5000);
+			await loadOfferings();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to delete offering';
+			console.error('Error deleting offering:', e);
+		} finally {
+			deletingId = null;
 		}
 	}
 
@@ -353,7 +387,7 @@
 		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id)}
 		<div class="bg-amber-500/20 border border-amber-500/30  p-4 flex items-start gap-3">
 			<Icon name="alert" size={24} class="text-amber-400 shrink-0" />
-			<div>
+			<div class="flex-1">
 				<p class="text-amber-400 font-semibold">
 					{offeringsWithoutPool.length} offering{offeringsWithoutPool.length !== 1 ? 's' : ''} without matching pool
 				</p>
@@ -361,6 +395,12 @@
 					These offerings are hidden from the public marketplace. Create agent pools or assign pools via CSV to enable provisioning.
 				</p>
 			</div>
+			<a
+				href="/dashboard/provider/agents"
+				class="text-xs text-amber-400 hover:text-amber-300 border border-amber-500/50 hover:border-amber-400 px-3 py-1.5 transition-colors shrink-0"
+			>
+				Configure Agents
+			</a>
 		</div>
 	{/if}
 
@@ -494,25 +534,46 @@
 						>
 							Edit full details
 						</a>
-						<button
-							onclick={(e) => handleDuplicate(offering, e)}
-							disabled={duplicatingId === offering.id}
-							class="text-xs text-neutral-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-							title="Duplicate this offering"
-						>
-							{#if duplicatingId === offering.id}
-								<svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-								</svg>
-								Duplicating...
-							{:else}
-								<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-								</svg>
-								Duplicate
-							{/if}
-						</button>
+						<div class="flex items-center gap-3">
+							<button
+								onclick={(e) => handleDuplicate(offering, e)}
+								disabled={duplicatingId === offering.id}
+								class="text-xs text-neutral-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+								title="Duplicate this offering"
+							>
+								{#if duplicatingId === offering.id}
+									<svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+									</svg>
+									Duplicating...
+								{:else}
+									<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+									</svg>
+									Duplicate
+								{/if}
+							</button>
+							<button
+								onclick={(e) => handleDelete(offering, e)}
+								disabled={deletingId === offering.id}
+								class="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+								title="Delete this offering"
+							>
+								{#if deletingId === offering.id}
+									<svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+									</svg>
+									Deleting...
+								{:else}
+									<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									</svg>
+									Delete
+								{/if}
+							</button>
+						</div>
 					</div>
 				</div>
 			{/each}

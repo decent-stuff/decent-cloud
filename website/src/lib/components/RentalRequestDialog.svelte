@@ -6,8 +6,9 @@
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
-	import { getExternalKeys } from "$lib/services/user-api";
+	import { getExternalKeys, UserApiClient } from "$lib/services/user-api";
 	import { authStore } from "$lib/stores/auth";
+	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import { loadStripe, type Stripe } from "@stripe/stripe-js";
 	import { onMount, onDestroy } from "svelte";
@@ -37,6 +38,7 @@
 	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
 	let sshKeyError = $state<string | null>(null);
+	let saveKeyToProfile = $state(false);
 
 	// Validate SSH public key format
 	function validateSshKey(key: string): string | null {
@@ -53,6 +55,10 @@
 
 	// Reactive validation
 	let sshKeyValidation = $derived(validateSshKey(sshKey));
+	let isCustomKey = $derived(
+		sshKey.trim().length > 0 &&
+		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
+	);
 	let paymentMethod = $state<"icpay" | "stripe">("icpay");
 
 	// Subscription offering helpers
@@ -171,7 +177,24 @@
 			}
 		}
 
+		await maybeSaveKeyToProfile();
 		onSuccess(pendingContractId);
+	}
+
+	async function maybeSaveKeyToProfile() {
+		if (!saveKeyToProfile || !isCustomKey || sshKeyValidation) return;
+		const activeIdentity = get(authStore.activeIdentity);
+		if (!activeIdentity?.account?.username || !activeIdentity.identity) return;
+		try {
+			const client = new UserApiClient(activeIdentity.identity);
+			const keyType = sshKey.trim().split(" ")[0];
+			await client.addExternalKey(activeIdentity.account.username, {
+				keyType,
+				keyData: sshKey.trim(),
+			});
+		} catch (e) {
+			console.warn("Failed to save SSH key to profile:", e);
+		}
 	}
 
 	async function handleSubmit() {
@@ -271,6 +294,7 @@
 			}
 
 			// Fallback for other payment methods
+			await maybeSaveKeyToProfile();
 			onSuccess(response.contractId);
 		} catch (e) {
 			error =
@@ -595,6 +619,21 @@
 						<p class="text-xs text-neutral-500 mt-1">
 							Required for server access after provisioning
 						</p>
+					{/if}
+					<details class="text-sm text-neutral-400 mt-1">
+						<summary class="cursor-pointer hover:text-neutral-200 select-none">How to generate an SSH key?</summary>
+						<div class="mt-2 p-3 bg-neutral-800 rounded font-mono text-xs space-y-2">
+							<p class="text-neutral-300 font-sans">Run this command in your terminal:</p>
+							<code class="block">ssh-keygen -t ed25519 -C "your-email@example.com"</code>
+							<p class="text-neutral-300 font-sans">Then copy your public key:</p>
+							<code class="block">cat ~/.ssh/id_ed25519.pub</code>
+						</div>
+					</details>
+					{#if isCustomKey && !sshKeyValidation && sshKey.trim()}
+						<label class="flex items-center gap-2 text-sm text-neutral-400 mt-2 cursor-pointer">
+							<input type="checkbox" bind:checked={saveKeyToProfile} class="w-4 h-4 accent-primary-500" />
+							Save this key to my profile for future rentals
+						</label>
 					{/if}
 				</div>
 

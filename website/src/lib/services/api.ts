@@ -493,6 +493,31 @@ export async function duplicateProviderOffering(
 	return payload.data;
 }
 
+export async function deleteProviderOffering(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}`;
+
+	const response = await fetch(url, {
+		method: 'DELETE',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to delete offering: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to delete offering');
+	}
+}
+
 // Visibility Allowlist API functions
 export interface AllowlistEntry {
 	id: number;

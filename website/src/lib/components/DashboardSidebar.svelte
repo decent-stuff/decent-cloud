@@ -61,7 +61,7 @@
 		label: 'Provider Setup'
 	};
 
-	// Items visible only after onboarding is complete
+	// Items locked until onboarding is complete
 	const providerOnboardedItems: NavItem[] = [
 		{ href: '/dashboard/provider/requests', icon: 'inbox', label: 'Rental Requests' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
@@ -242,60 +242,72 @@
 				{/if}
 			</a>
 
-			<!-- Items only visible after onboarding is complete -->
-			{#if onboardingCompleted}
-				<!-- My Offerings -->
-				{@const offeringsActive =
-					currentPath === '/dashboard/offerings' ||
-					currentPath.startsWith('/dashboard/offerings')}
+			<!-- Provider items: always visible, locked until onboarding is complete -->
+			{@const providerLocked = !onboardingCompleted}
+			{@const lockedClass = providerLocked ? 'opacity-40 pointer-events-none cursor-not-allowed' : ''}
+			{@const lockedTitle = providerLocked ? 'Complete Provider Setup to unlock' : undefined}
+
+			<!-- My Offerings -->
+			{@const offeringsActive =
+				currentPath === '/dashboard/offerings' ||
+				currentPath.startsWith('/dashboard/offerings')}
+			<a
+				href="/dashboard/offerings"
+				onclick={closeSidebar}
+				class="nav-item {offeringsActive ? 'nav-item-active' : ''} {lockedClass}"
+				title={lockedTitle}
+			>
+				<Icon name="package" size={20} />
+				<span class="text-sm">My Offerings</span>
+				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+			</a>
+
+			<!-- Earnings -->
+			{@const earningsActive =
+				currentPath === '/dashboard/provider/earnings' ||
+				currentPath.startsWith('/dashboard/provider/earnings')}
+			<a
+				href="/dashboard/provider/earnings"
+				onclick={closeSidebar}
+				class="nav-item {earningsActive ? 'nav-item-active' : ''} {lockedClass}"
+				title={lockedTitle}
+			>
+				<Icon name="trending-up" size={20} />
+				<span class="text-sm">Earnings</span>
+				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+			</a>
+
+			{#each providerOnboardedItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 				<a
-					href="/dashboard/offerings"
+					href={item.href}
 					onclick={closeSidebar}
-					class="nav-item {offeringsActive ? 'nav-item-active' : ''}"
+					class="nav-item {isActive ? 'nav-item-active' : ''} {lockedClass}"
+					title={lockedTitle}
 				>
-					<Icon name="package" size={20} />
-					<span class="text-sm">My Offerings</span>
+					<Icon name={item.icon} size={20} />
+					<span class="text-sm">{item.label}</span>
+					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 				</a>
+			{/each}
 
-				<!-- Earnings -->
-				{@const earningsActive =
-					currentPath === '/dashboard/provider/earnings' ||
-					currentPath.startsWith('/dashboard/provider/earnings')}
+			{#if CHATWOOT_BASE_URL}
 				<a
-					href="/dashboard/provider/earnings"
+					href={supportDashboardUrl}
+					target="_blank"
+					rel="noopener noreferrer"
 					onclick={closeSidebar}
-					class="nav-item {earningsActive ? 'nav-item-active' : ''}"
+					class="nav-item {lockedClass}"
+					title={providerLocked ? lockedTitle : 'Open Chatwoot support dashboard'}
 				>
-					<Icon name="trending-up" size={20} />
-					<span class="text-sm">Earnings</span>
-				</a>
-
-				{#each providerOnboardedItems as item}
-					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-					<a
-						href={item.href}
-						onclick={closeSidebar}
-						class="nav-item {isActive ? 'nav-item-active' : ''}"
-					>
-						<Icon name={item.icon} size={20} />
-						<span class="text-sm">{item.label}</span>
-					</a>
-				{/each}
-
-				{#if CHATWOOT_BASE_URL}
-					<a
-						href={supportDashboardUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						onclick={closeSidebar}
-						class="nav-item"
-						title="Open Chatwoot support dashboard"
-					>
-						<Icon name="headphones" size={20} />
-						<span class="text-sm">Support Dashboard</span>
+					<Icon name="headphones" size={20} />
+					<span class="text-sm">Support Dashboard</span>
+					{#if providerLocked}
+						<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
+					{:else}
 						<Icon name="external" size={20} class="ml-auto text-neutral-600" />
-					</a>
-				{/if}
+					{/if}
+				</a>
 			{/if}
 		{/if}
 

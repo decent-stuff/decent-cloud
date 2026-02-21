@@ -499,6 +499,77 @@
 					{/if}
 				</div>
 
+				<!-- Column Reference Guide -->
+				<details class="text-sm border border-neutral-700 rounded-lg overflow-hidden">
+					<summary class="cursor-pointer px-4 py-2 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-medium flex items-center gap-2 select-none">
+						<span>Column Reference</span>
+						<span class="text-neutral-500 font-normal text-xs">(click to expand)</span>
+					</summary>
+					<div class="p-4 bg-neutral-900 space-y-3 text-xs">
+						<div>
+							<div class="font-semibold text-neutral-200 mb-2">Required</div>
+							<div class="grid gap-y-1" style="grid-template-columns: minmax(0,auto) 1fr">
+								<span class="font-mono text-primary-400 pr-4">offering_id</span><span class="text-neutral-400">Unique identifier for this offering (e.g. "vps-small-eu")</span>
+								<span class="font-mono text-primary-400 pr-4">offer_name</span><span class="text-neutral-400">Display name shown in the marketplace</span>
+								<span class="font-mono text-primary-400 pr-4">monthly_price</span><span class="text-neutral-400">Price per month (numeric, e.g. 9.99)</span>
+								<span class="font-mono text-primary-400 pr-4">setup_fee</span><span class="text-neutral-400">One-time setup fee (use 0 if none)</span>
+								<span class="font-mono text-primary-400 pr-4">currency</span><span class="text-neutral-400">ISO 4217 currency code (e.g. USD, EUR)</span>
+								<span class="font-mono text-primary-400 pr-4">product_type</span><span class="text-neutral-400">compute | gpu | storage | network | dedicated</span>
+								<span class="font-mono text-primary-400 pr-4">visibility</span><span class="text-neutral-400">public | shared | private</span>
+								<span class="font-mono text-primary-400 pr-4">stock_status</span><span class="text-neutral-400">in_stock | out_of_stock | discontinued</span>
+								<span class="font-mono text-primary-400 pr-4">billing_interval</span><span class="text-neutral-400">monthly | annually</span>
+								<span class="font-mono text-primary-400 pr-4">datacenter_country</span><span class="text-neutral-400">ISO 3166-1 alpha-2 country code (e.g. US, DE, JP)</span>
+								<span class="font-mono text-primary-400 pr-4">datacenter_city</span><span class="text-neutral-400">City name of the datacenter</span>
+							</div>
+						</div>
+						<div>
+							<div class="font-semibold text-neutral-200 mb-2">Compute / Hardware (optional)</div>
+							<div class="grid gap-y-1" style="grid-template-columns: minmax(0,auto) 1fr">
+								<span class="font-mono text-neutral-400 pr-4">processor_brand</span><span class="text-neutral-500">CPU brand (e.g. AMD, Intel)</span>
+								<span class="font-mono text-neutral-400 pr-4">processor_name</span><span class="text-neutral-500">CPU model name</span>
+								<span class="font-mono text-neutral-400 pr-4">processor_cores</span><span class="text-neutral-500">Number of CPU cores (integer)</span>
+								<span class="font-mono text-neutral-400 pr-4">processor_speed</span><span class="text-neutral-500">CPU speed (e.g. "3.5 GHz")</span>
+								<span class="font-mono text-neutral-400 pr-4">memory_amount</span><span class="text-neutral-500">RAM amount (e.g. "8 GB")</span>
+								<span class="font-mono text-neutral-400 pr-4">memory_type</span><span class="text-neutral-500">RAM type (e.g. DDR4)</span>
+								<span class="font-mono text-neutral-400 pr-4">total_ssd_capacity</span><span class="text-neutral-500">SSD storage (e.g. "100 GB")</span>
+								<span class="font-mono text-neutral-400 pr-4">total_hdd_capacity</span><span class="text-neutral-500">HDD storage (e.g. "1 TB")</span>
+								<span class="font-mono text-neutral-400 pr-4">gpu_name</span><span class="text-neutral-500">GPU model (e.g. "NVIDIA A100")</span>
+								<span class="font-mono text-neutral-400 pr-4">gpu_count</span><span class="text-neutral-500">Number of GPUs (integer)</span>
+								<span class="font-mono text-neutral-400 pr-4">gpu_memory_gb</span><span class="text-neutral-500">GPU VRAM in GB (integer)</span>
+							</div>
+						</div>
+						<div>
+							<div class="font-semibold text-neutral-200 mb-2">Network (optional)</div>
+							<div class="grid gap-y-1" style="grid-template-columns: minmax(0,auto) 1fr">
+								<span class="font-mono text-neutral-400 pr-4">uplink_speed</span><span class="text-neutral-500">Network speed (e.g. "1 Gbps")</span>
+								<span class="font-mono text-neutral-400 pr-4">traffic</span><span class="text-neutral-500">Monthly traffic in GB (integer; leave empty if unmetered)</span>
+								<span class="font-mono text-neutral-400 pr-4">unmetered_bandwidth</span><span class="text-neutral-500">true | false</span>
+							</div>
+						</div>
+						<div>
+							<div class="font-semibold text-neutral-200 mb-2">Provisioning (optional)</div>
+							<div class="grid gap-y-1" style="grid-template-columns: minmax(0,auto) 1fr">
+								<span class="font-mono text-neutral-400 pr-4">template_name</span><span class="text-neutral-500">OS template (e.g. "ubuntu-22.04") or Proxmox VMID</span>
+								<span class="font-mono text-neutral-400 pr-4">agent_pool_id</span><span class="text-neutral-500">Pool ID to pin this offering to (empty = auto-match by location)</span>
+								<span class="font-mono text-neutral-400 pr-4">operating_systems</span><span class="text-neutral-500">Comma-separated OS list (e.g. "Ubuntu 22.04,Debian 12")</span>
+								<span class="font-mono text-neutral-400 pr-4">min_contract_hours</span><span class="text-neutral-500">Minimum contract duration in hours (integer)</span>
+								<span class="font-mono text-neutral-400 pr-4">max_contract_hours</span><span class="text-neutral-500">Maximum contract duration in hours (integer)</span>
+							</div>
+						</div>
+						<div>
+							<div class="font-semibold text-neutral-200 mb-2">Other (optional)</div>
+							<div class="grid gap-y-1" style="grid-template-columns: minmax(0,auto) 1fr">
+								<span class="font-mono text-neutral-400 pr-4">description</span><span class="text-neutral-500">Free-text description</span>
+								<span class="font-mono text-neutral-400 pr-4">product_page_url</span><span class="text-neutral-500">Link to product page</span>
+								<span class="font-mono text-neutral-400 pr-4">payment_methods</span><span class="text-neutral-500">Comma-separated list (e.g. "credit_card,crypto")</span>
+								<span class="font-mono text-neutral-400 pr-4">features</span><span class="text-neutral-500">Comma-separated feature list</span>
+								<span class="font-mono text-neutral-400 pr-4">datacenter_latitude</span><span class="text-neutral-500">Decimal latitude (e.g. 52.52)</span>
+								<span class="font-mono text-neutral-400 pr-4">datacenter_longitude</span><span class="text-neutral-500">Decimal longitude (e.g. 13.40)</span>
+							</div>
+						</div>
+					</div>
+				</details>
+
 				<!-- CSV Spreadsheet Editor -->
 				<div class="space-y-3">
 					<SpreadsheetEditor
