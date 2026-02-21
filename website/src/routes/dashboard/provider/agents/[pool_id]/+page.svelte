@@ -363,19 +363,19 @@
 									<span class="flex items-center gap-2 text-red-400">
 										<span class="h-2 w-2 rounded-full bg-red-400"></span>
 										Revoked
-										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs ?? null)}</span>
 									</span>
 								{:else if delegation.online}
 									<span class="flex items-center gap-2 text-green-400">
 										<span class="h-2 w-2 rounded-full bg-green-400"></span>
 										Online
-										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs ?? null)}</span>
 									</span>
 								{:else}
 									<span class="flex items-center gap-2 text-amber-400">
 										<span class="h-2 w-2 rounded-full bg-amber-400"></span>
 										Offline
-										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs ?? null)}</span>
 									</span>
 								{/if}
 							</td>

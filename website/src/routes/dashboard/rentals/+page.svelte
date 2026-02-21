@@ -30,6 +30,7 @@
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
 	let downloadingInvoiceContractId = $state<string | null>(null);
+	let copiedCommand = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
@@ -354,6 +355,12 @@
 		if (parts.length >= 3) return parts[2]; // comment (email/name)
 		if (parts.length === 2) return `...${parts[1].slice(-20)}`; // last 20 of key data
 		return `...${key.slice(-20)}`; // no spaces: show tail
+	}
+
+	async function copyToClipboard(text: string, key: string) {
+		await navigator.clipboard.writeText(text);
+		copiedCommand = key;
+		setTimeout(() => { copiedCommand = null; }, 2000);
 	}
 
 	function contactProvider(contractId: string, providerPubkey: string) {
@@ -717,26 +724,61 @@
 						</div>
 					{/if}
 
-					{#if contract.provisioning_instance_details}
-						<div
-							class="bg-green-500/10 border border-green-500/30  p-4"
-						>
-							<div class="text-green-400 font-semibold mb-2">
-								Instance Details
-							</div>
-							<div class="text-white text-sm whitespace-pre-wrap">
-								{contract.provisioning_instance_details}
-							</div>
-							{#if contract.provisioning_completed_at_ns}
-								<div class="text-green-400/60 text-xs mt-2">
-									Provisioned: {formatDate(
-										contract.provisioning_completed_at_ns,
-									)}
+					{#if contract.gateway_subdomain && contract.gateway_ssh_port || contract.provisioning_instance_details}
+						{@const instanceJson = (() => { try { return JSON.parse(contract.provisioning_instance_details ?? ''); } catch { return null; } })()}
+						{@const gatewaySshCmd = contract.gateway_subdomain && contract.gateway_ssh_port ? `ssh -p ${contract.gateway_ssh_port} root@${contract.gateway_subdomain}` : null}
+						{@const directSshCmd = instanceJson?.ip_address ? `ssh root@${instanceJson.ip_address}` : null}
+						<div class="bg-green-500/10 border border-green-500/30 p-4 space-y-3">
+							<div class="text-green-400 font-semibold text-sm">Connection Details</div>
+							{#if gatewaySshCmd}
+								<div>
+									<div class="text-neutral-500 text-xs mb-1">Gateway SSH (recommended)</div>
+									<div class="flex items-center gap-2">
+										<code class="flex-1 bg-black/30 px-3 py-2 text-xs font-mono text-green-300 overflow-x-auto whitespace-nowrap">{gatewaySshCmd}</code>
+										<button
+											onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(gatewaySshCmd, `gw-${contract.contract_id}`); }}
+											class="shrink-0 px-2 py-2 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 transition-colors"
+											title="Copy SSH command"
+										>{copiedCommand === `gw-${contract.contract_id}` ? '✓' : 'Copy'}</button>
+									</div>
 								</div>
+							{/if}
+							{#if directSshCmd}
+								<div>
+									<div class="text-neutral-500 text-xs mb-1">Direct SSH</div>
+									<div class="flex items-center gap-2">
+										<code class="flex-1 bg-black/30 px-3 py-2 text-xs font-mono text-green-300 overflow-x-auto whitespace-nowrap">{directSshCmd}</code>
+										<button
+											onclick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(directSshCmd, `ip-${contract.contract_id}`); }}
+											class="shrink-0 px-2 py-2 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30 transition-colors"
+											title="Copy SSH command"
+										>{copiedCommand === `ip-${contract.contract_id}` ? '✓' : 'Copy'}</button>
+									</div>
+								</div>
+							{/if}
+							{#if !gatewaySshCmd && !directSshCmd && contract.provisioning_instance_details}
+								<div class="text-white text-xs font-mono whitespace-pre-wrap">{contract.provisioning_instance_details}</div>
+							{/if}
+							{#if contract.provisioning_completed_at_ns}
+								<div class="text-green-400/60 text-xs">Provisioned: {formatDate(contract.provisioning_completed_at_ns)}</div>
 							{/if}
 						</div>
 					{/if}
 				</a>
+			{:else}
+				<div class="text-center py-10 text-neutral-500">
+					{#if activeTab === 'active'}
+						<p class="text-lg mb-2">No active rentals</p>
+						<p class="text-sm">Provisioned resources appear here. <a href="/dashboard/marketplace" class="text-primary-400 hover:underline">Browse the marketplace</a> to rent one.</p>
+					{:else if activeTab === 'pending'}
+						<p class="text-lg mb-2">No pending requests</p>
+						<p class="text-sm">Rental requests awaiting provider review appear here. <a href="/dashboard/marketplace" class="text-primary-400 hover:underline">Create a new request</a>.</p>
+					{:else if activeTab === 'cancelled'}
+						<p class="text-lg mb-2">No cancelled or failed rentals</p>
+					{:else}
+						<p class="text-lg mb-2">No rentals found</p>
+					{/if}
+				</div>
 			{/each}
 		</div>
 	{/if}

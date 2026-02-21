@@ -1188,16 +1188,25 @@
 														</div>
 													{/if}
 												</div>
-												<button
-													onclick={(e) => copyOfferingLink(offering.id, e)}
-													class="mt-3 inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
-												>
-													{#if copyLinkFeedback === offering.id}
-														<Icon name="check" size={14} class="text-green-400" /> Copied!
-													{:else}
-														<Icon name="link" size={14} /> Copy link
-													{/if}
-												</button>
+												<div class="mt-3 flex flex-col gap-2">
+													<button
+														onclick={(e) => copyOfferingLink(offering.id, e)}
+														class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+													>
+														{#if copyLinkFeedback === offering.id}
+															<Icon name="check" size={14} class="text-green-400" /> Copied!
+														{:else}
+															<Icon name="link" size={14} /> Copy link
+														{/if}
+													</button>
+													<a
+														href="/dashboard/reputation/{offering.owner_username || offering.pubkey}"
+														onclick={(e) => e.stopPropagation()}
+														class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+													>
+														<Icon name="user" size={14} /> View provider profile
+													</a>
+												</div>
 											</div>
 										</td>
 									</tr>
@@ -1441,16 +1450,25 @@
 											</div>
 										{/if}
 									</div>
-									<button
-										onclick={(e) => copyOfferingLink(offering.id, e)}
-										class="mt-2 inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
-									>
-										{#if copyLinkFeedback === offering.id}
-											<Icon name="check" size={14} class="text-green-400" /> Copied!
-										{:else}
-											<Icon name="link" size={14} /> Copy link
-										{/if}
-									</button>
+									<div class="mt-2 flex flex-col gap-2">
+										<button
+											onclick={(e) => copyOfferingLink(offering.id, e)}
+											class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+										>
+											{#if copyLinkFeedback === offering.id}
+												<Icon name="check" size={14} class="text-green-400" /> Copied!
+											{:else}
+												<Icon name="link" size={14} /> Copy link
+											{/if}
+										</button>
+										<a
+											href="/dashboard/reputation/{offering.owner_username || offering.pubkey}"
+											onclick={(e) => e.stopPropagation()}
+											class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
+										>
+											<Icon name="user" size={14} /> View provider profile
+										</a>
+									</div>
 								</div>
 							{/if}
 						</div>
