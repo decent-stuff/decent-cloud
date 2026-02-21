@@ -384,6 +384,42 @@ impl ProvidersApi {
         }
     }
 
+    /// Get monthly revenue breakdown for a provider (last 12 months)
+    #[oai(
+        path = "/providers/:pubkey/revenue-by-month",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_revenue_by_month(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::RevenueByMonth>>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        match db.get_provider_revenue_by_month(&pubkey_bytes).await {
+            Ok(data) => Json(ApiResponse {
+                success: true,
+                data: Some(data),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get revenue by month: {e:#}")),
+            }),
+        }
+    }
+
     /// Get provider trust metrics
     ///
     /// Returns trust score and reliability metrics for a specific provider.

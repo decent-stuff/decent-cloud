@@ -16,6 +16,8 @@
 	let selectedOffering = $state<Offering | null>(null);
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	const PROVIDER_CTA_KEY = 'dc-provider-cta-dismissed';
+	let providerCtaDismissed = $state(false);
 	let showAuthModal = $state(false);
 	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
@@ -240,6 +242,7 @@
 	}
 
 	onMount(async () => {
+		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
 		await fetchOfferings();
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
@@ -458,6 +461,24 @@
 	{#if error}
 		<div class="bg-danger/10 border border-danger/20 p-3 text-danger text-sm">
 			{error}
+		</div>
+	{/if}
+
+	{#if isAuthenticated && !providerCtaDismissed}
+		<div class="bg-primary-500/10 border border-primary-500/30 p-4 flex items-center justify-between gap-4">
+			<div class="flex items-center gap-3">
+				<Icon name="server" size={20} class="text-primary-400 shrink-0" />
+				<p class="text-sm text-neutral-300">
+					Have infrastructure to share? <a href="/dashboard/provider/support" class="text-primary-400 hover:text-primary-300 font-medium">Become a provider</a> and earn by renting out your resources.
+				</p>
+			</div>
+			<button
+				onclick={() => { providerCtaDismissed = true; localStorage.setItem(PROVIDER_CTA_KEY, '1'); }}
+				class="text-neutral-500 hover:text-white transition-colors shrink-0"
+				aria-label="Dismiss"
+			>
+				<Icon name="x" size={16} />
+			</button>
 		</div>
 	{/if}
 

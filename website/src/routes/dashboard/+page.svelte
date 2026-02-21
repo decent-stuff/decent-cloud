@@ -329,20 +329,37 @@
 				</div>
 			</a>
 
-			<a
-				href="/dashboard/offerings"
-				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
-			>
-				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="package" size={20} />
-				</div>
-				<div>
-					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-						My Offerings
-					</h3>
-					<p class="text-xs text-neutral-500">Manage services</p>
-				</div>
-			</a>
+			{#if !currentIdentity || myOfferingsLoading || myOfferings.length > 0}
+				<a
+					href="/dashboard/offerings"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="package" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+							My Offerings
+						</h3>
+						<p class="text-xs text-neutral-500">Manage services</p>
+					</div>
+				</a>
+			{:else}
+				<a
+					href="/dashboard/provider/support"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="server" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
+							Provider Setup
+						</h3>
+						<p class="text-xs text-neutral-500">Share your resources</p>
+					</div>
+				</a>
+			{/if}
 
 			<a
 				href="/dashboard/rentals"

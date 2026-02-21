@@ -349,6 +349,13 @@
 	/**
 	 * Open Chatwoot widget with contract context for messaging the provider.
 	 */
+	function formatSshKeyDisplay(key: string): string {
+		const parts = key.trim().split(/\s+/);
+		if (parts.length >= 3) return parts[2]; // comment (email/name)
+		if (parts.length === 2) return `...${parts[1].slice(-20)}`; // last 20 of key data
+		return `...${key.slice(-20)}`; // no spaces: show tail
+	}
+
 	function contactProvider(contractId: string, providerPubkey: string) {
 		// @ts-expect-error - Chatwoot global
 		if (typeof window !== 'undefined' && window.$chatwoot) {
@@ -661,7 +668,7 @@
 								<div
 									class="text-white text-sm font-mono truncate"
 								>
-									{truncateHash(
+									{formatSshKeyDisplay(
 										contract.requester_ssh_pubkey,
 									)}
 								</div>

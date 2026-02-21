@@ -208,6 +208,45 @@ async fn test_get_provider_stats_with_data() {
 }
 
 #[tokio::test]
+async fn test_get_provider_revenue_by_month_empty() {
+    let db = setup_test_db().await;
+    let result = db.get_provider_revenue_by_month(&[1u8; 32]).await.unwrap();
+    assert!(result.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_provider_revenue_by_month_excludes_old_contracts() {
+    // Contracts inserted with created_at_ns = 0 (epoch) are more than 12 months old
+    // and must not appear in the result.
+    let db = setup_test_db().await;
+    let pubkey = vec![3u8; 32];
+    let contract_id = vec![3u8; 32];
+    let requester_pubkey = vec![4u8; 32];
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    {
+        let contract_id_ref: &[u8] = &contract_id;
+        let requester_ref: &[u8] = &requester_pubkey;
+        let pubkey_ref: &[u8] = &pubkey;
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, 'pending', $4, $5, $6, 'usd')",
+            contract_id_ref,
+            requester_ref,
+            pubkey_ref,
+            payment_method,
+            stripe_payment_intent_id,
+            stripe_customer_id
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    let result = db.get_provider_revenue_by_month(&pubkey).await.unwrap();
+    assert!(result.is_empty(), "old contracts must be excluded from the 12-month window");
+}
+
+#[tokio::test]
 async fn test_get_latest_block_timestamp_ns_empty() {
     let db = setup_test_db().await;
     let result = db.get_latest_block_timestamp_ns().await.unwrap();

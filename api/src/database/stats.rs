@@ -113,6 +113,40 @@ impl Database {
         Ok(info)
     }
 
+    /// Get monthly revenue breakdown for a provider (last 12 months)
+    pub async fn get_provider_revenue_by_month(&self, pubkey: &[u8]) -> Result<Vec<RevenueByMonth>> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            month: String,
+            revenue_e9s: i64,
+            contract_count: i64,
+        }
+
+        let rows = sqlx::query_as::<_, Row>(
+            r#"SELECT
+                to_char(to_timestamp(created_at_ns / 1000000000), 'YYYY-MM') as month,
+                COALESCE(SUM(payment_amount_e9s), 0)::BIGINT as revenue_e9s,
+                COUNT(*)::BIGINT as contract_count
+               FROM contract_sign_requests
+               WHERE provider_pubkey = $1
+                 AND created_at_ns > (EXTRACT(EPOCH FROM NOW() - INTERVAL '12 months') * 1000000000)::BIGINT
+               GROUP BY month
+               ORDER BY month ASC"#,
+        )
+        .bind(pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| RevenueByMonth {
+                month: r.month,
+                revenue_e9s: r.revenue_e9s,
+                contract_count: r.contract_count,
+            })
+            .collect())
+    }
+
     /// Get contract stats for a provider
     pub async fn get_provider_stats(&self, pubkey: &[u8]) -> Result<ProviderStats> {
         let total_contracts: i64 = sqlx::query_scalar!(
@@ -785,6 +819,19 @@ pub struct ProviderStats {
     pub pending_contracts: i64,
     pub total_revenue_e9s: i64,
     pub offerings_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct RevenueByMonth {
+    /// Year-month label, e.g. "2024-01"
+    pub month: String,
+    /// Total revenue in e9s for this month
+    #[ts(type = "number")]
+    pub revenue_e9s: i64,
+    /// Number of contracts this month
+    #[ts(type = "number")]
+    pub contract_count: i64,
 }
 
 /// Provider trust metrics for transparency and red flag detection

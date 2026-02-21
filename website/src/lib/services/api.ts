@@ -2334,6 +2334,13 @@ export interface ProviderStats {
 	offerings_count: number;
 }
 
+export interface RevenueByMonth {
+	/** Year-month label, e.g. "2024-01" */
+	month: string;
+	revenue_e9s: number;
+	contract_count: number;
+}
+
 /**
  * Get provider stats (contracts, revenue, offerings count).
  * Public endpoint - no authentication required.
@@ -2351,6 +2358,28 @@ export async function getProviderStats(pubkeyHex: string): Promise<ProviderStats
 
 	if (!payload.success || !payload.data) {
 		throw new Error(payload.error ?? 'Failed to fetch provider stats');
+	}
+
+	return payload.data;
+}
+
+/**
+ * Get monthly revenue breakdown for a provider (last 12 months).
+ * Public endpoint - no authentication required.
+ */
+export async function getProviderRevenueByMonth(pubkeyHex: string): Promise<RevenueByMonth[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/revenue-by-month`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch revenue by month: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<RevenueByMonth[]>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch revenue by month');
 	}
 
 	return payload.data;

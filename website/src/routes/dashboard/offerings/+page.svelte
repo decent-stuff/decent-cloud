@@ -521,7 +521,7 @@
 							{#if offering.resolved_pool_name}
 								<span class="text-primary-400 font-medium">→ {offering.resolved_pool_name}</span>
 							{:else}
-								<span class="inline-flex items-center gap-1 text-amber-400 font-medium"><Icon name="alert" size={20} class="text-amber-400" /> No pool</span>
+								<a href="/dashboard/provider/agents" onclick={(e) => e.stopPropagation()} class="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-medium transition-colors"><Icon name="alert" size={20} class="text-amber-400" /> No pool →</a>
 							{/if}
 						</div>
 						{#if offering.template_name}

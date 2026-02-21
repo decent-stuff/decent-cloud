@@ -7,10 +7,12 @@
 		getProviderFeedbackStats,
 		getProviderBandwidthStats,
 		getProviderOnboarding,
+		getProviderRevenueByMonth,
 		hexEncode,
 		type ProviderStats,
 		type ProviderFeedbackStats,
 		type BandwidthStatsResponse,
+		type RevenueByMonth,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAccountBalance } from "$lib/services/api-reputation";
@@ -21,6 +23,7 @@
 	let stats = $state<ProviderStats | null>(null);
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
+	let revenueByMonth = $state<RevenueByMonth[]>([]);
 	let tokenBalance = $state<number>(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -81,11 +84,12 @@
 				return getProviderBandwidthStats(providerHex, signed.headers).catch(() => []);
 			})();
 
-			const [providerStats, feedback, balance, onboarding] = await Promise.all([
+			const [providerStats, feedback, balance, onboarding, revenueData] = await Promise.all([
 				getProviderStats(providerHex),
 				getProviderFeedbackStats(providerHex).catch(() => null),
 				getAccountBalance(providerHex).catch(() => 0),
 				getProviderOnboarding(providerHex).catch(() => null),
+				getProviderRevenueByMonth(providerHex).catch(() => []),
 			]);
 
 			stats = providerStats;
@@ -93,6 +97,7 @@
 			tokenBalance = balance;
 			bandwidthStats = bandwidthStats_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
+			revenueByMonth = revenueData;
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load earnings data";
 		} finally {
@@ -176,7 +181,52 @@
 				</div>
 			</section>
 
-			<!-- Offerings -->
+			<!-- Revenue Trend (last 12 months) -->
+		{#if revenueByMonth.length > 0}
+			{@const maxRevenue = Math.max(...revenueByMonth.map(m => m.revenue_e9s), 1)}
+			{@const chartHeight = 120}
+			{@const barWidth = Math.min(40, Math.floor(600 / revenueByMonth.length) - 4)}
+			{@const gap = 4}
+			{@const totalWidth = revenueByMonth.length * (barWidth + gap)}
+			<section class="space-y-4">
+				<h2 class="text-xl font-semibold text-white">Revenue Trend</h2>
+				<div class="bg-surface-elevated border border-neutral-800 p-6">
+					<svg
+						viewBox="0 0 {totalWidth} {chartHeight + 30}"
+						class="w-full overflow-visible"
+						aria-label="Monthly revenue chart"
+					>
+						{#each revenueByMonth as month, i}
+							{@const barH = Math.max(2, (month.revenue_e9s / maxRevenue) * chartHeight)}
+							{@const x = i * (barWidth + gap)}
+							{@const y = chartHeight - barH}
+							<g>
+								<rect
+									x={x}
+									y={y}
+									width={barWidth}
+									height={barH}
+									class="fill-primary-500/80 hover:fill-primary-400 transition-colors"
+									rx="2"
+								>
+									<title>{month.month}: ${(month.revenue_e9s / 1e9).toFixed(2)} ({month.contract_count} contracts)</title>
+								</rect>
+								<text
+									x={x + barWidth / 2}
+									y={chartHeight + 14}
+									text-anchor="middle"
+									class="fill-neutral-500 text-[8px]"
+									font-size="8"
+								>{month.month.slice(5)}</text>
+							</g>
+						{/each}
+					</svg>
+					<p class="text-xs text-neutral-500 mt-2">Monthly revenue (last 12 months). Hover bars for details.</p>
+				</div>
+			</section>
+		{/if}
+
+		<!-- Offerings -->
 			<section class="space-y-4">
 				<h2 class="text-xl font-semibold text-white">Offerings</h2>
 				<div class="bg-surface-elevated border border-neutral-800 p-6">
