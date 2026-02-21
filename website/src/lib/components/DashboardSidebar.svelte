@@ -30,6 +30,40 @@
 	let pendingRequestsCount = $state(0);
 	let pendingPasswordResetsCount = $state(0);
 
+	// Section keys and their default collapsed state (false = expanded by default)
+	type SectionKey = 'discover' | 'activity' | 'cloud' | 'provider';
+	const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
+		discover: false,
+		activity: false,
+		cloud: false,
+		provider: true
+	};
+
+	let sectionCollapsed = $state<Record<SectionKey, boolean>>({ ...SECTION_DEFAULTS });
+
+	function loadSectionState(key: SectionKey): boolean {
+		const stored = localStorage.getItem(`sidebar_section_${key}`);
+		if (stored === null) return SECTION_DEFAULTS[key];
+		return stored === 'true';
+	}
+
+	function toggleSection(key: SectionKey) {
+		const next = !sectionCollapsed[key];
+		sectionCollapsed[key] = next;
+		localStorage.setItem(`sidebar_section_${key}`, String(next));
+	}
+
+	// Auto-expand provider section when the user has offerings
+	$effect(() => {
+		if (offeringsCount > 0) {
+			const stored = localStorage.getItem('sidebar_section_provider');
+			if (stored === null || stored === 'true') {
+				sectionCollapsed.provider = false;
+				localStorage.setItem('sidebar_section_provider', 'false');
+			}
+		}
+	});
+
 	const CHATWOOT_BASE_URL =
 		import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
 	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
@@ -143,6 +177,11 @@
 	}
 
 	onMount(() => {
+		// Restore section collapse state from localStorage
+		for (const key of Object.keys(SECTION_DEFAULTS) as SectionKey[]) {
+			sectionCollapsed[key] = loadSectionState(key);
+		}
+
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
 			if (value?.publicKeyBytes) {
@@ -202,176 +241,207 @@
 
 	<!-- Navigation -->
 	<nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-		<!-- Browse section -->
-		<div class="pb-2 px-3 pt-1">
-			<div class="section-label">Browse</div>
-		</div>
-		{#each browseItems as item}
-			{@const isActive =
-				currentPath === item.href ||
-				(item.label === 'Reputation' && currentPath.startsWith('/dashboard/reputation'))}
-			<a
-				href={item.href}
-				onclick={closeSidebar}
-				class="nav-item {isActive ? 'nav-item-active' : ''}"
-			>
-				<Icon name={item.icon} size={20} />
-				<span class="text-sm">{item.label}</span>
-			</a>
-		{/each}
+		<!-- Discover section -->
+		<button
+			type="button"
+			class="section-toggle"
+			onclick={() => toggleSection('discover')}
+			aria-expanded={!sectionCollapsed.discover}
+		>
+			<span class="section-label">Discover</span>
+			<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.discover ? '-rotate-90' : ''}" />
+		</button>
+		{#if !sectionCollapsed.discover}
+			{#each browseItems as item}
+				{@const isActive =
+					currentPath === item.href ||
+					(item.label === 'Reputation' && currentPath.startsWith('/dashboard/reputation'))}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="nav-item {isActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name={item.icon} size={20} />
+					<span class="text-sm">{item.label}</span>
+				</a>
+			{/each}
+		{/if}
 
 		{#if isAuthenticated}
 			<!-- My Activity section -->
-			<div class="pt-5 pb-2 px-3">
-				<div class="section-label">My Activity</div>
-			</div>
-			{#each activityItems as item}
-				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-				<a
-					href={item.href}
-					onclick={closeSidebar}
-					class="nav-item {isActive ? 'nav-item-active' : ''}"
-				>
-					<Icon name={item.icon} size={20} />
-					<span class="text-sm">{item.label}</span>
-				</a>
-			{/each}
+			<button
+				type="button"
+				class="section-toggle mt-3"
+				onclick={() => toggleSection('activity')}
+				aria-expanded={!sectionCollapsed.activity}
+			>
+				<span class="section-label">My Activity</span>
+				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.activity ? '-rotate-90' : ''}" />
+			</button>
+			{#if !sectionCollapsed.activity}
+				{#each activityItems as item}
+					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+					<a
+						href={item.href}
+						onclick={closeSidebar}
+						class="nav-item {isActive ? 'nav-item-active' : ''}"
+					>
+						<Icon name={item.icon} size={20} />
+						<span class="text-sm">{item.label}</span>
+					</a>
+				{/each}
+			{/if}
 
-			<!-- Cloud section -->
-			<div class="pt-5 pb-2 px-3">
-				<div class="section-label">My Cloud</div>
-			</div>
-			{#each cloudItems as item}
-				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-				<a
-					href={item.href}
-					onclick={closeSidebar}
-					class="nav-item {isActive ? 'nav-item-active' : ''}"
-				>
-					<Icon name={item.icon} size={20} />
-					<span class="text-sm">{item.label}</span>
-				</a>
-			{/each}
+			<!-- My Cloud section -->
+			<button
+				type="button"
+				class="section-toggle mt-3"
+				onclick={() => toggleSection('cloud')}
+				aria-expanded={!sectionCollapsed.cloud}
+			>
+				<span class="section-label">My Cloud</span>
+				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.cloud ? '-rotate-90' : ''}" />
+			</button>
+			{#if !sectionCollapsed.cloud}
+				{#each cloudItems as item}
+					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+					<a
+						href={item.href}
+						onclick={closeSidebar}
+						class="nav-item {isActive ? 'nav-item-active' : ''}"
+					>
+						<Icon name={item.icon} size={20} />
+						<span class="text-sm">{item.label}</span>
+					</a>
+				{/each}
+			{/if}
 
 			<!-- Provider section -->
-			<div class="pt-5 pb-2 px-3">
-				<div class="section-label flex items-center gap-2">
+			<button
+				type="button"
+				class="section-toggle mt-3"
+				onclick={() => toggleSection('provider')}
+				aria-expanded={!sectionCollapsed.provider}
+			>
+				<span class="section-label flex items-center gap-2">
 					Provider
 					{#if providerDataError}
 						<span class="status-dot status-dot-danger" title="Failed to load provider data"></span>
 					{/if}
-				</div>
-			</div>
-
-			<!-- Provider Setup -->
-			{@const setupActive =
-				currentPath === providerSetupItem.href ||
-				currentPath.startsWith(providerSetupItem.href)}
-			<a
-				href={providerSetupItem.href}
-				onclick={closeSidebar}
-				class="nav-item {setupActive ? 'nav-item-active' : ''}"
-			>
-				<Icon name={providerSetupItem.icon} size={20} />
-				<span class="text-sm">{providerSetupItem.label}</span>
-				{#if hasOfferings && !onboardingCompleted}
-					<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
-				{/if}
-			</a>
-
-			<!-- Provider items: always visible, locked until onboarding is complete -->
-			{@const providerLocked = !onboardingCompleted}
-			{@const lockedClass = providerLocked ? 'opacity-40 pointer-events-none cursor-not-allowed' : ''}
-			{@const lockedTitle = providerLocked ? 'Complete Provider Setup to unlock' : undefined}
-
-			<!-- My Offerings -->
-			{@const offeringsActive =
-				currentPath === '/dashboard/offerings' ||
-				currentPath.startsWith('/dashboard/offerings')}
-			<a
-				href="/dashboard/offerings"
-				onclick={closeSidebar}
-				class="nav-item {offeringsActive ? 'nav-item-active' : ''} {lockedClass}"
-				title={lockedTitle}
-			>
-				<Icon name="package" size={20} />
-				<span class="text-sm">My Offerings</span>
-				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-			</a>
-
-			<!-- Earnings -->
-			{@const earningsActive =
-				currentPath === '/dashboard/provider/earnings' ||
-				currentPath.startsWith('/dashboard/provider/earnings')}
-			<a
-				href="/dashboard/provider/earnings"
-				onclick={closeSidebar}
-				class="nav-item {earningsActive ? 'nav-item-active' : ''} {lockedClass}"
-				title={lockedTitle}
-			>
-				<Icon name="trending-up" size={20} />
-				<span class="text-sm">Earnings</span>
-				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-			</a>
-
-			<!-- SLA Monitor -->
-			{@const slaActive =
-				currentPath === '/dashboard/provider/sla' ||
-				currentPath.startsWith('/dashboard/provider/sla')}
-			<a
-				href="/dashboard/provider/sla"
-				onclick={closeSidebar}
-				class="nav-item {slaActive ? 'nav-item-active' : ''} {lockedClass}"
-				title={lockedTitle}
-			>
-				<Icon name="shield" size={20} />
-				<span class="text-sm">SLA Monitor</span>
-				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-			</a>
-
-			{#each providerOnboardedItems as item}
-				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				</span>
+				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.provider ? '-rotate-90' : ''}" />
+			</button>
+			{#if !sectionCollapsed.provider}
+				<!-- Provider Setup -->
+				{@const setupActive =
+					currentPath === providerSetupItem.href ||
+					currentPath.startsWith(providerSetupItem.href)}
 				<a
-					href={item.href}
+					href={providerSetupItem.href}
 					onclick={closeSidebar}
-					class="nav-item {isActive ? 'nav-item-active' : ''} {lockedClass}"
+					class="nav-item {setupActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name={providerSetupItem.icon} size={20} />
+					<span class="text-sm">{providerSetupItem.label}</span>
+					{#if hasOfferings && !onboardingCompleted}
+						<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
+					{/if}
+				</a>
+
+				<!-- Provider items: always visible, locked until onboarding is complete -->
+				{@const providerLocked = !onboardingCompleted}
+				{@const lockedClass = providerLocked ? 'opacity-40 pointer-events-none cursor-not-allowed' : ''}
+				{@const lockedTitle = providerLocked ? 'Complete Provider Setup to unlock' : undefined}
+
+				<!-- My Offerings -->
+				{@const offeringsActive =
+					currentPath === '/dashboard/offerings' ||
+					currentPath.startsWith('/dashboard/offerings')}
+				<a
+					href="/dashboard/offerings"
+					onclick={closeSidebar}
+					class="nav-item {offeringsActive ? 'nav-item-active' : ''} {lockedClass}"
 					title={lockedTitle}
 				>
-					<Icon name={item.icon} size={20} />
-					<span class="text-sm">{item.label}</span>
-					{#if item.href === '/dashboard/provider/requests' && !providerLocked}
-						<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
-					{:else if item.href === '/dashboard/provider/password-resets' && !providerLocked}
-						<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
-					{:else if providerLocked}
-						<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
-					{/if}
+					<Icon name="package" size={20} />
+					<span class="text-sm">My Offerings</span>
+					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 				</a>
-			{/each}
 
-			{#if CHATWOOT_BASE_URL}
+				<!-- Earnings -->
+				{@const earningsActive =
+					currentPath === '/dashboard/provider/earnings' ||
+					currentPath.startsWith('/dashboard/provider/earnings')}
 				<a
-					href={supportDashboardUrl}
-					target="_blank"
-					rel="noopener noreferrer"
+					href="/dashboard/provider/earnings"
 					onclick={closeSidebar}
-					class="nav-item {lockedClass}"
-					title={providerLocked ? lockedTitle : 'Open Chatwoot support dashboard'}
+					class="nav-item {earningsActive ? 'nav-item-active' : ''} {lockedClass}"
+					title={lockedTitle}
 				>
-					<Icon name="headphones" size={20} />
-					<span class="text-sm">Support Dashboard</span>
-					{#if providerLocked}
-						<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
-					{:else}
-						<Icon name="external" size={20} class="ml-auto text-neutral-600" />
-					{/if}
+					<Icon name="trending-up" size={20} />
+					<span class="text-sm">Earnings</span>
+					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 				</a>
+
+				<!-- SLA Monitor -->
+				{@const slaActive =
+					currentPath === '/dashboard/provider/sla' ||
+					currentPath.startsWith('/dashboard/provider/sla')}
+				<a
+					href="/dashboard/provider/sla"
+					onclick={closeSidebar}
+					class="nav-item {slaActive ? 'nav-item-active' : ''} {lockedClass}"
+					title={lockedTitle}
+				>
+					<Icon name="shield" size={20} />
+					<span class="text-sm">SLA Monitor</span>
+					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+				</a>
+
+				{#each providerOnboardedItems as item}
+					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+					<a
+						href={item.href}
+						onclick={closeSidebar}
+						class="nav-item {isActive ? 'nav-item-active' : ''} {lockedClass}"
+						title={lockedTitle}
+					>
+						<Icon name={item.icon} size={20} />
+						<span class="text-sm">{item.label}</span>
+						{#if item.href === '/dashboard/provider/requests' && !providerLocked}
+							<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
+						{:else if item.href === '/dashboard/provider/password-resets' && !providerLocked}
+							<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
+						{:else if providerLocked}
+							<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
+						{/if}
+					</a>
+				{/each}
+
+				{#if CHATWOOT_BASE_URL}
+					<a
+						href={supportDashboardUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						onclick={closeSidebar}
+						class="nav-item {lockedClass}"
+						title={providerLocked ? lockedTitle : 'Open Chatwoot support dashboard'}
+					>
+						<Icon name="headphones" size={20} />
+						<span class="text-sm">Support Dashboard</span>
+						{#if providerLocked}
+							<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
+						{:else}
+							<Icon name="external" size={20} class="ml-auto text-neutral-600" />
+						{/if}
+					</a>
+				{/if}
 			{/if}
 		{/if}
 
 		{#if isAdmin}
 			<!-- Admin section -->
-			<div class="pt-5 pb-2 px-3">
+			<div class="pt-3 pb-2 px-3">
 				<div class="section-label">Admin</div>
 			</div>
 			<a

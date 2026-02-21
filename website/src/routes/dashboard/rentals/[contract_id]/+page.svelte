@@ -36,6 +36,7 @@
 	import { formatRelativeTime } from "$lib/utils/contract-format";
 	import Icons from "$lib/components/Icons.svelte";
 	import type { IconName } from "$lib/components/Icons.svelte";
+	import Breadcrumb from "$lib/components/Breadcrumb.svelte";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
 	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
 	import {
@@ -733,12 +734,20 @@
 </script>
 
 <div class="space-y-8">
-	<!-- Breadcrumb -->
-	<nav class="text-sm text-neutral-500">
-		<a href="/dashboard/rentals" class="hover:text-white transition-colors">My Rentals</a>
-		<span class="mx-2">/</span>
-		<span class="text-white">{truncateHash(contractId)}</span>
-	</nav>
+	<Breadcrumb items={[
+		{ label: 'Dashboard', href: '/dashboard' },
+		{ label: 'My Rentals', href: '/dashboard/rentals' },
+		{ label: `Contract #${truncateHash(contractId)}` },
+	]} />
+
+	<!-- Mobile back button -->
+	<button
+		onclick={() => history.back()}
+		class="md:hidden fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-surface-elevated border border-neutral-700 text-neutral-300 hover:text-white shadow-lg transition-colors"
+		aria-label="Go back"
+	>
+		← Back
+	</button>
 
 	{#if !isAuthenticated}
 		<div class="card p-8 border border-neutral-800 text-center">

@@ -111,6 +111,40 @@ export function formatTimeRemaining(
 	return { text: `${Math.floor(remainingD)}d left`, urgency: 'normal' };
 }
 
+const PROVISIONING_STATUSES = new Set(['provisioning', 'pending', 'accepted']);
+const STUCK_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Returns elapsed time string (e.g. "2m ago") if the contract is in a
+ * provisioning-like state, otherwise null.
+ * Uses status_updated_at_ns when available (transition into current state),
+ * falling back to created_at_ns.
+ */
+export function getProvisioningElapsed(
+	status: string,
+	created_at_ns: number,
+	status_updated_at_ns?: number
+): string | null {
+	if (!PROVISIONING_STATUSES.has(status.toLowerCase())) return null;
+	const ref_ns = status_updated_at_ns ?? created_at_ns;
+	return formatRelativeTime(ref_ns);
+}
+
+/**
+ * Returns true when a contract has been in a provisioning-like state for
+ * more than 30 minutes, indicating something may be wrong.
+ */
+export function isProvisioningStuck(
+	status: string,
+	created_at_ns: number,
+	status_updated_at_ns?: number
+): boolean {
+	if (!PROVISIONING_STATUSES.has(status.toLowerCase())) return false;
+	const ref_ns = status_updated_at_ns ?? created_at_ns;
+	const elapsedMs = Date.now() - ref_ns / 1_000_000;
+	return elapsedMs > STUCK_THRESHOLD_MS;
+}
+
 /**
  * Format duration from nanoseconds to human-readable string.
  */

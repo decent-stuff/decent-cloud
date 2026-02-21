@@ -23,6 +23,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncatePubkey } from '$lib/utils/identity';
+	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 
 	const offeringId = parseInt($page.params.id ?? '', 10);
 
@@ -38,6 +39,7 @@
 	let copyLinkFeedback = $state(false);
 	let icpPriceUsd = $state<number | null>(null);
 	let savedIds = $state(new Set<number>());
+	let trustWarningDismissed = $state(false);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -57,6 +59,7 @@
 		} finally {
 			loading = false;
 		}
+		trustWarningDismissed = sessionStorage.getItem(`trust_warning_dismissed_${offeringId}`) === '1';
 		if (isAuthenticated) {
 			try {
 				const info = await authStore.getSigningIdentity();
@@ -188,12 +191,20 @@
 </script>
 
 <div class="space-y-6 max-w-5xl">
-	<!-- Breadcrumb -->
-	<nav class="text-sm text-neutral-500">
-		<a href="/dashboard/marketplace" class="hover:text-white transition-colors">Marketplace</a>
-		<span class="mx-2">/</span>
-		<span class="text-white">{offering?.offer_name ?? '...'}</span>
-	</nav>
+	<Breadcrumb items={[
+		{ label: 'Dashboard', href: '/dashboard' },
+		{ label: 'Marketplace', href: '/dashboard/marketplace' },
+		{ label: offering?.offer_name ?? '…' },
+	]} />
+
+	<!-- Mobile back button -->
+	<button
+		onclick={() => history.back()}
+		class="md:hidden fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-2.5 bg-surface-elevated border border-neutral-700 text-neutral-300 hover:text-white shadow-lg transition-colors"
+		aria-label="Go back"
+	>
+		← Back
+	</button>
 
 	{#if successMessage}
 		<div class="bg-success/10 border border-success/20 p-3 text-success text-sm">
@@ -217,6 +228,35 @@
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else if offering}
+	<!-- Trust warning banners -->
+	{#if trustMetrics && trustMetrics.total_contracts === 0}
+		<div class="bg-blue-500/10 border border-blue-500/30 p-4 flex items-start gap-3">
+			<span class="text-blue-400 shrink-0 text-base leading-none mt-0.5">ℹ</span>
+			<p class="text-sm text-blue-300">
+				This is a new provider with no completed contracts yet.
+				Consider starting with a short rental to test reliability.
+			</p>
+		</div>
+	{:else if !trustWarningDismissed && trustMetrics && Number(trustMetrics.trust_score) < 60}
+		<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-start justify-between gap-4">
+			<div class="flex items-start gap-3">
+				<span class="text-amber-400 shrink-0 text-base leading-none mt-0.5">⚠</span>
+				<p class="text-sm text-amber-300">
+					This provider has a low trust score ({Number(trustMetrics.trust_score)}%). New or underperforming providers may be less reliable.
+				</p>
+			</div>
+			<div class="flex items-center gap-3 shrink-0">
+				<a
+					href="/dashboard/marketplace?types={offering.product_type.toLowerCase().split(' ')[0]}"
+					class="text-xs text-amber-400 hover:text-amber-300 underline whitespace-nowrap"
+				>See alternatives</a>
+				<button
+					onclick={() => { trustWarningDismissed = true; sessionStorage.setItem(`trust_warning_dismissed_${offeringId}`, '1'); }}
+					class="text-xs text-neutral-400 hover:text-white whitespace-nowrap"
+				>I understand, continue</button>
+			</div>
+		</div>
+	{/if}
 		<div class="grid grid-cols-1 lg:grid-cols-[1fr_272px] gap-6 items-start">
 		<div class="space-y-6">
 		<!-- Header -->

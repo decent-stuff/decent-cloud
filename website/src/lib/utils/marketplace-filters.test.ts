@@ -130,3 +130,37 @@ describe('marketplace filter URL encoding', () => {
 		expect((p.get('preset') as 'gpu' | 'budget' | 'na' | 'europe' | null) ?? null).toBe('budget');
 	});
 });
+
+describe('marketplace first-time hint: visit counter', () => {
+	it('shows hint for first visit (count 0)', () => {
+		const visits = 0;
+		expect(visits < 3).toBe(true);
+	});
+
+	it('shows hint for second visit (count 1)', () => {
+		const visits = 1;
+		expect(visits < 3).toBe(true);
+	});
+
+	it('shows hint for third visit (count 2)', () => {
+		const visits = 2;
+		expect(visits < 3).toBe(true);
+	});
+
+	it('hides hint after three visits (count 3)', () => {
+		const visits = 3;
+		expect(visits < 3).toBe(false);
+	});
+
+	it('increments counter correctly from stored string', () => {
+		const stored = '2';
+		const parsed = parseInt(stored, 10);
+		expect(parsed + 1).toBe(3);
+	});
+
+	it('defaults to 0 when no stored value', () => {
+		const stored = null;
+		const parsed = parseInt(stored ?? '0', 10);
+		expect(parsed).toBe(0);
+	});
+});

@@ -33,7 +33,7 @@ const STATUS_BADGES: Record<string, ContractStatusBadge> = {
 		icon: '🟢'
 	},
 	provisioning: {
-		text: 'Provisioning',
+		text: 'Provisioning (5–15 min)',
 		class: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
 		icon: '⚙️'
 	},

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime, formatTimeRemaining } from './contract-format';
+import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime, formatTimeRemaining, getProvisioningElapsed, isProvisioningStuck } from './contract-format';
 
 describe('contract formatting helpers', () => {
 	it('formats timestamps into readable strings', () => {
@@ -117,6 +117,79 @@ describe('contract formatting helpers', () => {
 		it('formats fractional minutes clearly', () => {
 			const ninetySecondsNs = 90 * 1_000_000_000;
 			expect(formatDuration(ninetySecondsNs)).toBe('1.5min');
+		});
+	});
+
+	describe('getProvisioningElapsed', () => {
+		const NOW_MS = 1_700_000_000_000;
+		const NOW_NS = NOW_MS * 1_000_000;
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('returns null for non-provisioning statuses', () => {
+			vi.setSystemTime(NOW_MS);
+			expect(getProvisioningElapsed('active', NOW_NS - 5 * 60 * 1_000_000_000)).toBeNull();
+			expect(getProvisioningElapsed('cancelled', NOW_NS)).toBeNull();
+			expect(getProvisioningElapsed('requested', NOW_NS)).toBeNull();
+		});
+
+		it('returns elapsed string for provisioning status using status_updated_at_ns', () => {
+			vi.setSystemTime(NOW_MS);
+			const twoMinAgoNs = NOW_NS - 2 * 60 * 1_000_000_000;
+			const result = getProvisioningElapsed('provisioning', NOW_NS - 10 * 60 * 1_000_000_000, twoMinAgoNs);
+			expect(result).toBe('2m ago');
+		});
+
+		it('falls back to created_at_ns when status_updated_at_ns is absent', () => {
+			vi.setSystemTime(NOW_MS);
+			const fiveMinAgoNs = NOW_NS - 5 * 60 * 1_000_000_000;
+			const result = getProvisioningElapsed('pending', fiveMinAgoNs);
+			expect(result).toBe('5m ago');
+		});
+
+		it('returns elapsed string for accepted status', () => {
+			vi.setSystemTime(NOW_MS);
+			const oneHourAgoNs = NOW_NS - 60 * 60 * 1_000_000_000;
+			const result = getProvisioningElapsed('accepted', NOW_NS, oneHourAgoNs);
+			expect(result).toBe('1h ago');
+		});
+	});
+
+	describe('isProvisioningStuck', () => {
+		const NOW_MS = 1_700_000_000_000;
+		const NOW_NS = NOW_MS * 1_000_000;
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('returns false for non-provisioning statuses regardless of age', () => {
+			vi.setSystemTime(NOW_MS);
+			const oldNs = NOW_NS - 60 * 60 * 1_000_000_000; // 1 hour ago
+			expect(isProvisioningStuck('active', oldNs)).toBe(false);
+			expect(isProvisioningStuck('requested', oldNs)).toBe(false);
+		});
+
+		it('returns false for provisioning contract under 30 minutes old', () => {
+			vi.setSystemTime(NOW_MS);
+			const tenMinAgoNs = NOW_NS - 10 * 60 * 1_000_000_000;
+			expect(isProvisioningStuck('provisioning', tenMinAgoNs)).toBe(false);
+		});
+
+		it('returns true for provisioning contract over 30 minutes old', () => {
+			vi.setSystemTime(NOW_MS);
+			const fortyMinAgoNs = NOW_NS - 40 * 60 * 1_000_000_000;
+			expect(isProvisioningStuck('provisioning', NOW_NS, fortyMinAgoNs)).toBe(true);
+		});
+
+		it('uses status_updated_at_ns over created_at_ns for stuck detection', () => {
+			vi.setSystemTime(NOW_MS);
+			// created_at_ns is old but status_updated_at_ns is recent (just transitioned)
+			const oldCreatedNs = NOW_NS - 2 * 60 * 60 * 1_000_000_000;
+			const recentStatusNs = NOW_NS - 5 * 60 * 1_000_000_000;
+			expect(isProvisioningStuck('provisioning', oldCreatedNs, recentStatusNs)).toBe(false);
 		});
 	});
 

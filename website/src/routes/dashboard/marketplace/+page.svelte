@@ -24,7 +24,9 @@
 	let isAuthenticated = $state(false);
 	let savedIds = $state(new Set<number>());
 	const PROVIDER_CTA_KEY = 'dc-provider-cta-dismissed';
+	const FIRST_TIME_HINT_KEY = 'dc-marketplace-hint-visits';
 	let providerCtaDismissed = $state(false);
+	let showFirstTimeHint = $state(false);
 	let showAuthModal = $state(false);
 	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
@@ -361,6 +363,11 @@
 
 	onMount(async () => {
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
+		const hintVisits = parseInt(localStorage.getItem(FIRST_TIME_HINT_KEY) ?? '0', 10);
+		if (hintVisits < 3) {
+			showFirstTimeHint = true;
+			localStorage.setItem(FIRST_TIME_HINT_KEY, String(hintVisits + 1));
+		}
 		readFiltersFromUrl($page.url);
 		const fetches: Promise<unknown>[] = [fetchOfferings(), fetchIcpPrice()];
 		if (isAuthenticated) fetches.push(loadSavedIds().catch((err) => console.error('Failed to load saved offerings:', err)));
@@ -698,6 +705,14 @@
 		if (days <= 366) return "Yearly";
 		return `${days}d`;
 	}
+
+	let hasActiveFilters = $derived(
+		selectedTypes.size > 0 || searchQuery !== '' || selectedRegion !== '' || selectedCountry !== '' ||
+		selectedCity !== '' || minPrice !== null || maxPrice !== null || minCores !== null ||
+		minMemoryGb !== null || minSsdGb !== null || selectedVirt !== '' || unmeteredOnly ||
+		minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly ||
+		quickFilter !== null || selectedPreset !== null
+	);
 
 	let activeFilterChips = $derived.by(() => {
 		const chips: Array<{ label: string; remove: () => void }> = [];
@@ -1107,9 +1122,14 @@
 
 		<!-- Main Content -->
 		<div class="flex-1 min-w-0 space-y-4">
-			<!-- Quick-filter preset pills -->
+			<!-- Quick-filter preset pills with first-time guidance -->
+			<div class="space-y-2">
+			{#if showFirstTimeHint && !hasActiveFilters}
+				<p class="text-xs text-neutral-500">Not sure where to start? Pick what you need:</p>
+			{:else}
+				<p class="text-xs text-neutral-600">I'm looking for...</p>
+			{/if}
 			<div class="flex flex-wrap items-center gap-2">
-				<span class="text-xs text-neutral-500 shrink-0">Quick:</span>
 				<button
 					onclick={() => toggleQuickFilter("newest")}
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'newest' ? 'bg-primary-500/20 text-primary-300 border-primary-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
@@ -1147,6 +1167,7 @@
 				>
 					Europe
 				</button>
+			</div>
 			</div>
 
 			<!-- Search Bar with Icon -->

@@ -9,8 +9,10 @@
 	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, getPendingProviderRequests, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
 	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
+	import { detectUserRole, countActiveRentals, countExpiringSoon, countActiveRentalsAsProvider } from "$lib/utils/role-detection";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
+	import WelcomeModal from "$lib/components/WelcomeModal.svelte";
 	import Icon from "$lib/components/Icons.svelte";
 
 	let dashboardData = $state<DashboardData>({
@@ -43,14 +45,11 @@
 	// Pending provider requests
 	let pendingRequestsCount = $state(0);
 
-	// Getting Started card
-	const GETTING_STARTED_KEY = 'dc-getting-started-dismissed';
-	let gettingStartedDismissed = $state(false);
+	// Platform stats collapsible
+	let platformStatsExpanded = $state(false);
 
-	function dismissGettingStarted() {
-		gettingStartedDismissed = true;
-		if (browser) localStorage.setItem(GETTING_STARTED_KEY, '1');
-	}
+	// Derived role for personalized stats
+	let userRole = $derived(detectUserRole(activity, myOfferings));
 
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
@@ -161,8 +160,6 @@
 	onMount(() => {
 		if (!browser) return;
 
-		gettingStartedDismissed = localStorage.getItem(GETTING_STARTED_KEY) === '1';
-
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
@@ -243,47 +240,14 @@
 	<!-- Page Header -->
 	<div>
 		<h1 class="text-2xl font-bold text-white tracking-tight">Dashboard</h1>
-		<p class="text-neutral-500 text-sm mt-1">Marketplace statistics and quick actions</p>
+		<p class="text-neutral-500 text-sm mt-1">
+			{#if currentIdentity && !activityLoading && !myOfferingsLoading}
+				{userRole === 'provider' ? 'Your provider overview' : userRole === 'tenant' ? 'Your rental overview' : 'Get started with Decent Cloud'}
+			{:else}
+				Marketplace statistics and quick actions
+			{/if}
+		</p>
 	</div>
-
-	<!-- Getting Started card: shown to new users with no contracts and no offerings -->
-	{#if currentIdentity && !gettingStartedDismissed && !activityLoading && !myOfferingsLoading && myOfferings.length === 0 && (activity === null || (activity.rentals_as_requester.length === 0 && activity.offerings_provided.length === 0))}
-		<div class="card p-5 border-primary-500/30 bg-primary-500/5 relative">
-			<button
-				type="button"
-				onclick={dismissGettingStarted}
-				class="absolute top-3 right-3 text-neutral-500 hover:text-white transition-colors"
-				aria-label="Dismiss"
-			>
-				<Icon name="x" size={16} />
-			</button>
-			<div class="flex items-start gap-4">
-				<div class="icon-box-accent shrink-0">
-					<Icon name="star" size={20} />
-				</div>
-				<div class="flex-1 min-w-0">
-					<h2 class="text-base font-semibold text-white mb-1">Deploy your first VM</h2>
-					<p class="text-sm text-neutral-400 mb-4">Browse available offerings on the marketplace and deploy in minutes.</p>
-					<div class="flex flex-wrap gap-3">
-						<a
-							href="/dashboard/marketplace"
-							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
-						>
-							<Icon name="cart" size={16} />
-							<span>Browse Marketplace</span>
-						</a>
-						<a
-							href="/dashboard/provider/support"
-							class="inline-flex items-center gap-2 px-4 py-2 bg-surface-elevated border border-neutral-700 hover:border-neutral-600 text-white text-sm font-medium transition-colors"
-						>
-							<Icon name="server" size={16} />
-							<span>Become a Provider</span>
-						</a>
-					</div>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	{#if pendingRequestsCount > 0}
 		<a
@@ -310,53 +274,224 @@
 		</div>
 	{/if}
 
-	<!-- Stats Grid -->
-	<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-		<div class="metric-card">
-			<div class="flex items-center gap-2 mb-3">
-				<Icon name="server" size={20} class="text-neutral-600" />
-				<span class="metric-label mb-0">Providers</span>
+	<!-- Personalized Stats: role-aware -->
+	{#if !currentIdentity || activityLoading || myOfferingsLoading}
+		<!-- Loading or anonymous: show global platform stats -->
+		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="server" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Providers</span>
+				</div>
+				<p class="metric-value">{dashboardData.totalProviders.toLocaleString()}</p>
+				<p class="metric-subtext">Registered</p>
 			</div>
-			<p class="metric-value">{dashboardData.totalProviders.toLocaleString()}</p>
-			<p class="metric-subtext">Registered</p>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="check" size={20} class="text-success" />
+					<span class="metric-label mb-0">Active</span>
+				</div>
+				<p class="metric-value">{dashboardData.activeProviders.toLocaleString()}</p>
+				<p class="metric-subtext">Online now</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="package" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Offerings</span>
+				</div>
+				<p class="metric-value">{dashboardData.totalOfferings.toLocaleString()}</p>
+				<p class="metric-subtext">Available</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="file" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Contracts</span>
+				</div>
+				<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
+				<p class="metric-subtext">Total</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="shield" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Validators</span>
+				</div>
+				<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
+				<p class="metric-subtext">Active</p>
+			</div>
 		</div>
+	{:else if userRole === 'new'}
+		<!-- New user: prominent Get Started CTAs -->
+		<div class="card p-6 border-primary-500/30 bg-primary-500/5">
+			<h2 class="text-base font-semibold text-white mb-1">Ready to get started?</h2>
+			<p class="text-sm text-neutral-400 mb-5">Choose how you want to use Decent Cloud.</p>
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+				<a
+					href="/dashboard/marketplace"
+					class="group flex flex-col items-center gap-2 p-4 bg-surface-elevated border border-neutral-700 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all text-center"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="cart" size={20} />
+					</div>
+					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Browse Marketplace</span>
+					<span class="text-xs text-neutral-500">Find and rent cloud VMs</span>
+				</a>
+				<a
+					href="/dashboard/account"
+					class="group flex flex-col items-center gap-2 p-4 bg-surface-elevated border border-neutral-700 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all text-center"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="user" size={20} />
+					</div>
+					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Add Cloud Account</span>
+					<span class="text-xs text-neutral-500">Set up your profile</span>
+				</a>
+				<a
+					href="/dashboard/validators"
+					class="group flex flex-col items-center gap-2 p-4 bg-surface-elevated border border-neutral-700 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all text-center"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="shield" size={20} />
+					</div>
+					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">View Validators</span>
+					<span class="text-xs text-neutral-500">Network trust nodes</span>
+				</a>
+			</div>
+		</div>
+	{:else if userRole === 'tenant'}
+		<!-- Tenant personalized stats -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="file" size={20} class="text-primary-500" />
+					<span class="metric-label mb-0">Active Rentals</span>
+				</div>
+				<p class="metric-value">{countActiveRentals(activity)}</p>
+				<p class="metric-subtext">Running now</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="download" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Total Spent</span>
+				</div>
+				<p class="metric-value text-base">
+					{((activity?.rentals_as_requester ?? []).reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				</p>
+				<p class="metric-subtext">ICP lifetime</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="clock" size={20} class="text-amber-500" />
+					<span class="metric-label mb-0">Expiring Soon</span>
+				</div>
+				<p class="metric-value {countExpiringSoon(activity, 7) > 0 ? 'text-amber-400' : ''}">{countExpiringSoon(activity, 7)}</p>
+				<p class="metric-subtext">Within 7 days</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="package" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Total Contracts</span>
+				</div>
+				<p class="metric-value">{activity?.rentals_as_requester.length ?? 0}</p>
+				<p class="metric-subtext">All time</p>
+			</div>
+		</div>
+	{:else}
+		<!-- Provider personalized stats -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="server" size={20} class="text-primary-500" />
+					<span class="metric-label mb-0">Active Offerings</span>
+				</div>
+				<p class="metric-value">{myOfferings.length}</p>
+				<p class="metric-subtext">Listed</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="file" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Active Rentals</span>
+				</div>
+				<p class="metric-value">{countActiveRentalsAsProvider(activity)}</p>
+				<p class="metric-subtext">As provider</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="check" size={20} class="text-success" />
+					<span class="metric-label mb-0">Earnings</span>
+				</div>
+				<p class="metric-value text-base">
+					{((activity?.rentals_as_provider ?? []).filter(c => c.status === 'active' || c.status === 'provisioned').reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				</p>
+				<p class="metric-subtext">ICP active</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="inbox" size={20} class="text-amber-500" />
+					<span class="metric-label mb-0">Pending</span>
+				</div>
+				<p class="metric-value {pendingRequestsCount > 0 ? 'text-amber-400' : ''}">{pendingRequestsCount}</p>
+				<p class="metric-subtext">Requests</p>
+			</div>
+		</div>
+	{/if}
 
-		<div class="metric-card">
-			<div class="flex items-center gap-2 mb-3">
-				<Icon name="check" size={20} class="text-success" />
-				<span class="metric-label mb-0">Active</span>
-			</div>
-			<p class="metric-value">{dashboardData.activeProviders.toLocaleString()}</p>
-			<p class="metric-subtext">Online now</p>
+	<!-- Platform Overview (collapsible, shown to authenticated users with a role) -->
+	{#if currentIdentity && !activityLoading && !myOfferingsLoading && userRole !== 'new'}
+		<div>
+			<button
+				type="button"
+				onclick={() => platformStatsExpanded = !platformStatsExpanded}
+				class="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-400 transition-colors"
+			>
+				<Icon name={platformStatsExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
+				Platform Overview
+			</button>
+			{#if platformStatsExpanded}
+				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3">
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-3">
+							<Icon name="server" size={20} class="text-neutral-600" />
+							<span class="metric-label mb-0">Providers</span>
+						</div>
+						<p class="metric-value">{dashboardData.totalProviders.toLocaleString()}</p>
+						<p class="metric-subtext">Registered</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-3">
+							<Icon name="check" size={20} class="text-success" />
+							<span class="metric-label mb-0">Active</span>
+						</div>
+						<p class="metric-value">{dashboardData.activeProviders.toLocaleString()}</p>
+						<p class="metric-subtext">Online now</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-3">
+							<Icon name="package" size={20} class="text-neutral-600" />
+							<span class="metric-label mb-0">Offerings</span>
+						</div>
+						<p class="metric-value">{dashboardData.totalOfferings.toLocaleString()}</p>
+						<p class="metric-subtext">Available</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-3">
+							<Icon name="file" size={20} class="text-neutral-600" />
+							<span class="metric-label mb-0">Contracts</span>
+						</div>
+						<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
+						<p class="metric-subtext">Total</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-3">
+							<Icon name="shield" size={20} class="text-neutral-600" />
+							<span class="metric-label mb-0">Validators</span>
+						</div>
+						<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
+						<p class="metric-subtext">Active</p>
+					</div>
+				</div>
+			{/if}
 		</div>
-
-		<div class="metric-card">
-			<div class="flex items-center gap-2 mb-3">
-				<Icon name="package" size={20} class="text-neutral-600" />
-				<span class="metric-label mb-0">Offerings</span>
-			</div>
-			<p class="metric-value">{dashboardData.totalOfferings.toLocaleString()}</p>
-			<p class="metric-subtext">Available</p>
-		</div>
-
-		<div class="metric-card">
-			<div class="flex items-center gap-2 mb-3">
-				<Icon name="file" size={20} class="text-neutral-600" />
-				<span class="metric-label mb-0">Contracts</span>
-			</div>
-			<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
-			<p class="metric-subtext">Total</p>
-		</div>
-
-		<div class="metric-card">
-			<div class="flex items-center gap-2 mb-3">
-				<Icon name="shield" size={20} class="text-neutral-600" />
-				<span class="metric-label mb-0">Validators</span>
-			</div>
-			<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
-			<p class="metric-subtext">Active</p>
-		</div>
-	</div>
+	{/if}
 
 	<!-- Quick Actions -->
 	<div class="card p-5">
@@ -663,4 +798,9 @@
 		onClose={() => selectedOfferingForRental = null}
 		onSuccess={handleRentalSuccess}
 	/>
+{/if}
+
+<!-- Welcome Modal: shown only on first login -->
+{#if currentIdentity}
+	<WelcomeModal />
 {/if}

@@ -138,26 +138,18 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. Blocked: billing decisions first.
 
-- **[Onboarding] First-login welcome flow** — New users land on a dashboard with no guidance. Add a 3-step dismissible modal on first login: (1) value prop + key concepts, (2) role selection (tenant vs provider), (3) navigate to relevant page. Persist `onboarding_completed` in localStorage. Single-session.
-
-- **[Sidebar] Semantic grouping to reduce cognitive load** — Sidebar has 14+ items in a flat list. Reorganize into collapsible sections: **Discover** (Browse, Reputation, Validators), **My Rentals** (Saved, Rentals, Transfers, Invoices), **My Cloud** (Cloud Accounts, Resources), **Provider** (collapsed by default, shows lock + "Complete setup" CTA until onboarded). Single-session.
-
-- **[Dashboard] Role-aware home stats** — Replace 5 global platform stats (meaningless to new tenants) with personalized stats: tenants see Active Rentals / Total Spent / Expiring Soon; providers see Active Offerings / Active Rentals / Earnings This Month. Move "Deploy your first VM" CTA to a sticky top banner (like email verification banner) for users with zero rentals. Single-session.
-
-- **[Marketplace] Guided search for first-time users** — The 15+ filter options are overwhelming for newcomers. Add a "I'm looking for..." section above filters with preset personas (Budget VM, GPU Server, High-Trust Provider, Specific Region); each pre-populates relevant filters. Hide advanced filters behind an "Advanced" toggle by default. Single-session.
-
-- **[Marketplace] Low-trust provider warning on offering detail** — New users cannot tell reliable from unreliable providers. Add a dismissible amber warning banner on the offering detail page if provider trust < 60%: "⚠️ This provider is new/low-trust. [See alternatives]". Color-code the trust badge (green ≥90%, yellow 80-89%, red <80%). Single-session.
-
-- **[Rentals] Provisioning status clarity** — "⚙️ Provisioning" with no ETA causes anxiety. Change label to "⚙️ Provisioning (5–15 min)"; add a tooltip explaining each stage; show relative elapsed time (auto-refreshing every 10s); add "Contact provider" link if stuck > 30 min. Single-session.
-
-- **[Marketplace] Trust Score explanation tooltip** — Trust % badge shown on cards/detail but never explained. Add ℹ️ icon with tooltip: "% of contracts completed on-time. 90%+ = Excellent, 80–89% = Good, <80% = Caution." Add a "Trust Breakdown" section on offering detail sidebar (completed count, on-time %, uptime). Single-session.
-
-- **[Rentals] Pending contract guidance** — Tab labels ("Pending", "Active") have no explanation. Add tooltips per tab explaining what each status means and what the user should do. Show a "What's next?" info box on the rentals page when the user has pending contracts. Single-session.
-
-- **[Mobile] Breadcrumbs on detail pages** — Nested pages (e.g., `/dashboard/rentals/[id]`) have no breadcrumb — users don't know how to go back. Add `My Rentals > Contract #xyz` breadcrumb at the top of all detail pages; add a floating "Back" button on mobile. Single-session.
-
 - **[Provider] Setup wizard** — `/dashboard/provider/support` is a 2000+ line wall-of-form. Break into a 3-step wizard (Support Portal → Contact Methods → Help Center Profile) with per-step validation, progress indicator, and a success state linking to offerings. *(Multi-session: refactor form into wizard state machine.)*
 
-- **[Rentals] Empty state "how it works" explainer** — The "No Rentals Yet" empty state is a single line + link. Replace with a 3-column visual explainer: Browse → Rent & Pay → SSH in (5–15 min). Link to docs or demo video. Single-session.
+### Completed (2026-02-21)
 
-- **[Invoices] Empty state billing explainer** — "No invoices yet" with no context. Replace with a step-by-step "When will I see invoices?" explanation + collapsible billing FAQ (how billing works, cancellation policy). Single-session.
+- **[Onboarding] First-login welcome flow** ✅ — `WelcomeModal.svelte`: 3-step modal (value prop → role selection → next steps). `onboarding_completed` + `user_role_preference` persisted in localStorage. Role-detection logic in `role-detection.ts` (23 tests). 20 modal tests.
+- **[Sidebar] Semantic grouping** ✅ — `DashboardSidebar.svelte` reorganized into 4 collapsible sections: Discover, My Activity, My Cloud, Provider. Collapse state persisted per-section in localStorage. Provider section auto-expands when user has offerings. 17 tests.
+- **[Dashboard] Role-aware home stats** ✅ — Dashboard home replaces global 5-stat grid with personalized stats: new users see Get Started CTAs; tenants see Active Rentals / Total Spent / Expiring Soon; providers see Active Offerings / Active Rentals / Earnings / Pending Requests. Global stats moved to collapsible "Platform Overview".
+- **[Marketplace] Guided search for first-time users** ✅ — "Not sure where to start?" hint label above preset pills, shown for first 3 visits (localStorage visit counter). Hint disappears once any filter is active.
+- **[Marketplace] Low-trust provider warning on offering detail** ✅ — Amber dismissible banner when trust < 60% (sessionStorage dismiss key per offering). Blue info box for new providers with 0 contracts. 10 tests in `trust-warning.test.ts`.
+- **[Marketplace] Trust Score explanation tooltip** ✅ — `TrustBadge.svelte` gains `showTooltip` prop (default true) and ℹ️ icon that shows tier legend on hover/click. 11 tests in `TrustBadge.test.ts`.
+- **[Rentals] Provisioning status clarity** ✅ — Status badge text changed to "Provisioning (5–15 min)"; `getProvisioningElapsed()` shows elapsed time in badge; `isProvisioningStuck()` triggers amber color + "Contact provider" link after 30 min. 8 new tests in `contract-format.test.ts`.
+- **[Rentals] Pending contract guidance** ✅ — Dismissible info banner above tabs when `pendingCount > 0` (sessionStorage); "View Pending" button switches tab. Tab titles explain each status on hover.
+- **[Rentals] Empty state "how it works" explainer** ✅ — 3-step card row (Browse → Rent & Pay → SSH In) replaces single-line empty state when user has zero contracts.
+- **[Invoices] Empty state billing explainer** ✅ — Structured 2-section layout: "When will I see invoices?" checklist + "How billing works" numbered steps + collapsible FAQ (refunds, payment methods, missing invoice).
+- **[Mobile] Breadcrumbs on detail pages** ✅ — Reusable `Breadcrumb.svelte` component (8 tests). Added to contract detail (`My Rentals › Contract #xyz`) and offering detail (`Marketplace › [Name]`) pages. Mobile floating "← Back" button on both.

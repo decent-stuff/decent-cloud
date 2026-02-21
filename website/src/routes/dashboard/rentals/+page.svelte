@@ -18,6 +18,8 @@
 		formatContractPrice as formatPrice,
 		truncateContractHash as truncateHash,
 		formatTimeRemaining,
+		getProvisioningElapsed,
+		isProvisioningStuck,
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
@@ -38,12 +40,19 @@
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
 	let icpPriceUsd = $state<number | null>(null);
+	let pendingGuidanceDismissed = $state(
+		typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pending_guidance_dismissed') === '1'
+	);
 
 	const spendingStats = $derived({
 		total: contracts.length,
 		active: contracts.filter(c => ['active', 'provisioned'].includes(c.status)).length,
 		totalSpentIcp: contracts.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
 	});
+
+	const pendingCount = $derived(
+		contracts.filter(c => ['requested', 'pending'].includes(c.status.toLowerCase())).length
+	);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -478,20 +487,59 @@
 			></div>
 		</div>
 	{:else if contracts.length === 0}
-		<div class="text-center py-16">
-			<span class="text-6xl mb-4 block">📋</span>
+		<div class="text-center py-12">
+			<span class="text-5xl mb-4 block">📋</span>
 			<h3 class="text-2xl font-bold text-white mb-2">No Rentals Yet</h3>
-			<p class="text-neutral-500 mb-6">
-				You haven't created any rental requests yet
-			</p>
+			<p class="text-neutral-500 mb-8">Get started in three steps</p>
+			<div class="flex items-center justify-center gap-3 max-w-2xl mx-auto mb-8">
+				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
+					<div class="text-2xl mb-2">🔍</div>
+					<div class="text-xs font-bold text-neutral-300 mb-1">1. Browse</div>
+					<div class="text-xs text-neutral-500">Find VMs from providers</div>
+				</div>
+				<div class="text-neutral-600 text-xl shrink-0">→</div>
+				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
+					<div class="text-2xl mb-2">💳</div>
+					<div class="text-xs font-bold text-neutral-300 mb-1">2. Rent &amp; Pay</div>
+					<div class="text-xs text-neutral-500">Pay with ICP or card</div>
+				</div>
+				<div class="text-neutral-600 text-xl shrink-0">→</div>
+				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
+					<div class="text-2xl mb-2">🖥️</div>
+					<div class="text-xs font-bold text-neutral-300 mb-1">3. SSH In</div>
+					<div class="text-xs text-neutral-500">Ready in 5–15 min</div>
+				</div>
+			</div>
 			<a
 				href="/dashboard/marketplace"
-				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 transition-all"
+				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all"
 			>
-				Browse Marketplace
+				Browse Marketplace →
 			</a>
 		</div>
 	{:else}
+		<!-- Pending guidance banner -->
+		{#if pendingCount > 0 && !pendingGuidanceDismissed}
+			<div class="bg-primary-500/10 border border-primary-500/30 p-4 flex items-start gap-3">
+				<span class="text-xl shrink-0">📋</span>
+				<div class="flex-1 min-w-0">
+					<p class="text-primary-300 font-semibold text-sm">You have {pendingCount} pending rental request{pendingCount > 1 ? 's' : ''}</p>
+					<p class="text-neutral-400 text-xs mt-0.5">Providers typically respond within 1–24 hours. Once accepted, your VM will be provisioned automatically. You'll receive a notification when it's ready.</p>
+				</div>
+				<div class="flex items-center gap-2 shrink-0">
+					<button
+						onclick={() => { activeTab = 'pending'; }}
+						class="px-3 py-1 text-xs font-medium bg-primary-500/20 text-primary-300 border border-primary-500/30 hover:bg-primary-500/30 transition-colors"
+					>View Pending</button>
+					<button
+						onclick={() => { pendingGuidanceDismissed = true; sessionStorage.setItem('pending_guidance_dismissed', '1'); }}
+						class="text-neutral-500 hover:text-neutral-300 transition-colors text-lg leading-none"
+						aria-label="Dismiss"
+					>×</button>
+				</div>
+			</div>
+		{/if}
+
 		<!-- Search -->
 		<div class="relative">
 			<input
@@ -532,13 +580,14 @@
 		<!-- Status filter tab bar -->
 		<div class="flex gap-1 border-b border-neutral-800 mb-2">
 			{#each [
-				{ key: 'all', label: 'All', count: contracts.length },
-				{ key: 'active', label: 'Active', count: contracts.filter((c) => c.status.toLowerCase() === 'active').length },
-				{ key: 'pending', label: 'Pending', count: contracts.filter((c) => PENDING_STATUSES.has(c.status.toLowerCase())).length },
-				{ key: 'cancelled', label: 'Cancelled / Failed', count: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase())).length },
+				{ key: 'all', label: 'All', count: contracts.length, title: 'All your rental contracts' },
+				{ key: 'active', label: 'Active', count: contracts.filter((c) => c.status.toLowerCase() === 'active').length, title: 'VMs currently running and accessible' },
+				{ key: 'pending', label: 'Pending', count: contracts.filter((c) => PENDING_STATUSES.has(c.status.toLowerCase())).length, title: 'Awaiting provider acceptance or VM provisioning' },
+				{ key: 'cancelled', label: 'Cancelled / Failed', count: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase())).length, title: 'Terminated or rejected contracts' },
 			] as tab}
 				<button
 					onclick={() => { activeTab = tab.key as typeof activeTab; }}
+					title={tab.title}
 					class="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px {activeTab === tab.key ? 'border-primary-400 text-white' : 'border-transparent text-neutral-500 hover:text-neutral-300'}"
 				>
 					{tab.label}
@@ -554,6 +603,8 @@
 				{@const isHighlighted = highlightedContractId === contract.contract_id}
 				{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
 				{@const nextStep = getNextStepInfo(contract.status, contract.payment_status)}
+				{@const provisioningElapsed = getProvisioningElapsed(contract.status, contract.created_at_ns, contract.status_updated_at_ns)}
+				{@const provisioningStuck = isProvisioningStuck(contract.status, contract.created_at_ns, contract.status_updated_at_ns)}
 				{@const expiryInfo = (() => {
 					const endNs = contract.end_timestamp_ns ?? contract.current_period_end_ns;
 					return ['active', 'provisioned'].includes(contract.status.toLowerCase()) ? formatTimeRemaining(endNs) : null;
@@ -572,11 +623,23 @@
 									{offeringNames.get(parseInt(contract.offering_id, 10)) ?? contract.offering_id}
 								</h3>
 								<span
-									class="inline-flex items-center gap-1 px-3 py-1  text-xs font-medium border {statusBadge.class}"
+									class="inline-flex items-center gap-1 px-3 py-1  text-xs font-medium border {provisioningStuck ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : statusBadge.class}"
 								>
 									<span>{statusBadge.icon}</span>
 									{statusBadge.text}
+									{#if provisioningElapsed}
+										<span class="opacity-70 font-normal">· {provisioningElapsed}</span>
+									{/if}
 								</span>
+								{#if provisioningStuck}
+									<span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30">
+										Taking longer than usual ·
+										<button
+											onclick={(e) => { e.preventDefault(); e.stopPropagation(); contactProvider(contract.contract_id, contract.provider_pubkey); }}
+											class="underline hover:no-underline"
+										>Contact provider</button>
+									</span>
+								{/if}
 								{#if expiryInfo}
 									<span class="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded {
 										expiryInfo.urgency === 'critical' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :

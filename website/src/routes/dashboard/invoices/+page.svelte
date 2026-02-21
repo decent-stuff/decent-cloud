@@ -149,18 +149,58 @@
 			<div class="animate-spin h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else if isAuthenticated && invoiceContracts.length === 0}
-		<div class="text-center py-16">
-			<span class="text-6xl mb-4 block">🧾</span>
-			<h3 class="text-2xl font-bold text-white mb-2">No Invoices Yet</h3>
-			<p class="text-neutral-500 mb-6">
-				Invoices will appear here once you have paid rental contracts.
-			</p>
-			<a
-				href="/dashboard/marketplace"
-				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all"
-			>
-				Browse Marketplace
-			</a>
+		<div class="space-y-6">
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div class="bg-surface-elevated border border-neutral-800 p-6">
+					<h3 class="text-sm font-semibold text-neutral-300 uppercase tracking-wide mb-3">When will I see invoices?</h3>
+					<ul class="space-y-2 text-sm text-neutral-400">
+						<li class="flex items-start gap-2"><span class="text-emerald-400 mt-0.5">✓</span> A provider accepts your rental request</li>
+						<li class="flex items-start gap-2"><span class="text-emerald-400 mt-0.5">✓</span> Your VM is provisioned and running</li>
+						<li class="flex items-start gap-2"><span class="text-emerald-400 mt-0.5">✓</span> Each billing period (monthly)</li>
+					</ul>
+				</div>
+				<div class="bg-surface-elevated border border-neutral-800 p-6">
+					<h3 class="text-sm font-semibold text-neutral-300 uppercase tracking-wide mb-3">How billing works</h3>
+					<ol class="space-y-2 text-sm text-neutral-400 list-none">
+						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">1.</span> You pay upfront when renting (ICP or card)</li>
+						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">2.</span> Invoice is generated immediately after payment</li>
+						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">3.</span> Download anytime from this page</li>
+					</ol>
+				</div>
+			</div>
+
+			<div class="flex justify-center">
+				<a
+					href="/dashboard/marketplace"
+					class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all"
+				>
+					Browse Marketplace →
+				</a>
+			</div>
+
+			<div class="border border-neutral-800 divide-y divide-neutral-800">
+				<details class="group">
+					<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm text-neutral-400 hover:text-white transition-colors select-none">
+						<span>Can I get a refund?</span>
+						<span class="text-neutral-600 group-open:rotate-180 transition-transform">&#9660;</span>
+					</summary>
+					<p class="px-4 pb-4 text-sm text-neutral-500">Contracts are prepaid; contact your provider for partial refunds.</p>
+				</details>
+				<details class="group">
+					<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm text-neutral-400 hover:text-white transition-colors select-none">
+						<span>What payment methods are accepted?</span>
+						<span class="text-neutral-600 group-open:rotate-180 transition-transform">&#9660;</span>
+					</summary>
+					<p class="px-4 pb-4 text-sm text-neutral-500">ICP tokens and credit/debit cards via Stripe.</p>
+				</details>
+				<details class="group">
+					<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm text-neutral-400 hover:text-white transition-colors select-none">
+						<span>Why is my invoice missing?</span>
+						<span class="text-neutral-600 group-open:rotate-180 transition-transform">&#9660;</span>
+					</summary>
+					<p class="px-4 pb-4 text-sm text-neutral-500">Invoices appear after payment is confirmed (may take a few minutes).</p>
+				</details>
+			</div>
 		</div>
 	{:else if isAuthenticated}
 		<!-- Invoice table -->
