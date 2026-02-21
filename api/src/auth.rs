@@ -742,6 +742,85 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ProviderOrAgentAuth {
     }
 }
 
+/// API token bearer authentication.
+/// Accepts `Authorization: Bearer <hex-token>` header.
+/// Looks up the token by SHA-256 hash, updates last_used_at, and returns the owning user's pubkey.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Constructed by poem framework as an API extractor, not directly in user code
+pub struct BearerAuth {
+    pub pubkey: Vec<u8>,
+}
+
+impl<'a> poem_openapi::ApiExtractor<'a> for BearerAuth {
+    const TYPES: &'static [poem_openapi::ApiExtractorType] =
+        &[poem_openapi::ApiExtractorType::RequestObject];
+    const PARAM_IS_REQUIRED: bool = true;
+
+    type ParamType = ();
+    type ParamRawType = ();
+
+    fn register(registry: &mut poem_openapi::registry::Registry) {
+        registry.create_security_scheme(
+            "BearerAuth",
+            MetaSecurityScheme {
+                ty: "http",
+                description: Some("API token authentication via Authorization: Bearer <token>"),
+                name: None,
+                key_in: None,
+                scheme: Some("bearer"),
+                bearer_format: Some("hex"),
+                flows: None,
+                openid_connect_url: None,
+            },
+        );
+    }
+
+    fn security_schemes() -> Vec<&'static str> {
+        vec!["BearerAuth"]
+    }
+
+    async fn from_request(
+        request: &'a poem::Request,
+        _body: &mut poem::RequestBody,
+        _param_opts: poem_openapi::ExtractParamOptions<Self::ParamType>,
+    ) -> poem::Result<Self> {
+        use crate::database::api_tokens::hash_token_hex;
+
+        let auth_header = request
+            .headers()
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AuthError::MissingHeader("Authorization".to_string()))?;
+
+        let token_hex = auth_header
+            .strip_prefix("Bearer ")
+            .ok_or_else(|| {
+                AuthError::InvalidFormat(
+                    "Authorization header must be 'Bearer <token>'".to_string(),
+                )
+            })?;
+
+        let token_hash = hash_token_hex(token_hex)
+            .map_err(|e| AuthError::InvalidFormat(format!("Invalid token: {}", e)))?;
+
+        let db = request
+            .data::<std::sync::Arc<crate::database::Database>>()
+            .ok_or_else(|| {
+                AuthError::InternalError("Database not available in request context".to_string())
+            })?;
+
+        let pubkey = db
+            .lookup_api_token_pubkey(&token_hash)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Token lookup failed: {}", e)))?
+            .ok_or_else(|| {
+                AuthError::InvalidSignature("Invalid or expired API token".to_string())
+            })?;
+
+        Ok(BearerAuth { pubkey })
+    }
+}
+
 /// Authenticate an agent from a plain poem request (for use in non-OpenAPI handlers like SSE).
 ///
 /// Reads X-Agent-Pubkey, X-Signature, X-Timestamp, X-Nonce headers, verifies signature,

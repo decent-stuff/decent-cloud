@@ -3,6 +3,7 @@ pub const DEFAULT_DATABASE_URL: &str = "postgres://test:test@localhost:5432/test
 
 pub mod accounts;
 pub mod acme_dns;
+pub mod api_tokens;
 pub mod agent_delegations;
 pub mod agent_pools;
 pub mod bandwidth;

@@ -1552,6 +1552,65 @@ impl Database {
         Ok(result.rows_affected())
     }
 
+    /// Bulk update monthly_price for multiple offerings.
+    ///
+    /// Accepts a list of `(id, price_e9s)` pairs where `price_e9s` is the price in nanocents
+    /// (1 USD = 1_000_000_000 price_e9s). Converts to `monthly_price` float for storage.
+    /// All updates execute in a single transaction; ownership is verified atomically.
+    /// Returns the count of rows updated.
+    pub async fn bulk_update_offering_prices(
+        &self,
+        pubkey: &[u8],
+        updates: &[(i64, i64)],
+    ) -> Result<u64> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        let ids: Vec<i64> = updates.iter().map(|(id, _)| *id).collect();
+
+        let mut tx = self.pool.begin().await?;
+
+        // Verify all offerings belong to this provider atomically
+        let id_placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
+        let pubkey_placeholder = format!("${}", ids.len() + 1);
+        let verify_query = format!(
+            "SELECT COUNT(*) FROM provider_offerings WHERE id IN ({}) AND pubkey = {}",
+            id_placeholders.join(","),
+            pubkey_placeholder
+        );
+
+        let mut verify_builder = sqlx::query_scalar::<_, i64>(&verify_query);
+        for id in &ids {
+            verify_builder = verify_builder.bind(id);
+        }
+        verify_builder = verify_builder.bind(pubkey);
+
+        let count: i64 = verify_builder.fetch_one(&mut *tx).await?;
+        if count != ids.len() as i64 {
+            return Err(anyhow::anyhow!(
+                "Not all offerings belong to this provider or some IDs are invalid"
+            ));
+        }
+
+        // Update each offering's price within the transaction
+        let mut rows_affected = 0u64;
+        for (id, price_e9s) in updates {
+            let monthly_price = *price_e9s as f64 / 1_000_000_000.0;
+            let result = sqlx::query!(
+                "UPDATE provider_offerings SET monthly_price = $1 WHERE id = $2",
+                monthly_price,
+                id
+            )
+            .execute(&mut *tx)
+            .await?;
+            rows_affected += result.rows_affected();
+        }
+
+        tx.commit().await?;
+        Ok(rows_affected)
+    }
+
     /// Import offerings from CSV data
     /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
     pub async fn import_offerings_csv(

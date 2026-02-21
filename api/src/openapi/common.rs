@@ -82,6 +82,25 @@ pub struct BulkUpdateStatusRequest {
     pub stock_status: String,
 }
 
+/// A single price update item for bulk price updates.
+#[derive(Debug, Deserialize, Serialize, Object, Clone)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OfferingPriceUpdate {
+    /// Database ID of the offering to update.
+    pub id: i64,
+    /// New price in nanocents (1 USD = 1_000_000_000 price_e9s).
+    pub price_e9s: i64,
+}
+
+/// Request body for bulk price updates on a provider's offerings.
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct BulkUpdatePricesRequest {
+    pub updates: Vec<OfferingPriceUpdate>,
+}
+
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]

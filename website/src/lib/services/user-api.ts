@@ -142,4 +142,46 @@ export class UserApiClient {
 		const path = `/api/v1/providers/${pubkeyHex}/contacts/${contactId}`;
 		return this.authenticatedFetch('DELETE', path);
 	}
+
+	// API Tokens
+	async createApiToken(
+		pubkeyHex: string,
+		name: string,
+		expiresInDays?: number
+	): Promise<{ id: string; name: string; token: string; createdAt: number; expiresAt?: number }> {
+		const path = `/api/v1/users/${pubkeyHex}/api-tokens`;
+		const res = await this.authenticatedFetch('POST', path, {
+			name,
+			expiresInDays: expiresInDays ?? null
+		});
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) {
+			throw new Error(data.error || 'Failed to create API token');
+		}
+		return data.data;
+	}
+
+	async listApiTokens(
+		pubkeyHex: string
+	): Promise<Array<{ id: string; name: string; createdAt: number; lastUsedAt?: number; expiresAt?: number; isActive: boolean }>> {
+		const path = `/api/v1/users/${pubkeyHex}/api-tokens`;
+		const res = await this.authenticatedFetch('GET', path);
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) {
+			throw new Error(data.error || 'Failed to list API tokens');
+		}
+		return data.data ?? [];
+	}
+
+	async revokeApiToken(pubkeyHex: string, tokenId: string): Promise<void> {
+		const path = `/api/v1/users/${pubkeyHex}/api-tokens/${tokenId}`;
+		const res = await this.authenticatedFetch('DELETE', path);
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) {
+			throw new Error(data.error || 'Failed to revoke API token');
+		}
+	}
 }

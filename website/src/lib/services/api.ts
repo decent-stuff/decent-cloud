@@ -558,6 +558,41 @@ export async function deleteProviderOffering(
 	}
 }
 
+export interface OfferingPriceUpdate {
+	id: number;
+	price_e9s: number;
+}
+
+export async function bulkUpdateOfferingPrices(
+	pubkey: string | Uint8Array,
+	updates: OfferingPriceUpdate[],
+	headers: SignedRequestHeaders
+): Promise<number> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/bulk-prices`;
+
+	const response = await fetch(url, {
+		method: 'PATCH',
+		headers,
+		body: JSON.stringify({ updates })
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(
+			`Failed to update offering prices: ${response.status} ${response.statusText}\n${errorText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<number>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update offering prices');
+	}
+
+	return payload.data ?? 0;
+}
+
 // Visibility Allowlist API functions
 export interface AllowlistEntry {
 	id: number;
@@ -1045,6 +1080,8 @@ export interface Contract {
 	gateway_port_range_end?: number;
 	// Auto-renewal preference
 	auto_renew: boolean;
+	// Set when user has requested a password reset; cleared by agent after completion
+	password_reset_requested_at_ns?: number;
 }
 
 export interface RentalRequestParams {

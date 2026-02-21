@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn test_sla_alert_service_interval() {
         // Verify a 1-hour interval is 3600 seconds
-        assert_eq!(Duration::from_secs(1 * 60 * 60).as_secs(), 3_600);
+        assert_eq!(Duration::from_secs(60 * 60).as_secs(), 3_600);
     }
 
     #[tokio::test]

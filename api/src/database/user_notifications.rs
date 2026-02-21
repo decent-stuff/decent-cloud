@@ -5,7 +5,6 @@ use anyhow::Result;
 #[derive(Debug, Clone)]
 pub struct UserNotification {
     pub id: i64,
-    pub user_pubkey: Vec<u8>,
     pub notification_type: String,
     pub title: String,
     pub body: String,
@@ -53,7 +52,7 @@ impl Database {
         limit: i64,
     ) -> Result<Vec<UserNotification>> {
         let rows = sqlx::query!(
-            r#"SELECT id, user_pubkey, type, title, body, contract_id, read_at, created_at
+            r#"SELECT id, type, title, body, contract_id, read_at, created_at
                FROM user_notifications
                WHERE user_pubkey = $1
                ORDER BY created_at DESC, id DESC
@@ -68,7 +67,6 @@ impl Database {
             .into_iter()
             .map(|r| UserNotification {
                 id: r.id,
-                user_pubkey: r.user_pubkey,
                 notification_type: r.r#type,
                 title: r.title,
                 body: r.body,

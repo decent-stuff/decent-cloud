@@ -1223,6 +1223,7 @@ mod tests {
             gateway_ssh_port: None,
             gateway_port_range_start: None,
             gateway_port_range_end: None,
+            password_reset_requested_at_ns: None,
         };
 
         std::env::remove_var("TELEGRAM_BOT_TOKEN");
@@ -1295,6 +1296,7 @@ mod tests {
             gateway_ssh_port: None,
             gateway_port_range_start: None,
             gateway_port_range_end: None,
+            password_reset_requested_at_ns: None,
         };
 
         std::env::remove_var("TELEGRAM_BOT_TOKEN");
@@ -1368,6 +1370,7 @@ mod tests {
             gateway_ssh_port: None,
             gateway_port_range_start: None,
             gateway_port_range_end: None,
+            password_reset_requested_at_ns: None,
         };
 
         std::env::remove_var("TELEGRAM_BOT_TOKEN");

@@ -341,6 +341,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/023_saved_offerings.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/024_contract_events.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/025_sla_uptime_config.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/026_api_tokens.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -602,6 +603,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "025_sla_uptime_config.sql",
                     include_str!("../../migrations_pg/025_sla_uptime_config.sql"),
+                ),
+                (
+                    "026_api_tokens.sql",
+                    include_str!("../../migrations_pg/026_api_tokens.sql"),
                 ),
             ];
 

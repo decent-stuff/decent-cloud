@@ -137,6 +137,10 @@ pub struct Contract {
     #[ts(type = "number | undefined")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_port_range_end: Option<i32>,
+    /// Timestamp (ns) when user requested a password reset; cleared by agent after completion.
+    #[ts(type = "number | undefined")]
+    #[oai(skip_serializing_if_is_none)]
+    pub password_reset_requested_at_ns: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -243,16 +247,19 @@ impl Database {
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE requester_pubkey = $1 ORDER BY created_at_ns DESC"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.requester_pubkey = $1 ORDER BY c.created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -265,16 +272,19 @@ impl Database {
     pub async fn get_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.provider_pubkey = $1 ORDER BY c.created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -287,16 +297,19 @@ impl Database {
     pub async fn get_pending_provider_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.provider_pubkey = $1 AND c.status IN ('requested', 'pending') ORDER BY c.created_at_ns DESC"#,
             pubkey
         )
         .fetch_all(&self.pool)
@@ -358,16 +371,19 @@ impl Database {
     pub async fn get_contract(&self, contract_id: &[u8]) -> Result<Option<Contract>> {
         let contract = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests WHERE contract_id = $1"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.contract_id = $1"#,
             contract_id
         )
         .fetch_optional(&self.pool)
@@ -380,16 +396,19 @@ impl Database {
     pub async fn list_contracts(&self, limit: i64, offset: i64) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT $1 OFFSET $2"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               ORDER BY c.created_at_ns DESC LIMIT $1 OFFSET $2"#,
             limit,
             offset
         )
@@ -1900,20 +1919,22 @@ impl Database {
     pub async fn get_contracts_for_release(&self) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests
-               WHERE payment_method = 'icpay'
-               AND payment_status = 'succeeded'
-               AND status IN ('active', 'provisioned')
-               ORDER BY created_at_ns ASC"#
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.payment_method = 'icpay'
+               AND c.payment_status = 'succeeded'
+               AND c.status IN ('active', 'provisioned')
+               ORDER BY c.created_at_ns ASC"#
         )
         .fetch_all(&self.pool)
         .await?;
@@ -2975,21 +2996,23 @@ impl Database {
 
         let contracts = sqlx::query_as!(
             Contract,
-            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
-               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
-               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
-               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
-               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
-               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
-               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
-               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
-               FROM contract_sign_requests
-               WHERE auto_renew = TRUE
-                 AND status = 'active'
-                 AND end_timestamp_ns IS NOT NULL
-                 AND end_timestamp_ns <= $1
-                 AND (payment_status = 'succeeded' OR payment_method = 'self_rental')"#,
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               c.offering_id as "offering_id!", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
+               c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
+               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
+               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
+               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
+               pd.password_reset_requested_at_ns
+               FROM contract_sign_requests c
+               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+               WHERE c.auto_renew = TRUE
+                 AND c.status = 'active'
+                 AND c.end_timestamp_ns IS NOT NULL
+                 AND c.end_timestamp_ns <= $1
+                 AND (c.payment_status = 'succeeded' OR c.payment_method = 'self_rental')"#,
             deadline_ns
         )
         .fetch_all(&self.pool)

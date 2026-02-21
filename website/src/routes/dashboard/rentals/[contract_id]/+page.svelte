@@ -45,6 +45,7 @@
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
+	import { createPasswordResetPoller, type PasswordResetPoller } from "$lib/utils/password-reset-poller";
 
 	const contractId = $page.params.contract_id ?? "";
 
@@ -65,8 +66,11 @@
 
 	// Password reset state
 	let passwordResetLoading = $state(false);
-	let passwordResetSuccess = $state(false);
 	let passwordResetError = $state<string | null>(null);
+	let passwordResetComplete = $state(false);
+	let passwordResetTimedOut = $state(false);
+	let passwordResetPolling = $state(false);
+	const passwordResetPoller: PasswordResetPoller = createPasswordResetPoller();
 
 	// Extend contract state
 	let showExtendForm = $state(false);
@@ -208,6 +212,28 @@
 		}
 	}
 
+	function startPasswordResetPolling() {
+		passwordResetPolling = true;
+		passwordResetPoller.start(
+			async () => {
+				await refreshContract();
+				return contract;
+			},
+			async () => {
+				passwordResetPolling = false;
+				passwordResetComplete = true;
+				const signingIdentityInfo = await authStore.getSigningIdentity();
+				if (signingIdentityInfo) {
+					await loadCredentials(signingIdentityInfo);
+				}
+			},
+			() => {
+				passwordResetPolling = false;
+				passwordResetTimedOut = true;
+			},
+		);
+	}
+
 	async function refreshContract() {
 		if (!isAuthenticated || loading) return;
 		try {
@@ -305,6 +331,11 @@
 				await loadFeedback(signingIdentityInfo);
 				await loadBandwidthHistory(signingIdentityInfo);
 				await loadEvents(signingIdentityInfo);
+
+				// If a password reset is already in progress when page loads, start polling
+				if (contract.password_reset_requested_at_ns && !passwordResetPolling) {
+					startPasswordResetPolling();
+				}
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -352,7 +383,8 @@
 
 		try {
 			passwordResetLoading = true;
-			passwordResetSuccess = false;
+			passwordResetComplete = false;
+			passwordResetTimedOut = false;
 			passwordResetError = null;
 
 			const signingIdentityInfo = await authStore.getSigningIdentity();
@@ -368,8 +400,8 @@
 			);
 
 			await requestPasswordReset(contractId, headers);
-			passwordResetSuccess = true;
-			decryptedPassword = null; // Clear cached password
+			decryptedPassword = null; // Clear cached password until reset completes
+			startPasswordResetPolling();
 		} catch (e) {
 			passwordResetError = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -696,6 +728,7 @@
 	onDestroy(() => {
 		unsubscribeAuth?.();
 		stopAutoRefresh();
+		passwordResetPoller.stop();
 	});
 </script>
 
@@ -1163,12 +1196,22 @@
 						<div class="text-neutral-500 text-xs mt-3">Loading credentials...</div>
 					{/if}
 
-					<!-- Password reset request button -->
+					<!-- Password reset section -->
 					{#if contract.status.toLowerCase() === 'provisioned' || contract.status.toLowerCase() === 'active'}
 						<div class="mt-4 pt-3 border-t border-surface-elevated">
-							{#if passwordResetSuccess}
-								<div class="text-green-400 text-sm">
-									Password reset requested. The provider will reset it shortly. Check back in a few minutes.
+							{#if passwordResetComplete}
+								<div class="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/30 p-3 rounded">
+									<span>✓</span>
+									<span>Password reset complete — new credentials below</span>
+								</div>
+							{:else if passwordResetTimedOut}
+								<div class="text-amber-400 text-sm bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+									Reset is taking longer than expected. Please refresh the page.
+								</div>
+							{:else if contract.password_reset_requested_at_ns || passwordResetPolling}
+								<div class="flex items-center gap-2 text-amber-400 text-sm">
+									<div class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-amber-400"></div>
+									<span>Password reset in progress...</span>
 								</div>
 							{:else}
 								<button

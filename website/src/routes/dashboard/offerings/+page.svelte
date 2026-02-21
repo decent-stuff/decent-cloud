@@ -7,6 +7,7 @@
 		duplicateProviderOffering,
 		deleteProviderOffering,
 		getProviderOnboarding,
+		bulkUpdateOfferingPrices,
 		type Offering,
 		type CsvImportResult,
 		getExampleOfferingsCSV,
@@ -38,6 +39,10 @@
 	let duplicatingId = $state<number | null>(null);
 	let deletingId = $state<number | null>(null);
 	let allowlistOffering = $state<Offering | null>(null);
+	let bulkEditMode = $state(false);
+	let bulkPrices = $state<Record<number, string>>({});
+	let savingBulk = $state(false);
+	let bulkError = $state<string | null>(null);
 
 	async function loadOfferings() {
 		try {
@@ -284,6 +289,60 @@
 		}
 	}
 
+	function enterBulkEdit() {
+		bulkPrices = Object.fromEntries(
+			offerings
+				.filter((o) => o.id !== undefined)
+				.map((o) => [o.id as number, o.monthly_price?.toFixed(2) ?? '0.00'])
+		);
+		bulkError = null;
+		bulkEditMode = true;
+	}
+
+	function exitBulkEdit() {
+		bulkEditMode = false;
+		bulkPrices = {};
+		bulkError = null;
+	}
+
+	async function saveBulkPrices() {
+		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes) {
+			bulkError = 'Authentication required';
+			return;
+		}
+
+		savingBulk = true;
+		bulkError = null;
+
+		try {
+			const updates = Object.entries(bulkPrices)
+				.map(([id, priceStr]) => {
+					const price = parseFloat(priceStr);
+					if (isNaN(price) || price < 0) {
+						throw new Error(`Invalid price for offering ID ${id}: "${priceStr}"`);
+					}
+					return { id: parseInt(id, 10), price_e9s: Math.round(price * 1_000_000_000) };
+				});
+
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const path = `/api/v1/providers/${pubkeyHex}/offerings/bulk-prices`;
+			const { signRequest } = await import('$lib/services/auth-api');
+			const signed = await signRequest(currentIdentity.identity, 'PATCH', path, { updates });
+
+			await bulkUpdateOfferingPrices(currentIdentity.publicKeyBytes, updates, signed.headers);
+
+			importSuccess = `Updated prices for ${updates.length} offering${updates.length !== 1 ? 's' : ''}`;
+			setTimeout(() => { importSuccess = null; }, 5000);
+			exitBulkEdit();
+			await loadOfferings();
+		} catch (e) {
+			bulkError = e instanceof Error ? e.message : 'Failed to save prices';
+			console.error('Error saving bulk prices:', e);
+		} finally {
+			savingBulk = false;
+		}
+	}
+
 	onMount(() => {
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			currentIdentity = identity;
@@ -332,50 +391,90 @@
 			<h1 class="text-2xl font-bold text-white tracking-tight">My Offerings</h1>
 			<p class="text-neutral-500">Manage your cloud service offerings</p>
 		</div>
-		<div class="flex gap-3">
-			<a
-				href="/dashboard/offerings/create"
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
-			>
-				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 4v16m8-8H4"
-					/>
-				</svg>
-				Create Offering
-			</a>
-			<button
-				onclick={() => (showTemplateDialog = true)}
-				class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
-				title="Download CSV template with example offerings"
-			>
-				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-					/>
-				</svg>
-				Download Template
-			</button>
-			<button
-				onclick={openEditor}
-				class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
-			>
-				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-					/>
-				</svg>
-				Edit Offerings
-			</button>
+		<div class="flex gap-3 flex-wrap">
+			{#if bulkEditMode}
+				<button
+					onclick={saveBulkPrices}
+					disabled={savingBulk}
+					class="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					{#if savingBulk}
+						<svg class="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+						</svg>
+						Saving...
+					{:else}
+						<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Save All Prices
+					{/if}
+				</button>
+				<button
+					onclick={exitBulkEdit}
+					disabled={savingBulk}
+					class="px-6 py-3 bg-surface-elevated backdrop-blur font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2 disabled:opacity-50"
+				>
+					Cancel
+				</button>
+			{:else}
+				<a
+					href="/dashboard/offerings/create"
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2"
+				>
+					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 4v16m8-8H4"
+						/>
+					</svg>
+					Create Offering
+				</a>
+				<button
+					onclick={() => (showTemplateDialog = true)}
+					class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
+					title="Download CSV template with example offerings"
+				>
+					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+						/>
+					</svg>
+					Download Template
+				</button>
+				<button
+					onclick={openEditor}
+					class="px-6 py-3 bg-surface-elevated backdrop-blur  font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2"
+				>
+					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+						/>
+					</svg>
+					Edit Offerings
+				</button>
+				{#if offerings.length > 0}
+					<button
+						onclick={enterBulkEdit}
+						class="px-6 py-3 bg-surface-elevated backdrop-blur font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2 border border-neutral-700"
+						title="Edit prices for all offerings at once"
+					>
+						<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						Bulk Edit Prices
+					</button>
+				{/if}
+			{/if}
 		</div>
 	</div>
 
@@ -385,6 +484,22 @@
 		>
 			<Icon name="check" size={24} class="text-green-400" />
 			<p class="text-green-400 font-semibold">{importSuccess}</p>
+		</div>
+	{/if}
+
+	{#if bulkError}
+		<div class="bg-red-500/20 border border-red-500/30  p-4 text-red-400">
+			<p class="font-semibold">Bulk price update failed</p>
+			<p class="text-sm mt-1">{bulkError}</p>
+		</div>
+	{/if}
+
+	{#if bulkEditMode}
+		<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-center gap-3">
+			<Icon name="alert" size={20} class="text-amber-400 shrink-0" />
+			<p class="text-amber-300 text-sm">
+				Bulk edit mode active — edit prices below and click <strong>Save All Prices</strong> to apply atomically.
+			</p>
 		</div>
 	{/if}
 
@@ -510,7 +625,21 @@
 						</div>
 						<div class="flex items-center justify-between text-neutral-400">
 							<span>Price</span>
-							<span class="text-white font-medium">{formatPrice(offering)}</span>
+							{#if bulkEditMode && offering.id !== undefined}
+								<div class="flex items-center gap-1">
+									<input
+										type="number"
+										min="0"
+										step="0.01"
+										bind:value={bulkPrices[offering.id]}
+										onclick={(e) => e.stopPropagation()}
+										class="w-24 bg-neutral-800 border border-neutral-600 focus:border-primary-400 text-white text-sm px-2 py-1 rounded outline-none text-right"
+									/>
+									<span class="text-neutral-500 text-xs">{offering.currency}/mo</span>
+								</div>
+							{:else}
+								<span class="text-white font-medium">{formatPrice(offering)}</span>
+							{/if}
 						</div>
 						{#if offering.datacenter_country}
 							<div class="flex items-center justify-between text-neutral-400">

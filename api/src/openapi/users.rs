@@ -3,8 +3,49 @@ use super::providers::BandwidthHistoryResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+/// Request body to create an API token
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateApiTokenRequest {
+    pub name: String,
+    /// Expiry in days. None = never expires.
+    #[oai(skip_serializing_if_is_none)]
+    pub expires_in_days: Option<i64>,
+}
+
+/// Response for a newly created token (includes raw token value — shown once).
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedApiTokenResponse {
+    pub id: String,
+    pub name: String,
+    /// The raw token value — store it securely, it will not be shown again.
+    pub token: String,
+    pub created_at: i64,
+    #[oai(skip_serializing_if_is_none)]
+    pub expires_at: Option<i64>,
+}
+
+/// Token summary for listing (no raw token value).
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ApiTokenSummary {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+    #[oai(skip_serializing_if_is_none)]
+    pub last_used_at: Option<i64>,
+    #[oai(skip_serializing_if_is_none)]
+    pub expires_at: Option<i64>,
+    pub is_active: bool,
+}
 
 /// Decode pubkey hex and verify it matches the authenticated user.
 /// Returns an error string on failure.
@@ -388,6 +429,162 @@ impl UsersApi {
 
         match result {
             Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Create API token
+    ///
+    /// Generates a new long-lived API token for programmatic access.
+    /// The raw token is returned once and must be stored securely.
+    #[oai(
+        path = "/users/:pubkey/api-tokens",
+        method = "post",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn create_api_token(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        body: Json<CreateApiTokenRequest>,
+    ) -> Json<ApiResponse<CreatedApiTokenResponse>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db
+            .create_api_token(&pubkey_bytes, &body.0.name, body.0.expires_in_days)
+            .await
+        {
+            Ok((token, raw_hex)) => Json(ApiResponse {
+                success: true,
+                data: Some(CreatedApiTokenResponse {
+                    id: token.id.to_string(),
+                    name: token.name,
+                    token: raw_hex,
+                    created_at: token.created_at,
+                    expires_at: token.expires_at,
+                }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// List API tokens
+    ///
+    /// Returns all API tokens for the authenticated user (raw token values are not returned).
+    #[oai(
+        path = "/users/:pubkey/api-tokens",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn list_api_tokens(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<ApiTokenSummary>>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.list_api_tokens(&pubkey_bytes).await {
+            Ok(tokens) => Json(ApiResponse {
+                success: true,
+                data: Some(
+                    tokens
+                        .into_iter()
+                        .map(|t| {
+                            let is_active = t.is_active();
+                            ApiTokenSummary {
+                                id: t.id.to_string(),
+                                name: t.name,
+                                created_at: t.created_at,
+                                last_used_at: t.last_used_at,
+                                expires_at: t.expires_at,
+                                is_active,
+                            }
+                        })
+                        .collect(),
+                ),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Revoke API token
+    ///
+    /// Revokes an API token by setting its revoked_at timestamp.
+    /// Only the token owner can revoke their own tokens.
+    #[oai(
+        path = "/users/:pubkey/api-tokens/:token_id",
+        method = "delete",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn revoke_api_token(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        token_id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        let token_uuid = match uuid::Uuid::parse_str(&token_id.0) {
+            Ok(u) => u,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid token ID format".to_string()),
+                })
+            }
+        };
+
+        match db.revoke_api_token(token_uuid, &pubkey_bytes).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: None,
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

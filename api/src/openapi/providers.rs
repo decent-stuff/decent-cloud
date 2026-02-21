@@ -1,8 +1,8 @@
 use super::common::{
     check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest, AllowlistAddRequest,
-    ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest,
-    CreatePoolRequest, CreateSetupTokenRequest, CsvImportError, CsvImportResult,
-    DuplicateOfferingRequest, GenerateOfferingsRequest, GenerateOfferingsResponse,
+    ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdatePricesRequest,
+    BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
+    CsvImportResult, DuplicateOfferingRequest, GenerateOfferingsRequest, GenerateOfferingsResponse,
     HelpcenterSyncResponse, LockResponse, NotificationConfigResponse, NotificationUsageResponse,
     OfferingSuggestionsResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
     ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
@@ -1532,6 +1532,63 @@ impl ProvidersApi {
             .bulk_update_stock_status(&pubkey_bytes, &req.offering_ids, &req.stock_status)
             .await
         {
+            Ok(count) => Json(ApiResponse {
+                success: true,
+                data: Some(count),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Bulk update offering prices
+    ///
+    /// Updates `monthly_price` for multiple offerings atomically (requires authentication).
+    /// Accepts a list of `{id, price_e9s}` pairs where `price_e9s` is the price in nanocents
+    /// (1 USD = 1_000_000_000 price_e9s). All offerings must belong to the authenticated provider.
+    #[oai(
+        path = "/providers/:pubkey/offerings/bulk-prices",
+        method = "patch",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn bulk_update_provider_offering_prices(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        req: Json<BulkUpdatePricesRequest>,
+    ) -> Json<ApiResponse<u64>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        let updates: Vec<(i64, i64)> = req
+            .0
+            .updates
+            .iter()
+            .map(|u| (u.id, u.price_e9s))
+            .collect();
+
+        match db.bulk_update_offering_prices(&pubkey_bytes, &updates).await {
             Ok(count) => Json(ApiResponse {
                 success: true,
                 data: Some(count),
@@ -4494,11 +4551,11 @@ pub struct BandwidthHistoryResponse {
 mod tests {
     use super::{BandwidthHistoryResponse, BandwidthStatsResponse};
     use crate::openapi::common::{
-        ApiResponse, AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest,
-        CreatePoolRequest, CreateSetupTokenRequest, CsvImportError, CsvImportResult,
-        DuplicateOfferingRequest, HelpcenterSyncResponse, NotificationConfigResponse,
-        NotificationUsageResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
-        ReconcileRequest, RentalResponseRequest, ResponseMetricsResponse,
+        ApiResponse, AutoAcceptRequest, AutoAcceptResponse, BulkUpdatePricesRequest,
+        BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
+        CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
+        NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
+        ProvisioningStatusRequest, ReconcileRequest, RentalResponseRequest, ResponseMetricsResponse,
         ResponseTimeDistributionResponse, TestNotificationResponse, UpdatePoolRequest,
     };
     use dcc_common::api_types::{
@@ -4950,6 +5007,24 @@ mod tests {
         let raw = r#"{"newOfferingId":"offer-clone-01"}"#;
         let req: DuplicateOfferingRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.new_offering_id, "offer-clone-01");
+    }
+
+    #[test]
+    fn test_bulk_update_prices_request_deserialization() {
+        let raw = r#"{"updates":[{"id":1,"priceE9s":15000000000},{"id":2,"priceE9s":25000000000}]}"#;
+        let req: BulkUpdatePricesRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.updates.len(), 2);
+        assert_eq!(req.updates[0].id, 1);
+        assert_eq!(req.updates[0].price_e9s, 15_000_000_000);
+        assert_eq!(req.updates[1].id, 2);
+        assert_eq!(req.updates[1].price_e9s, 25_000_000_000);
+    }
+
+    #[test]
+    fn test_bulk_update_prices_request_empty_updates() {
+        let raw = r#"{"updates":[]}"#;
+        let req: BulkUpdatePricesRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.updates.len(), 0);
     }
 
     // ── ApiResponse wrapping provider-specific types ─────────────────────────

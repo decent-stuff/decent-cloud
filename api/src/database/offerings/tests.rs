@@ -3275,3 +3275,86 @@ async fn test_unsave_nonexistent_is_ok() {
     // Unsaving something never saved should succeed (no-op)
     db.unsave_offering(&user, 99999).await.expect("unsave of non-existent should not fail");
 }
+
+#[tokio::test]
+async fn test_bulk_update_offering_prices_updates_all() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xAAu8; 32];
+
+    insert_test_offering(&db, 1, &pubkey, "US", 10.0).await;
+    insert_test_offering(&db, 2, &pubkey, "US", 20.0).await;
+    insert_test_offering(&db, 3, &pubkey, "US", 30.0).await;
+
+    let db_id_1 = test_id_to_db_id(1);
+    let db_id_2 = test_id_to_db_id(2);
+    let db_id_3 = test_id_to_db_id(3);
+
+    // 15 USD = 15_000_000_000 e9s
+    let updates = vec![
+        (db_id_1, 15_000_000_000i64),
+        (db_id_2, 25_000_000_000i64),
+        (db_id_3, 35_000_000_000i64),
+    ];
+
+    let rows = db
+        .bulk_update_offering_prices(&pubkey, &updates)
+        .await
+        .expect("bulk update should succeed");
+    assert_eq!(rows, 3);
+
+    let o1 = db.get_offering(db_id_1).await.unwrap().unwrap();
+    let o2 = db.get_offering(db_id_2).await.unwrap().unwrap();
+    let o3 = db.get_offering(db_id_3).await.unwrap().unwrap();
+
+    assert!(
+        (o1.monthly_price - 15.0).abs() < 1e-6,
+        "expected 15.0, got {}",
+        o1.monthly_price
+    );
+    assert!(
+        (o2.monthly_price - 25.0).abs() < 1e-6,
+        "expected 25.0, got {}",
+        o2.monthly_price
+    );
+    assert!(
+        (o3.monthly_price - 35.0).abs() < 1e-6,
+        "expected 35.0, got {}",
+        o3.monthly_price
+    );
+}
+
+#[tokio::test]
+async fn test_bulk_update_offering_prices_empty_is_noop() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xBBu8; 32];
+
+    let rows = db
+        .bulk_update_offering_prices(&pubkey, &[])
+        .await
+        .expect("empty bulk update should succeed");
+    assert_eq!(rows, 0);
+}
+
+#[tokio::test]
+async fn test_bulk_update_offering_prices_rejects_wrong_owner() {
+    let db = setup_test_db().await;
+    let owner = vec![0xCCu8; 32];
+    let attacker = vec![0xDDu8; 32];
+
+    insert_test_offering(&db, 1, &owner, "US", 10.0).await;
+    let db_id_1 = test_id_to_db_id(1);
+
+    let updates = vec![(db_id_1, 999_000_000_000i64)];
+
+    let result = db
+        .bulk_update_offering_prices(&attacker, &updates)
+        .await;
+    assert!(
+        result.is_err(),
+        "should reject update from non-owner"
+    );
+    assert!(
+        result.unwrap_err().to_string().contains("Not all offerings belong to this provider"),
+        "error message should mention ownership"
+    );
+}

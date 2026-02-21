@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT lower(encode(contract_id, 'hex')) as \"contract_id!: String\", lower(encode(requester_pubkey, 'hex')) as \"requester_pubkey!: String\", requester_ssh_pubkey as \"requester_ssh_pubkey!\", requester_contact as \"requester_contact!\", lower(encode(provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               offering_id as \"offering_id!\", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,\n               duration_hours, original_duration_hours, request_memo as \"request_memo!\", created_at_ns, status as \"status!\",\n               provisioning_instance_details, provisioning_completed_at_ns, payment_method as \"payment_method!\", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as \"payment_status!\",\n               currency as \"currency!\", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,\n               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,\n               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(auto_renew, FALSE) as \"auto_renew!: bool\",\n               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end\n               FROM contract_sign_requests WHERE contract_id = $1",
+  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n               pd.password_reset_requested_at_ns\n               FROM contract_sign_requests c\n               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n               WHERE c.provider_pubkey = $1 AND c.status IN ('requested', 'pending') ORDER BY c.created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -262,6 +262,11 @@
         "ordinal": 51,
         "name": "gateway_port_range_end",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 52,
+        "name": "password_reset_requested_at_ns",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
@@ -321,8 +326,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "c46e8ac0288f75917bed347ffabb524cae4e76615b86193afb8c0bcc6ffe2b52"
+  "hash": "089442a6bc7f80b8aa8db291ce006751ae268ca19000e4e2f13b69166ef7cfb8"
 }
