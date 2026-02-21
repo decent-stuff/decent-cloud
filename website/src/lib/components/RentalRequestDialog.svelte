@@ -283,7 +283,11 @@
 
 			// If Stripe payment, redirect to Checkout
 			if (paymentMethod === "stripe" && response.checkoutUrl) {
-				// Redirect to Stripe Checkout
+				// Persist SSH key save intent in localStorage so the rentals page
+				// can complete the save after returning from Stripe Checkout.
+				if (saveKeyToProfile && isCustomKey && !sshKeyValidation && sshKey.trim()) {
+					localStorage.setItem('dc_pending_ssh_save', sshKey.trim());
+				}
 				window.location.href = response.checkoutUrl;
 				return;
 			}

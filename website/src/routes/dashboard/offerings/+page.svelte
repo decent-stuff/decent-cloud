@@ -6,6 +6,7 @@
 		updateProviderOffering,
 		duplicateProviderOffering,
 		deleteProviderOffering,
+		getProviderOnboarding,
 		type Offering,
 		type CsvImportResult,
 		getExampleOfferingsCSV,
@@ -17,6 +18,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
+	import ProviderSetupBanner from '$lib/components/ProviderSetupBanner.svelte';
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
@@ -24,6 +26,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<any>(null);
+	let onboardingCompleted = $state<boolean | null>(null);
 	let showEditorDialog = $state(false);
 	let showEditDialog = $state(false);
 	let showTemplateDialog = $state(false);
@@ -45,7 +48,12 @@
 			}
 
 			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
-			offerings = await getProviderOfferings(pubkeyHex);
+			const [fetchedOfferings, onboarding] = await Promise.all([
+				getProviderOfferings(pubkeyHex),
+				getProviderOnboarding(pubkeyHex).catch(() => null),
+			]);
+			offerings = fetchedOfferings;
+			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offerings';
 			console.error('Error loading offerings:', e);
@@ -315,6 +323,8 @@
 </script>
 
 <div class="space-y-8">
+	<ProviderSetupBanner completed={onboardingCompleted} />
+
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-2xl font-bold text-white tracking-tight">My Offerings</h1>

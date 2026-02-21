@@ -7,10 +7,12 @@
 		createAgentPool,
 		updateAgentPool,
 		deleteAgentPool,
+		getProviderOnboarding,
 		hexEncode,
 	} from "$lib/services/api";
 	import type { AgentPoolWithStats } from "$lib/types/generated/AgentPoolWithStats";
 	import { signRequest } from "$lib/services/auth-api";
+	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 	import AgentPoolTable from "$lib/components/provider/AgentPoolTable.svelte";
@@ -21,6 +23,7 @@
 	let actionMessage = $state<string | null>(null);
 	let providerHex = $state("");
 	let isAuthenticated = $state(false);
+	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
 
 	// Form state
@@ -88,6 +91,7 @@
 			};
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
+			getProviderOnboarding(providerHex).catch(() => null).then(o => { onboardingCompleted = !!o?.onboarding_completed_at; });
 
 			// Fetch pools
 			const signed = await signRequest(
@@ -197,6 +201,8 @@
 </script>
 
 <div class="space-y-8">
+	<ProviderSetupBanner completed={onboardingCompleted} />
+
 	<header class="flex items-center justify-between">
 		<div>
 			<h1 class="text-2xl font-bold text-white tracking-tight">Agents</h1>

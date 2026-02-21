@@ -11,6 +11,7 @@
 		getResellerOrders,
 		fulfillResellerOrder,
 		getProviderOfferings,
+		getProviderOnboarding,
 		hexEncode,
 		type ExternalProvider,
 		type ResellerRelationship,
@@ -21,6 +22,7 @@
 		type Offering,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
+	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -32,6 +34,7 @@
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
 	let providerHex = $state("");
 
@@ -94,6 +97,7 @@
 			};
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
+			getProviderOnboarding(providerHex).catch(() => null).then(o => { onboardingCompleted = !!o?.onboarding_completed_at; });
 
 			// Fetch external providers (no auth required - public endpoint)
 			externalProviders = await getExternalProviders();
@@ -366,6 +370,8 @@
 </script>
 
 <div class="space-y-8">
+	<ProviderSetupBanner completed={onboardingCompleted} />
+
 	<header>
 		<h1 class="text-2xl font-bold text-white tracking-tight">Reseller Program</h1>
 		<p class="text-neutral-500">

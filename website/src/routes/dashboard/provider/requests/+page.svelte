@@ -10,6 +10,7 @@
 		respondToRentalRequest,
 		updateProvisioningStatus,
 		getProviderBandwidthStats,
+		getProviderOnboarding,
 		type Contract,
 		type ProviderRentalResponseParams,
 		type ProvisioningStatusUpdateParams,
@@ -17,6 +18,7 @@
 		hexEncode,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
+	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAutoAcceptSetting, updateAutoAcceptSetting } from "$lib/services/notification-api";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
@@ -33,6 +35,7 @@
 	let responding = $state<Record<string, boolean>>({}),
 		updating = $state<Record<string, boolean>>({});
 	let isAuthenticated = $state(false);
+	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
 	let autoAcceptEnabled = $state(false),
 		autoAcceptUpdating = $state(false);
@@ -131,6 +134,7 @@
 			};
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
+			getProviderOnboarding(providerHex).catch(() => null).then(o => { onboardingCompleted = !!o?.onboarding_completed_at; });
 			console.log(
 				"[Provider Requests] Authenticated as provider:",
 				providerHex,
@@ -299,6 +303,8 @@
 </script>
 
 <div class="space-y-8">
+	<ProviderSetupBanner completed={onboardingCompleted} />
+
 	<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 		<div>
 			<h1 class="text-2xl font-bold text-white tracking-tight mb-2">Provider Requests</h1>

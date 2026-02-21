@@ -74,8 +74,22 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### Tenant (Renter) Experience
 
-- **[Rental flow] Stripe path skips SSH key save to profile** — When paying via Stripe, the page navigates away immediately to Stripe Checkout, so the "save to profile" checkbox action is skipped. The ICPay and direct paths both save correctly. Resolving this requires either a post-payment webhook callback or a session-stored intent to save. *(Low priority: ICPay users are unaffected; Stripe users can add the key manually via Account > Security.)*
+- **[Rental flow] Stripe path SSH key save** — ✅ Fixed: SSH key is now stored in localStorage before Stripe redirect and saved to profile in the rentals page on return.
+
+- **[Contract lifecycle] No email notification link to rentals page** — When a user receives an email notifying them their resource is ready, there is no direct link to the contract in the rentals page. The email should include a deep-link URL with `?contract=<id>` so the user lands directly on the correct contract card. *(Low effort: update email template to include `/dashboard/rentals?contract=<id>`.)*
+
+- **[Marketplace UX] No "become a provider" CTA on marketplace** — When a user with no offerings browses the marketplace, they see only rentable offerings. A secondary CTA (e.g., a banner at the top or a sidebar card: "Have infrastructure to share? Become a provider →") would drive provider acquisition. *(Low effort: add a dismissible banner to the marketplace page for authenticated users with zero offerings.)*
+
+- **[Rentals page] SSH key display is truncated** — The SSH key on the rental card is truncated with `truncateHash()`, but SSH keys start with the same prefix (`ssh-ed25519 AAAA...`) so all truncated previews look identical. Consider showing the last 20 characters of the key instead, or the key comment (email part after the last space). *(Low effort: change truncation display logic.)*
 
 ### Provider Experience
 
-- **[Provider onboarding] Direct navigation to gated routes** — A provider who navigates directly to `/dashboard/offerings` before completing onboarding now sees sidebar items dimmed with "Complete Provider Setup to unlock" tooltip, but the page itself may still render an empty/confusing state. Consider adding a redirect or inline banner on those pages pointing to Provider Setup. *(Impact: Low. Effort: 1 hour.)*
+- **[Provider onboarding] Direct navigation to gated routes** — ✅ Fixed: All gated provider pages (My Offerings, Earnings, Rental Requests, Agents, Reseller) now show an inline "Provider Setup Required" banner when onboarding is incomplete, with a direct link to the setup page.
+
+- **[Provider earnings] No chart for revenue over time** — The earnings page shows totals but no time-series chart. Providers can't see if they're growing or declining. Adding a simple revenue-by-month bar chart would dramatically improve the earnings page. *(Medium effort: requires adding a time-bucketed earnings endpoint and a chart component.)*
+
+- **[Provider agents] Setup token UX is opaque** — The agent setup flow requires generating a setup token and running `dc-agent setup token` manually. There is no status indicator showing whether a dc-agent has successfully connected to the API. The Agents page should show: connected agents, last-seen timestamp, and health status for each pool. *(Medium effort: `last_seen_at` is tracked in DB; surface it in the agent pool table.)*
+
+- **[Offerings] Pool assignment UX** — When a provider creates an offering but has no agent pools, the offering shows a warning ("No pool") but no inline "Create a pool" CTA. The warning banner links to Agents, but a more direct flow would be: clicking "No pool" opens the pool creation dialog inline. *(Low effort: add a link or mini-dialog from the offering card's "No pool" indicator.)*
+
+- **[Dashboard] Quick Actions link to "My Offerings" is ungated** — The dashboard home page's Quick Actions grid links authenticated users to `/dashboard/offerings` regardless of onboarding status. For new providers this shows the "Provider Setup Required" banner, but the link label should instead say "Provider Setup" and go to `/dashboard/provider/support` when onboarding is not complete. *(Medium effort: dashboard home page needs to check onboarding status to conditionally render the link.)*

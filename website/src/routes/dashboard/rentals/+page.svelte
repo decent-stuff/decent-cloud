@@ -19,6 +19,9 @@
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
+	import { UserApiClient } from "$lib/services/user-api";
+	import { get } from "svelte/store";
+	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 
 	let contracts = $state<Contract[]>([]);
 	let offeringNames = $state<Map<number, string>>(new Map());
@@ -218,9 +221,29 @@
 		}
 	}
 
+	// Complete a pending SSH key save that was interrupted by Stripe redirect.
+	// The RentalRequestDialog stores the key in localStorage before redirecting.
+	async function maybeSavePendingSshKey() {
+		const pendingSshKey = localStorage.getItem('dc_pending_ssh_save');
+		if (!pendingSshKey) return;
+		localStorage.removeItem('dc_pending_ssh_save');
+		const identity = get(authStore.activeIdentity);
+		if (!identity?.account?.username || !identity.identity) return;
+		try {
+			const client = new UserApiClient(identity.identity as Ed25519KeyIdentity);
+			const keyType = pendingSshKey.split(' ')[0];
+			await client.addExternalKey(identity.account.username, { keyType, keyData: pendingSshKey });
+		} catch (e) {
+			console.warn('Failed to save SSH key after Stripe payment:', e);
+		}
+	}
+
 	onMount(async () => {
 		// Read contract ID from URL params for deep-linking
 		highlightedContractId = $page.url.searchParams.get("contract");
+
+		// Complete pending SSH key save from Stripe checkout flow (non-blocking)
+		maybeSavePendingSshKey();
 
 		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
 			isAuthenticated = isAuth;

@@ -6,11 +6,13 @@
 		getProviderStats,
 		getProviderFeedbackStats,
 		getProviderBandwidthStats,
+		getProviderOnboarding,
 		hexEncode,
 		type ProviderStats,
 		type ProviderFeedbackStats,
 		type BandwidthStatsResponse,
 	} from "$lib/services/api";
+	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAccountBalance } from "$lib/services/api-reputation";
 	import { signRequest } from "$lib/services/auth-api";
 	import { authStore } from "$lib/stores/auth";
@@ -23,6 +25,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
 
 	function formatRevenue(e9s: number): string {
@@ -78,16 +81,18 @@
 				return getProviderBandwidthStats(providerHex, signed.headers).catch(() => []);
 			})();
 
-			const [providerStats, feedback, balance] = await Promise.all([
+			const [providerStats, feedback, balance, onboarding] = await Promise.all([
 				getProviderStats(providerHex),
 				getProviderFeedbackStats(providerHex).catch(() => null),
 				getAccountBalance(providerHex).catch(() => 0),
+				getProviderOnboarding(providerHex).catch(() => null),
 			]);
 
 			stats = providerStats;
 			feedbackStats = feedback;
 			tokenBalance = balance;
 			bandwidthStats = bandwidthStats_;
+			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load earnings data";
 		} finally {
@@ -105,6 +110,8 @@
 </script>
 
 <div class="space-y-8">
+	<ProviderSetupBanner completed={onboardingCompleted} />
+
 	<header>
 		<h1 class="text-2xl font-bold text-white tracking-tight">Provider Earnings</h1>
 		<p class="text-neutral-500">Revenue, contracts, and customer feedback at a glance</p>
