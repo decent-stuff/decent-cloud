@@ -676,6 +676,175 @@ async fn send_email_password_reset_notification(
     Ok(())
 }
 
+/// Notify the tenant (requester) that their password reset has been completed by dc-agent.
+/// The new credentials are available in their dashboard.
+pub async fn notify_tenant_password_reset_complete(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    contract: &Contract,
+) -> Result<()> {
+    let requester_pubkey =
+        hex::decode(&contract.requester_pubkey).context("Invalid requester pubkey hex")?;
+
+    let config = db
+        .get_user_notification_config(&requester_pubkey)
+        .await
+        .context("Failed to get tenant notification config")?;
+
+    let Some(config) = config else {
+        tracing::debug!(
+            "No notification config for tenant {}, skipping password reset complete notification",
+            contract.requester_pubkey
+        );
+        return Ok(());
+    };
+
+    let tenant_id = &contract.requester_pubkey;
+    let mut channels_sent = Vec::new();
+    let mut errors = Vec::new();
+
+    if config.notify_telegram {
+        if let Some(chat_id) = &config.telegram_chat_id {
+            match send_telegram_tenant_password_reset_complete(chat_id, contract).await {
+                Ok(()) => {
+                    if let Err(e) = db
+                        .increment_notification_usage(tenant_id, "telegram")
+                        .await
+                    {
+                        tracing::error!(
+                            "Failed to increment telegram notification usage for {}: {:#}",
+                            tenant_id,
+                            e
+                        );
+                    }
+                    channels_sent.push("telegram");
+                }
+                Err(e) => errors.push(format!("telegram: {}", e)),
+            }
+        }
+    }
+
+    if config.notify_email {
+        match send_email_tenant_password_reset_complete(
+            db,
+            email_service,
+            &requester_pubkey,
+            contract,
+        )
+        .await
+        {
+            Ok(()) => {
+                if let Err(e) = db.increment_notification_usage(tenant_id, "email").await {
+                    tracing::error!(
+                        "Failed to increment email notification usage for {}: {:#}",
+                        tenant_id,
+                        e
+                    );
+                }
+                channels_sent.push("email");
+            }
+            Err(e) => errors.push(format!("email: {}", e)),
+        }
+    }
+
+    if !channels_sent.is_empty() || !errors.is_empty() {
+        tracing::info!(
+            "Password reset complete notification for tenant on contract {} - sent: [{}], errors: [{}]",
+            &contract.contract_id[..16],
+            channels_sent.join(", "),
+            errors.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+async fn send_telegram_tenant_password_reset_complete(
+    chat_id: &str,
+    contract: &Contract,
+) -> Result<()> {
+    use crate::notifications::telegram::TelegramClient;
+
+    if !TelegramClient::is_configured() {
+        anyhow::bail!("TELEGRAM_BOT_TOKEN not configured");
+    }
+
+    let telegram = TelegramClient::from_env()?;
+
+    let message = format!(
+        "*Password Reset Complete*\n\n\
+        Your password has been reset for contract `{}`.\n\n\
+        Log in to your dashboard to retrieve the new credentials:\n\
+        https://decent-cloud.org/dashboard/rentals?contract={}",
+        &contract.contract_id[..32],
+        contract.contract_id
+    );
+
+    telegram.send_message(chat_id, &message).await?;
+
+    tracing::info!(
+        "Telegram password reset complete notification sent to tenant chat_id: {} for contract {}",
+        chat_id,
+        &contract.contract_id[..16]
+    );
+    Ok(())
+}
+
+async fn send_email_tenant_password_reset_complete(
+    db: &Database,
+    email_service: Option<&Arc<EmailService>>,
+    requester_pubkey: &[u8],
+    contract: &Contract,
+) -> Result<()> {
+    let email_svc = email_service.ok_or_else(|| {
+        anyhow::anyhow!("Email service not configured (missing MAILCHANNELS_API_KEY)")
+    })?;
+
+    let account_id = db
+        .get_account_id_by_public_key(requester_pubkey)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("No account found for tenant pubkey"))?;
+
+    let account = db
+        .get_account(&account_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Account not found"))?;
+
+    let email_addr = account
+        .email
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No email address on tenant account"))?;
+
+    let email_body = format!(
+        "Your password has been reset for contract {}.\n\n\
+        Log in to your dashboard to retrieve the new credentials:\n\
+        https://decent-cloud.org/dashboard/rentals?contract={}\n\n\
+        If you did not request this reset, please contact support.",
+        contract.contract_id, contract.contract_id
+    );
+
+    let from_addr =
+        std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+
+    email_svc
+        .send_email(
+            &from_addr,
+            email_addr,
+            "Password Reset Complete - Decent Cloud",
+            &email_body,
+            false,
+        )
+        .await
+        .context("Failed to send email")?;
+
+    tracing::info!(
+        "Email password reset complete notification sent to tenant {} for contract {}",
+        email_addr,
+        &contract.contract_id[..16]
+    );
+    Ok(())
+}
+
 /// Notify offering owner when a buyer's recipe script fails during provisioning.
 pub async fn notify_offering_owner_recipe_failure(
     db: &Database,
@@ -1060,6 +1229,79 @@ mod tests {
 
         std::env::remove_var("TELEGRAM_BOT_TOKEN");
         let result = send_telegram_password_reset_notification("chat-123", &contract, true).await;
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string().contains("TELEGRAM_BOT_TOKEN"),
+            "expected TELEGRAM_BOT_TOKEN error, got: {}",
+            err
+        );
+    }
+
+    /// Verify that `send_telegram_tenant_password_reset_complete` bails early with a
+    /// descriptive error when TELEGRAM_BOT_TOKEN is absent, covering the fail-fast path
+    /// in the new tenant notification helper.
+    #[tokio::test]
+    async fn test_send_telegram_tenant_password_reset_complete_no_token() {
+        use crate::database::contracts::Contract;
+
+        let contract = Contract {
+            contract_id: "a".repeat(64),
+            requester_pubkey: "b".repeat(64),
+            requester_ssh_pubkey: String::new(),
+            requester_contact: String::new(),
+            provider_pubkey: "c".repeat(64),
+            offering_id: "offering-1".to_string(),
+            region_name: None,
+            instance_config: None,
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: None,
+            end_timestamp_ns: None,
+            duration_hours: Some(24),
+            original_duration_hours: None,
+            request_memo: String::new(),
+            created_at_ns: 0,
+            status: "active".to_string(),
+            provisioning_instance_details: None,
+            provisioning_completed_at_ns: None,
+            payment_method: "stripe".to_string(),
+            stripe_payment_intent_id: None,
+            stripe_customer_id: None,
+            icpay_transaction_id: None,
+            payment_status: "succeeded".to_string(),
+            currency: "USD".to_string(),
+            refund_amount_e9s: None,
+            stripe_refund_id: None,
+            refund_created_at_ns: None,
+            status_updated_at_ns: None,
+            icpay_payment_id: None,
+            icpay_refund_id: None,
+            total_released_e9s: None,
+            last_release_at_ns: None,
+            tax_amount_e9s: None,
+            tax_rate_percent: None,
+            tax_type: None,
+            tax_jurisdiction: None,
+            customer_tax_id: None,
+            reverse_charge: None,
+            buyer_address: None,
+            stripe_invoice_id: None,
+            receipt_number: None,
+            receipt_sent_at_ns: None,
+            stripe_subscription_id: None,
+            subscription_status: None,
+            current_period_end_ns: None,
+            cancel_at_period_end: false,
+            auto_renew: false,
+            gateway_slug: None,
+            gateway_subdomain: None,
+            gateway_ssh_port: None,
+            gateway_port_range_start: None,
+            gateway_port_range_end: None,
+        };
+
+        std::env::remove_var("TELEGRAM_BOT_TOKEN");
+        let result = send_telegram_tenant_password_reset_complete("chat-456", &contract).await;
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(

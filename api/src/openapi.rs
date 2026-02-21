@@ -28,7 +28,7 @@ pub use contracts::ContractsApi;
 pub use invoices::InvoicesApi;
 pub use offerings::OfferingsApi;
 pub use prices::PricesApi;
-pub use providers::ProvidersApi;
+pub use providers::{password_reset_events, ProvidersApi};
 pub use resellers::ResellersApi;
 pub use stats::StatsApi;
 pub use subscriptions::SubscriptionsApi;

@@ -12,6 +12,8 @@
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncateContractHash, formatRelativeTime } from '$lib/utils/contract-format';
 
+	const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
 		publicKeyBytes: Uint8Array;
@@ -23,37 +25,33 @@
 	let isAuthenticated = $state(false);
 	let providerHex = $state('');
 	let signingIdentityInfo = $state<SigningIdentity | null>(null);
-
-	// Auto-refresh state
-	let refreshInterval: ReturnType<typeof setInterval> | null = null;
-	let autoRefreshEnabled = $state(true);
 	let lastRefresh = $state<number>(Date.now());
-	const REFRESH_INTERVAL_MS = 30_000;
+	let sseConnected = $state(false);
 
+	let eventSource: EventSource | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 
-	function startAutoRefresh() {
-		stopAutoRefresh();
-		if (autoRefreshEnabled && isAuthenticated) {
-			refreshInterval = setInterval(() => {
-				refreshData();
-			}, REFRESH_INTERVAL_MS);
-		}
+	function connectSSE() {
+		if (!isAuthenticated || !providerHex) return;
+		closeSSE();
+		const url = `${API_BASE_URL}/api/v1/providers/${providerHex}/password-reset-events`;
+		eventSource = new EventSource(url);
+		eventSource.addEventListener('password-reset-count', () => {
+			loadData();
+		});
+		eventSource.onopen = () => {
+			sseConnected = true;
+		};
+		eventSource.onerror = () => {
+			sseConnected = false;
+		};
 	}
 
-	function stopAutoRefresh() {
-		if (refreshInterval) {
-			clearInterval(refreshInterval);
-			refreshInterval = null;
-		}
-	}
-
-	function toggleAutoRefresh() {
-		autoRefreshEnabled = !autoRefreshEnabled;
-		if (autoRefreshEnabled) {
-			startAutoRefresh();
-		} else {
-			stopAutoRefresh();
+	function closeSSE() {
+		if (eventSource) {
+			eventSource.close();
+			eventSource = null;
+			sseConnected = false;
 		}
 	}
 
@@ -61,7 +59,6 @@
 		if (!isAuthenticated || loading) return;
 		try {
 			await loadData();
-			lastRefresh = Date.now();
 		} catch (e) {
 			console.error('[Password Resets] Error refreshing:', e);
 		}
@@ -118,18 +115,17 @@
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
 			isAuthenticated = isAuth;
 			if (isAuth) {
-				loadData();
-				startAutoRefresh();
+				loadData().then(() => connectSSE());
 			} else {
 				loading = false;
-				stopAutoRefresh();
+				closeSSE();
 			}
 		});
 	});
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
-		stopAutoRefresh();
+		closeSSE();
 	});
 </script>
 
@@ -143,19 +139,15 @@
 		</div>
 		{#if isAuthenticated}
 			<div class="flex items-center gap-3">
-				<button
-					onclick={toggleAutoRefresh}
-					class="flex items-center gap-2 px-3 py-1.5 text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}"
-					title={autoRefreshEnabled ? 'Auto-refresh enabled (30s)' : 'Auto-refresh disabled'}
-				>
+				<div class="flex items-center gap-2 px-3 py-1.5 text-sm {sseConnected ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}">
 					<span class="relative flex h-2 w-2">
-						{#if autoRefreshEnabled}
+						{#if sseConnected}
 							<span class="animate-ping absolute inline-flex h-full w-full bg-emerald-400 opacity-75"></span>
 						{/if}
-						<span class="relative inline-flex h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+						<span class="relative inline-flex h-2 w-2 {sseConnected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 					</span>
-					Auto-refresh
-				</button>
+					{sseConnected ? 'Live' : 'Disconnected'}
+				</div>
 				<button
 					onclick={refreshData}
 					class="px-3 py-1.5 text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:bg-surface-elevated transition-colors"

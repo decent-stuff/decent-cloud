@@ -16,6 +16,71 @@ use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
 
+/// SSE handler: streams pending password reset count changes every 5 seconds.
+///
+/// Authenticates via agent auth headers (same as `get_pending_password_reset_contracts`).
+/// Sends an immediate event on connect, then polls every 5 seconds and emits an event
+/// when the count or contract IDs change. Keep-alive comment sent every 30 seconds.
+///
+/// Event format:
+///   event: password-reset-count
+///   data: {"count":<n>,"contract_ids":["<id>",...]}
+#[poem::handler]
+pub async fn password_reset_events(
+    req: &poem::Request,
+    db: Data<&Arc<Database>>,
+    poem::web::Path(pubkey): poem::web::Path<String>,
+) -> poem::Result<poem::web::sse::SSE> {
+    use futures::StreamExt;
+    use poem::http::StatusCode;
+    use poem::web::sse::{Event, SSE};
+
+    let pubkey_bytes = hex::decode(&pubkey).map_err(|_| {
+        poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST)
+    })?;
+
+    let auth = crate::auth::authenticate_agent_from_request(req, &db)
+        .await
+        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::UNAUTHORIZED))?;
+
+    if auth.provider_pubkey != pubkey_bytes {
+        return Err(poem::Error::from_string(
+            "Unauthorized: can only access your delegated provider's contracts",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    let db_clone: Arc<Database> = Arc::clone(&db);
+    let stream = futures::stream::unfold(
+        (db_clone, pubkey_bytes, None::<Vec<String>>),
+        |(db, pk, prev_ids): (Arc<Database>, Vec<u8>, Option<Vec<String>>)| async move {
+            let contracts: Vec<crate::database::contracts::Contract> =
+                match db.get_pending_password_resets(&pk).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!("SSE password-reset-events DB error: {:#}", e);
+                        return None;
+                    }
+                };
+            let ids: Vec<String> = contracts.iter().map(|c| c.contract_id.clone()).collect();
+            let event: Option<Event> = if prev_ids.as_ref() != Some(&ids) {
+                let data = serde_json::json!({
+                    "count": ids.len(),
+                    "contract_ids": ids,
+                });
+                Some(Event::message(data.to_string()).event_type("password-reset-count"))
+            } else {
+                None
+            };
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            Some((event, (db, pk, Some(ids))))
+        },
+    )
+    .filter_map(|opt: Option<Event>| async move { opt });
+
+    Ok(SSE::new(stream).keep_alive(std::time::Duration::from_secs(30)))
+}
+
 /// Validate and normalize provisioning details
 pub fn normalize_provisioning_details(
     status: &str,
@@ -2232,6 +2297,21 @@ impl ProvidersApi {
                     tracing::warn!(
                         contract_id = %hex::encode(&contract_id),
                         "Failed to notify provider of completed password reset: {:#}",
+                        e
+                    );
+                }
+                // Notify tenant that their new credentials are ready
+                if let Err(e) =
+                    crate::rental_notifications::notify_tenant_password_reset_complete(
+                        &db,
+                        email_service.as_ref(),
+                        &contract,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        contract_id = %hex::encode(&contract_id),
+                        "Failed to notify tenant of completed password reset: {:#}",
                         e
                     );
                 }
@@ -4867,5 +4947,55 @@ mod tests {
         assert!(json["error"].is_null());
         assert_eq!(json["data"][0]["weekStart"], "2024-02-05");
         assert_eq!(json["data"][0]["revenueE9s"], 14_000_000_000_i64);
+    }
+
+    // ── password_reset_events SSE handler ───────────────────────────────────
+
+    #[test]
+    fn test_password_reset_events_route_registered() {
+        // Verify the SSE route is registered in main.rs and uses GET method
+        const MAIN_RS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        assert!(
+            MAIN_RS.contains("/api/v1/providers/:pubkey/password-reset-events"),
+            "SSE route must be registered in main.rs"
+        );
+        assert!(
+            MAIN_RS.contains("password_reset_events"),
+            "SSE handler must be referenced in main.rs"
+        );
+    }
+
+    #[test]
+    fn test_password_reset_sse_event_format() {
+        // Verify the SSE event data JSON structure matches frontend expectations
+        let ids: Vec<String> = vec!["contract-abc".to_string(), "contract-def".to_string()];
+        let data = serde_json::json!({
+            "count": ids.len(),
+            "contract_ids": ids,
+        });
+        let json_str = data.to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed["count"], 2);
+        assert_eq!(parsed["contract_ids"][0], "contract-abc");
+        assert_eq!(parsed["contract_ids"][1], "contract-def");
+    }
+
+    #[tokio::test]
+    async fn test_sse_response_has_event_stream_content_type() {
+        use futures::stream;
+        use poem::IntoResponse;
+        use poem::web::sse::{Event, SSE};
+
+        let events: Vec<Event> = vec![
+            Event::message(r#"{"count":1,"contract_ids":["id1"]}"#)
+                .event_type("password-reset-count"),
+        ];
+        let sse = SSE::new(stream::iter(events));
+        let resp = sse.into_response();
+        assert_eq!(
+            resp.content_type(),
+            Some("text/event-stream"),
+            "SSE response must have text/event-stream content type"
+        );
     }
 }

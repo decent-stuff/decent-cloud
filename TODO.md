@@ -107,7 +107,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Provider] Earnings fee breakdown** ✅ (2026-02-21) — Revenue Overview restructured to show Gross Revenue / Platform Fee (0 ICP) / Net Earnings rows; Contract Earnings table adds Platform Fee and Net columns.
 - **[Rentals] Contract expiry countdown badge** ✅ (2026-02-21) — `formatTimeRemaining()` added to `contract-format.ts`; rentals list shows "Xd left" / "Xh left" badge (neutral/amber/red) for active and provisioned contracts.
 - **[Marketplace] Filter URL persistence** ✅ (2026-02-21) — All 20 marketplace filter state variables synced to URL search params via `syncFiltersToUrl()` / `readFiltersFromUrl()`. Filters survive navigation and are shareable as URLs.
-- **[Provider] Password reset dashboard** ✅ (2026-02-21) — New page `/dashboard/provider/password-resets` lists active contracts with pending password reset requests. Auto-refreshes every 30s. Added "Password Resets" nav item to provider sidebar.
+- **[Provider] Password reset dashboard** ✅ (2026-02-21) — New page `/dashboard/provider/password-resets` lists active contracts with pending password reset requests. Added "Password Resets" nav item to provider sidebar.
 - **[Provider] Onboarding checklist links fixed** ✅ (2026-02-21) — Provider name / description / website / logo completeness items now link to `/dashboard/account/profile`.
 - **[Marketplace] Provider contact info on offering sidebar** ✅ (2026-02-21) — Offering detail page fetches `ProviderProfile` alongside `ProviderTrustMetrics`; sidebar shows website link and support email when set.
 - **[Provider] Per-contract feedback detail view** ✅ (2026-02-21) — Provider feedback page at `/dashboard/provider/feedback` lists individual tenant feedback with contract IDs and aggregate stats. Sidebar entry "Tenant Feedback" added.
@@ -118,11 +118,31 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Provider] Earnings CSV export** ✅ (2026-02-21) — "Export CSV" button on `/dashboard/provider/earnings` downloads all contract earnings as CSV (contract_id, offering_id, status, amount_icp, duration_hours, created_at).
 - **[Marketplace] Duration cost calculator on offering detail** ✅ (2026-02-21) — Interactive cost estimator on `/dashboard/marketplace/[id]` with preset duration buttons (1h, 12h, 1d, 7d, 30d, 90d); shows ICP + USD equivalent above Rent button.
 - **[Fix] Feedback contract links + login type display** ✅ (2026-02-21) — Feedback page contract IDs are now copyable buttons instead of dead links. Dashboard login type no longer hardcoded as "Seed Phrase".
-- **[Provider] Password reset completion notification** ✅ (2026-02-21) — Providers receive notification (Telegram/email) when dc-agent completes a password reset on their contract.
+- **[Provider] Password reset completion notification to provider** ✅ (2026-02-21) — Providers receive notification (Telegram/email) when dc-agent completes a password reset on their contract.
+- **[Provider] Password reset: real-time SSE + sidebar badge** ✅ (2026-02-21) — New `GET /api/v1/providers/:pubkey/password-reset-events` SSE endpoint replaces 30-second polling on `/dashboard/provider/password-resets`; stream polls DB every 5s and pushes events only on change. Sidebar now shows `UnreadBadge` count for pending password resets, loaded in parallel with rental request count.
+- **[Tenant] Password reset completion notification to tenant** ✅ (2026-02-21) — When dc-agent completes a password reset, the tenant (not just the provider) is now notified via Telegram/email: "Your password has been reset — log in to retrieve new credentials." Implemented via new `notify_tenant_password_reset_complete` in `rental_notifications.rs`, called from `update_contract_password` in `providers.rs`.
+- **[Invoices] Date range filter + text search + spending summary** ✅ (2026-02-21) — Invoice page now has: date range preset buttons (All / 7d / 30d / 90d), text search (by contract ID or provider), status tabs (All / Paid / Pending), and a summary line showing count + total ICP for the current filtered set. All filtering is client-side via `$derived`. 19 unit tests added in `invoice-filter.test.ts`.
 
 ---
 
 ## UX Improvements (Backlog)
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. Blocked: billing decisions first.
-- **[Provider] Password reset: dc-agent push notification** — Consider a real-time push notification (WebSocket or SSE) to the provider dashboard when a password reset is picked up by dc-agent, rather than the current polling approach on `/dashboard/provider/password-resets`.
+
+- **[Dashboard] In-app notification inbox** — A bell icon in the header showing recent in-app notifications (contract status changes, password reset completed, rental request accepted/rejected). Currently all notifications go to Telegram/email only; nothing surfaces inside the app. Needs: `user_notifications` DB table, `GET /api/v1/users/:pubkey/notifications` endpoint, frontend bell dropdown component. Dependency: SSE (done) can push new notification events.
+
+- **[Account] API token management** — Allow users to generate long-lived API tokens for programmatic access (scripts, CI, cli without seed phrase). Needs: `api_tokens` DB table (id, user_pubkey, name, token_hash, created_at, last_used_at, expires_at), token generation/rotation endpoints, and a UI page under `/dashboard/account/security`. Single-session once schema is approved.
+
+- **[Contracts] Contract event timeline** — Chronological audit log of all state transitions for a contract (created → accepted → provisioning → active → cancelled), shown on the contract detail page. Needs a `contract_events` DB table or deriving timeline from existing timestamp columns. Helps tenants debug stuck contracts. Single-session.
+
+- **[Provider] SLA breach alerts** — The SLA monitor page shows data but providers are never alerted when uptime drops below a threshold. Needs: configurable SLA threshold per offering (default 99%), background job checking health check aggregates, notification via Telegram/email when threshold crossed (max 1 alert per hour per contract). Dependency: existing notification system + health check tables.
+
+- **[Marketplace] Offering bookmark/save for later** — Let authenticated users save interesting offerings to a personal watchlist. Simple approach: `saved_offerings` DB table (user_pubkey, offering_id), `POST/DELETE /api/v1/users/:pubkey/saved-offerings/:id`, bookmark icon on offering cards and detail page, dedicated `/dashboard/saved` page. Single-session.
+
+- **[Dashboard] Global command palette (Cmd+K)** — Keyboard-driven search across offerings, contracts, and providers without navigating to different pages. Frontend-only: fuzzy-search against in-memory data (already loaded for sidebar counts). Opens a modal with grouped results (Offerings / My Contracts / Providers). Power-user feature, no API changes needed.
+
+- **[Provider] Bulk pricing update** — Providers with multiple offerings have to edit prices one by one. Add a "Bulk Edit" mode to `/dashboard/offerings` with inline price editing and a single "Save All" call. Needs: `PATCH /api/v1/providers/:pubkey/offerings/bulk` endpoint accepting `[{id, price_e9s}]`. Single-session.
+
+- **[Mobile] Progressive Web App (PWA)** — Add `manifest.json`, service worker, and `<meta>` tags so users can install the app on mobile home screen and receive push notifications. Low effort, high discoverability improvement for mobile users. Separate from SSE — push notifications need a push server (separate item).
+
+- **[Contracts] Password reset in-app status on contract detail** — The contract detail page shows "Password reset requested. Check back in a few minutes." but never updates. After dc-agent completes the reset, the page should show a success banner and re-fetch credentials. Currently relies on SSE (done on provider side); needs a tenant-facing SSE or polling endpoint `GET /api/v1/contracts/:id/events` that emits when `password_reset_requested_at_ns` is cleared.

@@ -742,5 +742,69 @@ impl<'a> poem_openapi::ApiExtractor<'a> for ProviderOrAgentAuth {
     }
 }
 
+/// Authenticate an agent from a plain poem request (for use in non-OpenAPI handlers like SSE).
+///
+/// Reads X-Agent-Pubkey, X-Signature, X-Timestamp, X-Nonce headers, verifies signature,
+/// and resolves the provider pubkey via delegation lookup.
+pub async fn authenticate_agent_from_request(
+    request: &poem::Request,
+    db: &std::sync::Arc<crate::database::Database>,
+) -> Result<AgentAuthenticatedUser, AuthError> {
+    let headers = request.headers();
+
+    let agent_pubkey_hex = headers
+        .get("X-Agent-Pubkey")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Agent-Pubkey".to_string()))?;
+
+    let signature_hex = headers
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+    let timestamp = headers
+        .get("X-Timestamp")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+    let nonce = headers
+        .get("X-Nonce")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
+    let full_path = format!("/api/v1{}", request.uri().path());
+
+    let agent_pubkey = verify_request_signature(
+        agent_pubkey_hex,
+        signature_hex,
+        timestamp,
+        nonce,
+        request.method().as_str(),
+        &full_path,
+        &[], // SSE GET has no body
+        None,
+    )?;
+
+    let delegation = db
+        .get_active_delegation(&agent_pubkey)
+        .await
+        .map_err(|e| AuthError::InternalError(format!("Failed to query delegation: {}", e)))?
+        .ok_or_else(|| {
+            AuthError::InvalidSignature(format!(
+                "No active delegation found for agent key '{}'",
+                hex::encode(&agent_pubkey)
+            ))
+        })?;
+
+    let (provider_pubkey, permissions, _signature, pool_id) = delegation;
+
+    Ok(AgentAuthenticatedUser {
+        agent_pubkey,
+        provider_pubkey,
+        permissions,
+        pool_id,
+    })
+}
+
 #[cfg(test)]
 mod tests;

@@ -1222,6 +1222,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/webhooks/telegram",
             post(openapi::webhooks::telegram_webhook),
         )
+        // SSE: real-time password reset count stream for providers
+        .at(
+            "/api/v1/providers/:pubkey/password-reset-events",
+            get(openapi::password_reset_events),
+        )
         // acme-dns protocol endpoint (used by Caddy acmedns plugin)
         .at("/api/v1/acme-dns/update", post(acme_dns_update))
         // NOTE: CSV operations are now included in OpenAPI schema above

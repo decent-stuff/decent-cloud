@@ -8,6 +8,7 @@
 		getProviderOfferings,
 		getProviderOnboarding,
 		getPendingProviderRequests,
+		getPendingPasswordResets,
 		hexEncode
 	} from '$lib/services/api';
 	import type { ProviderOnboarding } from '$lib/services/api';
@@ -27,6 +28,7 @@
 	let providerDataLoading = $state(false);
 	let providerDataError = $state(false);
 	let pendingRequestsCount = $state(0);
+	let pendingPasswordResetsCount = $state(0);
 
 	const CHATWOOT_BASE_URL =
 		import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
@@ -105,16 +107,24 @@
 				try {
 					const info = await authStore.getSigningIdentity();
 					if (info?.identity instanceof Ed25519KeyIdentity) {
-						const signed = await signRequest(
-							info.identity,
-							'GET',
-							'/api/v1/provider/rental-requests/pending'
-						);
-						const requests = await getPendingProviderRequests(signed.headers);
+						const pubkeyHexSigning = hexEncode(info.publicKeyBytes);
+						const [signedRequests, signedResets] = await Promise.all([
+							signRequest(info.identity, 'GET', '/api/v1/provider/rental-requests/pending'),
+							signRequest(
+								info.identity,
+								'GET',
+								`/api/v1/providers/${pubkeyHexSigning}/contracts/pending-password-reset`
+							)
+						]);
+						const [requests, resets] = await Promise.all([
+							getPendingProviderRequests(signedRequests.headers),
+							getPendingPasswordResets(pubkeyHexSigning, signedResets.headers)
+						]);
 						pendingRequestsCount = requests.length;
+						pendingPasswordResetsCount = resets.length;
 					}
 				} catch {
-					// keep count at 0 - don't break sidebar on error
+					// keep counts at 0 - don't break sidebar on error
 				}
 			}
 		} catch (err) {
@@ -140,6 +150,7 @@
 				offeringsCount = 0;
 				onboardingData = null;
 				pendingRequestsCount = 0;
+				pendingPasswordResetsCount = 0;
 			}
 		});
 		// Listen for provider data updates from other components
@@ -329,6 +340,8 @@
 					<span class="text-sm">{item.label}</span>
 					{#if item.href === '/dashboard/provider/requests' && !providerLocked}
 						<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
+					{:else if item.href === '/dashboard/provider/password-resets' && !providerLocked}
+						<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
 					{:else if providerLocked}
 						<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
 					{/if}

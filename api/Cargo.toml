@@ -43,7 +43,7 @@ lazy_static = "1.5"
 ledger-map = { path = "../ledger-map" }
 num-bigint.workspace = true
 oauth2 = { version = "4.4", features = ["reqwest"] }
-poem = { workspace = true, features = ["cookie"] }
+poem = { workspace = true, features = ["cookie", "sse"] }
 poem-openapi = { version = "5", features = ["swagger-ui", "chrono"] }
 rand = "0.9"
 time = { version = "0.3", features = ["serde", "macros"] }
