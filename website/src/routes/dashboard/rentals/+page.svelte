@@ -29,6 +29,7 @@
 	let contracts = $state<Contract[]>([]);
 	let offeringNames = $state<Map<number, string>>(new Map());
 	let activeTab = $state<'all' | 'active' | 'pending' | 'cancelled'>('all');
+	let searchQuery = $state('');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
@@ -50,15 +51,21 @@
 	const PENDING_STATUSES = new Set(['requested', 'pending', 'accepted', 'provisioning', 'provisioned']);
 	const CANCELLED_STATUSES = new Set(['cancelled', 'rejected', 'failed']);
 
-	let filteredContracts = $derived(
-		activeTab === 'all'
+	let filteredContracts = $derived.by(() => {
+		const byTab = activeTab === 'all'
 			? contracts
 			: activeTab === 'active'
 				? contracts.filter((c) => c.status.toLowerCase() === 'active')
 				: activeTab === 'pending'
 					? contracts.filter((c) => PENDING_STATUSES.has(c.status.toLowerCase()))
-					: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase())),
-	);
+					: contracts.filter((c) => CANCELLED_STATUSES.has(c.status.toLowerCase()));
+		const q = searchQuery.trim().toLowerCase();
+		if (!q) return byTab;
+		return byTab.filter((c) =>
+			c.contract_id.toLowerCase().includes(q) ||
+			(offeringNames.get(Number(c.offering_id)) ?? '').toLowerCase().includes(q)
+		);
+	});
 
 	// Lifecycle stages for progress indicator
 	const LIFECYCLE_STAGES = [
@@ -499,6 +506,23 @@
 			</a>
 		</div>
 	{:else}
+		<!-- Search -->
+		<div class="relative">
+			<input
+				type="text"
+				bind:value={searchQuery}
+				placeholder="Search by contract ID or offering name..."
+				class="w-full bg-surface-elevated border border-neutral-800 px-4 py-2 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600 transition-colors"
+			/>
+			{#if searchQuery}
+				<button
+					onclick={() => { searchQuery = ''; }}
+					class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+					aria-label="Clear search"
+				>×</button>
+			{/if}
+		</div>
+
 		<!-- Status filter tab bar -->
 		<div class="flex gap-1 border-b border-neutral-800 mb-2">
 			{#each [
@@ -825,7 +849,10 @@
 				</a>
 			{:else}
 				<div class="text-center py-10 text-neutral-500">
-					{#if activeTab === 'active'}
+					{#if searchQuery.trim()}
+						<p class="text-lg mb-2">No results for "{searchQuery.trim()}"</p>
+						<button onclick={() => { searchQuery = ''; }} class="text-sm text-primary-400 hover:underline">Clear search</button>
+					{:else if activeTab === 'active'}
 						<p class="text-lg mb-2">No active rentals</p>
 						<p class="text-sm">Provisioned resources appear here. <a href="/dashboard/marketplace" class="text-primary-400 hover:underline">Browse the marketplace</a> to rent one.</p>
 					{:else if activeTab === 'pending'}

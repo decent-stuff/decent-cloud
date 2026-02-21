@@ -59,6 +59,12 @@
 			icon: "💳",
 			description: "Billing address and VAT settings for invoices",
 		},
+		{
+			href: "/dashboard/account/notifications",
+			label: "Notifications",
+			icon: "🔔",
+			description: "Configure email, Telegram, and SMS alerts",
+		},
 	];
 </script>
 

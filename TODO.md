@@ -83,15 +83,8 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Contracts] Bandwidth usage chart on contract detail** ✅ (2026-02-21) — New tenant-authenticated endpoint `GET /api/v1/users/:pubkey/contracts/:id/bandwidth` + SVG chart on `/dashboard/rentals/[contract_id]`.
 - **[Provider] Trust metrics dedicated shareable page** ✅ (2026-02-21) — New route `/dashboard/reputation/[identifier]/trust` + "Share Trust Report" link on reputation page.
 - **[Agent] Per-agent status accuracy** ✅ (2026-02-21) — DB migration adds `agent_pubkey` as primary key to `provider_agent_status`; heartbeat now keyed per-agent instead of per-provider.
-
-### Future UX (single-session each)
-
-- **[Account] Notifications tab in Account Settings** — Notification config API exists (`GET/PUT /api/v1/providers/me/notification-config`) and `notification-api.ts` service is implemented, but the UI is buried inside Provider Setup. Non-providers cannot access it at all. Need: new `/dashboard/account/notifications/+page.svelte` with email/Telegram toggles + "Test" button + usage display. Add to the Account Settings tabs list in `/dashboard/account/+page.svelte`. *(Single-session: new page reusing notification-api.ts, add tab.)*
-
-- **[Provider] Per-contract earnings breakdown** — Earnings page shows aggregate revenue and bandwidth but no per-contract breakdown. Providers with many contracts cannot see which ones earned the most. Need: sortable table on the earnings page showing offering name, payment amount, duration, status, customer feedback. API: existing user contracts endpoint filtered by `provider_pubkey`. *(Single-session: table component on earnings page.)*
-
-- **[Rentals] Search/filter rentals list** — Rentals list has status tabs (all/active/pending/cancelled) but no text search. With many contracts, finding one by offering name or contract ID requires scrolling. Add a text input that client-side filters `contracts` array by `offering_id` or `contract_id`. *(Single-session: ~20 lines of svelte.)*
-
-- **[Marketplace] Default to hiding demo offerings** — Demo offerings are shown by default (`showDemoOfferings = true`), confusing new users who think they can rent placeholder offerings. Change default to `false`; add visible "(show demo)" checkbox. *(Single-session: 1-line default change + UI label.)*
-
-- **[Dashboard] Personalized activity on home for authenticated users** — Dashboard home shows only platform-wide stats after "Getting Started" card is dismissed. For users with history, show: last 3 rentals with status and expiry, and last 3 earnings if provider. Activity data is already fetched (`activity`, `myOfferings` state) but not displayed prominently. *(Single-session: add summary section to dashboard home.)*
+- **[Account] Notifications tab in Account Settings** ✅ (2026-02-21) — New `/dashboard/account/notifications/+page.svelte` with email/Telegram/SMS toggles, per-channel test buttons, and today's usage stats. Added "Notifications" tile to Account Settings grid.
+- **[Provider] Per-contract earnings breakdown** ✅ (2026-02-21) — Sortable "Contract Earnings" table added to `/dashboard/provider/earnings` showing offering, status, payment (ICP), duration, and created date for every provider contract. Data sourced from `GET /api/v1/users/:pubkey/activity`.
+- **[Rentals] Search/filter rentals list** ✅ (2026-02-21) — Text search input above the status tabs on `/dashboard/rentals`; client-side filters by contract ID or offering name. Clear button and contextual empty-state message included.
+- **[Marketplace] Default to hiding demo offerings** ✅ (2026-02-21) — `showDemoOfferings` default changed from `true` to `false`; `clearFilters()` also resets to `false`. Label already reads "Show demo offerings".
+- **[Dashboard] Personalized activity on home for authenticated users** ✅ (2026-02-21) — Recent Activity section now shows expiry dates (amber if <24 h) on active tenant contracts, plus a new "As Provider (last 3)" subsection with payment amounts and a link to the earnings page.

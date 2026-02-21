@@ -13,10 +13,12 @@
 		type ProviderFeedbackStats,
 		type BandwidthStatsResponse,
 		type RevenueByMonth,
+		type Contract,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAccountBalance } from "$lib/services/api-reputation";
 	import { signRequest } from "$lib/services/auth-api";
+	import { getUserActivity } from "$lib/services/api-user-activity";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -24,12 +26,40 @@
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
 	let revenueByMonth = $state<RevenueByMonth[]>([]);
+	let providerContracts = $state<Contract[]>([]);
 	let tokenBalance = $state<number>(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
+
+	type SortKey = 'offering_id' | 'status' | 'payment_amount_e9s' | 'duration_hours' | 'created_at_ns';
+	let sortKey = $state<SortKey>('created_at_ns');
+	let sortAsc = $state(false);
+
+	let sortedContracts = $derived(
+		[...providerContracts].sort((a, b) => {
+			const av = a[sortKey] ?? 0;
+			const bv = b[sortKey] ?? 0;
+			const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+			return sortAsc ? cmp : -cmp;
+		})
+	);
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) {
+			sortAsc = !sortAsc;
+		} else {
+			sortKey = key;
+			sortAsc = false;
+		}
+	}
+
+	function sortIndicator(key: SortKey): string {
+		if (sortKey !== key) return '';
+		return sortAsc ? ' ↑' : ' ↓';
+	}
 
 	function formatRevenue(e9s: number): string {
 		return (e9s / 1_000_000_000).toFixed(2);
@@ -48,6 +78,12 @@
 
 	function formatNsTimestamp(ns: number): string {
 		return new Date(ns / 1_000_000).toLocaleString();
+	}
+
+	function statusBadgeClass(status: string): string {
+		if (status === 'active' || status === 'provisioned') return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+		if (status === 'cancelled' || status === 'failed' || status === 'rejected') return 'bg-red-500/20 text-red-400 border border-red-500/30';
+		return 'bg-neutral-700/50 text-neutral-400 border border-neutral-600/30';
 	}
 
 	onMount(() => {
@@ -74,15 +110,27 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			const bandwidthStats_ = await (async () => {
-				if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
-				const signed = await signRequest(
-					info.identity,
-					"GET",
-					`/api/v1/providers/${providerHex}/bandwidth`,
-				);
-				return getProviderBandwidthStats(providerHex, signed.headers).catch(() => []);
-			})();
+			const [bandwidthStats_, activityResult] = await Promise.all([
+				(async () => {
+					if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
+					const signed = await signRequest(
+						info.identity,
+						"GET",
+						`/api/v1/providers/${providerHex}/bandwidth`,
+					);
+					return getProviderBandwidthStats(providerHex, signed.headers).catch(() => []);
+				})(),
+				(async () => {
+					if (!(info.identity instanceof Ed25519KeyIdentity)) return null;
+					const signed = await signRequest(
+						info.identity,
+						"GET",
+						`/api/v1/users/${providerHex}/activity`,
+						"",
+					);
+					return getUserActivity(providerHex, signed.headers).catch(() => null);
+				})(),
+			]);
 
 			const [providerStats, feedback, balance, onboarding, revenueData] = await Promise.all([
 				getProviderStats(providerHex),
@@ -98,6 +146,7 @@
 			bandwidthStats = bandwidthStats_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 			revenueByMonth = revenueData;
+			providerContracts = activityResult?.rentals_as_provider ?? [];
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load earnings data";
 		} finally {
@@ -179,6 +228,69 @@
 						</p>
 					</div>
 				</div>
+			</section>
+
+			<!-- Contract Earnings -->
+			<section class="space-y-4">
+				<h2 class="text-xl font-semibold text-white">Contract Earnings</h2>
+				{#if sortedContracts.length === 0}
+					<div class="bg-surface-elevated border border-neutral-800 p-6 text-neutral-500 text-sm">
+						No contracts yet
+					</div>
+				{:else}
+					<div class="bg-surface-elevated border border-neutral-800 overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-neutral-800">
+									<th
+										class="text-left text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+										onclick={() => toggleSort('offering_id')}
+									>Offering{sortIndicator('offering_id')}</th>
+									<th
+										class="text-left text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+										onclick={() => toggleSort('status')}
+									>Status{sortIndicator('status')}</th>
+									<th
+										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+										onclick={() => toggleSort('payment_amount_e9s')}
+									>Payment (ICP){sortIndicator('payment_amount_e9s')}</th>
+									<th
+										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+										onclick={() => toggleSort('duration_hours')}
+									>Duration{sortIndicator('duration_hours')}</th>
+									<th
+										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+										onclick={() => toggleSort('created_at_ns')}
+									>Created{sortIndicator('created_at_ns')}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each sortedContracts as contract}
+									<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+										<td class="px-4 py-3 font-mono text-neutral-300 text-xs">
+											#{contract.offering_id}
+											<span class="text-neutral-600 ml-1">({contract.contract_id.slice(0, 8)}...)</span>
+										</td>
+										<td class="px-4 py-3">
+											<span class="px-2 py-0.5 text-xs font-medium {statusBadgeClass(contract.status)}">
+												{contract.status}
+											</span>
+										</td>
+										<td class="px-4 py-3 text-right text-neutral-300 font-mono">
+											{(contract.payment_amount_e9s / 1e9).toFixed(4)}
+										</td>
+										<td class="px-4 py-3 text-right text-neutral-400">
+											{contract.duration_hours != null ? `${contract.duration_hours}h` : '—'}
+										</td>
+										<td class="px-4 py-3 text-right text-neutral-400 text-xs">
+											{formatNsTimestamp(contract.created_at_ns)}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			</section>
 
 			<!-- Revenue Trend (last 12 months) -->

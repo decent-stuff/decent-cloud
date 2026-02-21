@@ -5,7 +5,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
-	import { computePubkey } from "$lib/utils/contract-format";
+	import { computePubkey, formatContractPrice } from "$lib/utils/contract-format";
 	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
 	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
@@ -122,6 +122,17 @@
 		} finally {
 			activityLoading = false;
 		}
+	}
+
+	function formatExpiry(endNs: number | undefined): { text: string; urgent: boolean } | null {
+		if (!endNs) return null;
+		const endMs = endNs / 1_000_000;
+		const hoursLeft = (endMs - Date.now()) / (1000 * 60 * 60);
+		if (hoursLeft < 0) return null;
+		if (hoursLeft < 24) {
+			return { text: `Expires in ${Math.round(hoursLeft)}h`, urgent: true };
+		}
+		return { text: `Expires ${new Date(endMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, urgent: false };
 	}
 
 	function handleRentalSuccess(contractId: string) {
@@ -501,13 +512,24 @@
 						<h2 class="text-base font-semibold text-white">Recent Activity</h2>
 						<p class="text-xs text-neutral-500 mt-1">Your latest contracts and offerings</p>
 					</div>
-					<a
-						href="/dashboard/rentals"
-						class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
-					>
-						<span>View all rentals</span>
-						<Icon name="arrow-right" size={16} />
-					</a>
+					<div class="flex items-center gap-4">
+						{#if activity.rentals_as_provider.length > 0}
+							<a
+								href="/dashboard/provider/earnings"
+								class="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+							>
+								<span>View earnings</span>
+								<Icon name="arrow-right" size={16} />
+							</a>
+						{/if}
+						<a
+							href="/dashboard/rentals"
+							class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
+						>
+							<span>View all rentals</span>
+							<Icon name="arrow-right" size={16} />
+						</a>
+					</div>
 				</div>
 				<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
 					<div class="bg-surface-elevated border border-neutral-800 p-3">
@@ -529,15 +551,21 @@
 				</div>
 				{#if activity.rentals_as_requester.length > 0}
 					<div class="space-y-2">
-						<div class="text-xs text-neutral-500 font-medium mb-2">Recent contracts</div>
+						<div class="text-xs text-neutral-500 font-medium mb-2">As Tenant (last 3)</div>
 						{#each activity.rentals_as_requester.slice(0, 3) as contract (contract.contract_id)}
+							{@const expiry = (contract.status === 'active' || contract.status === 'provisioned') ? formatExpiry(contract.end_timestamp_ns) : null}
 							<a
 								href="/dashboard/rentals/{contract.contract_id}"
 								class="flex items-center justify-between p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 transition-colors"
 							>
 								<div class="flex-1 min-w-0">
 									<div class="text-sm text-neutral-300 truncate font-mono">{contract.contract_id.slice(0, 16)}...</div>
-									<div class="text-xs text-neutral-500 mt-0.5">{contract.offering_id}</div>
+									<div class="flex items-center gap-3 mt-0.5">
+										<span class="text-xs text-neutral-500">{contract.offering_id}</span>
+										{#if expiry}
+											<span class="text-xs {expiry.urgent ? 'text-amber-400' : 'text-neutral-500'}">{expiry.text}</span>
+										{/if}
+									</div>
 								</div>
 								<span class="ml-3 px-2 py-0.5 text-xs font-medium rounded-full
 									{contract.status === 'active' || contract.status === 'provisioned' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -548,6 +576,34 @@
 					</div>
 				{:else}
 					<p class="text-xs text-neutral-600 text-center py-4">No activity yet</p>
+				{/if}
+				{#if activity.rentals_as_provider.length > 0}
+					<div class="space-y-2 mt-4">
+						<div class="flex items-center justify-between mb-2">
+							<div class="text-xs text-neutral-500 font-medium">As Provider (last 3)</div>
+							<a
+								href="/dashboard/provider/earnings"
+								class="text-xs text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+							>
+								<span>View earnings</span>
+								<Icon name="arrow-right" size={16} />
+							</a>
+						</div>
+						{#each activity.rentals_as_provider.slice(0, 3) as contract (contract.contract_id)}
+							<div class="flex items-center justify-between p-3 bg-surface-elevated border border-neutral-800">
+								<div class="flex-1 min-w-0">
+									<div class="text-sm text-neutral-300 truncate font-mono">{contract.contract_id.slice(0, 16)}...</div>
+								</div>
+								<div class="flex items-center gap-3 ml-3">
+									<span class="text-sm font-mono text-emerald-400">{formatContractPrice(contract.payment_amount_e9s, 'ICP')}</span>
+									<span class="px-2 py-0.5 text-xs font-medium rounded-full
+										{contract.status === 'active' || contract.status === 'provisioned' ? 'bg-emerald-500/20 text-emerald-400' :
+										contract.status === 'cancelled' || contract.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+										'bg-neutral-700 text-neutral-300'}">{contract.status}</span>
+								</div>
+							</div>
+						{/each}
+					</div>
 				{/if}
 			</div>
 		{/if}

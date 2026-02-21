@@ -37,7 +37,7 @@
 	let selectedVirt = $state<string>("");
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | null>(null);
-	let showDemoOfferings = $state(true);
+	let showDemoOfferings = $state(false);
 	let showOfflineOfferings = $state(false);
 	let recipesOnly = $state(false);
 
@@ -284,7 +284,7 @@
 		selectedVirt = "";
 		unmeteredOnly = false;
 		minTrust = null;
-		showDemoOfferings = true;
+		showDemoOfferings = false;
 		showOfflineOfferings = false;
 		recipesOnly = false;
 		searchQuery = "";
