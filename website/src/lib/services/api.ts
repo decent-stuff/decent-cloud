@@ -189,6 +189,27 @@ export async function getActiveProviders(days: number = 1): Promise<ProviderProf
 	}));
 }
 
+export async function getProviderProfile(pubkey: string | Uint8Array): Promise<ProviderProfile | null> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		if (response.status === 404) return null;
+		throw new Error(`Failed to fetch provider profile: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderProfileRaw>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch provider profile');
+	}
+
+	if (!payload.data) return null;
+
+	return { ...payload.data, pubkey: pubkeyHex } as unknown as ProviderProfile;
+}
+
 export async function getProviderTrustMetrics(
 	pubkey: string | Uint8Array
 ): Promise<ProviderTrustMetrics> {
@@ -2485,8 +2506,9 @@ export async function getProviderFeedbackStats(pubkeyHex: string): Promise<Provi
 
 import type { BandwidthStatsResponse } from '$lib/types/generated/BandwidthStatsResponse';
 import type { BandwidthHistoryResponse } from '$lib/types/generated/BandwidthHistoryResponse';
+import type { OfferingStats } from '$lib/types/generated/OfferingStats';
 
-export type { BandwidthStatsResponse, BandwidthHistoryResponse };
+export type { BandwidthStatsResponse, BandwidthHistoryResponse, OfferingStats };
 
 /**
  * Get bandwidth stats for all provider's contracts
@@ -2584,6 +2606,38 @@ export async function getUserContractBandwidthHistory(
 
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to fetch bandwidth history');
+	}
+
+	return payload.data ?? [];
+}
+
+/**
+ * Get per-offering contract statistics for a provider.
+ * Requires provider authentication.
+ */
+export async function getProviderOfferingStats(
+	pubkeyHex: string,
+	headers: SignedRequestHeaders
+): Promise<OfferingStats[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offering-stats`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch offering stats: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingStats[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch offering stats');
 	}
 
 	return payload.data ?? [];

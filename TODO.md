@@ -93,3 +93,25 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Contracts] SSH connection guide on contract detail** ✅ (2026-02-21) — Collapsible "How to Connect" section with 3 tabs (Linux/macOS, Windows Terminal, PuTTY) on the contract detail page, shown only for provisioned/active gateway contracts.
 - **[Dashboard] Provider pending requests action banner** ✅ (2026-02-21) — Amber action banner on dashboard home shows count of pending rental requests when provider has offerings with unreviewed requests. Links to `/dashboard/provider/requests`.
 - **[Marketplace] Simplified search placeholder** ✅ (2026-02-21) — Changed from cryptic "e.g., type:gpu, price:<=100" to plain "Search by name, description, or type...".
+- **[Provider] Per-offering performance stats on earnings page** ✅ (2026-02-21) — New `getProviderOfferingStats` authenticated API function + "Offering Performance" table on `/dashboard/provider/earnings` showing total requests, active, cancelled, expired, and revenue per offering.
+- **[Marketplace] Sort by trust score** ✅ (2026-02-21) — 3-button sort group (Price ↑, Price ↓, Trust ↓) replaces the single price toggle. Offerings with highest trust score sort first.
+
+---
+
+## UX Improvements (Backlog)
+
+- **[Rentals] "Renew" action on expired/cancelled contracts** — One-click renew: pre-fills a new rental request for the same offering when a contract expires or is cancelled. Currently tenants must navigate back to marketplace, find the same offering, and start from scratch.
+
+- **[Provider] Profile completeness indicator** — Show providers a completeness score (e.g. 60% complete) for their profile: name ✓, description ✓, contacts ?, socials ?, banner ?. Helps providers understand what to fill in to improve trust.
+
+- **[Marketplace] "Recently Added" and "Most Trusted" quick-filter badges** — Two prominent tabs/badges at the top of the marketplace: one for newly-listed offerings (last 7 days), one sorted by highest trust score. Helps new users discover trustworthy providers without manually sorting.
+
+- **[Offerings] Offering detail page shows provider profile sidebar** — On the offering detail page (`/dashboard/marketplace/[id]`), add a sidebar card with the provider's trust score, response time, "Would rent again" rate, and a link to their full profile. Currently the page shows offering specs but no provider context.
+
+- **[Dashboard] Tenant empty state with CTAs** — When a tenant has no active rentals, show a clear "Get Started" card on the dashboard home: "Deploy your first VM in 2 minutes" with a direct link to the marketplace. Currently new tenants see a generic dashboard with no clear next step.
+
+- **[Provider] Offering performance chart (time series)** — The current "Offering Performance" table shows totals. Add a time-series chart (by week or month) for requests and active contracts per offering, so providers can spot trends. Backend would need a new endpoint returning stats over time.
+
+- **[Contracts] Automated contract renewal / subscription mode** — Allow tenants to opt into auto-renewal before a contract expires. Currently all contracts are one-shot; tenants must manually re-rent. *(Backend change needed: renewal field on contract + scheduler.)*
+
+- **[Security] Two-factor seed phrase backup reminder** — After login, if the user has never exported their seed phrase, show a dismissible amber banner: "Back up your identity seed phrase". Currently there's no prompt to secure the Ed25519 key.

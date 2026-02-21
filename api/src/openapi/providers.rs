@@ -3865,6 +3865,7 @@ impl ProvidersApi {
                 operating_systems: suggestion.operating_systems.clone(),
                 trust_score: None,
                 has_critical_flags: None,
+                reliability_score: None,
                 is_example: false,
                 offering_source: Some("generated".to_string()),
                 external_checkout_url: None,
@@ -3910,6 +3911,54 @@ impl ProvidersApi {
             }),
             error: None,
         })
+    }
+
+    /// Get per-offering contract statistics for a provider
+    ///
+    /// Returns aggregated contract counts and revenue broken down by offering.
+    /// Requires provider authentication — only the provider can access their own stats.
+    #[oai(
+        path = "/providers/:pubkey/offering-stats",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_offering_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::users::OfferingStats>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_offering_stats(&provider_pubkey).await {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get offering stats: {e:#}")),
+            }),
+        }
     }
 }
 
@@ -4438,5 +4487,53 @@ mod tests {
         assert_eq!(json["success"], false);
         assert!(json["data"].is_null());
         assert_eq!(json["error"], "Invalid pubkey format");
+    }
+
+    // ── OfferingStats serialization ──────────────────────────────────────────
+
+    #[test]
+    fn test_offering_stats_camelcase_field_names() {
+        use crate::database::users::OfferingStats;
+        let stats = OfferingStats {
+            offering_id: "pool-small".to_string(),
+            total_requests: 10,
+            active_count: 2,
+            cancelled_count: 3,
+            expired_count: 1,
+            rejected_count: 4,
+            total_revenue_e9s: 5_000_000_000,
+        };
+        let json = serde_json::to_value(&stats).unwrap();
+        assert_eq!(json["offeringId"], "pool-small");
+        assert_eq!(json["totalRequests"], 10_i64);
+        assert_eq!(json["activeCount"], 2_i64);
+        assert_eq!(json["cancelledCount"], 3_i64);
+        assert_eq!(json["expiredCount"], 1_i64);
+        assert_eq!(json["rejectedCount"], 4_i64);
+        assert_eq!(json["totalRevenueE9s"], 5_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_api_response_offering_stats_success() {
+        use crate::database::users::OfferingStats;
+        let stats = vec![OfferingStats {
+            offering_id: "pool-large".to_string(),
+            total_requests: 5,
+            active_count: 1,
+            cancelled_count: 0,
+            expired_count: 0,
+            rejected_count: 0,
+            total_revenue_e9s: 2_000_000_000,
+        }];
+        let resp: ApiResponse<Vec<OfferingStats>> = ApiResponse {
+            success: true,
+            data: Some(stats),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"][0]["offeringId"], "pool-large");
+        assert_eq!(json["data"][0]["totalRequests"], 5_i64);
     }
 }

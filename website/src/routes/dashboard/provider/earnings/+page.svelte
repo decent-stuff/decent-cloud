@@ -6,6 +6,7 @@
 		getProviderStats,
 		getProviderFeedbackStats,
 		getProviderBandwidthStats,
+		getProviderOfferingStats,
 		getProviderOnboarding,
 		getProviderRevenueByMonth,
 		hexEncode,
@@ -14,6 +15,7 @@
 		type BandwidthStatsResponse,
 		type RevenueByMonth,
 		type Contract,
+		type OfferingStats,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAccountBalance } from "$lib/services/api-reputation";
@@ -25,6 +27,7 @@
 	let stats = $state<ProviderStats | null>(null);
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
+	let offeringStats = $state<OfferingStats[]>([]);
 	let revenueByMonth = $state<RevenueByMonth[]>([]);
 	let providerContracts = $state<Contract[]>([]);
 	let tokenBalance = $state<number>(0);
@@ -110,7 +113,7 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			const [bandwidthStats_, activityResult] = await Promise.all([
+			const [bandwidthStats_, activityResult, offeringStats_] = await Promise.all([
 				(async () => {
 					if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
 					const signed = await signRequest(
@@ -130,6 +133,15 @@
 					);
 					return getUserActivity(providerHex, signed.headers).catch(() => null);
 				})(),
+				(async () => {
+					if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
+					const signed = await signRequest(
+						info.identity,
+						"GET",
+						`/api/v1/providers/${providerHex}/offering-stats`,
+					);
+					return getProviderOfferingStats(providerHex, signed.headers).catch(() => []);
+				})(),
 			]);
 
 			const [providerStats, feedback, balance, onboarding, revenueData] = await Promise.all([
@@ -144,6 +156,7 @@
 			feedbackStats = feedback;
 			tokenBalance = balance;
 			bandwidthStats = bandwidthStats_;
+			offeringStats = offeringStats_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 			revenueByMonth = revenueData;
 			providerContracts = activityResult?.rentals_as_provider ?? [];
@@ -346,6 +359,39 @@
 					<p class="text-3xl font-bold text-white mt-1">{stats.offerings_count}</p>
 				</div>
 			</section>
+
+			<!-- Offering Performance -->
+			{#if offeringStats.length > 0}
+				<section class="space-y-4">
+					<h2 class="text-xl font-semibold text-white">Offering Performance</h2>
+					<div class="bg-surface-elevated border border-neutral-800 overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-neutral-800">
+									<th class="text-left text-neutral-500 font-medium px-4 py-3">Offering ID</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Total Requests</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Active</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Cancelled</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Expired</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Revenue (ICP)</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each offeringStats as row}
+									<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+										<td class="px-4 py-3 font-mono text-neutral-300 text-xs">{row.offeringId}</td>
+										<td class="px-4 py-3 text-right text-neutral-300">{row.totalRequests}</td>
+										<td class="px-4 py-3 text-right text-emerald-400">{row.activeCount}</td>
+										<td class="px-4 py-3 text-right text-neutral-400">{row.cancelledCount}</td>
+										<td class="px-4 py-3 text-right text-neutral-400">{row.expiredCount}</td>
+										<td class="px-4 py-3 text-right text-primary-400 font-mono">{formatRevenue(row.totalRevenueE9s)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+			{/if}
 
 			<!-- Bandwidth Usage -->
 			<section class="space-y-4">

@@ -104,4 +104,9 @@ feedback_service_match_rate_pct: number | undefined,
 /**
  * Percentage of renters who would rent again (0-100). None if no feedback.
  */
-feedback_would_rent_again_rate_pct: number | undefined, };
+feedback_would_rent_again_rate_pct: number | undefined, 
+/**
+ * Composite reliability score 0-100: uptime 40% + completion rate 35% + response rate 25%.
+ * None if insufficient data (< 3 health checks AND < 3 contracts total).
+ */
+reliability_score: number | undefined, };

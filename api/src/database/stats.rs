@@ -185,6 +185,86 @@ impl Database {
         })
     }
 
+    /// Compute reliability score (0.0–100.0) for a provider.
+    ///
+    /// Formula: uptime_pct * 0.40 + completion_rate_pct * 0.35 + response_rate_pct * 0.25
+    ///
+    /// - uptime_pct: healthy_checks / total_checks * 100 (default 50 when < 3 checks)
+    /// - completion_rate_pct: completed / (total - cancelled_by_tenant) * 100
+    /// - response_rate_pct: non_rejected / total * 100
+    ///
+    /// Returns None when total_checks < 3 AND total_contracts < 3 (insufficient data).
+    pub async fn get_provider_reliability_score(&self, pubkey: &[u8]) -> Result<Option<f64>> {
+        #[derive(sqlx::FromRow)]
+        struct HealthRow {
+            total_checks: i64,
+            healthy_checks: i64,
+        }
+
+        let health = sqlx::query_as::<_, HealthRow>(
+            r#"SELECT
+                COUNT(*)::BIGINT as total_checks,
+                COUNT(*) FILTER (WHERE hc.status = 'healthy')::BIGINT as healthy_checks
+               FROM contract_health_checks hc
+               JOIN contract_sign_requests csr ON hc.contract_id = csr.contract_id
+               WHERE csr.provider_pubkey = $1"#,
+        )
+        .bind(pubkey)
+        .fetch_one(&self.pool)
+        .await?;
+
+        #[derive(sqlx::FromRow)]
+        struct ContractRow {
+            total: i64,
+            completed: i64,
+            cancelled_by_tenant: i64,
+            rejected: i64,
+        }
+
+        let contracts = sqlx::query_as::<_, ContractRow>(
+            r#"SELECT
+                COUNT(*)::BIGINT as total,
+                COUNT(*) FILTER (WHERE status = 'completed')::BIGINT as completed,
+                COUNT(*) FILTER (WHERE status = 'cancelled')::BIGINT as cancelled_by_tenant,
+                COUNT(*) FILTER (WHERE status = 'rejected')::BIGINT as rejected
+               FROM contract_sign_requests
+               WHERE provider_pubkey = $1"#,
+        )
+        .bind(pubkey)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // Require at least 3 health checks OR 3 contracts for a meaningful score
+        if health.total_checks < 3 && contracts.total < 3 {
+            return Ok(None);
+        }
+
+        // Uptime: default 50 (neutral) when fewer than 3 health checks
+        let uptime_pct = if health.total_checks >= 3 {
+            (health.healthy_checks as f64 / health.total_checks as f64) * 100.0
+        } else {
+            50.0
+        };
+
+        // Completion rate: denominator excludes tenant-cancelled contracts
+        let completion_denominator = contracts.total - contracts.cancelled_by_tenant;
+        let completion_rate_pct = if completion_denominator > 0 {
+            (contracts.completed as f64 / completion_denominator as f64) * 100.0
+        } else {
+            100.0 // All contracts cancelled by tenant — no negative signal
+        };
+
+        // Response rate: non-rejected / total
+        let response_rate_pct = if contracts.total > 0 {
+            ((contracts.total - contracts.rejected) as f64 / contracts.total as f64) * 100.0
+        } else {
+            100.0
+        };
+
+        let score = uptime_pct * 0.40 + completion_rate_pct * 0.35 + response_rate_pct * 0.25;
+        Ok(Some(score.clamp(0.0, 100.0)))
+    }
+
     /// Get trust metrics for a provider
     pub async fn get_provider_trust_metrics(&self, pubkey: &[u8]) -> Result<ProviderTrustMetrics> {
         let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
@@ -394,6 +474,7 @@ impl Database {
 
         // Fetch feedback stats for trust score integration
         let feedback_stats = self.get_provider_feedback_stats(pubkey).await?;
+        let reliability_score = self.get_provider_reliability_score(pubkey).await?;
 
         // Tier 3 Contextual Metrics
 
@@ -536,11 +617,12 @@ impl Database {
                 feedback_stats.would_rent_again_rate_pct,
             );
 
-        // Update cached trust score in provider_profiles
+        // Update cached scores in provider_profiles
         sqlx::query!(
-            "UPDATE provider_profiles SET trust_score = $1, has_critical_flags = $2 WHERE pubkey = $3",
+            "UPDATE provider_profiles SET trust_score = $1, has_critical_flags = $2, reliability_score = $3 WHERE pubkey = $4",
             trust_score,
             has_critical_flags,
+            reliability_score,
             pubkey
         )
         .execute(&self.pool)
@@ -581,6 +663,7 @@ impl Database {
             } else {
                 None
             },
+            reliability_score,
         })
     }
 
@@ -929,6 +1012,12 @@ pub struct ProviderTrustMetrics {
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub feedback_would_rent_again_rate_pct: Option<f64>,
+
+    /// Composite reliability score 0-100: uptime 40% + completion rate 35% + response rate 25%.
+    /// None if insufficient data (< 3 health checks AND < 3 contracts total).
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub reliability_score: Option<f64>,
 }
 
 /// Account search result with reputation and activity stats

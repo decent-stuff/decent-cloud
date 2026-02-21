@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE provider_profiles SET trust_score = $1, has_critical_flags = $2, reliability_score = $3 WHERE pubkey = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bool",
+        "Float8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "79ad85bc5cdbda0b4f5e3be4b8f7fdb5bde8cc914ddb030070cc3a5786609d3b"
+}

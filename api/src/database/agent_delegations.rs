@@ -364,6 +364,7 @@ impl Database {
     }
 
     /// Update agent heartbeat status, keyed by agent_pubkey for per-agent isolation.
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_agent_heartbeat(
         &self,
         agent_pubkey: &[u8],

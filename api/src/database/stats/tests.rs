@@ -2426,3 +2426,245 @@ async fn test_get_provider_feedback_stats_aggregation() {
     assert!((stats.service_match_rate_pct - 75.0).abs() < 0.01);
     assert!((stats.would_rent_again_rate_pct - 50.0).abs() < 0.01);
 }
+
+// ==================== Reliability Score Tests ====================
+
+#[tokio::test]
+async fn test_reliability_score_no_data_returns_none() {
+    // Provider with no history at all — insufficient data, must return None
+    let db = setup_test_db().await;
+    let score = db
+        .get_provider_reliability_score(&[0xABu8; 32])
+        .await
+        .unwrap();
+    assert!(score.is_none(), "new provider with zero data must return None");
+}
+
+#[tokio::test]
+async fn test_reliability_score_with_contracts_only() {
+    // 3 completed contracts, 0 health checks → should produce a score (contracts >= 3)
+    // uptime defaults to 50.0, completion=100%, response=100%
+    // score = 50*0.40 + 100*0.35 + 100*0.25 = 20 + 35 + 25 = 80.0
+    let db = setup_test_db().await;
+    let pubkey = vec![0x01u8; 32];
+    let requester = vec![0x02u8; 32];
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    for i in 0..3u8 {
+        let contract_id = vec![i + 0x10; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let score = db
+        .get_provider_reliability_score(&pubkey)
+        .await
+        .unwrap()
+        .expect("should return score when >= 3 contracts");
+    assert!(
+        (score - 80.0).abs() < 0.01,
+        "expected 80.0, got {score}"
+    );
+}
+
+#[tokio::test]
+async fn test_reliability_score_perfect_uptime() {
+    // Provider with 5 healthy checks + 3 completed contracts → score near 100
+    // uptime=100%, completion=100%, response=100% → 100*0.40 + 100*0.35 + 100*0.25 = 100.0
+    let db = setup_test_db().await;
+    let pubkey = vec![0x03u8; 32];
+    let requester = vec![0x04u8; 32];
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // Insert 3 completed contracts
+    let mut contract_ids: Vec<Vec<u8>> = Vec::new();
+    for i in 0..3u8 {
+        let contract_id = vec![i + 0x20; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+        contract_ids.push(contract_id);
+    }
+
+    // Insert 5 healthy health checks for first contract
+    let first_contract = &contract_ids[0];
+    for j in 0..5i64 {
+        sqlx::query(
+            "INSERT INTO contract_health_checks (contract_id, checked_at, status) VALUES ($1, $2, 'healthy')",
+        )
+        .bind(first_contract)
+        .bind(j * 3_600_000_000_000i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let score = db
+        .get_provider_reliability_score(&pubkey)
+        .await
+        .unwrap()
+        .expect("should return score");
+    assert!(
+        (score - 100.0).abs() < 0.01,
+        "expected 100.0 with perfect data, got {score}"
+    );
+}
+
+#[tokio::test]
+async fn test_reliability_score_partial_uptime_and_rejections() {
+    // 4 healthy + 4 unhealthy checks = 50% uptime
+    // 2 completed + 2 rejected (of 4 total) contracts
+    // completion_denominator = 4 - 0(cancelled) = 4, completion = 2/4 = 50%
+    // response_rate = (4-2)/4 = 50%
+    // score = 50*0.40 + 50*0.35 + 50*0.25 = 20 + 17.5 + 12.5 = 50.0
+    let db = setup_test_db().await;
+    let pubkey = vec![0x05u8; 32];
+    let requester = vec![0x06u8; 32];
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // 2 completed contracts
+    for i in 0..2u8 {
+        let contract_id = vec![i + 0x30; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+    // 2 rejected contracts
+    for i in 2..4u8 {
+        let contract_id = vec![i + 0x30; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'rejected', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // 4 healthy + 4 unhealthy checks on first completed contract
+    let first_contract = vec![0x30u8; 32];
+    for j in 0..4i64 {
+        sqlx::query(
+            "INSERT INTO contract_health_checks (contract_id, checked_at, status) VALUES ($1, $2, 'healthy')",
+        )
+        .bind(&first_contract)
+        .bind(j * 1000i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO contract_health_checks (contract_id, checked_at, status) VALUES ($1, $2, 'unhealthy')",
+        )
+        .bind(&first_contract)
+        .bind(j * 1000i64 + 1)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let score = db
+        .get_provider_reliability_score(&pubkey)
+        .await
+        .unwrap()
+        .expect("should return score");
+    assert!(
+        (score - 50.0).abs() < 0.01,
+        "expected 50.0, got {score}"
+    );
+}
+
+#[tokio::test]
+async fn test_reliability_score_neutral_uptime_for_new_provider_with_contracts() {
+    // Provider with 2 health checks (< 3) but 5 contracts → uptime defaults to 50
+    let db = setup_test_db().await;
+    let pubkey = vec![0x07u8; 32];
+    let requester = vec![0x08u8; 32];
+    let payment_method = "icpay";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+
+    // 5 completed contracts
+    let mut first_contract_id = vec![0u8; 32];
+    for i in 0..5u8 {
+        let contract_id = vec![i + 0x40; 32];
+        if i == 0 {
+            first_contract_id = contract_id.clone();
+        }
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000, 'memo', 0, 'completed', $4, $5, $6, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(payment_method)
+        .bind(stripe_payment_intent_id)
+        .bind(stripe_customer_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Only 2 health checks (below threshold — uptime defaults to 50)
+    for j in 0..2i64 {
+        sqlx::query(
+            "INSERT INTO contract_health_checks (contract_id, checked_at, status) VALUES ($1, $2, 'healthy')",
+        )
+        .bind(&first_contract_id)
+        .bind(j * 1000i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let score = db
+        .get_provider_reliability_score(&pubkey)
+        .await
+        .unwrap()
+        .expect("should return score when >= 3 contracts");
+
+    // uptime=50 (default), completion=100%, response=100%
+    // 50*0.40 + 100*0.35 + 100*0.25 = 20 + 35 + 25 = 80.0
+    assert!(
+        (score - 80.0).abs() < 0.01,
+        "expected 80.0 (neutral uptime), got {score}"
+    );
+}

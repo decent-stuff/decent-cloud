@@ -4,6 +4,38 @@ use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// Per-offering contract statistics for a provider
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(
+    export,
+    export_to = "../../website/src/lib/types/generated/",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct OfferingStats {
+    /// The offering_id string (e.g. "pool-small")
+    pub offering_id: String,
+    /// Total number of contract requests received
+    #[ts(type = "number")]
+    pub total_requests: i64,
+    /// Contracts currently provisioned or active
+    #[ts(type = "number")]
+    pub active_count: i64,
+    /// Contracts that were cancelled
+    #[ts(type = "number")]
+    pub cancelled_count: i64,
+    /// Contracts that expired
+    #[ts(type = "number")]
+    pub expired_count: i64,
+    /// Contracts that were rejected
+    #[ts(type = "number")]
+    pub rejected_count: i64,
+    /// Total revenue in e9s (sum of payment_amount_e9s for all non-rejected contracts)
+    #[ts(type = "number")]
+    pub total_revenue_e9s: i64,
+}
+
 /// Contact information for an account (account_contacts table)
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(
@@ -86,6 +118,40 @@ impl Database {
             .await?;
         }
         Ok(())
+    }
+
+    /// Get per-offering contract statistics for a provider
+    pub async fn get_offering_stats(&self, provider_pubkey: &[u8]) -> Result<Vec<OfferingStats>> {
+        let rows = sqlx::query!(
+            r#"SELECT
+                offering_id,
+                COUNT(*) as "total_requests!: i64",
+                COUNT(*) FILTER (WHERE status IN ('provisioned', 'active')) as "active_count!: i64",
+                COUNT(*) FILTER (WHERE status = 'cancelled') as "cancelled_count!: i64",
+                COUNT(*) FILTER (WHERE status = 'expired') as "expired_count!: i64",
+                COUNT(*) FILTER (WHERE status = 'rejected') as "rejected_count!: i64",
+                COALESCE(SUM(payment_amount_e9s) FILTER (WHERE status NOT IN ('rejected', 'cancelled')), 0) as "total_revenue_e9s!: i64"
+            FROM contract_sign_requests
+            WHERE provider_pubkey = $1
+            GROUP BY offering_id
+            ORDER BY offering_id"#,
+            provider_pubkey
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| OfferingStats {
+                offering_id: r.offering_id,
+                total_requests: r.total_requests,
+                active_count: r.active_count,
+                cancelled_count: r.cancelled_count,
+                expired_count: r.expired_count,
+                rejected_count: r.rejected_count,
+                total_revenue_e9s: r.total_revenue_e9s,
+            })
+            .collect())
     }
 
     /// Get user activity by pubkey (blockchain-based)

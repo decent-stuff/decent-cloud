@@ -8,6 +8,7 @@
 	import Icon, { type IconName } from "$lib/components/Icons.svelte";
 	import { authStore } from "$lib/stores/auth";
 	import { truncatePubkey } from "$lib/utils/identity";
+	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
@@ -22,6 +23,7 @@
 	let showAuthModal = $state(false);
 	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
+	let sortField = $state<"price" | "trust">("price");
 	let showFilters = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -196,8 +198,13 @@
 			result = result.filter((o) => o.provider_online);
 		}
 
-		// Sort by price
+		// Sort by selected field
 		result.sort((a, b) => {
+			if (sortField === "trust") {
+				const ta = a.trust_score ?? -1;
+				const tb = b.trust_score ?? -1;
+				return tb - ta; // descending always (highest trust first)
+			}
 			const priceA = a.monthly_price ?? Infinity;
 			const priceB = b.monthly_price ?? Infinity;
 			return sortDir === "asc" ? priceA - priceB : priceB - priceA;
@@ -303,6 +310,29 @@
 
 	let copyLinkFeedback = $state<number | null>(null);
 
+	let compareIds = $state(new Set<number>());
+	let showCompareModal = $state(false);
+	let compareWarning = $state<string | null>(null);
+	let compareOfferings = $derived(
+		offerings.filter((o) => o.id !== undefined && compareIds.has(o.id)),
+	);
+
+	function toggleCompare(e: Event, id: number) {
+		e.stopPropagation();
+		if (compareIds.has(id)) {
+			compareIds = removeFromComparison(compareIds, id);
+		} else {
+			try {
+				compareIds = addToComparison(compareIds, id);
+			} catch {
+				compareWarning = COMPARE_MAX_ERROR;
+				setTimeout(() => {
+					compareWarning = null;
+				}, 2500);
+			}
+		}
+	}
+
 	function toggleRow(id: number | undefined) {
 		if (id === undefined) return;
 		expandedRow = expandedRow === id ? null : id;
@@ -327,8 +357,13 @@
 		setTimeout(() => { copyLinkFeedback = null; }, 2000);
 	}
 
-	function toggleSort() {
-		sortDir = sortDir === "asc" ? "desc" : "asc";
+	function setSortPrice(dir: "asc" | "desc") {
+		sortField = "price";
+		sortDir = dir;
+	}
+
+	function setSortTrust() {
+		sortField = "trust";
 	}
 
 	function handleRentalSuccess(contractId: string) {
@@ -894,17 +929,20 @@
 				<div class="text-neutral-500 text-sm">
 					{filteredOfferings.length} offerings found
 				</div>
-				<button
-					onclick={toggleSort}
-					class="hidden md:inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-white transition-colors"
-				>
-					<span>Price</span>
-					{#if sortDir === "asc"}
-						<Icon name="chevron-up" size={20} class="text-neutral-500" />
-					{:else}
-						<Icon name="chevron-down" size={20} class="text-neutral-500" />
-					{/if}
-				</button>
+				<div class="hidden md:flex items-center gap-1">
+					<button
+						onclick={() => setSortPrice("asc")}
+						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'price' && sortDir === 'asc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+					>Price ↑</button>
+					<button
+						onclick={() => setSortPrice("desc")}
+						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'price' && sortDir === 'desc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+					>Price ↓</button>
+					<button
+						onclick={setSortTrust}
+						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+					>Trust ↓</button>
+				</div>
 			</div>
 
 			{#if loading}
@@ -938,20 +976,11 @@
 								<th class="pb-3 font-medium">Type</th>
 								<th class="pb-3 font-medium">Specs</th>
 								<th class="pb-3 font-medium">Location</th>
-								<th
-									class="pb-3 font-medium cursor-pointer hover:text-white"
-									onclick={toggleSort}
-								>
-									<span class="inline-flex items-center gap-1">
-										Price
-										{#if sortDir === "asc"}
-											<Icon name="chevron-up" size={20} class="text-neutral-500" />
-										{:else}
-											<Icon name="chevron-down" size={20} class="text-neutral-500" />
-										{/if}
-									</span>
+								<th class="pb-3 font-medium">
+									<span class="inline-flex items-center gap-1">Price</span>
 								</th>
 								<th class="pb-3 font-medium"></th>
+								<th class="pb-3 font-medium text-right text-neutral-500">Compare</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -1026,7 +1055,7 @@
 											{/if}
 										</div>
 										<a
-											href="/dashboard/reputation/{offering.owner_username ||
+											href="/dashboard/providers/{offering.owner_username ||
 												offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
 											class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
@@ -1092,10 +1121,25 @@
 											>
 										{/if}
 									</td>
+									<td class="py-3 text-right">
+										{#if offering.id !== undefined}
+											{@const inCompare = compareIds.has(offering.id)}
+											<button
+												onclick={(e) => toggleCompare(e, offering.id!)}
+												title={inCompare
+													? "Remove from comparison"
+													: "Add to comparison"}
+												class="px-2 py-1 text-xs border rounded transition-colors {inCompare
+													? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
+													: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
+											>{inCompare ? "✓ Compare" : "+ Compare"}</button
+											>
+										{/if}
+									</td>
 								</tr>
 								{#if isExpanded}
 									<tr class="bg-surface-elevated">
-										<td colspan="6" class="p-4">
+										<td colspan="7" class="p-4">
 											<div
 												class="grid grid-cols-3 gap-4 text-sm"
 											>
@@ -1294,7 +1338,7 @@
 														{/if}
 													</button>
 													<a
-														href="/dashboard/reputation/{offering.owner_username || offering.pubkey}"
+														href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
 														onclick={(e) => e.stopPropagation()}
 														class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
 													>
@@ -1382,7 +1426,7 @@
 										{offering.product_type}
 									</div>
 									<a
-										href="/dashboard/reputation/{offering.owner_username ||
+										href="/dashboard/providers/{offering.owner_username ||
 											offering.pubkey}"
 										onclick={(e) => e.stopPropagation()}
 										class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
@@ -1559,7 +1603,7 @@
 											{/if}
 										</button>
 										<a
-											href="/dashboard/reputation/{offering.owner_username || offering.pubkey}"
+											href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
 											class="inline-flex items-center gap-1.5 text-xs text-neutral-500 hover:text-primary-400 transition-colors"
 										>
@@ -1587,3 +1631,209 @@
 	onClose={() => (showAuthModal = false)}
 	message="Create an account or login to rent cloud resources"
 />
+
+<!-- Compare max warning toast -->
+{#if compareWarning}
+	<div class="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-neutral-900 border border-amber-500/50 text-amber-400 text-sm rounded shadow-lg">
+		{compareWarning}
+	</div>
+{/if}
+
+<!-- Sticky compare bar -->
+{#if compareIds.size > 0}
+	<div class="fixed bottom-0 inset-x-0 z-40 bg-surface-elevated border-t border-neutral-700 shadow-2xl">
+		<div class="max-w-screen-xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+			<span class="text-sm text-neutral-300">
+				Comparing <span class="font-semibold text-white">{compareIds.size}/3</span> offerings
+			</span>
+			<div class="flex items-center gap-2">
+				<button
+					onclick={() => {
+						compareIds = new Set();
+					}}
+					class="px-3 py-1.5 text-xs border border-neutral-600 text-neutral-400 hover:text-white hover:border-neutral-500 rounded transition-colors"
+				>Clear</button>
+				<button
+					onclick={() => {
+						showCompareModal = true;
+					}}
+					disabled={compareIds.size < 2}
+					class="px-4 py-1.5 text-xs font-medium rounded transition-colors {compareIds.size >= 2
+						? 'bg-primary-600 hover:bg-primary-500 text-white'
+						: 'bg-neutral-700 text-neutral-500 cursor-not-allowed'}"
+				>Compare</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Comparison modal -->
+{#if showCompareModal}
+	<div
+		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
+		onclick={(e) => e.target === e.currentTarget && (showCompareModal = false)}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && (showCompareModal = false)}
+	>
+		<div class="bg-surface-elevated border border-neutral-800 shadow-2xl w-full max-w-5xl mt-8 mb-8">
+			<!-- Header -->
+			<div class="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+				<h2 class="text-lg font-semibold text-white">Compare Offerings</h2>
+				<button
+					onclick={() => (showCompareModal = false)}
+					class="text-neutral-500 hover:text-white transition-colors"
+					aria-label="Close comparison"
+				>
+					<Icon name="x" size={20} />
+				</button>
+			</div>
+
+			<!-- Comparison table -->
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="border-b border-neutral-800">
+							<th class="px-4 py-3 text-left text-neutral-500 font-medium w-32">Spec</th>
+							{#each compareOfferings as offering}
+								<th class="px-4 py-3 text-left">
+									<a
+										href="/dashboard/marketplace/{offering.id}"
+										class="font-semibold text-white hover:text-primary-400 transition-colors"
+									>{offering.offer_name}</a>
+									<div class="text-xs text-neutral-500 font-normal mt-0.5">
+										{offering.owner_username
+											? `@${offering.owner_username}`
+											: truncatePubkey(offering.pubkey)}
+									</div>
+								</th>
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						<!-- Price -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Price</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3">
+									<span class="text-white font-medium">{formatPrice(offering)}</span>
+									{#if formatUsdEquivalent(offering)}
+										<span class="text-xs text-neutral-500 ml-1">{formatUsdEquivalent(offering)}</span>
+									{/if}
+								</td>
+							{/each}
+						</tr>
+						<!-- CPU -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">CPU Cores</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">{offering.processor_cores ?? '—'}</td>
+							{/each}
+						</tr>
+						<!-- RAM -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">RAM</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">{offering.memory_amount ?? '—'}</td>
+							{/each}
+						</tr>
+						<!-- SSD -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">SSD</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">
+									{offering.total_ssd_capacity ?? offering.total_hdd_capacity ?? '—'}
+								</td>
+							{/each}
+						</tr>
+						<!-- Location -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Location</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">{formatLocation(offering)}</td>
+							{/each}
+						</tr>
+						<!-- Virtualization -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Virtualization</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">{offering.virtualization_type ?? '—'}</td>
+							{/each}
+						</tr>
+						<!-- Bandwidth -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Bandwidth</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">
+									{offering.unmetered_bandwidth ? 'Unmetered' : (offering.uplink_speed ?? '—')}
+								</td>
+							{/each}
+						</tr>
+						<!-- Contract term -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Contract</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3 text-neutral-300">{formatContractTerms(offering)}</td>
+							{/each}
+						</tr>
+						<!-- Trust score -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Trust Score</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3">
+									{#if offering.trust_score !== undefined}
+										<TrustBadge
+											score={offering.trust_score}
+											hasFlags={offering.has_critical_flags ?? false}
+											compact={true}
+										/>
+									{:else}
+										<span class="text-neutral-500">—</span>
+									{/if}
+								</td>
+							{/each}
+						</tr>
+						<!-- Provider -->
+						<tr class="hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Provider</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3">
+									<a
+										href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+										class="text-primary-400 hover:text-primary-300 text-xs transition-colors {offering.owner_username ? '' : 'font-mono'}"
+									>{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}</a>
+								</td>
+							{/each}
+						</tr>
+					</tbody>
+				</table>
+			</div>
+
+			<!-- Action row -->
+			<div class="px-6 py-4 border-t border-neutral-800 flex gap-3">
+				{#each compareOfferings as offering}
+					<div class="flex-1">
+						{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
+							<a
+								href={offering.external_checkout_url}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="inline-flex items-center gap-1 w-full justify-center px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium rounded transition-colors"
+							>Visit Provider <Icon name="external" size={14} class="text-white" /></a>
+						{:else if offering.is_example}
+							<span class="inline-flex w-full justify-center px-3 py-2 bg-neutral-700 text-neutral-500 text-xs font-medium rounded cursor-not-allowed">Demo only</span>
+						{:else}
+							<button
+								onclick={() => {
+									showCompareModal = false;
+									handleRentClick(new MouseEvent('click'), offering);
+								}}
+								class="w-full px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium rounded transition-colors"
+							>Rent {offering.offer_name}</button>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</div>
+	</div>
+{/if}

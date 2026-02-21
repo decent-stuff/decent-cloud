@@ -168,7 +168,7 @@
 						{offering.product_type}
 					</span>
 					<a
-						href="/dashboard/reputation/{offering.owner_username || offering.pubkey}"
+						href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
 						class="text-sm text-neutral-500 hover:text-primary-400 {offering.owner_username ? '' : 'font-mono'}"
 					>
 						{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}

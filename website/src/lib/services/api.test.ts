@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, hexEncode, getUserContracts, getProviderContracts, getProviderResponseMetrics } from './api';
+import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, getProviderProfile, hexEncode, getUserContracts, getProviderContracts, getProviderResponseMetrics, getProviderOfferingStats } from './api';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 const sampleStats = {
@@ -511,5 +511,194 @@ describe('getProviderResponseMetrics', () => {
 		});
 
 		await expect(getProviderResponseMetrics('test')).rejects.toThrow('Provider not found');
+	});
+});
+
+describe('getProviderProfile', () => {
+	const sampleProfile = {
+		name: 'Acme Cloud',
+		description: 'Reliable cloud provider',
+		website_url: 'https://acme.example.com',
+		logo_url: null,
+		why_choose_us: null,
+		api_version: '1.0',
+		profile_version: '1.0',
+		updated_at_ns: 1234567890,
+		support_email: 'support@acme.example.com',
+		support_hours: null,
+		support_channels: null,
+		regions: 'europe,na',
+		payment_methods: null,
+		refund_policy: null,
+		sla_guarantee: null,
+		unique_selling_points: null,
+		common_issues: null,
+		onboarding_completed_at: null
+	};
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('returns provider profile with pubkey attached', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleProfile })
+		});
+
+		const profile = await getProviderProfile('abcd1234');
+
+		expect(profile).not.toBeNull();
+		expect(profile!.name).toBe('Acme Cloud');
+		expect(profile!.pubkey).toBe('abcd1234');
+		expect(profile!.website_url).toBe('https://acme.example.com');
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/providers/abcd1234')
+		);
+	});
+
+	it('converts Uint8Array pubkey to hex in URL', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleProfile })
+		});
+
+		const pubkey = new Uint8Array([0xab, 0xcd, 0x12, 0x34]);
+		await getProviderProfile(pubkey);
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/providers/abcd1234')
+		);
+	});
+
+	it('returns null for 404 response', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 404,
+			statusText: 'Not Found'
+		});
+
+		const profile = await getProviderProfile('unknownpubkey');
+		expect(profile).toBeNull();
+	});
+
+	it('returns null when data is absent', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: null })
+		});
+
+		const profile = await getProviderProfile('abcd1234');
+		expect(profile).toBeNull();
+	});
+
+	it('throws when API returns non-404 error', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 500,
+			statusText: 'Internal Server Error'
+		});
+
+		await expect(getProviderProfile('abcd1234')).rejects.toThrow(
+			'Failed to fetch provider profile'
+		);
+	});
+
+	it('throws when API reports failure', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: false, error: 'Database error' })
+		});
+
+		await expect(getProviderProfile('abcd1234')).rejects.toThrow('Database error');
+	});
+});
+
+describe('getProviderOfferingStats', () => {
+	const providerHex = 'abcd1234';
+	const providerHeaders: SignedRequestHeaders = {
+		'X-Public-Key': providerHex,
+		'X-Signature': 'sig',
+		'X-Timestamp': '123',
+		'X-Nonce': 'test-nonce-uuid',
+		'Content-Type': 'application/json'
+	};
+
+	const sampleStats = [
+		{
+			offeringId: 'pool-small',
+			totalRequests: 10,
+			activeCount: 2,
+			cancelledCount: 3,
+			expiredCount: 1,
+			rejectedCount: 0,
+			totalRevenueE9s: 5_000_000_000
+		},
+		{
+			offeringId: 'pool-large',
+			totalRequests: 5,
+			activeCount: 1,
+			cancelledCount: 1,
+			expiredCount: 0,
+			rejectedCount: 2,
+			totalRevenueE9s: 12_000_000_000
+		}
+	];
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('returns offering stats array when API succeeds', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: sampleStats })
+		});
+
+		const result = await getProviderOfferingStats(providerHex, providerHeaders);
+
+		expect(result).toHaveLength(2);
+		expect(result[0].offeringId).toBe('pool-small');
+		expect(result[0].totalRequests).toBe(10);
+		expect(result[0].totalRevenueE9s).toBe(5_000_000_000);
+		expect(result[1].offeringId).toBe('pool-large');
+		expect(result[1].rejectedCount).toBe(2);
+	});
+
+	it('sends authenticated headers to correct URL', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: [] })
+		});
+
+		await getProviderOfferingStats(providerHex, providerHeaders);
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining(`/api/v1/providers/${providerHex}/offering-stats`),
+			expect.objectContaining({ method: 'GET', headers: providerHeaders })
+		);
+	});
+
+	it('throws when API returns HTTP error', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 403,
+			statusText: 'Forbidden'
+		});
+
+		await expect(getProviderOfferingStats(providerHex, providerHeaders)).rejects.toThrow(
+			'Failed to fetch offering stats: 403'
+		);
+	});
+
+	it('throws when API returns success:false', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: false, error: 'Not authorized' })
+		});
+
+		await expect(getProviderOfferingStats(providerHex, providerHeaders)).rejects.toThrow(
+			'Not authorized'
+		);
 	});
 });
