@@ -60,8 +60,6 @@ CREATE TABLE provider_profiles (
     -- Added: trust fields (migration 018)
     trust_score BIGINT,
     has_critical_flags BOOLEAN DEFAULT FALSE,
-    -- Added: reliability score (migration 020)
-    reliability_score DOUBLE PRECISION,
     -- Added: auto_accept_rentals (migration 048/049)
     auto_accept_rentals BOOLEAN NOT NULL DEFAULT TRUE,
     -- Added: account_id (migration 050)
