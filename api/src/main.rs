@@ -1,6 +1,7 @@
 mod acme_dns;
 mod auth;
 mod auto_renewal_service;
+mod publish_scheduled_service;
 mod sla_alert_service;
 mod chatwoot;
 mod cleanup_service;
@@ -49,6 +50,7 @@ use openapi::create_combined_api;
 use price_cache::PriceCache;
 use auto_renewal_service::AutoRenewalService;
 use payment_release_service::PaymentReleaseService;
+use publish_scheduled_service::PublishScheduledService;
 use sla_alert_service::SlaAlertService;
 use poem::web::{Data, Redirect};
 use poem::{
@@ -1360,6 +1362,13 @@ async fn serve_command() -> Result<(), std::io::Error> {
         sla_alert_service.run().await;
     });
 
+    // Start scheduled-offering publish service in background (runs every 60 seconds)
+    let db_for_publish = ctx.database.clone();
+    let publish_scheduled_task = tokio::spawn(async move {
+        tracing::info!("Starting publish-scheduled-offerings service (interval: 60s)");
+        PublishScheduledService::new(db_for_publish, 60).run().await;
+    });
+
     // Start cloud provisioning service in background
     let cloud_provisioning_interval_secs = env::var("CLOUD_PROVISIONING_INTERVAL_SECS")
         .ok()
@@ -1392,6 +1401,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     payment_release_task.abort();
     auto_renewal_task.abort();
     sla_alert_task.abort();
+    publish_scheduled_task.abort();
     cloud_provisioning_task.abort();
     if let Some(task) = email_processor_task {
         task.abort();

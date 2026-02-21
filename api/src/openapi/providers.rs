@@ -4482,6 +4482,7 @@ impl ProvidersApi {
                 reliability_score: None,
                 is_example: false,
                 is_draft: false,
+                publish_at: None,
                 offering_source: Some("generated".to_string()),
                 external_checkout_url: None,
                 reseller_name: None,

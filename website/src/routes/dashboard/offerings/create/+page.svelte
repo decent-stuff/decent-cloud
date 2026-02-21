@@ -47,6 +47,7 @@
 	let productType = $state('compute');
 	let visibility = $state('private');
 	let isDraft = $state(false);
+	let publishAt = $state('');
 	let monthlyPrice = $state<number | null>(null);
 	let currency = $state('USD');
 	let setupFee = $state(0);
@@ -249,6 +250,7 @@
 				reliability_score: undefined,
 				is_example: false,
 				is_draft: isDraft,
+				publish_at: isDraft && publishAt ? new Date(publishAt).toISOString() : undefined,
 				offering_source: undefined,
 				external_checkout_url: undefined,
 				reseller_name: undefined,
@@ -514,11 +516,27 @@
 				</div>
 
 				<!-- Draft mode toggle -->
-				<div class="flex items-center gap-3 p-3 bg-surface-elevated border border-neutral-700">
-					<input type="checkbox" id="isDraft" bind:checked={isDraft} class="w-4 h-4 accent-primary-400" />
-					<label for="isDraft" class="text-neutral-300 text-sm cursor-pointer">
-						Save as draft <span class="text-neutral-500">(hidden from marketplace until published)</span>
-					</label>
+				<div class="space-y-3">
+					<div class="flex items-center gap-3 p-3 bg-surface-elevated border border-neutral-700">
+						<input type="checkbox" id="isDraft" bind:checked={isDraft} class="w-4 h-4 accent-primary-400" />
+						<label for="isDraft" class="text-neutral-300 text-sm cursor-pointer">
+							Save as draft <span class="text-neutral-500">(hidden from marketplace until published)</span>
+						</label>
+					</div>
+					{#if isDraft}
+						<div>
+							<label for="publishAt" class="block text-sm font-medium text-neutral-400 mb-1.5">
+								Schedule publish
+							</label>
+							<input
+								id="publishAt"
+								type="datetime-local"
+								bind:value={publishAt}
+								class="w-full bg-surface-elevated border border-neutral-700 text-white px-3 py-2 focus:border-primary-500 focus:outline-none"
+							/>
+							<p class="text-xs text-neutral-500 mt-1">If set, this draft will automatically publish at the specified date and time.</p>
+						</div>
+					{/if}
 				</div>
 			</div>
 

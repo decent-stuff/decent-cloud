@@ -30,6 +30,14 @@
 
 	let sshKey = $state("");
 	let savedSshKeys = $state<AccountExternalKey[]>([]);
+	let sshKeygenTab = $state<'unix' | 'powershell' | 'putty'>('unix');
+	let copiedSshKeygen = $state<string | null>(null);
+
+	function copySshKeygenCmd(cmd: string, key: string) {
+		navigator.clipboard.writeText(cmd);
+		copiedSshKeygen = key;
+		setTimeout(() => { copiedSshKeygen = null; }, 2000);
+	}
 	let contactMethod = $state("");
 	let buyerAddress = $state("");
 	let durationHours = $state(720); // Default: 30 days
@@ -626,11 +634,62 @@
 					{/if}
 					<details class="text-sm text-neutral-400 mt-1">
 						<summary class="cursor-pointer hover:text-neutral-200 select-none">How to generate an SSH key?</summary>
-						<div class="mt-2 p-3 bg-neutral-800 rounded font-mono text-xs space-y-2">
-							<p class="text-neutral-300 font-sans">Run this command in your terminal:</p>
-							<code class="block">ssh-keygen -t ed25519 -C "your-email@example.com"</code>
-							<p class="text-neutral-300 font-sans">Then copy your public key:</p>
-							<code class="block">cat ~/.ssh/id_ed25519.pub</code>
+						<div class="mt-2 p-3 bg-neutral-800 rounded text-xs">
+							<div class="flex gap-1 mb-3">
+								{#each ([['unix', 'macOS / Linux'], ['powershell', 'Windows (PowerShell)'], ['putty', 'Windows (PuTTY)']] as const) as [id, label]}
+									<button
+										type="button"
+										onclick={() => sshKeygenTab = id}
+										class="text-xs px-2 py-1 border transition-colors {sshKeygenTab === id ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:text-white'}"
+									>{label}</button>
+								{/each}
+							</div>
+							{#if sshKeygenTab === 'unix'}
+								<ol class="text-neutral-300 space-y-2 list-decimal list-inside">
+									<li>Open Terminal</li>
+									<li>Generate key:
+										<div class="flex items-center justify-between mt-1 font-mono bg-black/30 px-3 py-2 rounded">
+											<code class="text-green-300 select-all">ssh-keygen -t ed25519 -C "your-email@example.com"</code>
+											<button type="button" onclick={() => copySshKeygenCmd('ssh-keygen -t ed25519 -C "your-email@example.com"', 'unix-gen')} class="ml-2 shrink-0 px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors">{copiedSshKeygen === 'unix-gen' ? 'Copied!' : 'Copy'}</button>
+										</div>
+									</li>
+									<li>Press Enter when prompted to accept defaults</li>
+									<li>Copy public key:
+										<div class="flex items-center justify-between mt-1 font-mono bg-black/30 px-3 py-2 rounded">
+											<code class="text-green-300 select-all">cat ~/.ssh/id_ed25519.pub</code>
+											<button type="button" onclick={() => copySshKeygenCmd('cat ~/.ssh/id_ed25519.pub', 'unix-cat')} class="ml-2 shrink-0 px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors">{copiedSshKeygen === 'unix-cat' ? 'Copied!' : 'Copy'}</button>
+										</div>
+									</li>
+									<li>Paste the output into the SSH Public Key field above</li>
+								</ol>
+							{:else if sshKeygenTab === 'powershell'}
+								<ol class="text-neutral-300 space-y-2 list-decimal list-inside">
+									<li>Open Windows Terminal or PowerShell</li>
+									<li>Generate key:
+										<div class="flex items-center justify-between mt-1 font-mono bg-black/30 px-3 py-2 rounded">
+											<code class="text-green-300 select-all">ssh-keygen -t ed25519 -C "your-email@example.com"</code>
+											<button type="button" onclick={() => copySshKeygenCmd('ssh-keygen -t ed25519 -C "your-email@example.com"', 'ps-gen')} class="ml-2 shrink-0 px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors">{copiedSshKeygen === 'ps-gen' ? 'Copied!' : 'Copy'}</button>
+										</div>
+									</li>
+									<li>Press Enter when prompted to accept defaults</li>
+									<li>Copy public key:
+										<div class="flex items-center justify-between mt-1 font-mono bg-black/30 px-3 py-2 rounded">
+											<code class="text-green-300 select-all">Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"</code>
+											<button type="button" onclick={() => copySshKeygenCmd('Get-Content "$env:USERPROFILE\\.ssh\\id_ed25519.pub"', 'ps-cat')} class="ml-2 shrink-0 px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors">{copiedSshKeygen === 'ps-cat' ? 'Copied!' : 'Copy'}</button>
+										</div>
+									</li>
+									<li>Paste the output into the SSH Public Key field above</li>
+								</ol>
+							{:else}
+								<ol class="text-neutral-300 space-y-2 list-decimal list-inside">
+									<li>Download PuTTYgen from <a href="https://putty.org" target="_blank" rel="noopener" class="text-green-400 hover:underline">putty.org</a></li>
+									<li>Open PuTTYgen → Select <strong>EdDSA</strong> → Click <strong>Generate</strong></li>
+									<li>Move mouse over the blank area to generate randomness</li>
+									<li>Click <strong>Save public key</strong> and <strong>Save private key</strong></li>
+									<li>Copy the text from the "Public key for pasting" box at the top</li>
+									<li>Paste it into the SSH Public Key field above</li>
+								</ol>
+							{/if}
 						</div>
 					</details>
 					{#if isCustomKey && !sshKeyValidation && sshKey.trim()}

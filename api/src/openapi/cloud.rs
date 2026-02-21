@@ -1104,6 +1104,7 @@ impl CloudApi {
             has_critical_flags: None,
             is_example: false,
             is_draft: false,
+            publish_at: None,
             offering_source: Some("self_provisioned".to_string()),
             external_checkout_url: None,
             reseller_name: None,

@@ -2,7 +2,7 @@
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
-	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, type Offering } from "$lib/services/api";
+	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, type Offering, type TrendingOffering } from "$lib/services/api";
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -56,6 +56,7 @@
 	let inStockOnly = $state(true);
 	let providerFilter = $state<string>('');
 	let recentlyViewedIds = $state<number[]>([]);
+	let trendingOfferings = $state<TrendingOffering[]>([]);
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -393,6 +394,8 @@
 		const fetches: Promise<unknown>[] = [fetchOfferings(), fetchIcpPrice()];
 		if (isAuthenticated) fetches.push(loadSavedIds().catch((err) => console.error('Failed to load saved offerings:', err)));
 		[, icpPriceUsd] = await Promise.all(fetches) as [unknown, number | null];
+		// Load trending independently — failure must not block the main marketplace
+		fetchTrendingOfferings(6).then(t => { trendingOfferings = t; }).catch(err => console.error('Failed to load trending offerings:', err));
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
 			const id = parseInt(offeringParam, 10);
@@ -1214,6 +1217,31 @@
 								{#if o.monthly_price}
 									<span class="text-neutral-500 text-xs">{o.monthly_price.toFixed(2)} {o.currency}</span>
 								{/if}
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if trendingOfferings.length >= 2 && !hasActiveFilters}
+				<div class="mb-6">
+					<div class="flex items-center justify-between mb-2">
+						<div class="text-xs text-neutral-500 uppercase tracking-wide">Trending this week</div>
+						<a href="/dashboard/marketplace" class="text-xs text-primary-400 hover:text-primary-300 transition-colors">See all</a>
+					</div>
+					<div class="flex gap-3 overflow-x-auto pb-1">
+						{#each trendingOfferings as t}
+							<a
+								href="/dashboard/marketplace/{t.offering_id}"
+								class="flex-none w-44 p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 transition-colors"
+							>
+								<div class="font-medium text-white text-sm truncate mb-1">{t.offer_name}</div>
+								<div class="text-xs text-neutral-400 mb-2">{t.product_type}</div>
+								<div class="text-xs text-neutral-300 mb-1">{t.monthly_price.toFixed(2)} {t.currency}/mo</div>
+								{#if t.datacenter_city || t.datacenter_country}
+									<div class="text-xs text-neutral-500 truncate mb-2">{[t.datacenter_city, t.datacenter_country].filter(Boolean).join(', ')}</div>
+								{/if}
+								<div class="text-xs text-orange-400">&#x1F525; {t.views_7d} views this week</div>
 							</a>
 						{/each}
 					</div>

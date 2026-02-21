@@ -629,11 +629,20 @@
 								<span class="w-2 h-2 rounded-full bg-current"></span>
 								{offering.stock_status.replace('_', ' ')}
 							</button>
-							<!-- Draft badge -->
+							<!-- Draft / Scheduled badge -->
 							{#if offering.is_draft}
-								<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border bg-amber-500/20 border-amber-500/50 text-amber-300">
-									Draft
-								</span>
+								{#if offering.publish_at}
+									<span
+										class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border bg-blue-500/20 border-blue-500/50 text-blue-300"
+										title="Scheduled to publish at {new Date(offering.publish_at).toLocaleString()}"
+									>
+										Scheduled
+									</span>
+								{:else}
+									<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border bg-amber-500/20 border-amber-500/50 text-amber-300">
+										Draft
+									</span>
+								{/if}
 							{/if}
 						</div>
 					</div>

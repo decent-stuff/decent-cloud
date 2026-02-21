@@ -590,6 +590,7 @@ async fn test_create_offering_success() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let offering_id = db
@@ -713,6 +714,7 @@ async fn test_create_offering_duplicate_id() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     // First creation should succeed
@@ -800,6 +802,7 @@ async fn test_create_offering_missing_required_fields() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -886,6 +889,7 @@ async fn test_update_offering_success() {
         is_subscription: false,
         subscription_interval_days: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -985,6 +989,7 @@ async fn test_update_offering_unauthorized() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;
@@ -1878,6 +1883,7 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -1982,6 +1988,7 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -2083,6 +2090,7 @@ async fn test_get_provider_offerings_no_matching_pool() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -2190,6 +2198,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
     db.create_offering(&provider_with_pool, params1)
         .await
@@ -2266,6 +2275,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
     db.create_offering(&provider_with_pool, params2)
         .await
@@ -2342,6 +2352,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
     db.create_offering(&provider_without_pool, params3)
         .await
@@ -2454,6 +2465,7 @@ async fn test_create_subscription_offering() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -2547,6 +2559,7 @@ async fn test_create_yearly_subscription_offering() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -2640,6 +2653,7 @@ async fn test_get_subscription_offering_fields() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -2758,6 +2772,7 @@ async fn test_one_time_offering_default_subscription_fields() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -2851,6 +2866,7 @@ async fn test_template_name_generates_provisioner_config() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -2950,6 +2966,7 @@ async fn test_template_name_non_numeric_no_config() {
         resolved_pool_id: None,
         resolved_pool_name: None,
         created_at_ns: None,
+        publish_at: None,
     };
 
     let db_id = db
@@ -3665,4 +3682,185 @@ async fn test_get_offering_analytics_multiple_viewers() {
     assert_eq!(analytics.unique_viewers_7d, 3, "Three unique viewers in 7d");
     assert_eq!(analytics.views_30d, 3, "Three distinct views in 30d window");
     assert_eq!(analytics.unique_viewers_30d, 3, "Three unique viewers in 30d");
+}
+
+// ── trending offerings tests ───────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_trending_offerings_with_views_appears() {
+    let db = setup_test_db().await;
+    let provider = vec![0xB1u8; 32];
+    insert_test_offering(&db, 11, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(11);
+
+    // Record views from distinct IPs so they aren't deduplicated
+    db.record_offering_view(offering_id, None, &[0xC1u8; 32]).await.expect("view 1 failed");
+    db.record_offering_view(offering_id, None, &[0xC2u8; 32]).await.expect("view 2 failed");
+    db.record_offering_view(offering_id, None, &[0xC3u8; 32]).await.expect("view 3 failed");
+
+    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+    let found = trending.iter().find(|t| t.offering_id == offering_id);
+    assert!(found.is_some(), "Offering with views must appear in trending");
+    assert_eq!(found.unwrap().views_7d, 3, "views_7d must equal number of distinct views recorded");
+}
+
+#[tokio::test]
+async fn test_get_trending_offerings_no_views_excluded() {
+    let db = setup_test_db().await;
+    let provider = vec![0xB2u8; 32];
+    insert_test_offering(&db, 12, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(12);
+
+    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+    let found = trending.iter().any(|t| t.offering_id == offering_id);
+    assert!(!found, "Offering with no views must not appear in trending");
+}
+
+#[tokio::test]
+async fn test_get_trending_offerings_ordered_by_view_count_descending() {
+    let db = setup_test_db().await;
+    let provider = vec![0xB3u8; 32];
+    insert_test_offering(&db, 13, &provider, "US", 10.0).await;
+    insert_test_offering(&db, 14, &provider, "US", 15.0).await;
+    let id_low = test_id_to_db_id(13); // 1 view
+    let id_high = test_id_to_db_id(14); // 3 views
+
+    db.record_offering_view(id_low, None, &[0xD1u8; 32]).await.expect("view low failed");
+    db.record_offering_view(id_high, None, &[0xD2u8; 32]).await.expect("view high 1 failed");
+    db.record_offering_view(id_high, None, &[0xD3u8; 32]).await.expect("view high 2 failed");
+    db.record_offering_view(id_high, None, &[0xD4u8; 32]).await.expect("view high 3 failed");
+
+    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+
+    // Both offerings must appear in the results
+    let pos_high = trending.iter().position(|t| t.offering_id == id_high);
+    let pos_low = trending.iter().position(|t| t.offering_id == id_low);
+    assert!(pos_high.is_some(), "High-view offering must be in trending");
+    assert!(pos_low.is_some(), "Low-view offering must be in trending");
+    assert!(pos_high.unwrap() < pos_low.unwrap(), "Higher view count must rank first");
+}
+
+// ==================== Scheduled Publish Tests ====================
+
+/// Build a minimal draft Offering for testing publish scheduling.
+fn make_draft_offering(id: i64, pubkey: &[u8], offering_id: &str, publish_at: Option<chrono::DateTime<chrono::Utc>>) -> Offering {
+    Offering {
+        id: None,
+        pubkey: hex::encode(pubkey),
+        offering_id: offering_id.to_string(),
+        offer_name: "Scheduled Test Offer".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 10.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: Some(2),
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: Some("4GB".to_string()),
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "Dallas".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        reliability_score: None,
+        is_example: false,
+        is_draft: true,
+        publish_at,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        template_name: None,
+        agent_pool_id: None,
+        post_provision_script: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+        created_at_ns: Some(id),
+    }
+}
+
+#[tokio::test]
+async fn test_publish_scheduled_offerings_publishes_past_due() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xFFu8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // Create a draft with publish_at in the past
+    let past = chrono::Utc::now() - chrono::Duration::hours(1);
+    let offering = make_draft_offering(9001, &pubkey, "sched-past-offer", Some(past));
+    let db_id = db.create_offering(&pubkey, offering).await.expect("create failed");
+
+    // Verify it starts as draft
+    let before = db.get_offering(db_id).await.expect("get failed").expect("not found");
+    assert!(before.is_draft, "offering must start as draft");
+
+    // Run the scheduler
+    let published = db.publish_scheduled_offerings().await.expect("publish_scheduled failed");
+    assert!(published >= 1, "at least one offering should have been published");
+
+    // Verify it is now published
+    let after = db.get_offering(db_id).await.expect("get failed").expect("not found");
+    assert!(!after.is_draft, "offering must be published after scheduler runs");
+    assert!(after.publish_at.is_none(), "publish_at must be cleared after publishing");
+}
+
+#[tokio::test]
+async fn test_publish_scheduled_offerings_keeps_future_drafts() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xFEu8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // Create a draft with publish_at in the future
+    let future = chrono::Utc::now() + chrono::Duration::hours(24);
+    let offering = make_draft_offering(9002, &pubkey, "sched-future-offer", Some(future));
+    let db_id = db.create_offering(&pubkey, offering).await.expect("create failed");
+
+    // Run the scheduler - should NOT publish this offering
+    let published = db.publish_scheduled_offerings().await.expect("publish_scheduled failed");
+    // We can't assert published == 0 because other tests may have created past-due offerings.
+    // Instead verify this specific offering is still a draft.
+    let _ = published;
+
+    let after = db.get_offering(db_id).await.expect("get failed").expect("not found");
+    assert!(after.is_draft, "future-scheduled offering must remain a draft");
+    assert!(after.publish_at.is_some(), "publish_at must not be cleared for future offering");
 }

@@ -49,6 +49,7 @@
 	let productType = $state('compute');
 	let visibility = $state('private');
 	let isDraft = $state(false);
+	let publishAt = $state("");
 	let monthlyPrice = $state<number | null>(null);
 	let currency = $state('USD');
 	let setupFee = $state(0);
@@ -182,6 +183,7 @@
 			const offering = {
 				...existing,
 				is_draft: isDraft,
+				publish_at: isDraft && publishAt ? new Date(publishAt).toISOString() : null,
 				offer_name: offerName.trim(),
 				description: description.trim() || null,
 				currency,
@@ -246,6 +248,8 @@
 					setupFee = offering.setup_fee;
 					postProvisionScript = offering.post_provision_script ?? '';
 					isDraft = offering.is_draft ?? false;
+					// Convert ISO timestamp to datetime-local format (strip seconds and timezone)
+					publishAt = offering.publish_at ? offering.publish_at.slice(0, 16) : '';
 				} catch (e) {
 					error = e instanceof Error ? e.message : 'Failed to load offering';
 				}
@@ -516,11 +520,27 @@
 			</div>
 
 			<!-- Draft mode toggle -->
-			<div class="flex items-center gap-3 p-3 bg-surface-elevated border border-neutral-700">
-				<input type="checkbox" id="isDraft" bind:checked={isDraft} class="w-4 h-4 accent-primary-400" />
-				<label for="isDraft" class="text-neutral-300 text-sm cursor-pointer">
-					Save as draft <span class="text-neutral-500">(hidden from marketplace until published)</span>
-				</label>
+			<div class="space-y-3">
+				<div class="flex items-center gap-3 p-3 bg-surface-elevated border border-neutral-700">
+					<input type="checkbox" id="isDraft" bind:checked={isDraft} class="w-4 h-4 accent-primary-400" />
+					<label for="isDraft" class="text-neutral-300 text-sm cursor-pointer">
+						Save as draft <span class="text-neutral-500">(hidden from marketplace until published)</span>
+					</label>
+				</div>
+				{#if isDraft}
+					<div>
+						<label for="publishAt" class="block text-sm font-medium text-neutral-400 mb-1.5">
+							Schedule publish
+						</label>
+						<input
+							id="publishAt"
+							type="datetime-local"
+							bind:value={publishAt}
+							class="w-full bg-surface-elevated border border-neutral-700 text-white px-3 py-2 focus:border-primary-500 focus:outline-none"
+						/>
+						<p class="text-xs text-neutral-500 mt-1">If set, this draft will automatically publish at the specified date and time.</p>
+					</div>
+				{/if}
 			</div>
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">

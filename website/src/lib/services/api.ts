@@ -3736,6 +3736,19 @@ export interface OfferingAnalytics {
 	unique_viewers_30d: number;
 }
 
+export interface TrendingOffering {
+	offering_id: number;
+	offer_name: string;
+	pubkey: string;
+	product_type: string;
+	monthly_price: number;
+	currency: string;
+	datacenter_country?: string;
+	datacenter_city?: string;
+	trust_score?: number;
+	views_7d: number;
+}
+
 /**
  * Fetch analytics for an offering (provider-only, requires signed auth headers).
  */
@@ -3752,6 +3765,22 @@ export async function getOfferingAnalytics(
 	const payload = (await response.json()) as ApiResponse<OfferingAnalytics>;
 	if (!payload.success || !payload.data) {
 		throw new Error(payload.error ?? 'Failed to fetch offering analytics');
+	}
+	return payload.data;
+}
+
+/**
+ * Fetch top trending offerings by view count in the last 7 days (public, no auth).
+ */
+export async function fetchTrendingOfferings(limit = 6): Promise<TrendingOffering[]> {
+	const url = `${API_BASE_URL}/api/v1/offerings/trending?limit=${limit}`;
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch trending offerings: ${response.status} ${response.statusText}`);
+	}
+	const payload = (await response.json()) as ApiResponse<TrendingOffering[]>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch trending offerings');
 	}
 	return payload.data;
 }

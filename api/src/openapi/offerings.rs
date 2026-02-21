@@ -74,6 +74,10 @@ pub struct ContactOfferingRequest {
 
 pub struct OfferingsApi;
 
+fn default_trending_limit() -> i64 {
+    6
+}
+
 #[OpenApi]
 impl OfferingsApi {
     /// Get pricing statistics for offerings
@@ -99,6 +103,32 @@ impl OfferingsApi {
                 success: false,
                 data: None,
                 error: Some(format!("Failed to get pricing stats: {e:#?}")),
+            }),
+        }
+    }
+
+    /// Get trending offerings
+    ///
+    /// Returns the top offerings by view count in the last 7 days.
+    /// Only public, non-draft, in-stock offerings are included.
+    /// Public — no auth required.
+    #[oai(path = "/offerings/trending", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_trending_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(default = "default_trending_limit")] limit: poem_openapi::param::Query<i64>,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::TrendingOffering>>> {
+        let limit = limit.0.min(10);
+        match db.get_trending_offerings(limit).await {
+            Ok(offerings) => Json(ApiResponse {
+                success: true,
+                data: Some(offerings),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get trending offerings: {e:#?}")),
             }),
         }
     }

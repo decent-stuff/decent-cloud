@@ -94,14 +94,14 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Provider] Request filtering and bulk actions** — Provider cannot filter pending rental requests by offering type, duration, or tenant trust score; cannot bulk-accept/reject; cannot set auto-accept rules. *(Single-session: client-side filtering + bulk action UI on existing endpoint.)*
   - Dependency: Would benefit from offering analytics (views vs. rentals) to inform auto-accept thresholds.
 
-- **[Tenant] SSH key onboarding guidance** — Tenants renting for the first time receive connection details with no guidance on generating SSH keys, no platform-specific instructions (Windows/Mac/Linux), and no "test connection" button. *(Single-session: expand connection details section in rental detail page with collapsible SSH help.)*
+- **[Tenant] SSH key onboarding guidance** — DONE: Rental request dialog now has platform-specific tabbed SSH key generation guide (macOS/Linux, Windows PowerShell, Windows PuTTY) with copy buttons for each command.
 
-- **[Marketplace] Trending and recommendations section** — Marketplace has search but no proactive discovery: no "Trending this week", "New providers", or "Recommended for you" sections. Needs: trending endpoint (most-viewed/rented in last 7d from `offering_views`), frontend recommendation cards. *(Single-session backend + frontend once `offering_views` accumulates data.)*
-  - Dependency: Requires `offering_views` data (migration 029, now live).
+- **[Marketplace] Trending and recommendations section** — DONE: `GET /api/v1/offerings/trending` endpoint returns top offerings by views in last 7 days. Marketplace shows "Trending this week" horizontal card strip when ≥2 trending offerings exist and no active filters are applied.
+  - **Remaining:** "New providers" and "Recommended for you" sections. *(Needs provider join date tracking and personalization logic.)*
 
 - **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's full public profile: historical trust score trend, feedback breakdown by offering type, response-time statistics, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page, comparison view.)*
 
-- **[Offerings] Draft offerings scheduling** — Providers can create draft offerings but cannot schedule a future publish date, bulk-publish drafts, or see what changed since last save. *(Single-session: add `publish_at` field to offerings, scheduled publish logic in backend, UI controls.)*
-  - Dependency: `is_draft` field already exists (migration 027).
+- **[Offerings] Draft offerings scheduling** — DONE: `publish_at` field (migration 030) on offerings. When `is_draft=true` and `publish_at <= NOW()`, `PublishScheduledService` (60s interval) auto-publishes. UI: schedule picker on create/edit pages (shown when draft=true), "Scheduled" badge with publish time on offerings list.
+  - **Remaining:** Bulk-publish drafts, "what changed since last save" diff view.
 
 - **[Tenant] Saved offerings price-change alerts** — Tenants can save offerings but receive no notification when a saved offering changes price or goes out of stock. *(Multi-session: needs price-history tracking table, notification integration.)*
