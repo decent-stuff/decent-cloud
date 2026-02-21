@@ -12,7 +12,6 @@ use super::common::ApiTags;
 pub struct IcpPriceResponse {
     /// ICP/USD price, or null if the price feed is unavailable
     #[oai(skip_serializing_if_is_none)]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub price_usd: Option<f64>,
 }
 
@@ -51,7 +50,7 @@ mod tests {
     fn response_serializes_without_price() {
         let resp = IcpPriceResponse { price_usd: None };
         let json = serde_json::to_value(&resp).unwrap();
-        // When price_usd is None the field should be omitted (skip_serializing_if_is_none)
-        assert!(json.get("priceUsd").is_none());
+        // poem_openapi's Object derive serializes None as JSON null (not omitted)
+        assert!(json["priceUsd"].is_null());
     }
 }
