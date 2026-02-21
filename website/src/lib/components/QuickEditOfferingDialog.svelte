@@ -209,6 +209,7 @@
 				operating_systems: offering.operating_systems || undefined,
 				trust_score: undefined,
 				has_critical_flags: undefined,
+				reliability_score: undefined,
 				is_example: offering.is_example,
 				offering_source: offering.offering_source || undefined,
 				external_checkout_url: offering.external_checkout_url || undefined,
@@ -229,7 +230,8 @@
 				overage_price_per_unit: overagePricePerUnit || undefined,
 				stripe_metered_price_id: offering.stripe_metered_price_id || undefined,
 				is_subscription: offering.is_subscription || false,
-				subscription_interval_days: offering.subscription_interval_days || undefined
+				subscription_interval_days: offering.subscription_interval_days || undefined,
+				created_at_ns: undefined
 			};
 
 			// Sign the request - this returns the exact JSON body that was signed

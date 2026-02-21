@@ -1,17 +1,23 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth';
-	import type { AccountInfo } from '$lib/stores/auth';
+	import type { AccountInfo, IdentityInfo } from '$lib/stores/auth';
 	import DashboardSidebar from '$lib/components/DashboardSidebar.svelte';
 	import AuthPromptBanner from '$lib/components/AuthPromptBanner.svelte';
 	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
+	import SeedPhraseBackupBanner from '$lib/components/SeedPhraseBackupBanner.svelte';
 	import Icon from '$lib/components/Icons.svelte';
+
+	const SEED_BACKUP_DISMISSED_KEY = 'seedPhraseBackupDismissed';
 
 	let { children } = $props();
 	let isAuthenticated = $state(false);
 	let isInitialized = $state(false);
 	let isSidebarOpen = $state(false);
 	let account = $state<AccountInfo | null>(null);
+	let activeIdentity = $state<IdentityInfo | null>(null);
+	let seedBackupDismissed = $state(browser ? localStorage.getItem(SEED_BACKUP_DISMISSED_KEY) === '1' : true);
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeIdentity: (() => void) | null = null;
 
@@ -25,6 +31,8 @@
 
 		unsubscribeIdentity = authStore.activeIdentity.subscribe((identity) => {
 			account = identity?.account || null;
+			activeIdentity = identity;
+			seedBackupDismissed = browser ? localStorage.getItem(SEED_BACKUP_DISMISSED_KEY) === '1' : true;
 		});
 	});
 
@@ -38,6 +46,9 @@
 	}
 
 	const showEmailVerificationBanner = $derived(isAuthenticated && account && !account.emailVerified);
+	const showSeedPhraseBackupBanner = $derived(
+		isAuthenticated && !showEmailVerificationBanner && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
+	);
 </script>
 
 <div class="min-h-screen bg-base">
@@ -62,10 +73,12 @@
 		<AuthPromptBanner />
 	{:else if showEmailVerificationBanner}
 		<EmailVerificationBanner />
+	{:else if showSeedPhraseBackupBanner}
+		<SeedPhraseBackupBanner onDismiss={() => { seedBackupDismissed = true; if (browser) localStorage.setItem(SEED_BACKUP_DISMISSED_KEY, '1'); }} />
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {showEmailVerificationBanner ? 'pt-44 md:pt-20' : ''} {!isAuthenticated ? 'md:pt-20' : ''}">
+	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {showEmailVerificationBanner ? 'pt-44 md:pt-20' : ''} {showSeedPhraseBackupBanner ? 'pt-28 md:pt-14' : ''} {!isAuthenticated ? 'md:pt-20' : ''}">
 		<div class="max-w-6xl mx-auto">
 			{@render children()}
 		</div>

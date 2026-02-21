@@ -588,6 +588,7 @@ async fn test_create_offering_success() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let offering_id = db
@@ -709,6 +710,7 @@ async fn test_create_offering_duplicate_id() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     // First creation should succeed
@@ -794,6 +796,7 @@ async fn test_create_offering_missing_required_fields() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let result = db.create_offering(&pubkey, params).await;
@@ -878,6 +881,7 @@ async fn test_update_offering_success() {
         resolved_pool_name: None,
         is_subscription: false,
         subscription_interval_days: None,
+        created_at_ns: None,
     };
 
     let db_id = test_id_to_db_id(1);
@@ -975,6 +979,7 @@ async fn test_update_offering_unauthorized() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let result = db.update_offering(&pubkey2, db_id, params).await;
@@ -1866,6 +1871,7 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -1968,6 +1974,7 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -2067,6 +2074,7 @@ async fn test_get_provider_offerings_no_matching_pool() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     db.create_offering(&pubkey, params)
@@ -2172,6 +2180,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
     db.create_offering(&provider_with_pool, params1)
         .await
@@ -2246,6 +2255,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
     db.create_offering(&provider_with_pool, params2)
         .await
@@ -2320,6 +2330,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
     db.create_offering(&provider_without_pool, params3)
         .await
@@ -2430,6 +2441,7 @@ async fn test_create_subscription_offering() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db
@@ -2521,6 +2533,7 @@ async fn test_create_yearly_subscription_offering() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db
@@ -2612,6 +2625,7 @@ async fn test_get_subscription_offering_fields() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db
@@ -2728,6 +2742,7 @@ async fn test_one_time_offering_default_subscription_fields() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db
@@ -2819,6 +2834,7 @@ async fn test_template_name_generates_provisioner_config() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db
@@ -2916,6 +2932,7 @@ async fn test_template_name_non_numeric_no_config() {
         provider_online: None,
         resolved_pool_id: None,
         resolved_pool_name: None,
+        created_at_ns: None,
     };
 
     let db_id = db

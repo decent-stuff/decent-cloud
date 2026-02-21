@@ -7,6 +7,7 @@
 		getProviderFeedbackStats,
 		getProviderBandwidthStats,
 		getProviderOfferingStats,
+		getProviderOfferingStatsHistory,
 		getProviderOnboarding,
 		getProviderRevenueByMonth,
 		hexEncode,
@@ -16,6 +17,7 @@
 		type RevenueByMonth,
 		type Contract,
 		type OfferingStats,
+		type OfferingStatsWeek,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { getAccountBalance } from "$lib/services/api-reputation";
@@ -28,6 +30,7 @@
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let bandwidthStats = $state<BandwidthStatsResponse[]>([]);
 	let offeringStats = $state<OfferingStats[]>([]);
+	let offeringStatsHistory = $state<OfferingStatsWeek[]>([]);
 	let revenueByMonth = $state<RevenueByMonth[]>([]);
 	let providerContracts = $state<Contract[]>([]);
 	let tokenBalance = $state<number>(0);
@@ -113,7 +116,7 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			const [bandwidthStats_, activityResult, offeringStats_] = await Promise.all([
+			const [bandwidthStats_, activityResult, offeringStats_, offeringStatsHistory_] = await Promise.all([
 				(async () => {
 					if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
 					const signed = await signRequest(
@@ -142,6 +145,15 @@
 					);
 					return getProviderOfferingStats(providerHex, signed.headers).catch(() => []);
 				})(),
+				(async () => {
+					if (!(info.identity instanceof Ed25519KeyIdentity)) return [];
+					const signed = await signRequest(
+						info.identity,
+						"GET",
+						`/api/v1/providers/${providerHex}/offering-stats-history`,
+					);
+					return getProviderOfferingStatsHistory(providerHex, signed.headers).catch(() => []);
+				})(),
 			]);
 
 			const [providerStats, feedback, balance, onboarding, revenueData] = await Promise.all([
@@ -157,6 +169,7 @@
 			tokenBalance = balance;
 			bandwidthStats = bandwidthStats_;
 			offeringStats = offeringStats_;
+			offeringStatsHistory = offeringStatsHistory_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 			revenueByMonth = revenueData;
 			providerContracts = activityResult?.rentals_as_provider ?? [];
@@ -389,6 +402,78 @@
 								{/each}
 							</tbody>
 						</table>
+					</div>
+				</section>
+			{/if}
+
+			<!-- Weekly Activity Trend -->
+			{#if offeringStatsHistory.length > 0}
+				{@const weeks = [...new Set(offeringStatsHistory.map(r => r.weekStart))].sort()}
+				{@const weekTotals = weeks.map(w => {
+					const rows = offeringStatsHistory.filter(r => r.weekStart === w);
+					return {
+						weekStart: w,
+						totalRequests: rows.reduce((s, r) => s + r.totalRequests, 0),
+						activeCount: rows.reduce((s, r) => s + r.activeCount, 0),
+					};
+				})}
+				{@const maxRequests = Math.max(...weekTotals.map(w => w.totalRequests), 1)}
+				{@const maxActive = Math.max(...weekTotals.map(w => w.activeCount), 1)}
+				{@const chartH = 100}
+				{@const padB = 28}
+				{@const barW = Math.min(36, Math.floor(560 / weeks.length) - 4)}
+				{@const gap = 4}
+				{@const totalW = weeks.length * (barW + gap)}
+				<section class="space-y-4">
+					<h2 class="text-xl font-semibold text-white">Weekly Activity (last 8 weeks)</h2>
+					<div class="bg-surface-elevated border border-neutral-800 p-6">
+						<div class="overflow-x-auto">
+							<svg viewBox="0 0 {totalW} {chartH + padB}" class="w-full" style="min-width:280px;max-height:160px" aria-label="Weekly activity chart">
+								{#each weekTotals as week, i}
+									{@const reqH = Math.max(2, (week.totalRequests / maxRequests) * chartH)}
+									{@const actH = Math.max(2, (week.activeCount / maxActive) * chartH)}
+									{@const x = i * (barW + gap)}
+									<g>
+										<!-- requests bar (full width, lighter) -->
+										<rect
+											x={x}
+											y={chartH - reqH}
+											width={barW}
+											height={reqH}
+											fill="#6366f1"
+											fill-opacity="0.4"
+											rx="2"
+										>
+											<title>{week.weekStart}: {week.totalRequests} requests, {week.activeCount} active</title>
+										</rect>
+										<!-- active contracts bar (half width, solid, overlaid) -->
+										<rect
+											x={x}
+											y={chartH - actH}
+											width={barW}
+											height={actH}
+											fill="#10b981"
+											fill-opacity="0.8"
+											rx="2"
+										>
+											<title>{week.weekStart}: {week.activeCount} active contracts</title>
+										</rect>
+										<text
+											x={x + barW / 2}
+											y={chartH + 16}
+											text-anchor="middle"
+											fill="#6b7280"
+											font-size="8"
+										>{week.weekStart.slice(5)}</text>
+									</g>
+								{/each}
+							</svg>
+						</div>
+						<div class="flex items-center gap-4 mt-2 text-xs text-neutral-400">
+							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-indigo-500/40 rounded-sm"></span> Requests</span>
+							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-emerald-500/80 rounded-sm"></span> Active</span>
+							<span class="text-neutral-600">Hover bars for details.</span>
+						</div>
 					</div>
 				</section>
 			{/if}

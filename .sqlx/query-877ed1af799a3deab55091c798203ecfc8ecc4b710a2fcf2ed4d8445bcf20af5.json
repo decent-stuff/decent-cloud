@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                to_char(date_trunc('week', to_timestamp(created_at_ns / 1e9)), 'YYYY-MM-DD') as \"week_start!: String\",\n                offering_id,\n                COUNT(*) as \"total_requests!: i64\",\n                COUNT(*) FILTER (WHERE status IN ('provisioned', 'active')) as \"active_count!: i64\",\n                COALESCE(SUM(payment_amount_e9s) FILTER (WHERE status NOT IN ('rejected', 'cancelled')), 0) as \"revenue_e9s!: i64\"\n            FROM contract_sign_requests\n            WHERE provider_pubkey = $1\n              AND created_at_ns >= EXTRACT(EPOCH FROM (NOW() - make_interval(weeks => $2))) * 1e9\n            GROUP BY date_trunc('week', to_timestamp(created_at_ns / 1e9)), offering_id\n            ORDER BY 1, offering_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "week_start!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "offering_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "total_requests!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "active_count!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "revenue_e9s!: i64",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "877ed1af799a3deab55091c798203ecfc8ecc4b710a2fcf2ed4d8445bcf20af5"
+}

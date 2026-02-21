@@ -36,6 +36,31 @@ pub struct OfferingStats {
     pub total_revenue_e9s: i64,
 }
 
+/// Weekly contract activity for a provider's offering
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(
+    export,
+    export_to = "../../website/src/lib/types/generated/",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct OfferingStatsWeek {
+    /// ISO date of the Monday that starts this week, e.g. "2024-01-08"
+    pub week_start: String,
+    /// The offering_id this row applies to
+    pub offering_id: String,
+    /// Total contract requests that week
+    #[ts(type = "number")]
+    pub total_requests: i64,
+    /// Active contracts (provisioned/active) that week
+    #[ts(type = "number")]
+    pub active_count: i64,
+    /// Revenue in e9s for that week
+    #[ts(type = "number")]
+    pub revenue_e9s: i64,
+}
+
 /// Contact information for an account (account_contacts table)
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(
@@ -150,6 +175,42 @@ impl Database {
                 expired_count: r.expired_count,
                 rejected_count: r.rejected_count,
                 total_revenue_e9s: r.total_revenue_e9s,
+            })
+            .collect())
+    }
+
+    /// Get weekly offering stats history for a provider (last N weeks)
+    pub async fn get_offering_stats_history(
+        &self,
+        provider_pubkey: &[u8],
+        weeks: i32,
+    ) -> Result<Vec<OfferingStatsWeek>> {
+        let rows = sqlx::query!(
+            r#"SELECT
+                to_char(date_trunc('week', to_timestamp(created_at_ns / 1e9)), 'YYYY-MM-DD') as "week_start!: String",
+                offering_id,
+                COUNT(*) as "total_requests!: i64",
+                COUNT(*) FILTER (WHERE status IN ('provisioned', 'active')) as "active_count!: i64",
+                COALESCE(SUM(payment_amount_e9s) FILTER (WHERE status NOT IN ('rejected', 'cancelled')), 0) as "revenue_e9s!: i64"
+            FROM contract_sign_requests
+            WHERE provider_pubkey = $1
+              AND created_at_ns >= EXTRACT(EPOCH FROM (NOW() - make_interval(weeks => $2))) * 1e9
+            GROUP BY date_trunc('week', to_timestamp(created_at_ns / 1e9)), offering_id
+            ORDER BY 1, offering_id"#,
+            provider_pubkey,
+            weeks
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| OfferingStatsWeek {
+                week_start: r.week_start,
+                offering_id: r.offering_id,
+                total_requests: r.total_requests,
+                active_count: r.active_count,
+                revenue_e9s: r.revenue_e9s,
             })
             .collect())
     }

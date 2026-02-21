@@ -137,6 +137,10 @@ pub struct Offering {
     #[ts(type = "string | undefined")]
     #[sqlx(default)]
     pub resolved_pool_name: Option<String>,
+    // Creation timestamp in nanoseconds since epoch
+    #[ts(type = "number | undefined")]
+    #[sqlx(default)]
+    pub created_at_ns: Option<i64>,
 }
 
 /// A tier definition for auto-generating offerings
@@ -1013,6 +1017,7 @@ impl Database {
             provider_online: _,
             resolved_pool_id: _,
             resolved_pool_name: _,
+            created_at_ns: _,
         } = params;
 
         // If template_name is provided and provisioner_config is empty, build it
@@ -1258,6 +1263,7 @@ impl Database {
             provider_online: _,
             resolved_pool_id: _,
             resolved_pool_name: _,
+            created_at_ns: _,
         } = params;
 
         // If template_name is provided and provisioner_config is empty, build it
@@ -1487,6 +1493,7 @@ impl Database {
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
+            created_at_ns: None,
         };
 
         self.create_offering(pubkey, params).await
@@ -1828,6 +1835,7 @@ impl Database {
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
+            created_at_ns: None,
         })
     }
 }

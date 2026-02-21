@@ -2507,8 +2507,9 @@ export async function getProviderFeedbackStats(pubkeyHex: string): Promise<Provi
 import type { BandwidthStatsResponse } from '$lib/types/generated/BandwidthStatsResponse';
 import type { BandwidthHistoryResponse } from '$lib/types/generated/BandwidthHistoryResponse';
 import type { OfferingStats } from '$lib/types/generated/OfferingStats';
+import type { OfferingStatsWeek } from '$lib/types/generated/OfferingStatsWeek';
 
-export type { BandwidthStatsResponse, BandwidthHistoryResponse, OfferingStats };
+export type { BandwidthStatsResponse, BandwidthHistoryResponse, OfferingStats, OfferingStatsWeek };
 
 /**
  * Get bandwidth stats for all provider's contracts
@@ -2638,6 +2639,39 @@ export async function getProviderOfferingStats(
 
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to fetch offering stats');
+	}
+
+	return payload.data ?? [];
+}
+
+/**
+ * Get weekly offering stats history for a provider (last N weeks).
+ * Requires provider authentication.
+ */
+export async function getProviderOfferingStatsHistory(
+	pubkeyHex: string,
+	headers: SignedRequestHeaders,
+	weeks = 8
+): Promise<OfferingStatsWeek[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offering-stats-history?weeks=${weeks}`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch offering stats history: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingStatsWeek[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch offering stats history');
 	}
 
 	return payload.data ?? [];

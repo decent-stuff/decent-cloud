@@ -6,9 +6,12 @@
 	import {
 		hexEncode,
 		getProviderOnboarding,
+		getProviderProfile,
 		updateProviderOnboarding,
 		syncProviderHelpcenter,
 		type ProviderOnboarding,
+		type ProviderProfile,
+		API_BASE_URL,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
 	import {
@@ -97,6 +100,47 @@
 	// Onboarding completion state
 	let onboardingCompleted = $state(false);
 
+	// Profile completeness state
+	let providerProfile = $state<ProviderProfile | null>(null);
+	let contactsCount = $state(0);
+
+	const completenessItems = $derived([
+		{
+			label: "Provider name",
+			done: !!providerProfile?.name,
+			href: "#helpcenter",
+		},
+		{
+			label: "Description",
+			done: !!providerProfile?.description,
+			href: "#helpcenter",
+		},
+		{
+			label: "Website URL",
+			done: !!providerProfile?.website_url,
+			href: "#helpcenter",
+		},
+		{
+			label: "Logo / banner image",
+			done: !!providerProfile?.logo_url,
+			href: "#helpcenter",
+		},
+		{
+			label: "Contact info",
+			done: contactsCount > 0,
+			href: "#contacts",
+		},
+		{
+			label: "Help Center profile",
+			done: onboardingCompleted,
+			href: "#helpcenter",
+		},
+	]);
+
+	const completenessScore = $derived(
+		Math.round((completenessItems.filter((i) => i.done).length / completenessItems.length) * 100),
+	);
+
 	const accountEmail = $derived(currentIdentity?.account?.email);
 
 	// Dynamic URLs based on provider's portal status
@@ -183,9 +227,30 @@
 				loadOnboarding(),
 				loadNotifications(),
 				loadPortal(),
+				loadProfile(),
+				loadContactsCount(),
 			]);
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadProfile() {
+		if (!currentIdentity?.publicKeyBytes) return;
+		providerProfile = await getProviderProfile(currentIdentity.publicKeyBytes).catch(() => null);
+	}
+
+	async function loadContactsCount() {
+		if (!currentIdentity?.publicKeyBytes) return;
+		const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/v1/providers/${pubkeyHex}/contacts`);
+			if (res.ok) {
+				const data = await res.json();
+				contactsCount = data.success && Array.isArray(data.data) ? data.data.length : 0;
+			}
+		} catch {
+			contactsCount = 0;
 		}
 	}
 
@@ -477,6 +542,49 @@
 					Complete your <a href="#helpcenter" class="text-primary-400 underline hover:text-primary-300">Help Center Profile</a> below to unlock <strong>My Offerings</strong>, <strong>Rental Requests</strong>, and other provider features in the sidebar.
 				</p>
 			</div>
+		</div>
+	{/if}
+
+	<!-- Profile Completeness Card -->
+	{#if isAuthenticated && !loading}
+		<div class="card p-5 border border-neutral-800 space-y-4">
+			<div class="flex items-center justify-between">
+				<h3 class="text-base font-semibold text-white">Profile completeness</h3>
+				<span
+					class="text-sm font-bold {completenessScore === 100
+						? 'text-green-400'
+						: completenessScore >= 60
+							? 'text-primary-400'
+							: 'text-yellow-400'}"
+				>{completenessScore}%</span>
+			</div>
+			<div class="w-full bg-neutral-800 h-2">
+				<div
+					class="h-2 transition-all duration-500 {completenessScore === 100
+						? 'bg-green-500'
+						: completenessScore >= 60
+							? 'bg-primary-500'
+							: 'bg-yellow-500'}"
+					style="width: {completenessScore}%"
+				></div>
+			</div>
+			<ul class="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1.5">
+				{#each completenessItems as item}
+					<li class="flex items-center gap-2 text-sm">
+						{#if item.done}
+							<svg class="w-4 h-4 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+							</svg>
+							<span class="text-neutral-400">{item.label}</span>
+						{:else}
+							<svg class="w-4 h-4 text-neutral-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+							<a href={item.href} class="text-neutral-500 hover:text-primary-400 transition-colors">{item.label}</a>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		</div>
 	{/if}
 
@@ -793,11 +901,13 @@
 
 		<!-- Provider Contacts Section -->
 		{#if providerApiClient && providerPubkeyHex}
-			<ContactsEditor
-				username=""
-				apiClient={providerApiClient}
-				{providerPubkeyHex}
-			/>
+			<div id="contacts" class="scroll-mt-4">
+				<ContactsEditor
+					username=""
+					apiClient={providerApiClient}
+					{providerPubkeyHex}
+				/>
+			</div>
 		{/if}
 
 		<!-- Notifications Section -->

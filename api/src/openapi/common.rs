@@ -36,6 +36,10 @@ pub fn default_false() -> bool {
     false
 }
 
+pub fn default_weeks() -> i32 {
+    8
+}
+
 /// Decode a hex-encoded public key with detailed error messages
 pub fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
     let bytes = hex::decode(pubkey_hex)

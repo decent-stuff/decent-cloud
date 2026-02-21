@@ -262,15 +262,15 @@
 					<Icon name="star" size={20} />
 				</div>
 				<div class="flex-1 min-w-0">
-					<h2 class="text-base font-semibold text-white mb-1">Get Started with Decent Cloud</h2>
-					<p class="text-sm text-neutral-400 mb-4">Choose your path: rent a VM from the marketplace or become a provider and earn by sharing your infrastructure.</p>
+					<h2 class="text-base font-semibold text-white mb-1">Deploy your first VM</h2>
+					<p class="text-sm text-neutral-400 mb-4">Browse available offerings on the marketplace and deploy in minutes.</p>
 					<div class="flex flex-wrap gap-3">
 						<a
 							href="/dashboard/marketplace"
 							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
 						>
 							<Icon name="cart" size={16} />
-							<span>Rent a VM</span>
+							<span>Browse Marketplace</span>
 						</a>
 						<a
 							href="/dashboard/provider/support"
@@ -610,7 +610,18 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="text-xs text-neutral-600 text-center py-4">No activity yet</p>
+					<div class="text-center py-6 border border-dashed border-neutral-800">
+						<Icon name="cart" size={28} class="mx-auto text-neutral-600 mb-3" />
+						<p class="text-sm text-neutral-400 font-medium mb-1">Deploy your first VM</p>
+						<p class="text-xs text-neutral-600 mb-4">Browse available offerings on the marketplace</p>
+						<a
+							href="/dashboard/marketplace"
+							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
+						>
+							<Icon name="cart" size={14} />
+							<span>Browse Marketplace</span>
+						</a>
+					</div>
 				{/if}
 				{#if activity.rentals_as_provider.length > 0}
 					<div class="space-y-2 mt-4">

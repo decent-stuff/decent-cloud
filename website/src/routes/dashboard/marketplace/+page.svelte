@@ -23,7 +23,8 @@
 	let showAuthModal = $state(false);
 	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
-	let sortField = $state<"price" | "trust">("price");
+	let sortField = $state<"price" | "trust" | "newest">("price");
+	let quickFilter = $state<"newest" | "trusted" | null>(null);
 	let showFilters = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -104,6 +105,11 @@
 			...new Set(filtered.map((o) => o.datacenter_city).filter(Boolean)),
 		].sort();
 	});
+
+	// 7-day cutoff in nanoseconds for "Recently Added" filter
+	const RECENT_CUTOFF_NS = $derived(quickFilter === "newest"
+		? (Date.now() - 7 * 24 * 60 * 60 * 1000) * 1_000_000
+		: null);
 
 	// Derived: filtered and sorted offerings
 	let filteredOfferings = $derived.by(() => {
@@ -198,12 +204,22 @@
 			result = result.filter((o) => o.provider_online);
 		}
 
+		// Recently Added: filter to last 7 days
+		if (RECENT_CUTOFF_NS !== null) {
+			result = result.filter((o) => (o.created_at_ns ?? 0) >= RECENT_CUTOFF_NS!);
+		}
+
 		// Sort by selected field
 		result.sort((a, b) => {
 			if (sortField === "trust") {
 				const ta = a.trust_score ?? -1;
 				const tb = b.trust_score ?? -1;
 				return tb - ta; // descending always (highest trust first)
+			}
+			if (sortField === "newest") {
+				const ta = a.created_at_ns ?? 0;
+				const tb = b.created_at_ns ?? 0;
+				return tb - ta; // descending: newest first
 			}
 			const priceA = a.monthly_price ?? Infinity;
 			const priceB = b.monthly_price ?? Infinity;
@@ -296,6 +312,9 @@
 		showOfflineOfferings = false;
 		recipesOnly = false;
 		searchQuery = "";
+		quickFilter = null;
+		sortField = "price";
+		sortDir = "asc";
 		fetchOfferings();
 	}
 
@@ -360,10 +379,23 @@
 	function setSortPrice(dir: "asc" | "desc") {
 		sortField = "price";
 		sortDir = dir;
+		quickFilter = null;
 	}
 
 	function setSortTrust() {
 		sortField = "trust";
+		quickFilter = null;
+	}
+
+	function toggleQuickFilter(filter: "newest" | "trusted") {
+		if (quickFilter === filter) {
+			quickFilter = null;
+			sortField = "price";
+			sortDir = "asc";
+		} else {
+			quickFilter = filter;
+			sortField = filter === "newest" ? "newest" : "trust";
+		}
 	}
 
 	function handleRentalSuccess(contractId: string) {
@@ -890,6 +922,23 @@
 
 		<!-- Main Content -->
 		<div class="flex-1 min-w-0 space-y-4">
+			<!-- Quick-filter preset pills -->
+			<div class="flex items-center gap-2">
+				<span class="text-xs text-neutral-500 shrink-0">Quick:</span>
+				<button
+					onclick={() => toggleQuickFilter("newest")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'newest' ? 'bg-primary-500/20 text-primary-300 border-primary-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					<Icon name="clock" size={14} /> Recently Added
+				</button>
+				<button
+					onclick={() => toggleQuickFilter("trusted")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'trusted' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					<Icon name="shield" size={14} /> Most Trusted
+				</button>
+			</div>
+
 			<!-- Search Bar with Icon -->
 			<div class="relative">
 				<div class="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">

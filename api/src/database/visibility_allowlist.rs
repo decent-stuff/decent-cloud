@@ -271,6 +271,7 @@ mod tests {
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
+            created_at_ns: None,
         };
 
         let offering_id = db
@@ -459,6 +460,7 @@ mod tests {
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
+            created_at_ns: None,
         };
 
         let offering_id = db

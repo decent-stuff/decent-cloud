@@ -1,7 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { getOffering, fetchIcpPrice, type Offering } from '$lib/services/api';
+	import {
+		getOffering,
+		fetchIcpPrice,
+		getProviderTrustMetrics,
+		type Offering,
+		type ProviderTrustMetrics
+	} from '$lib/services/api';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
@@ -12,6 +18,7 @@
 	const offeringId = parseInt($page.params.id ?? '', 10);
 
 	let offering = $state<Offering | null>(null);
+	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
@@ -28,6 +35,9 @@
 	onMount(async () => {
 		try {
 			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
+			if (offering) {
+				trustMetrics = await getProviderTrustMetrics(offering.pubkey).catch(() => null);
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offering';
 		} finally {
@@ -110,7 +120,7 @@
 	}
 </script>
 
-<div class="space-y-6 max-w-4xl">
+<div class="space-y-6 max-w-5xl">
 	<!-- Breadcrumb -->
 	<nav class="text-sm text-neutral-500">
 		<a href="/dashboard/marketplace" class="hover:text-white transition-colors">Marketplace</a>
@@ -140,6 +150,8 @@
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else if offering}
+		<div class="grid grid-cols-1 lg:grid-cols-[1fr_272px] gap-6 items-start">
+		<div class="space-y-6">
 		<!-- Header -->
 		<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 			<div>
@@ -365,6 +377,80 @@
 					Rent this offering
 				</button>
 			{/if}
+		</div>
+		</div>
+
+		<!-- Provider Sidebar -->
+		<div class="space-y-4 lg:sticky lg:top-6">
+			<div class="card p-5 border border-neutral-800">
+				<h2 class="text-xs font-medium text-neutral-500 uppercase tracking-wide mb-4">Provider</h2>
+
+				<a
+					href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+					class="flex items-center gap-2 group mb-4"
+				>
+					<div class="h-8 w-8 rounded-full bg-primary-500/20 flex items-center justify-center shrink-0">
+						<Icon name="user" size={16} class="text-primary-400" />
+					</div>
+					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors {offering.owner_username ? '' : 'font-mono truncate'}">
+						{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
+					</span>
+				</a>
+
+				{#if offering.trust_score !== undefined}
+					<div class="mb-4">
+						<span class="text-xs text-neutral-500 block mb-1.5">Trust Score</span>
+						<TrustBadge
+							score={offering.trust_score}
+							hasFlags={offering.has_critical_flags ?? false}
+							compact={false}
+						/>
+					</div>
+				{/if}
+
+				{#if offering.reliability_score !== undefined}
+					<div class="mb-4">
+						<span class="text-xs text-neutral-500 block mb-1">Reliability</span>
+						<div class="flex items-center gap-2">
+							<div class="flex-1 h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+								<div
+									class="h-full rounded-full {offering.reliability_score >= 80 ? 'bg-green-500' : offering.reliability_score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}"
+									style="width: {offering.reliability_score}%"
+								></div>
+							</div>
+							<span class="text-xs text-neutral-400 shrink-0">{offering.reliability_score}%</span>
+						</div>
+					</div>
+				{/if}
+
+				{#if trustMetrics}
+					<div class="space-y-2 mb-4 text-sm">
+						<div class="flex justify-between">
+							<span class="text-neutral-500">Rentals</span>
+							<span class="text-white">{trustMetrics.total_contracts}</span>
+						</div>
+						{#if trustMetrics.completion_rate_pct > 0}
+							<div class="flex justify-between">
+								<span class="text-neutral-500">Completion</span>
+								<span class="text-white">{trustMetrics.completion_rate_pct.toFixed(0)}%</span>
+							</div>
+						{/if}
+						<div class="flex justify-between">
+							<span class="text-neutral-500">Tenure</span>
+							<span class="text-white capitalize">{trustMetrics.provider_tenure}</span>
+						</div>
+					</div>
+				{/if}
+
+				<a
+					href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+					class="flex items-center justify-center gap-1.5 w-full px-3 py-2 text-sm border border-neutral-700 text-neutral-300 hover:border-primary-500 hover:text-primary-400 transition-colors"
+				>
+					View Provider Profile
+					<Icon name="external" size={14} />
+				</a>
+			</div>
+		</div>
 		</div>
 	{/if}
 </div>

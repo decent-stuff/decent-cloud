@@ -1,5 +1,5 @@
 use super::common::{
-    check_authorization, decode_pubkey, default_limit, AddAccountContactRequest, AllowlistAddRequest,
+    check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest, AllowlistAddRequest,
     ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdateStatusRequest,
     CreatePoolRequest, CreateSetupTokenRequest, CsvImportError, CsvImportResult,
     DuplicateOfferingRequest, GenerateOfferingsRequest, GenerateOfferingsResponse,
@@ -3880,6 +3880,7 @@ impl ProvidersApi {
                 provider_online: None,
                 resolved_pool_id: None,
                 resolved_pool_name: None,
+                created_at_ns: None,
             };
 
             if !req.dry_run {
@@ -3957,6 +3958,56 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some(format!("Failed to get offering stats: {e:#}")),
+            }),
+        }
+    }
+
+    /// Get weekly offering stats history for a provider
+    ///
+    /// Returns per-offering weekly contract counts and revenue for the last N weeks.
+    /// Requires provider authentication — only the provider can access their own stats.
+    #[oai(
+        path = "/providers/:pubkey/offering-stats-history",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_offering_stats_history(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        #[oai(default = "default_weeks")] weeks: poem_openapi::param::Query<i32>,
+    ) -> Json<ApiResponse<Vec<crate::database::users::OfferingStatsWeek>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        let weeks = weeks.0.clamp(1, 52);
+        match db.get_offering_stats_history(&provider_pubkey, weeks).await {
+            Ok(rows) => Json(ApiResponse {
+                success: true,
+                data: Some(rows),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get offering stats history: {e:#}")),
             }),
         }
     }
@@ -4535,5 +4586,47 @@ mod tests {
         assert!(json["error"].is_null());
         assert_eq!(json["data"][0]["offeringId"], "pool-large");
         assert_eq!(json["data"][0]["totalRequests"], 5_i64);
+    }
+
+    // ── OfferingStatsWeek serialization ──────────────────────────────────────
+
+    #[test]
+    fn test_offering_stats_week_camelcase_field_names() {
+        use crate::database::users::OfferingStatsWeek;
+        let row = OfferingStatsWeek {
+            week_start: "2024-01-08".to_string(),
+            offering_id: "gpu-xl".to_string(),
+            total_requests: 3,
+            active_count: 1,
+            revenue_e9s: 9_000_000_000,
+        };
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["weekStart"], "2024-01-08");
+        assert_eq!(json["offeringId"], "gpu-xl");
+        assert_eq!(json["totalRequests"], 3_i64);
+        assert_eq!(json["activeCount"], 1_i64);
+        assert_eq!(json["revenueE9s"], 9_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_api_response_offering_stats_week_success() {
+        use crate::database::users::OfferingStatsWeek;
+        let rows = vec![OfferingStatsWeek {
+            week_start: "2024-02-05".to_string(),
+            offering_id: "pool-medium".to_string(),
+            total_requests: 7,
+            active_count: 3,
+            revenue_e9s: 14_000_000_000,
+        }];
+        let resp: ApiResponse<Vec<OfferingStatsWeek>> = ApiResponse {
+            success: true,
+            data: Some(rows),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert!(json["error"].is_null());
+        assert_eq!(json["data"][0]["weekStart"], "2024-02-05");
+        assert_eq!(json["data"][0]["revenueE9s"], 14_000_000_000_i64);
     }
 }

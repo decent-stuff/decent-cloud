@@ -1117,6 +1117,7 @@ impl CloudApi {
             resolved_pool_id: None,
             resolved_pool_name: None,
             reliability_score: None,
+            created_at_ns: None,
         };
 
         let offering_db_id = match db.create_offering(&user.pubkey, offering).await {

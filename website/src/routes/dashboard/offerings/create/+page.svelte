@@ -213,6 +213,7 @@
 				operating_systems: selectedImage.name,
 				trust_score: undefined,
 				has_critical_flags: undefined,
+				reliability_score: undefined,
 				is_example: false,
 				offering_source: undefined,
 				external_checkout_url: undefined,
@@ -229,7 +230,8 @@
 				template_name: undefined,
 				agent_pool_id: undefined,
 				post_provision_script: postProvisionScript.trim() || undefined,
-				provider_online: undefined
+				provider_online: undefined,
+				created_at_ns: undefined
 			};
 
 			const signed = await signRequest(currentIdentity.identity, 'POST', path, offering);

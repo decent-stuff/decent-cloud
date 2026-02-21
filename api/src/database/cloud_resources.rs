@@ -1637,6 +1637,7 @@ mod tests {
             provider_online: None,
             resolved_pool_id: None,
             resolved_pool_name: None,
+            created_at_ns: None,
         };
         db.create_offering(pubkey, offering).await.unwrap()
     }

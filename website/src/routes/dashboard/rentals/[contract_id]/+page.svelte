@@ -838,12 +838,20 @@
 								? 'Your resource could not be provisioned. Try a different provider or contact support.'
 								: 'This rental has been cancelled.'}
 					</p>
-					<a
-						href="/dashboard/marketplace"
-						class="px-4 py-2 text-sm bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 transition-all whitespace-nowrap"
-					>
-						Browse Marketplace
-					</a>
+					<div class="flex items-center gap-2">
+						<a
+							href="/dashboard/marketplace/{contract.offering_id}"
+							class="px-4 py-2 text-sm bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 transition-all whitespace-nowrap"
+						>
+							&#8635; Renew
+						</a>
+						<a
+							href="/dashboard/marketplace"
+							class="px-4 py-2 text-sm bg-surface-elevated text-neutral-400 border border-neutral-700 font-semibold hover:text-white transition-all whitespace-nowrap"
+						>
+							Browse Marketplace
+						</a>
+					</div>
 				</div>
 			{/if}
 

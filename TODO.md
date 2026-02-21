@@ -95,23 +95,17 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Marketplace] Simplified search placeholder** ✅ (2026-02-21) — Changed from cryptic "e.g., type:gpu, price:<=100" to plain "Search by name, description, or type...".
 - **[Provider] Per-offering performance stats on earnings page** ✅ (2026-02-21) — New `getProviderOfferingStats` authenticated API function + "Offering Performance" table on `/dashboard/provider/earnings` showing total requests, active, cancelled, expired, and revenue per offering.
 - **[Marketplace] Sort by trust score** ✅ (2026-02-21) — 3-button sort group (Price ↑, Price ↓, Trust ↓) replaces the single price toggle. Offerings with highest trust score sort first.
+- **[Rentals] "Renew" action on expired/cancelled contracts** ✅ (2026-02-21) — "Renew" button on rentals list and contract detail pages for cancelled/rejected/failed contracts; navigates directly to `/dashboard/marketplace/[offering_id]`.
+- **[Offerings] Provider profile sidebar on offering detail** ✅ (2026-02-21) — Sticky sidebar on `/dashboard/marketplace/[id]` shows provider name (linked), TrustBadge, reliability bar, rental count, and "View Provider Profile" button. Fetches `ProviderTrustMetrics` alongside the offering.
+- **[Provider] Profile completeness indicator** ✅ (2026-02-21) — Progress bar + checklist on `/dashboard/provider/support` showing 6 completeness items (name, description, website, logo, contacts, help center); score 0–100%; incomplete items link to the relevant settings section.
+- **[Dashboard] Tenant empty state with CTAs** ✅ (2026-02-21) — "Deploy your first VM" CTA card in Recent Activity section when tenant has no contracts; "Get Started" card copy updated on dashboard home.
+- **[Security] Seed phrase backup reminder** ✅ (2026-02-21) — Dismissible amber banner in dashboard layout for seed-phrase-type identities; persisted via `localStorage`; "Back Up Now" links to `/dashboard/account/security`; mutually exclusive with email verification banner.
+- **[Marketplace] "Recently Added" and "Most Trusted" quick-filter badges** ✅ (2026-02-21) — Two pill buttons above marketplace search: "Recently Added" (filters to offerings ≤7 days old, sorts newest-first using new `created_at_ns` DB field) and "Most Trusted" (sorts by trust score descending). Added `created_at_ns: Option<i64>` to `Offering` struct + SELECT queries; sqlx cache updated.
+- **[Provider] Offering performance time-series chart** ✅ (2026-02-21) — New authenticated endpoint `GET /api/v1/providers/:pubkey/offering-stats-history?weeks=N` returning `OfferingStatsWeek[]` (week, offering, requests, active, revenue). SVG bar chart added to `/dashboard/provider/earnings` showing weekly requests (indigo) + active contracts (emerald) for the last 8 weeks.
 
 ---
 
 ## UX Improvements (Backlog)
 
-- **[Rentals] "Renew" action on expired/cancelled contracts** — One-click renew: pre-fills a new rental request for the same offering when a contract expires or is cancelled. Currently tenants must navigate back to marketplace, find the same offering, and start from scratch.
-
-- **[Provider] Profile completeness indicator** — Show providers a completeness score (e.g. 60% complete) for their profile: name ✓, description ✓, contacts ?, socials ?, banner ?. Helps providers understand what to fill in to improve trust.
-
-- **[Marketplace] "Recently Added" and "Most Trusted" quick-filter badges** — Two prominent tabs/badges at the top of the marketplace: one for newly-listed offerings (last 7 days), one sorted by highest trust score. Helps new users discover trustworthy providers without manually sorting.
-
-- **[Offerings] Offering detail page shows provider profile sidebar** — On the offering detail page (`/dashboard/marketplace/[id]`), add a sidebar card with the provider's trust score, response time, "Would rent again" rate, and a link to their full profile. Currently the page shows offering specs but no provider context.
-
-- **[Dashboard] Tenant empty state with CTAs** — When a tenant has no active rentals, show a clear "Get Started" card on the dashboard home: "Deploy your first VM in 2 minutes" with a direct link to the marketplace. Currently new tenants see a generic dashboard with no clear next step.
-
-- **[Provider] Offering performance chart (time series)** — The current "Offering Performance" table shows totals. Add a time-series chart (by week or month) for requests and active contracts per offering, so providers can spot trends. Backend would need a new endpoint returning stats over time.
-
 - **[Contracts] Automated contract renewal / subscription mode** — Allow tenants to opt into auto-renewal before a contract expires. Currently all contracts are one-shot; tenants must manually re-rent. *(Backend change needed: renewal field on contract + scheduler.)*
 
-- **[Security] Two-factor seed phrase backup reminder** — After login, if the user has never exported their seed phrase, show a dismissible amber banner: "Back up your identity seed phrase". Currently there's no prompt to secure the Ed25519 key.
