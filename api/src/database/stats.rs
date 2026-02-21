@@ -1048,6 +1048,105 @@ pub struct AccountSearchResult {
     pub offering_count: i64,
 }
 
+/// Per-offering conversion stats: views vs rentals for a provider's offerings
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct OfferingConversionStats {
+    /// The offering_id text identifier
+    pub offering_id: String,
+    /// Human-readable offering name
+    pub offer_name: String,
+    /// Product type (e.g. "vps", "dedicated", "gpu")
+    pub product_type: String,
+    /// Views in the last 7 days
+    #[ts(type = "number")]
+    pub views_7d: i64,
+    /// Views in the last 30 days
+    #[ts(type = "number")]
+    pub views_30d: i64,
+    /// Rentals (contract requests) in the last 7 days
+    #[ts(type = "number")]
+    pub rentals_7d: i64,
+    /// Rentals (contract requests) in the last 30 days
+    #[ts(type = "number")]
+    pub rentals_30d: i64,
+    /// Conversion rate: rentals_30d / views_30d * 100, or 0.0 if no views
+    pub conversion_rate_30d: f64,
+    /// Revenue from rentals in the last 30 days (in e9s)
+    #[ts(type = "number")]
+    pub revenue_30d_e9s: i64,
+}
+
+impl Database {
+    /// Get per-offering conversion stats (views → rentals) for a provider
+    pub async fn get_offering_conversion_stats(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<OfferingConversionStats>> {
+        let cutoff_7d_ms: i64 =
+            (chrono::Utc::now().timestamp_millis()) - 7 * 24 * 3600 * 1000;
+        let cutoff_30d_ms: i64 =
+            (chrono::Utc::now().timestamp_millis()) - 30 * 24 * 3600 * 1000;
+        let cutoff_7d_ns: i64 = cutoff_7d_ms * 1_000_000;
+        let cutoff_30d_ns: i64 = cutoff_30d_ms * 1_000_000;
+
+        let rows = sqlx::query_as::<_, OfferingConversionStats>(
+            r#"SELECT
+                o.offering_id,
+                o.offer_name,
+                o.product_type,
+                COALESCE(ov7.views, 0)::BIGINT AS views_7d,
+                COALESCE(ov30.views, 0)::BIGINT AS views_30d,
+                COALESCE(c7.cnt, 0)::BIGINT AS rentals_7d,
+                COALESCE(c30.cnt, 0)::BIGINT AS rentals_30d,
+                CASE WHEN COALESCE(ov30.views, 0) > 0
+                     THEN COALESCE(c30.cnt, 0)::DOUBLE PRECISION / ov30.views::DOUBLE PRECISION * 100.0
+                     ELSE 0.0 END AS conversion_rate_30d,
+                COALESCE(c30.revenue, 0)::BIGINT AS revenue_30d_e9s
+            FROM provider_offerings o
+            LEFT JOIN (
+                SELECT offering_id, COUNT(*) AS views
+                FROM offering_views
+                WHERE viewed_at >= $2
+                GROUP BY offering_id
+            ) ov7 ON ov7.offering_id = o.id
+            LEFT JOIN (
+                SELECT offering_id, COUNT(*) AS views
+                FROM offering_views
+                WHERE viewed_at >= $3
+                GROUP BY offering_id
+            ) ov30 ON ov30.offering_id = o.id
+            LEFT JOIN (
+                SELECT offering_id, COUNT(*) AS cnt
+                FROM contract_sign_requests
+                WHERE created_at_ns >= $4
+                  AND provider_pubkey = $1
+                GROUP BY offering_id
+            ) c7 ON c7.offering_id = o.offering_id
+            LEFT JOIN (
+                SELECT offering_id, COUNT(*) AS cnt, COALESCE(SUM(payment_amount_e9s), 0) AS revenue
+                FROM contract_sign_requests
+                WHERE created_at_ns >= $5
+                  AND provider_pubkey = $1
+                GROUP BY offering_id
+            ) c30 ON c30.offering_id = o.offering_id
+            WHERE o.pubkey = $1
+            ORDER BY rentals_30d DESC, views_30d DESC"#,
+        )
+        .bind(provider_pubkey)
+        .bind(cutoff_7d_ms)
+        .bind(cutoff_30d_ms)
+        .bind(cutoff_7d_ns)
+        .bind(cutoff_30d_ns)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+}
+
 /// Contract feedback from renters (structured Y/N survey)
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]

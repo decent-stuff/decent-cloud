@@ -7,11 +7,13 @@
 	import {
 		getPendingProviderRequests,
 		getProviderContracts,
+		getProviderOfferings,
 		respondToRentalRequest,
 		updateProvisioningStatus,
 		getProviderBandwidthStats,
 		getProviderOnboarding,
 		type Contract,
+		type Offering,
 		type ProviderRentalResponseParams,
 		type ProvisioningStatusUpdateParams,
 		type BandwidthStatsResponse,
@@ -41,6 +43,19 @@
 	let unsubscribeAuth: (() => void) | null = null;
 	let autoAcceptEnabled = $state(false),
 		autoAcceptUpdating = $state(false);
+	let providerOfferings = $state<Offering[]>([]);
+	let filterOfferingId = $state('');
+	let filterMinDuration = $state<number | null>(null);
+	let filterMaxDuration = $state<number | null>(null);
+
+	let filteredPendingRequests = $derived(
+		pendingRequests.filter((req) => {
+			if (filterOfferingId && String(req.offering_id) !== filterOfferingId) return false;
+			if (filterMinDuration !== null && (req.duration_hours ?? 0) < filterMinDuration) return false;
+			if (filterMaxDuration !== null && (req.duration_hours ?? Infinity) > filterMaxDuration) return false;
+			return true;
+		}),
+	);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -137,6 +152,7 @@
 			signingIdentityInfo = normalizedIdentity;
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
 			getProviderOnboarding(providerHex).catch(() => null).then(o => { onboardingCompleted = !!o?.onboarding_completed_at; });
+			getProviderOfferings(providerHex).then(o => { providerOfferings = o; }).catch(() => null);
 			console.log(
 				"[Provider Requests] Authenticated as provider:",
 				providerHex,
@@ -256,7 +272,7 @@
 
 	async function handleBatchAction(accept: boolean) {
 		const action = accept ? "Accept" : "Reject";
-		if (!window.confirm(`${action} all ${pendingRequests.length} pending requests?`)) return;
+		if (!window.confirm(`${action} all ${filteredPendingRequests.length} pending requests?`)) return;
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) {
 			error = "Missing signing identity";
@@ -265,7 +281,7 @@
 		error = null;
 		actionMessage = null;
 		batchProcessing = true;
-		const snapshot = [...pendingRequests];
+		const snapshot = [...filteredPendingRequests];
 		const errors: string[] = [];
 		for (let i = 0; i < snapshot.length; i++) {
 			const contract = snapshot[i];
@@ -442,6 +458,50 @@
 			{/if}
 		</section>
 
+		{#if autoAcceptEnabled}
+		<!-- Auto-Accept Rules Panel (UI preview - rule-based backend support coming soon) -->
+		<section class="bg-surface-elevated border border-neutral-800  p-6 space-y-4">
+			<div>
+				<h3 class="text-base font-semibold text-white">Auto-Accept Rules</h3>
+				<p class="text-neutral-500 text-sm mt-1">Configure which requests are automatically accepted.</p>
+			</div>
+			<div class="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30  text-amber-300 text-sm">
+				<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+					<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+				</svg>
+				<span>Rule-based auto-accept is coming soon. Currently, auto-accept applies to <strong>all</strong> requests after payment.</span>
+			</div>
+			<div class="space-y-4 opacity-60 pointer-events-none select-none">
+				<div>
+					<p class="text-sm font-medium text-neutral-300 mb-2">Allowed offerings</p>
+					{#if providerOfferings.length === 0}
+						<p class="text-neutral-500 text-sm">No offerings found.</p>
+					{:else}
+						<div class="space-y-1.5">
+							{#each providerOfferings as offering}
+								<label class="flex items-center gap-2 text-sm text-neutral-400">
+									<input type="checkbox" class="rounded border-neutral-700 bg-surface-elevated text-primary-500" disabled />
+									<span>{offering.offer_name}</span>
+									<span class="text-neutral-600 text-xs">(ID: {offering.offering_id})</span>
+								</label>
+							{/each}
+						</div>
+					{/if}
+				</div>
+				<div class="flex items-center gap-4">
+					<div>
+						<label for="aa-min-hours" class="block text-sm font-medium text-neutral-300 mb-1">Min duration (hours)</label>
+						<input id="aa-min-hours" type="number" min="0" placeholder="e.g. 24" class="w-32 px-3 py-1.5 bg-surface-elevated border border-neutral-700  text-sm text-neutral-300" disabled />
+					</div>
+					<div>
+						<label for="aa-max-hours" class="block text-sm font-medium text-neutral-300 mb-1">Max duration (hours)</label>
+						<input id="aa-max-hours" type="number" min="0" placeholder="e.g. 720" class="w-32 px-3 py-1.5 bg-surface-elevated border border-neutral-700  text-sm text-neutral-300" disabled />
+					</div>
+				</div>
+			</div>
+		</section>
+		{/if}
+
 		<section class="space-y-4">
 			<div class="flex items-center justify-between">
 				<h2 class="text-2xl font-semibold text-white">
@@ -451,7 +511,7 @@
 					{#if batchProgress}
 						<span class="text-sm text-neutral-400">{batchProgress}</span>
 					{/if}
-					{#if pendingRequests.length > 1}
+					{#if filteredPendingRequests.length > 1}
 						<button
 							onclick={() => handleBatchAction(true)}
 							disabled={batchProcessing || Object.values(responding).some((v) => v)}
@@ -472,6 +532,49 @@
 				</div>
 			</div>
 
+			<!-- Filter bar -->
+			{#if pendingRequests.length > 0}
+			<div class="flex flex-wrap items-center gap-3 p-3 bg-surface-elevated border border-neutral-800 ">
+				<select
+					bind:value={filterOfferingId}
+					class="px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+				>
+					<option value="">All offerings</option>
+					{#each providerOfferings as offering}
+						<option value={String(offering.offering_id)}>{offering.offer_name}</option>
+					{/each}
+				</select>
+				<div class="flex items-center gap-2">
+					<input
+						type="number"
+						min="0"
+						placeholder="Min hours"
+						bind:value={filterMinDuration}
+						class="w-28 px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+					/>
+					<span class="text-neutral-600 text-sm">–</span>
+					<input
+						type="number"
+						min="0"
+						placeholder="Max hours"
+						bind:value={filterMaxDuration}
+						class="w-28 px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+					/>
+				</div>
+				<span class="text-neutral-500 text-sm ml-auto">
+					Showing {filteredPendingRequests.length} of {pendingRequests.length}
+				</span>
+				{#if filterOfferingId || filterMinDuration !== null || filterMaxDuration !== null}
+					<button
+						onclick={() => { filterOfferingId = ''; filterMinDuration = null; filterMaxDuration = null; }}
+						class="px-2.5 py-1 text-xs text-neutral-400 border border-neutral-700  hover:bg-neutral-800 transition-colors"
+					>
+						Clear filters
+					</button>
+				{/if}
+			</div>
+			{/if}
+
 			{#if pendingRequests.length === 0}
 				<div
 					class="bg-surface-elevated border border-neutral-800  p-6 text-neutral-400"
@@ -482,9 +585,13 @@
 						No pending rental requests right now.
 					{/if}
 				</div>
+			{:else if filteredPendingRequests.length === 0}
+				<div class="bg-surface-elevated border border-neutral-800  p-6 text-neutral-400">
+					No requests match the current filters.
+				</div>
 			{:else}
 				<div class="space-y-4">
-					{#each pendingRequests as contract}
+					{#each filteredPendingRequests as contract}
 						<PendingRequestCard
 							{contract}
 							memo={memoValue(contract.contract_id)}

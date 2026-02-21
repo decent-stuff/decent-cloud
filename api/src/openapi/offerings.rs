@@ -78,6 +78,10 @@ fn default_trending_limit() -> i64 {
     6
 }
 
+fn default_trend_days() -> i64 {
+    30
+}
+
 #[OpenApi]
 impl OfferingsApi {
     /// Get pricing statistics for offerings
@@ -611,6 +615,76 @@ impl OfferingsApi {
                     success: false,
                     data: None,
                     error: Some("Failed to load analytics".to_string()),
+                })
+            }
+        }
+    }
+
+    /// Get daily view trends for an offering
+    ///
+    /// Provider-only endpoint. Returns daily view counts for the last `days` days (1–90).
+    /// Only the offering's provider may call this.
+    #[oai(path = "/offerings/:id/view-trends", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_offering_view_trends(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+        #[oai(default = "default_trend_days")] days: poem_openapi::param::Query<i64>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::DailyViewTrend>>> {
+        // Verify the caller owns this offering
+        let offering = match db.get_offering(id.0).await {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Offering not found".to_string()),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get offering {}: {:#}", id.0, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to load offering".to_string()),
+                });
+            }
+        };
+
+        let provider_pubkey_bytes = match hex::decode(&offering.pubkey) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Invalid provider pubkey hex {}: {:#}", offering.pubkey, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Internal error".to_string()),
+                });
+            }
+        };
+
+        if provider_pubkey_bytes != auth.pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Forbidden".to_string()),
+            });
+        }
+
+        let days_clamped = days.0.clamp(1, 90);
+        match db.get_offering_view_trends(id.0, days_clamped).await {
+            Ok(trends) => Json(ApiResponse {
+                success: true,
+                data: Some(trends),
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to get view trends for offering {}: {:#}", id.0, e);
+                Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to load view trends".to_string()),
                 })
             }
         }

@@ -9,9 +9,11 @@
 		getProviderOnboarding,
 		bulkUpdateOfferingPrices,
 		getOfferingAnalytics,
+		getOfferingViewTrends,
 		type Offering,
 		type CsvImportResult,
 		type OfferingAnalytics,
+		type DailyViewTrend,
 		getExampleOfferingsCSV,
 		getProductTypes,
 		type ProductType
@@ -46,6 +48,7 @@
 	let savingBulk = $state(false);
 	let bulkError = $state<string | null>(null);
 	let analyticsMap = $state<Record<number, OfferingAnalytics>>({});
+	let trendsMap = $state<Record<number, DailyViewTrend[]>>({});
 
 	async function loadOfferings() {
 		try {
@@ -65,17 +68,26 @@
 			offerings = fetchedOfferings;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 
-			// Load analytics for each offering (fire individually, best-effort)
+			// Load analytics and view trends for each offering (fire individually, best-effort)
 			analyticsMap = {};
+			trendsMap = {};
 			await Promise.all(
 				fetchedOfferings
 					.filter((o) => o.id !== undefined)
 					.map(async (o) => {
 						try {
-							const path = `/api/v1/offerings/${o.id}/analytics`;
-										const signed = await signRequest(currentIdentity!.identity, 'GET', path);
-							const analytics = await getOfferingAnalytics(o.id!, signed.headers);
+							const analyticsPath = `/api/v1/offerings/${o.id}/analytics`;
+							const signedAnalytics = await signRequest(currentIdentity!.identity, 'GET', analyticsPath);
+							const [analytics, trends] = await Promise.all([
+								getOfferingAnalytics(o.id!, signedAnalytics.headers),
+								(async () => {
+									const trendsPath = `/api/v1/offerings/${o.id}/view-trends`;
+									const signedTrends = await signRequest(currentIdentity!.identity, 'GET', trendsPath);
+									return getOfferingViewTrends(o.id!, signedTrends.headers);
+								})()
+							]);
 							analyticsMap = { ...analyticsMap, [o.id!]: analytics };
+							trendsMap = { ...trendsMap, [o.id!]: trends };
 						} catch {
 							// Analytics are non-critical; silently skip on error
 						}
@@ -699,9 +711,19 @@
 						{#if offering.id !== undefined && analyticsMap[offering.id] !== undefined}
 							<div class="flex items-center justify-between text-neutral-400">
 								<span>Views (30d)</span>
-								<span class="text-white font-medium">
+								<span class="text-white font-medium flex items-center gap-2">
 									{analyticsMap[offering.id].views_30d}
 									<span class="text-neutral-500 text-xs font-normal">({analyticsMap[offering.id].unique_viewers_30d} unique)</span>
+									{#if (trendsMap[offering.id]?.length ?? 0) > 1}
+										{@const trends = trendsMap[offering.id] ?? []}
+										{@const maxViews = Math.max(...trends.map((t) => t.views), 1)}
+										{@const width = 80}
+										{@const height = 24}
+										{@const points = trends.map((t, i) => `${(i / (trends.length - 1)) * width},${height - (t.views / maxViews) * height}`).join(' ')}
+										<svg {width} {height} class="text-purple-400 shrink-0" aria-hidden="true">
+											<polyline fill="none" stroke="currentColor" stroke-width="1.5" points={points} />
+										</svg>
+									{/if}
 								</span>
 							</div>
 						{/if}

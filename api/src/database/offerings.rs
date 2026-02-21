@@ -189,6 +189,15 @@ pub struct OfferingAnalytics {
     pub unique_viewers_30d: i64,
 }
 
+/// Daily view counts for trend analysis
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct DailyViewTrend {
+    pub day: String,
+    pub views: i64,
+    pub unique_viewers: i64,
+}
+
 /// A tier definition for auto-generating offerings
 #[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -2095,6 +2104,32 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// Get daily view trends for an offering over the last `days` days, ordered by day ASC.
+    pub async fn get_offering_view_trends(
+        &self,
+        offering_id: i64,
+        days: i64,
+    ) -> Result<Vec<DailyViewTrend>> {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let cutoff_ms = now_ms - days * 86_400_000i64;
+        let rows = sqlx::query_as::<_, DailyViewTrend>(
+            r#"SELECT
+                to_char(to_timestamp(viewed_at / 1000), 'YYYY-MM-DD') AS day,
+                COUNT(*)::BIGINT AS views,
+                COUNT(DISTINCT ip_hash)::BIGINT AS unique_viewers
+               FROM offering_views
+               WHERE offering_id = $1
+                 AND viewed_at >= $2
+               GROUP BY day
+               ORDER BY day ASC"#,
+        )
+        .bind(offering_id)
+        .bind(cutoff_ms)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
     }
 
     /// Get the top N offerings by view count in the last 7 days.

@@ -2750,3 +2750,143 @@ async fn test_reliability_score_neutral_uptime_for_new_provider_with_contracts()
         "expected 80.0 (neutral uptime), got {score}"
     );
 }
+
+#[tokio::test]
+async fn test_get_offering_conversion_stats_empty() {
+    // Provider with no offerings returns empty list
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA0u8; 32];
+    let stats = db.get_offering_conversion_stats(&pubkey).await.unwrap();
+    assert!(stats.is_empty(), "expected empty stats for provider with no offerings");
+}
+
+#[tokio::test]
+async fn test_get_offering_conversion_stats_no_views_no_rentals() {
+    // Offering exists but has no views and no rentals → all zeros, conversion_rate = 0.0
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA1u8; 32];
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-a1', 'Server A', 'USD', 100.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NY', FALSE, 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let stats = db.get_offering_conversion_stats(&pubkey).await.unwrap();
+    assert_eq!(stats.len(), 1);
+    let row = &stats[0];
+    assert_eq!(row.offering_id, "off-a1");
+    assert_eq!(row.offer_name, "Server A");
+    assert_eq!(row.product_type, "vps");
+    assert_eq!(row.views_7d, 0);
+    assert_eq!(row.views_30d, 0);
+    assert_eq!(row.rentals_7d, 0);
+    assert_eq!(row.rentals_30d, 0);
+    assert!((row.conversion_rate_30d - 0.0).abs() < 0.001);
+    assert_eq!(row.revenue_30d_e9s, 0);
+}
+
+#[tokio::test]
+async fn test_get_offering_conversion_stats_with_recent_data() {
+    // Offering with recent views and rentals within 7d and 30d windows
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA2u8; 32];
+    let requester = vec![0xA3u8; 32];
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-a2', 'GPU Node', 'USD', 500.0, 0, 'public', 'gpu', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0)",
+    )
+    .bind(&pubkey)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Insert 4 views with distinct ip_hashes (dedup is per day per ip_hash)
+    for i in 0u8..4 {
+        let ip_hash = vec![i; 32];
+        sqlx::query(
+            "INSERT INTO offering_views (offering_id, viewer_pubkey, ip_hash, viewed_at) VALUES ((SELECT id FROM provider_offerings WHERE offering_id = 'off-a2' AND pubkey = $1), NULL, $2, $3)",
+        )
+        .bind(&pubkey)
+        .bind(&ip_hash)
+        .bind(now_ms)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Insert 2 contracts (rentals)
+    for i in 0u8..2 {
+        let contract_id = vec![0xA2u8 + i; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-a2', 1000000000, 'memo', $4, 'active', 'icpay', NULL, NULL, 'usd')",
+        )
+        .bind(&contract_id)
+        .bind(&requester)
+        .bind(&pubkey)
+        .bind(now_ns)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    let stats = db.get_offering_conversion_stats(&pubkey).await.unwrap();
+    assert_eq!(stats.len(), 1);
+    let row = &stats[0];
+    assert_eq!(row.offering_id, "off-a2");
+    assert_eq!(row.views_7d, 4);
+    assert_eq!(row.views_30d, 4);
+    assert_eq!(row.rentals_7d, 2);
+    assert_eq!(row.rentals_30d, 2);
+    // conversion = 2 / 4 * 100 = 50.0
+    assert!((row.conversion_rate_30d - 50.0).abs() < 0.01, "expected 50.0, got {}", row.conversion_rate_30d);
+    assert_eq!(row.revenue_30d_e9s, 2_000_000_000);
+}
+
+#[tokio::test]
+async fn test_get_offering_conversion_stats_only_counts_own_provider() {
+    // Stats for one provider must not include other provider's data
+    let db = setup_test_db().await;
+    let provider_a = vec![0xA4u8; 32];
+    let provider_b = vec![0xA5u8; 32];
+    let requester = vec![0xA6u8; 32];
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    for (pubkey, offering_id) in [(&provider_a, "off-pa"), (&provider_b, "off-pb")] {
+        sqlx::query(
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, 'Node', 'USD', 100.0, 0, 'public', 'vps', 'monthly', 'in_stock', 'US', 'NY', FALSE, 0)",
+        )
+        .bind(pubkey.as_slice())
+        .bind(offering_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Only provider_b has a rental
+    let contract_id = vec![0xA7u8; 32];
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-pb', 500, 'memo', $4, 'active', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(&contract_id)
+    .bind(&requester)
+    .bind(&provider_b)
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // provider_a should see 0 rentals
+    let stats_a = db.get_offering_conversion_stats(&provider_a).await.unwrap();
+    assert_eq!(stats_a.len(), 1);
+    assert_eq!(stats_a[0].rentals_30d, 0);
+
+    // provider_b should see 1 rental
+    let stats_b = db.get_offering_conversion_stats(&provider_b).await.unwrap();
+    assert_eq!(stats_b.len(), 1);
+    assert_eq!(stats_b[0].rentals_30d, 1);
+}

@@ -305,3 +305,131 @@ async fn test_delete_provider_contact_wrong_pubkey_is_noop() {
     assert_eq!(contacts.len(), 1);
     assert_eq!(contacts[0].contact_value, "@carol");
 }
+
+/// Insert a provider profile with a recent created_at (within the last 90 days).
+async fn insert_new_provider_with_offering(db: &super::Database, pubkey: &[u8], name: &str) {
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, created_at, has_critical_flags) VALUES ($1, $2, $3, $4, $5, NOW(), FALSE)",
+    )
+    .bind(pubkey)
+    .bind(name)
+    .bind("v1")
+    .bind("1.0")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let offering_id = hex::encode(pubkey);
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, $2, 'Test Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
+    )
+    .bind(pubkey)
+    .bind(offering_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_get_new_providers_returns_recent_with_offerings() {
+    let db = setup_test_db().await;
+    let pubkey1 = vec![60u8; 32];
+    let pubkey2 = vec![61u8; 32];
+
+    insert_new_provider_with_offering(&db, &pubkey1, "New Provider A").await;
+    insert_new_provider_with_offering(&db, &pubkey2, "New Provider B").await;
+
+    let results = db.get_new_providers(10).await.unwrap();
+    let names: Vec<&str> = results.iter().map(|p| p.name.as_str()).collect();
+
+    assert!(names.contains(&"New Provider A"), "Expected 'New Provider A' in results");
+    assert!(names.contains(&"New Provider B"), "Expected 'New Provider B' in results");
+    // Each result must have at least 1 offering
+    for p in &results {
+        assert!(p.offerings_count > 0, "Provider {} should have offerings", p.name);
+        assert!(p.joined_days_ago >= 0, "joined_days_ago must be non-negative");
+    }
+}
+
+#[tokio::test]
+async fn test_get_new_providers_excludes_old_providers() {
+    let db = setup_test_db().await;
+    let pubkey = vec![62u8; 32];
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Insert provider with created_at > 90 days ago — should be excluded
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, created_at, has_critical_flags) VALUES ($1, $2, $3, $4, $5, NOW() - INTERVAL '100 days', FALSE)",
+    )
+    .bind(&pubkey)
+    .bind("Old Provider")
+    .bind("v1")
+    .bind("1.0")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let offering_id = hex::encode(&pubkey);
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, $2, 'Old Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
+    )
+    .bind(&pubkey)
+    .bind(offering_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let results = db.get_new_providers(10).await.unwrap();
+    assert!(
+        results.iter().all(|p| p.name != "Old Provider"),
+        "Old provider must not appear in new providers list"
+    );
+}
+
+#[tokio::test]
+async fn test_get_new_providers_excludes_providers_without_public_offerings() {
+    let db = setup_test_db().await;
+    let pubkey = vec![63u8; 32];
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+
+    // Insert provider with no offerings
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, created_at, has_critical_flags) VALUES ($1, $2, $3, $4, $5, NOW(), FALSE)",
+    )
+    .bind(&pubkey)
+    .bind("No-Offering Provider")
+    .bind("v1")
+    .bind("1.0")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let results = db.get_new_providers(10).await.unwrap();
+    assert!(
+        results.iter().all(|p| p.name != "No-Offering Provider"),
+        "Provider with no offerings must not appear in new providers list"
+    );
+}
+
+#[tokio::test]
+async fn test_get_new_providers_respects_limit() {
+    let db = setup_test_db().await;
+
+    // Insert 3 new providers with offerings
+    for i in 64u8..67 {
+        insert_new_provider_with_offering(&db, &[i; 32], &format!("Limit Provider {i}")).await;
+    }
+
+    let results = db.get_new_providers(2).await.unwrap();
+    // The limit is applied; we inserted 3 but asked for 2, so at most 2 returned
+    assert!(results.len() <= 2, "Result count must not exceed requested limit");
+}
+
+#[test]
+fn export_new_provider_typescript_type() {
+    NewProvider::export().expect("Failed to export NewProvider type");
+}

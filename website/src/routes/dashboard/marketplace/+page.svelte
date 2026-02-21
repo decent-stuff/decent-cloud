@@ -2,7 +2,7 @@
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
-	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, type Offering, type TrendingOffering } from "$lib/services/api";
+	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, type Offering, type TrendingOffering, type NewProvider } from "$lib/services/api";
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -57,6 +57,7 @@
 	let providerFilter = $state<string>('');
 	let recentlyViewedIds = $state<number[]>([]);
 	let trendingOfferings = $state<TrendingOffering[]>([]);
+	let newProviders = $state<NewProvider[]>([]);
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -396,6 +397,7 @@
 		[, icpPriceUsd] = await Promise.all(fetches) as [unknown, number | null];
 		// Load trending independently — failure must not block the main marketplace
 		fetchTrendingOfferings(6).then(t => { trendingOfferings = t; }).catch(err => console.error('Failed to load trending offerings:', err));
+		fetchNewProviders(6).then(p => { newProviders = p; }).catch(err => console.error('Failed to load new providers:', err));
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
 			const id = parseInt(offeringParam, 10);
@@ -1242,6 +1244,29 @@
 									<div class="text-xs text-neutral-500 truncate mb-2">{[t.datacenter_city, t.datacenter_country].filter(Boolean).join(', ')}</div>
 								{/if}
 								<div class="text-xs text-orange-400">&#x1F525; {t.views_7d} views this week</div>
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if newProviders.length >= 2 && !hasActiveFilters}
+				<div class="mb-6">
+					<div class="flex items-center justify-between mb-2">
+						<div class="text-xs text-neutral-500 uppercase tracking-wide">New to the platform</div>
+					</div>
+					<div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+						{#each newProviders as provider}
+							<a
+								href="/dashboard/providers/{provider.pubkey}"
+								class="flex-shrink-0 w-44 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 rounded-lg p-3 transition-colors"
+							>
+								<div class="text-sm font-medium text-neutral-200 truncate mb-1">{provider.name}</div>
+								<div class="text-xs text-neutral-500 mb-2">{provider.offerings_count} offering{provider.offerings_count !== 1 ? 's' : ''}</div>
+								{#if provider.trust_score !== null && provider.trust_score !== undefined}
+									<div class="text-xs text-neutral-400">Trust: {provider.trust_score}</div>
+								{/if}
+								<div class="text-xs text-green-500 mt-1">New · {provider.joined_days_ago}d ago</div>
 							</a>
 						{/each}
 					</div>

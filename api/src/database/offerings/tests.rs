@@ -3684,6 +3684,49 @@ async fn test_get_offering_analytics_multiple_viewers() {
     assert_eq!(analytics.unique_viewers_30d, 3, "Three unique viewers in 30d");
 }
 
+// ── offering view trends tests ────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_offering_view_trends_empty() {
+    let db = setup_test_db().await;
+    let provider = vec![0xD1u8; 32];
+    insert_test_offering(&db, 21, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(21);
+
+    let trends = db
+        .get_offering_view_trends(offering_id, 30)
+        .await
+        .expect("get_offering_view_trends failed");
+
+    assert!(trends.is_empty(), "No views must yield empty trend vec");
+}
+
+#[tokio::test]
+async fn test_get_offering_view_trends_with_data() {
+    let db = setup_test_db().await;
+    let provider = vec![0xD2u8; 32];
+    insert_test_offering(&db, 22, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(22);
+
+    // Insert two views with distinct ip_hashes (today's bucket)
+    let ip1 = vec![0xE1u8; 32];
+    let ip2 = vec![0xE2u8; 32];
+    db.record_offering_view(offering_id, None, &ip1).await.expect("view ip1 failed");
+    db.record_offering_view(offering_id, None, &ip2).await.expect("view ip2 failed");
+
+    let trends = db
+        .get_offering_view_trends(offering_id, 30)
+        .await
+        .expect("get_offering_view_trends failed");
+
+    assert_eq!(trends.len(), 1, "Views from a single day must produce one trend row");
+    assert_eq!(trends[0].views, 2, "Two views must be counted");
+    assert_eq!(trends[0].unique_viewers, 2, "Two distinct IPs must count as 2 unique viewers");
+    // Day must be in YYYY-MM-DD format
+    assert_eq!(trends[0].day.len(), 10, "Day must be 10 chars (YYYY-MM-DD)");
+    assert!(trends[0].day.chars().nth(4) == Some('-'), "Day must contain dash at index 4");
+}
+
 // ── trending offerings tests ───────────────────────────────────────────────────
 
 #[tokio::test]

@@ -383,6 +383,21 @@
 					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 				</a>
 
+				<!-- Analytics -->
+				{@const analyticsActive =
+					currentPath === '/dashboard/provider/analytics' ||
+					currentPath.startsWith('/dashboard/provider/analytics')}
+				<a
+					href="/dashboard/provider/analytics"
+					onclick={closeSidebar}
+					class="nav-item {analyticsActive ? 'nav-item-active' : ''} {lockedClass}"
+					title={lockedTitle}
+				>
+					<Icon name="chart" size={20} />
+					<span class="text-sm">Analytics</span>
+					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+				</a>
+
 				<!-- SLA Monitor -->
 				{@const slaActive =
 					currentPath === '/dashboard/provider/sla' ||

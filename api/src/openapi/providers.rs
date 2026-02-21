@@ -268,6 +268,10 @@ async fn validate_hetzner_offering(
 
 pub struct ProvidersApi;
 
+fn default_new_providers_limit() -> i64 {
+    6
+}
+
 #[OpenApi]
 impl ProvidersApi {
     /// List all providers
@@ -317,6 +321,31 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get recently joined providers
+    ///
+    /// Returns providers that joined within the last 90 days and have at least one public offering.
+    /// Public — no auth required.
+    #[oai(path = "/providers/new", method = "get", tag = "ApiTags::Providers")]
+    async fn get_new_providers(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(default = "default_new_providers_limit")] limit: poem_openapi::param::Query<i64>,
+    ) -> Json<ApiResponse<Vec<crate::database::providers::NewProvider>>> {
+        let limit = limit.0.min(10);
+        match db.get_new_providers(limit).await {
+            Ok(providers) => Json(ApiResponse {
+                success: true,
+                data: Some(providers),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get new providers: {e:#?}")),
             }),
         }
     }
@@ -4624,6 +4653,54 @@ impl ProvidersApi {
                 success: false,
                 data: None,
                 error: Some(format!("Failed to get offering stats history: {e:#}")),
+            }),
+        }
+    }
+
+    /// Get per-offering conversion stats for a provider
+    ///
+    /// Returns views vs rentals breakdown per offering for the last 7 and 30 days.
+    /// Requires provider authentication — only the provider can access their own stats.
+    #[oai(
+        path = "/providers/:pubkey/offering-conversion-stats",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_offering_conversion_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::OfferingConversionStats>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_offering_conversion_stats(&provider_pubkey).await {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get offering conversion stats: {e:#}")),
             }),
         }
     }

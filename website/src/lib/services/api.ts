@@ -2745,8 +2745,9 @@ import type { BandwidthStatsResponse } from '$lib/types/generated/BandwidthStats
 import type { BandwidthHistoryResponse } from '$lib/types/generated/BandwidthHistoryResponse';
 import type { OfferingStats } from '$lib/types/generated/OfferingStats';
 import type { OfferingStatsWeek } from '$lib/types/generated/OfferingStatsWeek';
+import type { OfferingConversionStats } from '$lib/types/generated/OfferingConversionStats';
 
-export type { BandwidthStatsResponse, BandwidthHistoryResponse, OfferingStats, OfferingStatsWeek };
+export type { BandwidthStatsResponse, BandwidthHistoryResponse, OfferingStats, OfferingStatsWeek, OfferingConversionStats };
 
 /**
  * Get bandwidth stats for all provider's contracts
@@ -2909,6 +2910,38 @@ export async function getProviderOfferingStatsHistory(
 
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to fetch offering stats history');
+	}
+
+	return payload.data ?? [];
+}
+
+/**
+ * Get per-offering conversion stats (views → rentals) for a provider.
+ * Requires provider authentication.
+ */
+export async function getProviderOfferingConversionStats(
+	pubkeyHex: string,
+	headers: SignedRequestHeaders
+): Promise<OfferingConversionStats[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offering-conversion-stats`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch offering conversion stats: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingConversionStats[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch offering conversion stats');
 	}
 
 	return payload.data ?? [];
@@ -3736,6 +3769,12 @@ export interface OfferingAnalytics {
 	unique_viewers_30d: number;
 }
 
+export interface DailyViewTrend {
+	day: string;
+	views: number;
+	unique_viewers: number;
+}
+
 export interface TrendingOffering {
 	offering_id: number;
 	offer_name: string;
@@ -3770,6 +3809,27 @@ export async function getOfferingAnalytics(
 }
 
 /**
+ * Fetch daily view trends for an offering (provider-only, requires signed auth headers).
+ */
+export async function getOfferingViewTrends(
+	offeringId: number,
+	headers: SignedRequestHeaders,
+	days = 30
+): Promise<DailyViewTrend[]> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${offeringId}/view-trends?days=${days}`;
+	const response = await fetch(url, { method: 'GET', headers });
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch view trends: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+	const payload = (await response.json()) as ApiResponse<DailyViewTrend[]>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch offering view trends');
+	}
+	return payload.data;
+}
+
+/**
  * Fetch top trending offerings by view count in the last 7 days (public, no auth).
  */
 export async function fetchTrendingOfferings(limit = 6): Promise<TrendingOffering[]> {
@@ -3781,6 +3841,32 @@ export async function fetchTrendingOfferings(limit = 6): Promise<TrendingOfferin
 	const payload = (await response.json()) as ApiResponse<TrendingOffering[]>;
 	if (!payload.success || !payload.data) {
 		throw new Error(payload.error ?? 'Failed to fetch trending offerings');
+	}
+	return payload.data;
+}
+
+export interface NewProvider {
+	pubkey: string;
+	name: string;
+	description?: string | null;
+	logo_url?: string | null;
+	trust_score?: number | null;
+	offerings_count: number;
+	joined_days_ago: number;
+}
+
+/**
+ * Fetch recently joined providers (joined within 90 days, with public offerings). Public, no auth.
+ */
+export async function fetchNewProviders(limit = 6): Promise<NewProvider[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/new?limit=${limit}`;
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error(`Failed to fetch new providers: ${response.status} ${response.statusText}`);
+	}
+	const payload = (await response.json()) as ApiResponse<NewProvider[]>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch new providers');
 	}
 	return payload.data;
 }

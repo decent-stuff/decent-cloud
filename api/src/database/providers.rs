@@ -179,6 +179,19 @@ pub struct ExternalProvider {
     pub created_at_ns: i64,
 }
 
+/// A recently joined provider with offering count and days-since-join.
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct NewProvider {
+    pub pubkey: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub logo_url: Option<String>,
+    pub trust_score: Option<i64>,
+    pub offerings_count: i64,
+    pub joined_days_ago: i64,
+}
+
 /// Uptime SLA configuration for a provider (from provider_sla_config).
 #[derive(Debug, Serialize, Deserialize, poem_openapi::Object, ts_rs::TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -829,6 +842,36 @@ impl Database {
                 sla_alert_window_hours: r.sla_alert_window_hours,
             })
             .collect())
+    }
+
+    /// Get recently joined providers (joined within 90 days) that have at least one public offering.
+    /// `limit` is capped at 10.
+    pub async fn get_new_providers(&self, limit: i64) -> Result<Vec<NewProvider>> {
+        let limit = limit.min(10);
+        let rows = sqlx::query_as::<_, NewProvider>(
+            r#"SELECT
+                lower(encode(pp.pubkey, 'hex')) AS pubkey,
+                pp.name,
+                pp.description,
+                pp.logo_url,
+                pp.trust_score,
+                COUNT(po.id)::BIGINT AS offerings_count,
+                EXTRACT(DAY FROM NOW() - pp.created_at)::BIGINT AS joined_days_ago
+            FROM provider_profiles pp
+            LEFT JOIN provider_offerings po ON po.pubkey = pp.pubkey
+                AND po.is_draft = false
+                AND po.visibility = 'public'
+            WHERE pp.created_at >= NOW() - INTERVAL '90 days'
+              AND pp.has_critical_flags = false
+            GROUP BY pp.pubkey, pp.name, pp.description, pp.logo_url, pp.trust_score, pp.created_at
+            HAVING COUNT(po.id) > 0
+            ORDER BY pp.created_at DESC
+            LIMIT $1"#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
     }
 }
 

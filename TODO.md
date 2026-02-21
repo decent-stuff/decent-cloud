@@ -76,8 +76,8 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
 
-- **[Offerings] Per-offering analytics** — DONE: `offering_views` table (migration 029), `POST /offerings/{id}/view` (public, IP-hash deduplication per day), `GET /offerings/{id}/analytics` (provider-only), view tracking on marketplace detail page, views shown on provider offerings list.
-  - **Remaining:** Time-series analytics (trend over weeks), click-through rate (views → rentals), conversion funnel. *(Multi-session: needs additional DB aggregation and UI charts.)*
+- **[Offerings] Per-offering analytics** — DONE: `offering_views` table (migration 029), `POST /offerings/{id}/view` (public, IP-hash deduplication per day), `GET /offerings/{id}/analytics` (provider-only), view tracking on marketplace detail page, views shown on provider offerings list. Daily view trends: `GET /offerings/{id}/view-trends?days=30` returns `Vec<DailyViewTrend>` (day, views, unique_viewers); sparkline shown in provider offerings list.
+  - **Remaining:** Click-through rate (views → rentals) conversion funnel. *(Note: overall conversion rate per offering is now shown on the Analytics page at `/dashboard/provider/analytics`.)*
 
 - **[Marketplace] Offering comparison page** — DONE: `/dashboard/marketplace/compare?ids=1,2,3` with side-by-side specs, best-value highlighting, rent buttons, and compare toolbar on marketplace listing.
 
@@ -89,17 +89,18 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Multi-session: the app is currently dark-only; adding a light theme requires defining a full light-mode color palette and updating all components with conditional classes. Not trivial.)*
 
-- **[Provider] Provider performance insights dashboard** — Providers have separate earnings, feedback, and SLA pages but no unified analytics view. Needs: a new `/dashboard/provider/analytics` page showing which offerings are most rented, view-to-rental conversion rates, tenant satisfaction trends, and pricing elasticity insights. *(Multi-session: needs time-series offering analytics backend endpoints.)*
+- **[Provider] Provider performance analytics** — DONE: `/dashboard/provider/analytics` page shows per-offering view-to-rental conversion rates (views 7d/30d, rentals 7d/30d, conversion %, revenue 30d). Backend: `GET /providers/{pubkey}/offering-conversion-stats` (authenticated, provider-only). Sidebar nav item added.
+  - **Remaining:** Tenant satisfaction trends on analytics page, pricing elasticity insights. *(Single-session: needs feedback data joined with offering performance data.)*
 
-- **[Provider] Request filtering and bulk actions** — Provider cannot filter pending rental requests by offering type, duration, or tenant trust score; cannot bulk-accept/reject; cannot set auto-accept rules. *(Single-session: client-side filtering + bulk action UI on existing endpoint.)*
-  - Dependency: Would benefit from offering analytics (views vs. rentals) to inform auto-accept thresholds.
+- **[Provider] Request filtering and bulk actions** — DONE: Provider can filter pending rental requests by offering (dropdown) and duration range (min/max hours). Filtered set is used by Accept All / Reject All batch actions. Auto-accept rules panel (coming soon) previewed in UI.
+  - **Remaining:** Rule-based auto-accept (per-offering, per-duration threshold). *(Needs new DB table `auto_accept_rules`, API endpoints, and backend enforcement in the provisioning service. Single-session.)*
 
 - **[Tenant] SSH key onboarding guidance** — DONE: Rental request dialog now has platform-specific tabbed SSH key generation guide (macOS/Linux, Windows PowerShell, Windows PuTTY) with copy buttons for each command.
 
-- **[Marketplace] Trending and recommendations section** — DONE: `GET /api/v1/offerings/trending` endpoint returns top offerings by views in last 7 days. Marketplace shows "Trending this week" horizontal card strip when ≥2 trending offerings exist and no active filters are applied.
-  - **Remaining:** "New providers" and "Recommended for you" sections. *(Needs provider join date tracking and personalization logic.)*
+- **[Marketplace] Trending and new providers sections** — DONE: `GET /api/v1/offerings/trending` (top offerings by 7-day views) + "Trending this week" carousel. DONE: `GET /api/v1/providers/new` (providers joined last 90 days with public offerings) + "New to the platform" provider cards on marketplace. Migration 031 adds `created_at` to `provider_profiles`.
+  - **Remaining:** "Recommended for you" personalized section. *(Needs user behavior tracking and personalization logic. Multi-session.)*
 
-- **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's full public profile: historical trust score trend, feedback breakdown by offering type, response-time statistics, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page, comparison view.)*
+- **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown by offering type, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page with timeline, comparison view.)*
 
 - **[Offerings] Draft offerings scheduling** — DONE: `publish_at` field (migration 030) on offerings. When `is_draft=true` and `publish_at <= NOW()`, `PublishScheduledService` (60s interval) auto-publishes. UI: schedule picker on create/edit pages (shown when draft=true), "Scheduled" badge with publish time on offerings list.
   - **Remaining:** Bulk-publish drafts, "what changed since last save" diff view.
