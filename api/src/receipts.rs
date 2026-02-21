@@ -291,12 +291,35 @@ pub async fn send_contract_accepted_notification(db: &Database, contract_id: &[u
         }
     };
 
+    // Insert in-app notification for the requester
+    if let Ok(requester_pubkey) = hex::decode(&contract.requester_pubkey) {
+        if let Err(e) = db
+            .insert_user_notification(
+                &requester_pubkey,
+                "contract_status",
+                "Rental Request Accepted",
+                &format!(
+                    "Your rental request {}... has been accepted. Provisioning will begin shortly.",
+                    &contract_hex[..16]
+                ),
+                Some(&contract_hex),
+            )
+            .await
+        {
+            tracing::warn!(
+                "Failed to insert in-app notification for accepted contract {}: {}",
+                contract_hex,
+                e
+            );
+        }
+    }
+
     // Extract email from contact (skip if not an email contact)
     let recipient_email = match extract_email(&contract.requester_contact) {
         Some(email) => email,
         None => {
             tracing::debug!(
-                "Skipping accepted notification for contract {}: non-email contact",
+                "Skipping accepted email notification for contract {}: non-email contact",
                 contract_hex
             );
             return;
@@ -387,12 +410,37 @@ pub async fn send_contract_rejected_notification(
         }
     };
 
+    // Insert in-app notification for the requester
+    if let Ok(requester_pubkey) = hex::decode(&contract.requester_pubkey) {
+        let reason_text = reject_memo.unwrap_or("No reason provided");
+        if let Err(e) = db
+            .insert_user_notification(
+                &requester_pubkey,
+                "contract_status",
+                "Rental Request Rejected",
+                &format!(
+                    "Your rental request {}... was rejected. Reason: {}. A refund has been initiated.",
+                    &contract_hex[..16],
+                    reason_text
+                ),
+                Some(&contract_hex),
+            )
+            .await
+        {
+            tracing::warn!(
+                "Failed to insert in-app notification for rejected contract {}: {}",
+                contract_hex,
+                e
+            );
+        }
+    }
+
     // Extract email from contact (skip if not an email contact)
     let recipient_email = match extract_email(&contract.requester_contact) {
         Some(email) => email,
         None => {
             tracing::debug!(
-                "Skipping rejected notification for contract {}: non-email contact",
+                "Skipping rejected email notification for contract {}: non-email contact",
                 contract_hex
             );
             return;

@@ -2,12 +2,15 @@
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
-	import { searchOfferings, fetchIcpPrice, type Offering } from "$lib/services/api";
+	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, type Offering } from "$lib/services/api";
+	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
 	import TrustBadge from "$lib/components/TrustBadge.svelte";
 	import Icon, { type IconName } from "$lib/components/Icons.svelte";
 	import { authStore } from "$lib/stores/auth";
+	import { signRequest } from "$lib/services/auth-api";
+	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncatePubkey } from "$lib/utils/identity";
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 
@@ -19,6 +22,7 @@
 	let selectedOffering = $state<Offering | null>(null);
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	let savedIds = $state(new Set<number>());
 	const PROVIDER_CTA_KEY = 'dc-provider-cta-dismissed';
 	let providerCtaDismissed = $state(false);
 	let showAuthModal = $state(false);
@@ -235,6 +239,41 @@
 		isAuthenticated = value;
 	});
 
+	async function loadSavedIds() {
+		const info = await authStore.getSigningIdentity();
+		if (!info || !(info.identity instanceof Ed25519KeyIdentity)) return;
+		const pubkeyHex = hexEncode(info.publicKeyBytes);
+		const { headers } = await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/saved-offering-ids`);
+		const ids = await getSavedOfferingIds(headers, pubkeyHex);
+		savedIds = new Set(ids);
+	}
+
+	async function toggleBookmark(e: Event, offeringId: number) {
+		e.stopPropagation();
+		if (!isAuthenticated) {
+			showAuthModal = true;
+			return;
+		}
+		const info = await authStore.getSigningIdentity();
+		if (!info || !(info.identity instanceof Ed25519KeyIdentity)) return;
+		const pubkeyHex = hexEncode(info.publicKeyBytes);
+		const isSaved = savedIds.has(offeringId);
+		savedIds = toggleSavedId(savedIds, offeringId);
+		try {
+			if (isSaved) {
+				const { headers } = await signRequest(info.identity, 'DELETE', `/api/v1/users/${pubkeyHex}/saved-offerings/${offeringId}`);
+				await unsaveOffering(headers, pubkeyHex, offeringId);
+			} else {
+				const { headers } = await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/saved-offerings/${offeringId}`);
+				await saveOffering(headers, pubkeyHex, offeringId);
+			}
+		} catch (err) {
+			// Revert optimistic update on error
+			savedIds = toggleSavedId(savedIds, offeringId);
+			console.error('Failed to toggle bookmark:', err);
+		}
+	}
+
 	async function fetchOfferings() {
 		try {
 			loading = true;
@@ -323,7 +362,9 @@
 	onMount(async () => {
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
 		readFiltersFromUrl($page.url);
-		[, icpPriceUsd] = await Promise.all([fetchOfferings(), fetchIcpPrice()]);
+		const fetches: Promise<unknown>[] = [fetchOfferings(), fetchIcpPrice()];
+		if (isAuthenticated) fetches.push(loadSavedIds().catch((err) => console.error('Failed to load saved offerings:', err)));
+		[, icpPriceUsd] = await Promise.all(fetches) as [unknown, number | null];
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
 			const id = parseInt(offeringParam, 10);
@@ -1198,6 +1239,7 @@
 									<span class="inline-flex items-center gap-1">Price</span>
 								</th>
 								<th class="pb-3 font-medium"></th>
+								<th class="pb-3 font-medium text-right text-neutral-500"></th>
 								<th class="pb-3 font-medium text-right text-neutral-500">Compare</th>
 							</tr>
 						</thead>
@@ -1339,6 +1381,17 @@
 											>
 										{/if}
 									</td>
+								<td class="py-3 text-right">
+									{#if offering.id !== undefined}
+										<button
+											onclick={(e) => toggleBookmark(e, offering.id!)}
+											title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
+											class="p-1 transition-colors {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300' : 'text-neutral-600 hover:text-neutral-400'}"
+										>
+											<Icon name="bookmark" size={16} />
+										</button>
+									{/if}
+								</td>
 									<td class="py-3 text-right">
 										{#if offering.id !== undefined}
 											{@const inCompare = compareIds.has(offering.id)}
@@ -1357,7 +1410,7 @@
 								</tr>
 								{#if isExpanded}
 									<tr class="bg-surface-elevated">
-										<td colspan="7" class="p-4">
+										<td colspan="8" class="p-4">
 											<div
 												class="grid grid-cols-3 gap-4 text-sm"
 											>
@@ -1657,14 +1710,25 @@
 												)}</a
 									>
 								</div>
-								{#if offering.trust_score !== undefined}
-									<TrustBadge
-										score={offering.trust_score}
-										hasFlags={offering.has_critical_flags ??
-											false}
-										compact={true}
-									/>
-								{/if}
+								<div class="flex items-center gap-2 shrink-0">
+									{#if offering.trust_score !== undefined}
+										<TrustBadge
+											score={offering.trust_score}
+											hasFlags={offering.has_critical_flags ??
+												false}
+											compact={true}
+										/>
+									{/if}
+									{#if offering.id !== undefined}
+										<button
+											onclick={(e) => toggleBookmark(e, offering.id!)}
+											title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
+											class="p-1 transition-colors {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300' : 'text-neutral-600 hover:text-neutral-400'}"
+										>
+											<Icon name="bookmark" size={16} />
+										</button>
+									{/if}
+								</div>
 							</div>
 							<div class="text-sm text-neutral-400 mb-2">
 								{formatSpecs(offering)}

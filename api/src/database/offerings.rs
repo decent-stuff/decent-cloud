@@ -1840,5 +1840,86 @@ impl Database {
     }
 }
 
+impl Database {
+    /// Save an offering to a user's watchlist (upsert — silently succeeds if already saved).
+    pub async fn save_offering(&self, user_pubkey: &[u8], offering_id: i64) -> Result<()> {
+        let saved_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        sqlx::query!(
+            "INSERT INTO saved_offerings (user_pubkey, offering_id, saved_at) VALUES ($1, $2, $3) ON CONFLICT (user_pubkey, offering_id) DO NOTHING",
+            user_pubkey,
+            offering_id,
+            saved_at
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Remove an offering from a user's watchlist.
+    pub async fn unsave_offering(&self, user_pubkey: &[u8], offering_id: i64) -> Result<()> {
+        sqlx::query!(
+            "DELETE FROM saved_offerings WHERE user_pubkey = $1 AND offering_id = $2",
+            user_pubkey,
+            offering_id
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get all saved offerings for a user, joined with full offering data.
+    pub async fn get_saved_offerings(&self, user_pubkey: &[u8]) -> Result<Vec<Offering>> {
+        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
+        let offerings = sqlx::query_as::<_, Offering>(
+            r#"SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price,
+               o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval,
+               o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id,
+               o.is_subscription, o.subscription_interval_days,
+               o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name,
+               o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity,
+               o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic,
+               o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude,
+               o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours,
+               o.payment_methods, o.features, o.operating_systems,
+               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score,
+               CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               o.offering_source, o.external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script,
+               NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
+               FROM provider_offerings o
+               INNER JOIN saved_offerings s ON o.id = s.offering_id AND s.user_pubkey = $2
+               ORDER BY s.saved_at DESC"#
+        )
+        .bind(example_provider_pubkey)
+        .bind(user_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(offerings)
+    }
+
+    /// Check whether a specific offering is saved by the user.
+    pub async fn is_offering_saved(&self, user_pubkey: &[u8], offering_id: i64) -> Result<bool> {
+        let count: i64 = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM saved_offerings WHERE user_pubkey = $1 AND offering_id = $2"#,
+            user_pubkey,
+            offering_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(count > 0)
+    }
+
+    /// Get IDs of all offerings saved by the user (for bulk highlighting).
+    pub async fn get_saved_offering_ids(&self, user_pubkey: &[u8]) -> Result<Vec<i64>> {
+        let ids = sqlx::query_scalar!(
+            r#"SELECT offering_id as "offering_id!: i64" FROM saved_offerings WHERE user_pubkey = $1 ORDER BY saved_at DESC"#,
+            user_pubkey
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(ids)
+    }
+}
+
 #[cfg(test)]
 mod tests;

@@ -337,6 +337,10 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/019_per_agent_status.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/020_reliability_score.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/021_auto_renew.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/022_user_notifications.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/023_saved_offerings.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/024_contract_events.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/025_sla_uptime_config.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -582,6 +586,22 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "021_auto_renew.sql",
                     include_str!("../../migrations_pg/021_auto_renew.sql"),
+                ),
+                (
+                    "022_user_notifications.sql",
+                    include_str!("../../migrations_pg/022_user_notifications.sql"),
+                ),
+                (
+                    "023_saved_offerings.sql",
+                    include_str!("../../migrations_pg/023_saved_offerings.sql"),
+                ),
+                (
+                    "024_contract_events.sql",
+                    include_str!("../../migrations_pg/024_contract_events.sql"),
+                ),
+                (
+                    "025_sla_uptime_config.sql",
+                    include_str!("../../migrations_pg/025_sla_uptime_config.sql"),
                 ),
             ];
 

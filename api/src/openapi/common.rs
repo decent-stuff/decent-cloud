@@ -663,6 +663,40 @@ fn default_visibility() -> String {
     "public".to_string()
 }
 
+/// A single in-app notification
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+#[oai(skip_serializing_if_is_none)]
+pub struct UserNotificationResponse {
+    pub id: i64,
+    pub notification_type: String,
+    pub title: String,
+    pub body: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub contract_id: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub read_at: Option<i64>,
+    pub created_at: i64,
+}
+
+/// Unread notification count
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadCountResponse {
+    pub unread_count: i64,
+}
+
+/// Request body to mark notifications as read
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct MarkReadRequest {
+    /// Specific notification IDs to mark as read. If empty, marks all as read.
+    pub ids: Vec<i64>,
+}
+
 /// Response from offering generation
 #[derive(Debug, Serialize, poem_openapi::Object, ts_rs::TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -673,6 +707,17 @@ pub struct GenerateOfferingsResponse {
     pub created_offerings: Vec<crate::database::offerings::Offering>,
     /// Tiers that were skipped (no pricing provided or other reasons)
     pub skipped_tiers: Vec<crate::database::offerings::UnavailableTier>,
+}
+
+/// Request to update a provider's uptime SLA alert settings
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSlaUptimeConfigRequest {
+    /// Minimum acceptable uptime percentage (1–100)
+    pub uptime_threshold_percent: i32,
+    /// Rolling window in hours over which uptime is measured (1–168)
+    pub sla_alert_window_hours: i32,
 }
 
 #[derive(poem_openapi::Tags)]

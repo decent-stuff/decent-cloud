@@ -594,6 +594,16 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        self.insert_contract_event(
+            &contract_id,
+            "status_change",
+            None,
+            Some(&requested_status),
+            "tenant",
+            None,
+        )
+        .await?;
+
         Ok(contract_id)
     }
 
@@ -675,6 +685,18 @@ impl Database {
         )
             .execute(&mut *tx)
             .await?;
+
+        sqlx::query!(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, 'status_change', $2, $3, 'provider', $4, $5)"#,
+            contract_id,
+            contract.status,
+            new_status_str,
+            change_memo,
+            updated_at_ns
+        )
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
 
@@ -833,6 +855,18 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
+        sqlx::query!(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, 'status_change', $2, $3, 'provider', $4, $5)"#,
+            contract_id,
+            contract.status,
+            rejected_status,
+            reject_memo,
+            updated_at_ns
+        )
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
         Ok(())
     }
@@ -976,6 +1010,16 @@ impl Database {
 
         tx.commit().await?;
 
+        self.insert_contract_event(
+            contract_id,
+            "provisioned",
+            None,
+            None,
+            "system",
+            None,
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -1068,6 +1112,7 @@ impl Database {
 
         // Non-cascading BYTEA contract_id tables
         let bytea_tables = [
+            "contract_events",
             "contract_usage_events",
             "contract_usage",
             "contract_health_checks",
@@ -1215,6 +1260,16 @@ impl Database {
             );
         }
 
+        self.insert_contract_event(
+            contract_id,
+            "password_reset",
+            None,
+            None,
+            "tenant",
+            None,
+        )
+        .await?;
+
         Ok(())
     }
 
@@ -1354,6 +1409,22 @@ impl Database {
         .execute(&self.pool)
         .await?;
 
+        let actor = if hex::encode(extended_by_pubkey) == contract.requester_pubkey {
+            "tenant"
+        } else {
+            "provider"
+        };
+        let details = format!("Extended by {} hours", extension_hours);
+        self.insert_contract_event(
+            contract_id,
+            "extension",
+            None,
+            None,
+            actor,
+            Some(&details),
+        )
+        .await?;
+
         Ok(extension_payment_e9s)
     }
 
@@ -1397,6 +1468,16 @@ impl Database {
         .bind(stripe_invoice_id)
         .bind(contract_id)
         .execute(&self.pool)
+        .await?;
+
+        self.insert_contract_event(
+            contract_id,
+            "payment_confirmed",
+            None,
+            None,
+            "system",
+            Some(&format!("Stripe session: {}", checkout_session_id)),
+        )
         .await?;
 
         Ok(())
@@ -1789,6 +1870,18 @@ impl Database {
         .execute(&mut *tx)
         .await?;
 
+        sqlx::query!(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, 'status_change', $2, $3, 'tenant', $4, $5)"#,
+            contract_id,
+            contract.status,
+            cancelled_status,
+            cancel_memo,
+            updated_at_ns
+        )
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
 
         // Trigger cloud_resource deletion if this contract has a linked resource
@@ -2109,6 +2202,18 @@ impl Database {
             provider_pubkey,
             updated_at_ns,
             change_memo
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query!(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, 'status_change', $2, $3, 'system', $4, $5)"#,
+            contract_id,
+            contract.status,
+            new_status,
+            change_memo,
+            updated_at_ns
         )
         .execute(&mut *tx)
         .await?;
@@ -2930,6 +3035,53 @@ impl Database {
 
         Ok(())
     }
+
+    /// Insert a contract event into the timeline.
+    pub async fn insert_contract_event(
+        &self,
+        contract_id: &[u8],
+        event_type: &str,
+        old_status: Option<&str>,
+        new_status: Option<&str>,
+        actor: &str,
+        details: Option<&str>,
+    ) -> Result<i64> {
+        let created_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let id: i64 = sqlx::query_scalar(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id"#,
+        )
+        .bind(contract_id)
+        .bind(event_type)
+        .bind(old_status)
+        .bind(new_status)
+        .bind(actor)
+        .bind(details)
+        .bind(created_at)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(id)
+    }
+
+    /// Get all events for a contract ordered chronologically.
+    pub async fn get_contract_events(&self, contract_id: &[u8]) -> Result<Vec<ContractEvent>> {
+        let events = sqlx::query_as!(
+            ContractEvent,
+            r#"SELECT id as "id!", lower(encode(contract_id, 'hex')) as "contract_id!: String",
+               event_type as "event_type!", old_status, new_status,
+               actor as "actor!", details, created_at as "created_at!"
+               FROM contract_events
+               WHERE contract_id = $1
+               ORDER BY created_at ASC"#,
+            contract_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(events)
+    }
 }
 
 /// Contract usage tracking for billing periods
@@ -3059,6 +3211,33 @@ pub struct ContractHealthCheck {
     #[oai(skip_serializing_if_is_none)]
     pub details: Option<String>,
     /// Timestamp when this record was created (nanoseconds since epoch)
+    #[ts(type = "number")]
+    pub created_at: i64,
+}
+
+/// Timeline event for a contract (status changes, payment, provisioning, extensions)
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase", skip_serializing_if_is_none)]
+pub struct ContractEvent {
+    #[ts(type = "number")]
+    pub id: i64,
+    /// Contract ID as hex string
+    #[ts(type = "string")]
+    pub contract_id: String,
+    /// Event type: 'status_change', 'payment_confirmed', 'provisioned', 'extension', 'password_reset', 'note'
+    pub event_type: String,
+    #[oai(skip_serializing_if_is_none)]
+    pub old_status: Option<String>,
+    #[oai(skip_serializing_if_is_none)]
+    pub new_status: Option<String>,
+    /// Who caused the event: 'tenant', 'provider', 'system'
+    pub actor: String,
+    /// Optional JSON or plain text details
+    #[oai(skip_serializing_if_is_none)]
+    pub details: Option<String>,
+    /// Nanoseconds since epoch
     #[ts(type = "number")]
     pub created_at: i64,
 }

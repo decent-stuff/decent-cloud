@@ -15,6 +15,8 @@ import type { UnavailableTier } from '$lib/types/generated/UnavailableTier';
 import type { ContractHealthCheck } from '$lib/types/generated/ContractHealthCheck';
 import type { ContractHealthSummary } from '$lib/types/generated/ContractHealthSummary';
 import type { ContractFeedback } from '$lib/types/generated/ContractFeedback';
+import type { ContractEvent } from '$lib/types/generated/ContractEvent';
+import type { SlaUptimeConfig } from '$lib/types/generated/SlaUptimeConfig';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
@@ -3312,4 +3314,223 @@ export async function unlistFromMarketplace(
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to unlist from marketplace');
 	}
+}
+
+export interface UserNotification {
+	id: number;
+	notificationType: string;
+	title: string;
+	body: string;
+	contractId?: string;
+	readAt?: number;
+	createdAt: number;
+}
+
+export async function getUserNotifications(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string
+): Promise<UserNotification[]> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/notifications`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch notifications: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<UserNotification[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch notifications');
+	}
+
+	return payload.data ?? [];
+}
+
+export async function getUnreadNotificationCount(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string
+): Promise<number> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/notifications/unread-count`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch unread count: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<{ unreadCount: number }>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch unread count');
+	}
+
+	return payload.data.unreadCount;
+}
+
+export async function markNotificationsRead(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string,
+	ids: number[]
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/notifications/mark-read`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({ ids })
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to mark notifications read: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to mark notifications read');
+	}
+}
+
+export type { ContractEvent };
+
+export async function getContractEvents(
+	headers: SignedRequestHeaders,
+	contractId: string
+): Promise<ContractEvent[]> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/events`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch contract events: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractEvent[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch contract events');
+	}
+
+	return payload.data ?? [];
+}
+
+export type { SlaUptimeConfig };
+
+export async function getProviderSlaUptimeConfig(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string
+): Promise<SlaUptimeConfig> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/sla-uptime-config`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch SLA uptime config: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SlaUptimeConfig>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch SLA uptime config');
+	}
+
+	return payload.data;
+}
+
+export async function updateProviderSlaUptimeConfig(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string,
+	config: SlaUptimeConfig
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/sla-uptime-config`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify(config)
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to update SLA uptime config: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update SLA uptime config');
+	}
+}
+
+export async function saveOffering(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string,
+	offeringId: number
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/saved-offerings/${offeringId}`;
+	const response = await fetch(url, { method: 'POST', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to save offering: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to save offering');
+	}
+}
+
+export async function unsaveOffering(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string,
+	offeringId: number
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/saved-offerings/${offeringId}`;
+	const response = await fetch(url, { method: 'DELETE', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to unsave offering: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to unsave offering');
+	}
+}
+
+export async function getSavedOfferings(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string
+): Promise<Offering[]> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/saved-offerings`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch saved offerings: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Offering[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch saved offerings');
+	}
+
+	return (payload.data ?? []).map((o) => ({ ...o, pubkey: normalizePubkey(o.pubkey) }));
+}
+
+export async function getSavedOfferingIds(
+	headers: SignedRequestHeaders,
+	pubkeyHex: string
+): Promise<number[]> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/saved-offering-ids`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch saved offering IDs: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<number[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch saved offering IDs');
+	}
+
+	return payload.data ?? [];
 }

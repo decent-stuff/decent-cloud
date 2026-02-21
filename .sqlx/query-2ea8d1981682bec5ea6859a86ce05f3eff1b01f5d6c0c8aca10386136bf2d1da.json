@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", lower(encode(contract_id, 'hex')) as \"contract_id!: String\",\n               event_type as \"event_type!\", old_status, new_status,\n               actor as \"actor!\", details, created_at as \"created_at!\"\n               FROM contract_events\n               WHERE contract_id = $1\n               ORDER BY created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "old_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "new_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "actor!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "2ea8d1981682bec5ea6859a86ce05f3eff1b01f5d6c0c8aca10386136bf2d1da"
+}

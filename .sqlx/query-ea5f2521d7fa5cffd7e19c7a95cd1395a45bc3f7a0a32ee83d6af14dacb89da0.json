@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_notifications\n               SET read_at = $1\n               WHERE user_pubkey = $2 AND read_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea5f2521d7fa5cffd7e19c7a95cd1395a45bc3f7a0a32ee83d6af14dacb89da0"
+}

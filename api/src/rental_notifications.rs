@@ -16,6 +16,34 @@ pub async fn notify_provider_new_rental(
     let provider_pubkey =
         hex::decode(&contract.provider_pubkey).context("Invalid provider pubkey hex")?;
 
+    // Insert in-app notification for the provider
+    let amount_display = format_amount(contract.payment_amount_e9s, &contract.currency);
+    let duration_display = contract
+        .duration_hours
+        .map(format_duration)
+        .unwrap_or_else(|| "Unknown".to_string());
+    if let Err(e) = db
+        .insert_user_notification(
+            &provider_pubkey,
+            "rental_request",
+            "New Rental Request",
+            &format!(
+                "A tenant requested {} for {}. Contract: {}...",
+                amount_display,
+                duration_display,
+                &contract.contract_id[..16]
+            ),
+            Some(&contract.contract_id),
+        )
+        .await
+    {
+        tracing::error!(
+            "Failed to insert in-app notification for provider {}: {:#}",
+            contract.provider_pubkey,
+            e
+        );
+    }
+
     // Get provider notification config
     let config = db
         .get_user_notification_config(&provider_pubkey)
@@ -226,6 +254,27 @@ pub async fn notify_user_provisioned(
 ) -> Result<()> {
     let requester_pubkey =
         hex::decode(&contract.requester_pubkey).context("Invalid requester pubkey hex")?;
+
+    // Insert in-app notification for the requester
+    if let Err(e) = db
+        .insert_user_notification(
+            &requester_pubkey,
+            "contract_provisioned",
+            "Your VM is Ready",
+            &format!(
+                "Your virtual machine for contract {}... is provisioned and ready to use.",
+                &contract.contract_id[..16]
+            ),
+            Some(&contract.contract_id),
+        )
+        .await
+    {
+        tracing::error!(
+            "Failed to insert in-app notification for requester {}: {:#}",
+            contract.requester_pubkey,
+            e
+        );
+    }
 
     // Get user notification config
     let config = db
@@ -685,6 +734,27 @@ pub async fn notify_tenant_password_reset_complete(
 ) -> Result<()> {
     let requester_pubkey =
         hex::decode(&contract.requester_pubkey).context("Invalid requester pubkey hex")?;
+
+    // Insert in-app notification for the tenant
+    if let Err(e) = db
+        .insert_user_notification(
+            &requester_pubkey,
+            "password_reset_complete",
+            "Password Reset Complete",
+            &format!(
+                "Your password has been reset for contract {}.... Retrieve new credentials from the dashboard.",
+                &contract.contract_id[..16]
+            ),
+            Some(&contract.contract_id),
+        )
+        .await
+    {
+        tracing::error!(
+            "Failed to insert in-app notification for tenant {}: {:#}",
+            contract.requester_pubkey,
+            e
+        );
+    }
 
     let config = db
         .get_user_notification_config(&requester_pubkey)

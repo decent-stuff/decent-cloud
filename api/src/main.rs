@@ -1,6 +1,7 @@
 mod acme_dns;
 mod auth;
 mod auto_renewal_service;
+mod sla_alert_service;
 mod chatwoot;
 mod cleanup_service;
 mod cloud;
@@ -48,6 +49,7 @@ use openapi::create_combined_api;
 use price_cache::PriceCache;
 use auto_renewal_service::AutoRenewalService;
 use payment_release_service::PaymentReleaseService;
+use sla_alert_service::SlaAlertService;
 use poem::web::{Data, Redirect};
 use poem::{
     get, handler,
@@ -1335,6 +1337,24 @@ async fn serve_command() -> Result<(), std::io::Error> {
         auto_renewal_service.run().await;
     });
 
+    // Start SLA alert service in background (runs every 1 hour)
+    let sla_alert_interval_hours = env::var("SLA_ALERT_INTERVAL_HOURS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1u64);
+
+    let db_for_sla = ctx.database.clone();
+    let email_svc_for_sla = ctx.email_service.clone();
+    let sla_alert_task = tokio::spawn(async move {
+        let sla_alert_service =
+            SlaAlertService::new(db_for_sla, email_svc_for_sla, sla_alert_interval_hours);
+        tracing::info!(
+            "Starting SLA alert service (interval: {}h)",
+            sla_alert_interval_hours
+        );
+        sla_alert_service.run().await;
+    });
+
     // Start cloud provisioning service in background
     let cloud_provisioning_interval_secs = env::var("CLOUD_PROVISIONING_INTERVAL_SECS")
         .ok()
@@ -1366,6 +1386,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     cleanup_task.abort();
     payment_release_task.abort();
     auto_renewal_task.abort();
+    sla_alert_task.abort();
     cloud_provisioning_task.abort();
     if let Some(task) = email_processor_task {
         task.abort();

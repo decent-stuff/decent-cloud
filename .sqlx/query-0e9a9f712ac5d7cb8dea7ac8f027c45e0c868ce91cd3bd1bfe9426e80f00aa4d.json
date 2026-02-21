@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)\n               VALUES ($1, 'status_change', $2, $3, 'provider', $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e9a9f712ac5d7cb8dea7ac8f027c45e0c868ce91cd3bd1bfe9426e80f00aa4d"
+}

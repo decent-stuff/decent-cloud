@@ -50,6 +50,7 @@
 
 	// My Activity section - user's rentals (customer perspective)
 	const activityItems: NavItem[] = [
+		{ href: '/dashboard/saved', icon: 'bookmark', label: 'Saved' },
 		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' },
 		{ href: '/dashboard/transfers', icon: 'activity', label: 'Transfers' },
 		{ href: '/dashboard/invoices', icon: 'download', label: 'Invoices' }

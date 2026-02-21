@@ -5,9 +5,12 @@
 	import {
 		getProviderContracts,
 		getProviderContractHealthSummary,
+		getProviderSlaUptimeConfig,
+		updateProviderSlaUptimeConfig,
 		hexEncode,
 		type Contract,
-		type ContractHealthSummary
+		type ContractHealthSummary,
+		type SlaUptimeConfig
 	} from '$lib/services/api';
 	import { signRequest } from '$lib/services/auth-api';
 	import { authStore } from '$lib/stores/auth';
@@ -24,6 +27,13 @@
 	let error = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
+
+	// Alert configuration state
+	let slaConfig = $state<SlaUptimeConfig>({ uptimeThresholdPercent: 95, slaAlertWindowHours: 24 });
+	let slaConfigLoading = $state(false);
+	let slaConfigSaving = $state(false);
+	let slaConfigError = $state<string | null>(null);
+	let slaConfigSuccess = $state(false);
 
 	const overallUptime = $derived(() => {
 		const monitored = rows.filter((r) => r.summary && r.summary.totalChecks > 0);
@@ -67,7 +77,11 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			const signedContracts = await signRequest(info.identity, 'GET', `/api/v1/providers/${providerHex}/contracts`);
+			// Load SLA config and contracts in parallel
+			const [signedContracts] = await Promise.all([
+				signRequest(info.identity, 'GET', `/api/v1/providers/${providerHex}/contracts`),
+				loadSlaConfig(info.identity, providerHex)
+			]);
 			const contracts = await getProviderContracts(signedContracts.headers, providerHex);
 
 			// Fetch health summary for each contract in parallel
@@ -96,6 +110,53 @@
 			error = e instanceof Error ? e.message : 'Failed to load SLA data';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function loadSlaConfig(identity: Ed25519KeyIdentity, providerHex: string) {
+		try {
+			slaConfigLoading = true;
+			slaConfigError = null;
+			const signed = await signRequest(
+				identity,
+				'GET',
+				`/api/v1/providers/${providerHex}/sla-uptime-config`
+			);
+			slaConfig = await getProviderSlaUptimeConfig(signed.headers, providerHex);
+		} catch (e) {
+			// Config not found is not fatal - keep defaults
+			console.debug('SLA config not found, using defaults:', e);
+		} finally {
+			slaConfigLoading = false;
+		}
+	}
+
+	async function saveSlaConfig() {
+		try {
+			slaConfigSaving = true;
+			slaConfigError = null;
+			slaConfigSuccess = false;
+
+			const info = await authStore.getSigningIdentity();
+			if (!info || !(info.identity instanceof Ed25519KeyIdentity)) {
+				slaConfigError = 'You must be authenticated to update configuration';
+				return;
+			}
+
+			const providerHex = hexEncode(info.publicKeyBytes);
+			const signed = await signRequest(
+				info.identity,
+				'PUT',
+				`/api/v1/providers/${providerHex}/sla-uptime-config`,
+				slaConfig
+			);
+			await updateProviderSlaUptimeConfig(signed.headers, providerHex, slaConfig);
+			slaConfigSuccess = true;
+			setTimeout(() => { slaConfigSuccess = false; }, 3000);
+		} catch (e) {
+			slaConfigError = e instanceof Error ? e.message : 'Failed to save configuration';
+		} finally {
+			slaConfigSaving = false;
 		}
 	}
 
@@ -158,6 +219,61 @@
 				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else}
+			<!-- Alert Configuration -->
+			<section class="bg-surface-elevated border border-neutral-800 p-5">
+				<h2 class="text-base font-semibold text-white mb-1">Alert Configuration</h2>
+				<p class="text-neutral-500 text-xs mb-4">Configure when SLA alerts are triggered for your contracts</p>
+				{#if slaConfigLoading}
+					<div class="text-neutral-500 text-sm">Loading configuration...</div>
+				{:else}
+					<div class="flex flex-wrap items-end gap-4">
+						<div class="flex flex-col gap-1">
+							<label for="uptime-threshold" class="text-xs text-neutral-400 font-medium">
+								Uptime Threshold (%)
+							</label>
+							<input
+								id="uptime-threshold"
+								type="number"
+								min="1"
+								max="100"
+								bind:value={slaConfig.uptimeThresholdPercent}
+								class="w-28 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+							<p class="text-neutral-600 text-xs">Alert when uptime drops below this value</p>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="alert-window" class="text-xs text-neutral-400 font-medium">
+								Alert Window (hours)
+							</label>
+							<input
+								id="alert-window"
+								type="number"
+								min="1"
+								max="168"
+								bind:value={slaConfig.slaAlertWindowHours}
+								class="w-28 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+							<p class="text-neutral-600 text-xs">Rolling window for uptime measurement</p>
+						</div>
+						<div class="flex flex-col gap-1 pb-5">
+							<button
+								onclick={saveSlaConfig}
+								disabled={slaConfigSaving}
+								class="px-4 py-1.5 text-sm bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								{slaConfigSaving ? 'Saving...' : 'Save'}
+							</button>
+						</div>
+					</div>
+					{#if slaConfigSuccess}
+						<p class="text-emerald-400 text-xs mt-2">Configuration saved.</p>
+					{/if}
+					{#if slaConfigError}
+						<p class="text-red-400 text-xs mt-2">{slaConfigError}</p>
+					{/if}
+				{/if}
+			</section>
+
 			<!-- Summary header -->
 			{#if overallUptime() !== null}
 				<section class="grid grid-cols-1 sm:grid-cols-3 gap-4">

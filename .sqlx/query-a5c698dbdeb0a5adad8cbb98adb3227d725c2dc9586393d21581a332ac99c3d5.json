@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO saved_offerings (user_pubkey, offering_id, saved_at) VALUES ($1, $2, $3) ON CONFLICT (user_pubkey, offering_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5c698dbdeb0a5adad8cbb98adb3227d725c2dc9586393d21581a332ac99c3d5"
+}

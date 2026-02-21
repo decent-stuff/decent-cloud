@@ -6,15 +6,22 @@
 		fetchIcpPrice,
 		getProviderTrustMetrics,
 		getProviderProfile,
+		getSavedOfferingIds,
+		saveOffering,
+		unsaveOffering,
+		hexEncode,
 		type Offering,
 		type ProviderTrustMetrics,
 		type ProviderProfile
 	} from '$lib/services/api';
+	import { toggleSavedId } from '$lib/services/saved-offerings';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 	import { authStore } from '$lib/stores/auth';
+	import { signRequest } from '$lib/services/auth-api';
+	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncatePubkey } from '$lib/utils/identity';
 
 	const offeringId = parseInt($page.params.id ?? '', 10);
@@ -30,6 +37,7 @@
 	let successMessage = $state<string | null>(null);
 	let copyLinkFeedback = $state(false);
 	let icpPriceUsd = $state<number | null>(null);
+	let savedIds = $state(new Set<number>());
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -49,7 +57,45 @@
 		} finally {
 			loading = false;
 		}
+		if (isAuthenticated) {
+			try {
+				const info = await authStore.getSigningIdentity();
+				if (info && info.identity instanceof Ed25519KeyIdentity) {
+					const pubkeyHex = hexEncode(info.publicKeyBytes);
+					const { headers } = await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/saved-offering-ids`);
+					const ids = await getSavedOfferingIds(headers, pubkeyHex);
+					savedIds = new Set(ids);
+				}
+			} catch (err) {
+				console.error('Failed to load saved offerings:', err);
+			}
+		}
 	});
+
+	async function toggleBookmark() {
+		if (!isAuthenticated) {
+			showAuthModal = true;
+			return;
+		}
+		if (!offering?.id) return;
+		const info = await authStore.getSigningIdentity();
+		if (!info || !(info.identity instanceof Ed25519KeyIdentity)) return;
+		const pubkeyHex = hexEncode(info.publicKeyBytes);
+		const isSaved = savedIds.has(offering.id);
+		savedIds = toggleSavedId(savedIds, offering.id);
+		try {
+			if (isSaved) {
+				const { headers } = await signRequest(info.identity, 'DELETE', `/api/v1/users/${pubkeyHex}/saved-offerings/${offering.id}`);
+				await unsaveOffering(headers, pubkeyHex, offering.id);
+			} else {
+				const { headers } = await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/saved-offerings/${offering.id}`);
+				await saveOffering(headers, pubkeyHex, offering.id);
+			}
+		} catch (err) {
+			savedIds = toggleSavedId(savedIds, offering.id);
+			console.error('Failed to toggle bookmark:', err);
+		}
+	}
 
 	function handleRentClick() {
 		if (!isAuthenticated) {
@@ -220,6 +266,16 @@
 						<Icon name="link" size={14} class="inline mr-1" />Copy link
 					{/if}
 				</button>
+				{#if offering.id !== undefined}
+					<button
+						onclick={toggleBookmark}
+						title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
+						class="px-3 py-1.5 text-sm bg-surface-elevated border border-neutral-800 transition-colors flex items-center gap-1.5 {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300 border-primary-500/30' : 'text-neutral-400 hover:text-white'}"
+					>
+						<Icon name="bookmark" size={14} />
+						{savedIds.has(offering.id) ? 'Saved' : 'Save'}
+					</button>
+				{/if}
 				{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
 					<a
 						href={offering.external_checkout_url}

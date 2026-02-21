@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO sla_breach_alerts\n                   (contract_id, provider_pubkey, uptime_percent, threshold_percent, alert_sent_at)\n               VALUES ($1, $2, $3, $4, $5)\n               ON CONFLICT (contract_id) DO UPDATE\n                   SET provider_pubkey  = EXCLUDED.provider_pubkey,\n                       uptime_percent   = EXCLUDED.uptime_percent,\n                       threshold_percent = EXCLUDED.threshold_percent,\n                       alert_sent_at    = EXCLUDED.alert_sent_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int4",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "066483b4a21a750cd4a8fbf56a092a16d913447b98de4738d005b228511c72fe"
+}

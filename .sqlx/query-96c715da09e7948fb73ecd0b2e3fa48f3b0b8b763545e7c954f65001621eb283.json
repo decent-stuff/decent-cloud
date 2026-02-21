@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT offering_id as \"offering_id!: i64\" FROM saved_offerings WHERE user_pubkey = $1 ORDER BY saved_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "offering_id!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "96c715da09e7948fb73ecd0b2e3fa48f3b0b8b763545e7c954f65001621eb283"
+}

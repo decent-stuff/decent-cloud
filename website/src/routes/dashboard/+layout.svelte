@@ -7,6 +7,8 @@
 	import AuthPromptBanner from '$lib/components/AuthPromptBanner.svelte';
 	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
 	import SeedPhraseBackupBanner from '$lib/components/SeedPhraseBackupBanner.svelte';
+	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import Icon from '$lib/components/Icons.svelte';
 
 	const SEED_BACKUP_DISMISSED_KEY = 'seedPhraseBackupDismissed';
@@ -15,6 +17,7 @@
 	let isAuthenticated = $state(false);
 	let isInitialized = $state(false);
 	let isSidebarOpen = $state(false);
+	let commandPalette = $state<{ openPalette: () => void } | null>(null);
 	let account = $state<AccountInfo | null>(null);
 	let activeIdentity = $state<IdentityInfo | null>(null);
 	let seedBackupDismissed = $state(browser ? localStorage.getItem(SEED_BACKUP_DISMISSED_KEY) === '1' : true);
@@ -52,6 +55,9 @@
 </script>
 
 <div class="min-h-screen bg-base">
+	<!-- Command Palette -->
+	<CommandPalette bind:this={commandPalette} />
+
 	<!-- Sidebar -->
 	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} />
 
@@ -65,7 +71,16 @@
 		>
 			<Icon name="menu" size={20} />
 		</button>
-		<span class="ml-3 text-white font-semibold text-sm">Decent Cloud</span>
+		<span class="ml-3 text-white font-semibold text-sm flex-1">Decent Cloud</span>
+		<NotificationBell />
+		<button
+			type="button"
+			onclick={() => commandPalette?.openPalette()}
+			class="text-neutral-400 p-2 hover:bg-surface-hover hover:text-white transition-colors"
+			aria-label="Open command palette"
+		>
+			<Icon name="search" size={20} />
+		</button>
 	</header>
 
 	<!-- Auth prompt banner for anonymous users -->

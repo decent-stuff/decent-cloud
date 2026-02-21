@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                   encode(c.contract_id, 'hex') AS \"contract_id!\",\n                   encode(c.provider_pubkey, 'hex') AS \"provider_pubkey!\",\n                   COUNT(h.id)                  AS \"total_checks!: i64\",\n                   SUM(CASE WHEN h.status = 'healthy' THEN 1 ELSE 0 END) AS \"healthy_checks!: i64\"\n               FROM contract_sign_requests c\n               JOIN contract_health_checks h ON h.contract_id = c.contract_id\n               WHERE c.status IN ('active', 'provisioned')\n                 AND h.checked_at >= $1\n               GROUP BY c.contract_id, c.provider_pubkey\n               HAVING COUNT(h.id) > 0\n                 AND (SUM(CASE WHEN h.status = 'healthy' THEN 1 ELSE 0 END) * 100 / COUNT(h.id)) < $2\n                 AND NOT EXISTS (\n                     SELECT 1 FROM sla_breach_alerts a\n                     WHERE a.contract_id = c.contract_id\n                       AND a.alert_sent_at > $3\n                 )",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contract_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider_pubkey!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "total_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "healthy_checks!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "94a59c4fbf59686bf0623e55a7ee57655586507ff92f206965c55f77e123f734"
+}

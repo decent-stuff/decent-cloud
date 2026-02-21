@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_sla_config\n                   (provider_pubkey, response_time_seconds, created_at, updated_at,\n                    uptime_threshold_percent, sla_alert_window_hours)\n               VALUES ($1, 14400, $2, $2, $3, $4)\n               ON CONFLICT (provider_pubkey) DO UPDATE\n                   SET uptime_threshold_percent = EXCLUDED.uptime_threshold_percent,\n                       sla_alert_window_hours   = EXCLUDED.sla_alert_window_hours,\n                       updated_at               = EXCLUDED.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "61b772017bf6641f584b4527252baa5da55b6a6bc0dd2df6afe30ef76d9526c0"
+}

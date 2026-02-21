@@ -3184,3 +3184,94 @@ fn test_tier_eligibility_min_agent_check() {
         "Reason should mention agent constraint"
     );
 }
+
+// ── saved offerings tests ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_save_offering_and_retrieve() {
+    let db = setup_test_db().await;
+    let user = vec![0xAAu8; 32];
+    let provider = vec![0xBBu8; 32];
+    insert_test_offering(&db, 1, &provider, "US", 5.0).await;
+    let db_id = test_id_to_db_id(1);
+
+    db.save_offering(&user, db_id).await.expect("save_offering failed");
+
+    let saved = db.get_saved_offerings(&user).await.expect("get_saved_offerings failed");
+    assert_eq!(saved.len(), 1, "Expected 1 saved offering");
+    assert_eq!(saved[0].id, Some(db_id), "Saved offering id mismatch");
+}
+
+#[tokio::test]
+async fn test_save_offering_idempotent() {
+    let db = setup_test_db().await;
+    let user = vec![0xCCu8; 32];
+    let provider = vec![0xDDu8; 32];
+    insert_test_offering(&db, 2, &provider, "DE", 10.0).await;
+    let db_id = test_id_to_db_id(2);
+
+    db.save_offering(&user, db_id).await.expect("first save failed");
+    db.save_offering(&user, db_id).await.expect("second save (upsert) failed");
+
+    let ids = db.get_saved_offering_ids(&user).await.expect("get_saved_offering_ids failed");
+    assert_eq!(ids.len(), 1, "Duplicate save should not create two rows");
+}
+
+#[tokio::test]
+async fn test_unsave_offering() {
+    let db = setup_test_db().await;
+    let user = vec![0xEEu8; 32];
+    let provider = vec![0xFFu8; 32];
+    insert_test_offering(&db, 3, &provider, "US", 15.0).await;
+    let db_id = test_id_to_db_id(3);
+
+    db.save_offering(&user, db_id).await.expect("save failed");
+    db.unsave_offering(&user, db_id).await.expect("unsave failed");
+
+    let saved = db.get_saved_offerings(&user).await.expect("get_saved_offerings failed");
+    assert_eq!(saved.len(), 0, "Offering should be removed after unsave");
+}
+
+#[tokio::test]
+async fn test_is_offering_saved() {
+    let db = setup_test_db().await;
+    let user = vec![0x11u8; 32];
+    let provider = vec![0x22u8; 32];
+    insert_test_offering(&db, 4, &provider, "US", 20.0).await;
+    let db_id = test_id_to_db_id(4);
+
+    assert!(!db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should not be saved initially");
+
+    db.save_offering(&user, db_id).await.expect("save failed");
+    assert!(db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should be saved after save");
+
+    db.unsave_offering(&user, db_id).await.expect("unsave failed");
+    assert!(!db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should not be saved after unsave");
+}
+
+#[tokio::test]
+async fn test_get_saved_offering_ids_multiple() {
+    let db = setup_test_db().await;
+    let user = vec![0x33u8; 32];
+    let provider = vec![0x44u8; 32];
+    insert_test_offering(&db, 5, &provider, "US", 5.0).await;
+    insert_test_offering(&db, 6, &provider, "US", 6.0).await;
+    let db_id_5 = test_id_to_db_id(5);
+    let db_id_6 = test_id_to_db_id(6);
+
+    db.save_offering(&user, db_id_5).await.expect("save 5 failed");
+    db.save_offering(&user, db_id_6).await.expect("save 6 failed");
+
+    let ids = db.get_saved_offering_ids(&user).await.expect("get_saved_offering_ids failed");
+    assert_eq!(ids.len(), 2, "Expected 2 saved offering ids");
+    assert!(ids.contains(&db_id_5));
+    assert!(ids.contains(&db_id_6));
+}
+
+#[tokio::test]
+async fn test_unsave_nonexistent_is_ok() {
+    let db = setup_test_db().await;
+    let user = vec![0x55u8; 32];
+    // Unsaving something never saved should succeed (no-op)
+    db.unsave_offering(&user, 99999).await.expect("unsave of non-existent should not fail");
+}

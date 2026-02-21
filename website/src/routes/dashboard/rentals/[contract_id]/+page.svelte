@@ -20,6 +20,7 @@
 		getUserContractBandwidthHistory,
 		setContractAutoRenew,
 		getProviderProfile,
+		getContractEvents,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
@@ -28,8 +29,13 @@
 		type ContractFeedback,
 		type BandwidthHistoryResponse,
 		type ProviderProfile,
+		type ContractEvent,
 		hexEncode,
 	} from "$lib/services/api";
+	import { formatEventType, getEventIcon, formatEventActor } from "$lib/utils/contract-events";
+	import { formatRelativeTime } from "$lib/utils/contract-format";
+	import Icons from "$lib/components/Icons.svelte";
+	import type { IconName } from "$lib/components/Icons.svelte";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
 	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
 	import {
@@ -99,6 +105,11 @@
 	let autoRenewSaving = $state(false);
 	let autoRenewError = $state<string | null>(null);
 	let autoRenewSuccess = $state(false);
+
+	// Event timeline state
+	let events = $state<ContractEvent[]>([]);
+	let eventsLoading = $state(false);
+	let eventsError = $state<string | null>(null);
 
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
@@ -293,6 +304,7 @@
 				await loadHealthChecks(signingIdentityInfo);
 				await loadFeedback(signingIdentityInfo);
 				await loadBandwidthHistory(signingIdentityInfo);
+				await loadEvents(signingIdentityInfo);
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -528,6 +540,23 @@
 		}
 	}
 
+	async function loadEvents(signingIdentityInfo: any) {
+		try {
+			eventsLoading = true;
+			eventsError = null;
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/events`,
+			);
+			events = await getContractEvents(headers, contractId);
+		} catch (e) {
+			eventsError = e instanceof Error ? e.message : "Failed to load events";
+		} finally {
+			eventsLoading = false;
+		}
+	}
+
 	async function handleCancelContract() {
 		if (!contract || !isCancellable(contract.status)) return;
 
@@ -650,6 +679,18 @@
 		} finally {
 			autoRenewSaving = false;
 		}
+	}
+
+	function actorBadgeClass(actor: string): string {
+		if (actor === 'provider') return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+		if (actor === 'tenant') return 'bg-green-500/20 text-green-400 border border-green-500/30';
+		return 'bg-neutral-700/50 text-neutral-400 border border-neutral-600/30';
+	}
+
+	function actorDotClass(actor: string): string {
+		if (actor === 'provider') return 'bg-blue-500';
+		if (actor === 'tenant') return 'bg-green-500';
+		return 'bg-neutral-500';
 	}
 
 	onDestroy(() => {
@@ -1560,7 +1601,56 @@
 		</div>
 	{/if}
 
-		<!-- Back link -->
+		<!-- Event Timeline -->
+	<div class="card p-6 border border-neutral-800">
+		<h3 class="text-sm font-semibold text-neutral-300 mb-4">Activity Log</h3>
+		{#if eventsLoading}
+			<div class="flex items-center gap-2 text-neutral-500 text-sm">
+				<div class="animate-spin rounded-full h-4 w-4 border-t border-b border-neutral-500"></div>
+				Loading events...
+			</div>
+		{:else if eventsError}
+			<div class="text-red-400 text-sm">{eventsError}</div>
+		{:else if events.length === 0}
+			<p class="text-neutral-600 text-sm">No events recorded yet.</p>
+		{:else}
+			{@const sorted = [...events].sort((a, b) => a.createdAt - b.createdAt)}
+			<div class="relative">
+				<!-- Vertical line -->
+				<div class="absolute left-2.5 top-2 bottom-2 w-px bg-neutral-800"></div>
+				<div class="space-y-4">
+					{#each sorted as evt (evt.id)}
+						<div class="flex gap-4 relative">
+							<!-- Dot -->
+							<div class="flex-none w-5 flex flex-col items-center">
+								<div class="w-2 h-2 rounded-full mt-1.5 {actorDotClass(evt.actor)}"></div>
+							</div>
+							<!-- Content -->
+							<div class="flex-1 min-w-0 pb-1">
+								<div class="flex flex-wrap items-center gap-2 mb-0.5">
+									<span class="text-white text-sm font-medium">{formatEventType(evt.eventType)}</span>
+									<span class="px-1.5 py-0.5 rounded text-xs font-medium {actorBadgeClass(evt.actor)}">{formatEventActor(evt.actor)}</span>
+									<span class="text-neutral-600 text-xs">{formatRelativeTime(evt.createdAt)}</span>
+								</div>
+								{#if evt.eventType === 'status_change' && evt.oldStatus && evt.newStatus}
+									<div class="text-xs text-neutral-400 flex items-center gap-1.5">
+										<span class="font-mono">{evt.oldStatus}</span>
+										<Icons name="arrow-right" size={12} class="text-neutral-600" />
+										<span class="font-mono text-neutral-300">{evt.newStatus}</span>
+									</div>
+								{/if}
+								{#if evt.details}
+									<p class="text-xs text-neutral-500 mt-0.5 break-words">{evt.details}</p>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Back link -->
 		<div>
 			<a
 				href="/dashboard/rentals"

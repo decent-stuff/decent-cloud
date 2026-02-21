@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT uptime_threshold_percent, sla_alert_window_hours\n               FROM provider_sla_config WHERE provider_pubkey = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uptime_threshold_percent",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "sla_alert_window_hours",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8d1a3fa2855d086fb2d54e12d4b60495cd07c05a17cbbfe39c0173a405eaf55c"
+}

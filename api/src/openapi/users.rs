@@ -1,10 +1,21 @@
-use super::common::ApiResponse;
+use super::common::{ApiResponse, MarkReadRequest, UnreadCountResponse, UserNotificationResponse};
 use super::providers::BandwidthHistoryResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
+
+/// Decode pubkey hex and verify it matches the authenticated user.
+/// Returns an error string on failure.
+fn decode_and_verify_pubkey(pubkey_hex: &str, auth_pubkey: &[u8]) -> Result<Vec<u8>, String> {
+    let pubkey_bytes = hex::decode(pubkey_hex)
+        .map_err(|_| "Invalid pubkey format".to_string())?;
+    if auth_pubkey != pubkey_bytes.as_slice() {
+        return Err("Unauthorized: can only access your own data".to_string());
+    }
+    Ok(pubkey_bytes)
+}
 
 pub struct UsersApi;
 
@@ -56,6 +67,118 @@ impl UsersApi {
                 data: None,
                 error: Some(e.to_string()),
             }),
+        }
+    }
+
+    /// Save an offering to watchlist
+    ///
+    /// Add an offering to the authenticated user's personal watchlist.
+    /// Idempotent: saving an already-saved offering succeeds silently.
+    #[oai(
+        path = "/users/:pubkey/saved-offerings/:offering_id",
+        method = "post",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn save_offering(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        offering_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+            }
+        };
+        match db.save_offering(&pubkey_bytes, offering_id.0).await {
+            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        }
+    }
+
+    /// Remove an offering from watchlist
+    ///
+    /// Remove an offering from the authenticated user's personal watchlist.
+    /// Idempotent: unsaving a non-saved offering succeeds silently.
+    #[oai(
+        path = "/users/:pubkey/saved-offerings/:offering_id",
+        method = "delete",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn unsave_offering(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        offering_id: Path<i64>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+            }
+        };
+        match db.unsave_offering(&pubkey_bytes, offering_id.0).await {
+            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        }
+    }
+
+    /// Get saved offerings
+    ///
+    /// Returns all offerings saved to the authenticated user's watchlist, most-recently saved first.
+    #[oai(
+        path = "/users/:pubkey/saved-offerings",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_saved_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+        match db.get_saved_offerings(&pubkey_bytes).await {
+            Ok(offerings) => Json(ApiResponse { success: true, data: Some(offerings), error: None }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+        }
+    }
+
+    /// Get saved offering IDs
+    ///
+    /// Returns the IDs of all offerings saved by the authenticated user (for bulk UI highlighting).
+    #[oai(
+        path = "/users/:pubkey/saved-offering-ids",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_saved_offering_ids(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<i64>>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+            }
+        };
+        match db.get_saved_offering_ids(&pubkey_bytes).await {
+            Ok(ids) => Json(ApiResponse { success: true, data: Some(ids), error: None }),
+            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
         }
     }
 
@@ -138,6 +261,133 @@ impl UsersApi {
                     error: None,
                 })
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get user notifications
+    ///
+    /// Returns the last 50 notifications for the authenticated user, newest first.
+    #[oai(
+        path = "/users/:pubkey/notifications",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_user_notifications(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<UserNotificationResponse>>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.get_user_notifications(&pubkey_bytes, 50).await {
+            Ok(notifications) => {
+                let response = notifications
+                    .into_iter()
+                    .map(|n| UserNotificationResponse {
+                        id: n.id,
+                        notification_type: n.notification_type,
+                        title: n.title,
+                        body: n.body,
+                        contract_id: n.contract_id,
+                        read_at: n.read_at,
+                        created_at: n.created_at,
+                    })
+                    .collect();
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(response),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get unread notification count
+    ///
+    /// Returns the number of unread notifications for the authenticated user.
+    #[oai(
+        path = "/users/:pubkey/notifications/unread-count",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_unread_count(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<UnreadCountResponse>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+            }
+        };
+
+        match db.get_unread_count(&pubkey_bytes).await {
+            Ok(count) => Json(ApiResponse {
+                success: true,
+                data: Some(UnreadCountResponse { unread_count: count }),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Mark notifications as read
+    ///
+    /// Marks the specified notification IDs as read.
+    /// If the `ids` array is empty, all notifications for the user are marked as read.
+    #[oai(
+        path = "/users/:pubkey/notifications/mark-read",
+        method = "post",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn mark_notifications_read(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        body: Json<MarkReadRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+            }
+        };
+
+        let result = if body.ids.is_empty() {
+            db.mark_all_notifications_read(&pubkey_bytes).await
+        } else {
+            db.mark_notifications_read(&body.ids, &pubkey_bytes).await
+        };
+
+        match result {
+            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

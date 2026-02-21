@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	// Icon names for type safety
 	export type IconName =
+		| 'bell'
 		| 'shield'
 		| 'star'
 		| 'clock'
@@ -65,7 +66,9 @@
 		| 'play'
 		| 'pause'
 		| 'trash'
-		| 'arrow-left';
+		| 'arrow-left'
+		| 'bell'
+		| 'bookmark';
 </script>
 
 <script lang="ts">
@@ -324,5 +327,10 @@
 	{:else if name === 'arrow-left'}
 		<line x1="19" y1="12" x2="5" y2="12" />
 		<polyline points="12 19 5 12 12 5" />
+	{:else if name === 'bell'}
+		<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+		<path d="M13.73 21a2 2 0 0 1-3.46 0" />
+	{:else if name === 'bookmark'}
+		<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
 	{/if}
 </svg>
