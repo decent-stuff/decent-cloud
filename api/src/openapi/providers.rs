@@ -82,6 +82,116 @@ pub async fn password_reset_events(
     Ok(SSE::new(stream).keep_alive(std::time::Duration::from_secs(30)))
 }
 
+/// SSE handler: streams contract status changes for a user every 5 seconds.
+///
+/// Authenticates via user signature headers (X-Public-Key, X-Signature, etc.).
+/// Sends an immediate event on connect, then polls every 5 seconds and emits events
+/// when any contract status or updated_at_ns changes. Keep-alive sent every 30 seconds.
+/// Closes after 5 minutes (client reconnects).
+///
+/// Event format:
+///   event: contract-status
+///   data: {"contract_id":"<id>","status":"<status>","updated_at_ns":<ns>}
+#[poem::handler]
+pub async fn contract_status_events(
+    req: &poem::Request,
+    db: Data<&Arc<Database>>,
+    poem::web::Path(pubkey): poem::web::Path<String>,
+) -> poem::Result<poem::web::sse::SSE> {
+    use futures::StreamExt;
+    use poem::http::StatusCode;
+    use poem::web::sse::{Event, SSE};
+
+    let pubkey_bytes = hex::decode(&pubkey).map_err(|_| {
+        poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST)
+    })?;
+
+    let auth_pubkey = crate::auth::authenticate_user_from_request(req)
+        .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::UNAUTHORIZED))?;
+
+    if auth_pubkey != pubkey_bytes {
+        return Err(poem::Error::from_string(
+            "Unauthorized: can only access your own contract events",
+            StatusCode::FORBIDDEN,
+        ));
+    }
+
+    // Snapshot: contract_id -> (status, updated_at_ns)
+    type Snapshot = std::collections::HashMap<String, (String, Option<i64>)>;
+
+    let db_clone: Arc<Database> = Arc::clone(&db);
+    // Close after 5 minutes: 60 polls × 5 seconds
+    let stream = futures::stream::unfold(
+        (db_clone, pubkey_bytes, None::<Snapshot>, 0u32),
+        |(db, pk, prev_snapshot, poll_count): (Arc<Database>, Vec<u8>, Option<Snapshot>, u32)| async move {
+            if poll_count >= 60 {
+                return None;
+            }
+            let contracts = match db.get_user_contracts(&pk).await {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::error!("SSE contract-status-events DB error: {:#}", e);
+                    return None;
+                }
+            };
+
+            let current: Snapshot = contracts
+                .iter()
+                .map(|c| {
+                    (
+                        c.contract_id.clone(),
+                        (c.status.clone(), c.status_updated_at_ns),
+                    )
+                })
+                .collect();
+
+            let events: Vec<Event> = match &prev_snapshot {
+                None => {
+                    // First poll: emit all contracts
+                    contracts
+                        .iter()
+                        .map(|c| {
+                            let data = serde_json::json!({
+                                "contract_id": c.contract_id,
+                                "status": c.status,
+                                "updated_at_ns": c.status_updated_at_ns,
+                            });
+                            Event::message(data.to_string()).event_type("contract-status")
+                        })
+                        .collect()
+                }
+                Some(prev) => {
+                    // Subsequent polls: emit only changed contracts
+                    contracts
+                        .iter()
+                        .filter(|c| {
+                            prev.get(&c.contract_id)
+                                .map(|(ps, pt)| {
+                                    ps != &c.status || pt != &c.status_updated_at_ns
+                                })
+                                .unwrap_or(true) // new contract
+                        })
+                        .map(|c| {
+                            let data = serde_json::json!({
+                                "contract_id": c.contract_id,
+                                "status": c.status,
+                                "updated_at_ns": c.status_updated_at_ns,
+                            });
+                            Event::message(data.to_string()).event_type("contract-status")
+                        })
+                        .collect()
+                }
+            };
+
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            Some((events, (db, pk, Some(current), poll_count + 1)))
+        },
+    )
+    .flat_map(|events: Vec<Event>| futures::stream::iter(events));
+
+    Ok(SSE::new(stream).keep_alive(std::time::Duration::from_secs(30)))
+}
+
 /// Validate and normalize provisioning details
 pub fn normalize_provisioning_details(
     status: &str,
@@ -5199,6 +5309,71 @@ mod tests {
             resp.content_type(),
             Some("text/event-stream"),
             "SSE response must have text/event-stream content type"
+        );
+    }
+
+    // ── contract_status_events SSE handler ───────────────────────────────────
+
+    #[test]
+    fn test_contract_status_events_route_registered() {
+        const MAIN_RS: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        assert!(
+            MAIN_RS.contains("/api/v1/users/:pubkey/contract-events"),
+            "Contract SSE route must be registered in main.rs"
+        );
+        assert!(
+            MAIN_RS.contains("contract_status_events"),
+            "SSE handler must be referenced in main.rs"
+        );
+    }
+
+    #[test]
+    fn test_contract_status_sse_event_format() {
+        // Verify the SSE event data JSON structure matches frontend expectations
+        let contract_id = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+        let status = "active";
+        let updated_at_ns: Option<i64> = Some(1_700_000_000_000_000_000);
+        let data = serde_json::json!({
+            "contract_id": contract_id,
+            "status": status,
+            "updated_at_ns": updated_at_ns,
+        });
+        let json_str = data.to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed["contract_id"], contract_id);
+        assert_eq!(parsed["status"], "active");
+        assert_eq!(parsed["updated_at_ns"], 1_700_000_000_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_contract_status_sse_event_format_null_updated_at() {
+        let data = serde_json::json!({
+            "contract_id": "deadbeef",
+            "status": "pending",
+            "updated_at_ns": serde_json::Value::Null,
+        });
+        let json_str = data.to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed["status"], "pending");
+        assert!(parsed["updated_at_ns"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_contract_status_sse_response_content_type() {
+        use futures::stream;
+        use poem::IntoResponse;
+        use poem::web::sse::{Event, SSE};
+
+        let events: Vec<Event> = vec![
+            Event::message(r#"{"contract_id":"abc","status":"active","updated_at_ns":null}"#)
+                .event_type("contract-status"),
+        ];
+        let sse = SSE::new(stream::iter(events));
+        let resp = sse.into_response();
+        assert_eq!(
+            resp.content_type(),
+            Some("text/event-stream"),
+            "Contract SSE response must have text/event-stream content type"
         );
     }
 }

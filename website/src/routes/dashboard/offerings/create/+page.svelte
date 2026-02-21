@@ -50,6 +50,27 @@
 	let postProvisionScript = $state('');
 	let selectedTemplate = $state('');
 	import { RECIPE_TEMPLATES } from '$lib/data/recipe-templates';
+	import { OFFERING_TEMPLATES } from '$lib/data/offering-templates';
+
+	let selectedOfferingTemplate = $state('');
+
+	function applyOfferingTemplate(key: string) {
+		if (selectedOfferingTemplate === key) {
+			selectedOfferingTemplate = '';
+			return;
+		}
+		const tpl = OFFERING_TEMPLATES.find((t) => t.key === key);
+		if (!tpl) return;
+		selectedOfferingTemplate = key;
+		offerName = tpl.offerName;
+		description = tpl.offeringDescription;
+		productType = tpl.productType;
+		monthlyPrice = tpl.monthlyPrice;
+		visibility = tpl.visibility;
+		if (!offeringIdManuallyEdited) {
+			offeringId = slugify(tpl.offerName);
+		}
+	}
 
 	function applyTemplate() {
 		const tpl = RECIPE_TEMPLATES.find((t) => t.key === selectedTemplate);
@@ -452,6 +473,28 @@
 				<Icon name="package" size={20} class="text-primary-400" />
 				Offering Details
 			</h2>
+
+			<!-- Offering Templates -->
+			<div class="space-y-3">
+				<p class="text-sm font-medium text-neutral-300">
+					Start from a template <span class="text-neutral-600 font-normal">(optional)</span>
+				</p>
+				<div class="flex flex-wrap gap-2">
+					{#each OFFERING_TEMPLATES as tpl}
+						<button
+							type="button"
+							onclick={() => applyOfferingTemplate(tpl.key)}
+							class="flex items-center gap-2 px-3 py-2 border transition-colors text-sm {selectedOfferingTemplate === tpl.key ? 'bg-primary-500/20 border-primary-500/50 text-primary-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500'}"
+						>
+							<span>{tpl.icon}</span>
+							<div class="text-left">
+								<div class="font-medium">{tpl.label}</div>
+								<div class="text-xs text-neutral-500">{tpl.description}</div>
+							</div>
+						</button>
+					{/each}
+				</div>
+			</div>
 
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				<!-- Offer Name -->

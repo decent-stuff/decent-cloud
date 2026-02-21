@@ -31,6 +31,14 @@
 	import { UserApiClient } from "$lib/services/user-api";
 	import ContactsEditor from "$lib/components/ContactsEditor.svelte";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
+	import {
+		getWizardStep,
+		setWizardStep,
+		wizardStepLabels,
+		canGoBack,
+		isStepComplete,
+		WIZARD_STEP_COUNT,
+	} from "./wizard-logic";
 
 	interface CommonIssue {
 		question: string;
@@ -64,6 +72,9 @@
 	let error = $state<string | null>(null);
 	let success = $state<string | null>(null);
 	let articleUrl = $state<string | null>(null);
+
+	// Wizard step state (persisted in localStorage)
+	let currentStep = $state(1);
 
 	// Help Center state
 	let savingOnboarding = $state(false);
@@ -149,12 +160,21 @@
 			? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/inbox/${portalStatus.inboxId}`
 			: `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`,
 	);
-	// Help Center editing URL - goes to portal articles admin (requires /en/ locale)
 	const helpCenterEditUrl = $derived(
 		portalStatus?.portalSlug
 			? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/portals/${portalStatus.portalSlug}/en/articles`
 			: null,
 	);
+
+	// Wizard step completeness data (derived from current state)
+	const wizardData = $derived({
+		chatwootAccountExists: portalStatus?.hasAccount ?? false,
+		contactsCount,
+		notifyEmail,
+		notifyTelegram,
+		notifySms,
+		onboardingCompleted,
+	});
 
 	// Options
 	const supportHoursOptions = [
@@ -204,6 +224,7 @@
 	];
 
 	onMount(() => {
+		currentStep = getWizardStep(localStorage);
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((v) => {
 			isAuthenticated = v;
 		});
@@ -217,6 +238,22 @@
 		unsubscribe?.();
 		unsubscribeAuth?.();
 	});
+
+	function goToStep(step: number) {
+		error = null;
+		success = null;
+		testResult = null;
+		currentStep = step;
+		setWizardStep(localStorage, step);
+	}
+
+	function goBack() {
+		if (canGoBack(currentStep)) goToStep(currentStep - 1);
+	}
+
+	function goNext() {
+		if (currentStep < WIZARD_STEP_COUNT) goToStep(currentStep + 1);
+	}
 
 	async function loadAll() {
 		if (!currentIdentity?.identity) return;
@@ -532,20 +569,7 @@
 		</p>
 	</div>
 
-	<!-- Onboarding prompt for new providers -->
-	{#if isAuthenticated && !loading && !onboardingCompleted}
-		<div class="bg-primary-500/20 border border-primary-500/40 p-4 flex items-start gap-3">
-			<span class="text-2xl">👋</span>
-			<div>
-				<h3 class="text-white font-semibold">Welcome, Provider!</h3>
-				<p class="text-neutral-300 text-sm mt-1">
-					Complete your <a href="#helpcenter" class="text-primary-400 underline hover:text-primary-300">Help Center Profile</a> below to unlock <strong>My Offerings</strong>, <strong>Rental Requests</strong>, and other provider features in the sidebar.
-				</p>
-			</div>
-		</div>
-	{/if}
-
-	<!-- Profile Completeness Card -->
+	<!-- Profile Completeness Card (always visible) -->
 	{#if isAuthenticated && !loading}
 		<div class="card p-5 border border-neutral-800 space-y-4">
 			<div class="flex items-center justify-between">
@@ -588,24 +612,43 @@
 		</div>
 	{/if}
 
-	<!-- Section Navigation -->
-	<nav class="flex flex-wrap gap-2 bg-surface-elevated  p-2">
-		<a
-			href="#support"
-			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
-			>Support Portal</a
-		>
-		<a
-			href="#notifications"
-			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
-			>Notifications</a
-		>
-		<a
-			href="#helpcenter"
-			class="px-4 py-2  text-sm font-medium text-neutral-400 hover:bg-surface-elevated hover:text-white transition-colors"
-			>Help Center Profile</a
-		>
-	</nav>
+	<!-- Step Indicator -->
+	{#if isAuthenticated && !loading}
+		<div class="flex items-center gap-0">
+			{#each wizardStepLabels as label, i}
+				{@const stepNum = i + 1}
+				{@const isActive = currentStep === stepNum}
+				{@const isDone = isStepComplete(stepNum, wizardData)}
+				<button
+					onclick={() => goToStep(stepNum)}
+					class="flex-1 flex flex-col items-center gap-1.5 py-3 px-2 border-b-2 transition-all {isActive
+						? 'border-primary-500 text-white'
+						: isDone
+							? 'border-green-500/60 text-neutral-400 hover:text-white'
+							: 'border-neutral-800 text-neutral-600 hover:text-neutral-400'}"
+				>
+					<div class="flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold transition-all {isActive
+						? 'bg-primary-500 text-white'
+						: isDone
+							? 'bg-green-500/30 text-green-400'
+							: 'bg-neutral-800 text-neutral-600'}">
+						{#if isDone && !isActive}
+							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+							</svg>
+						{:else}
+							{stepNum}
+						{/if}
+					</div>
+					<span class="text-xs font-medium hidden sm:block">{label}</span>
+					<span class="text-xs font-medium sm:hidden">Step {stepNum}</span>
+				</button>
+				{#if i < wizardStepLabels.length - 1}
+					<div class="w-px h-8 bg-neutral-800 shrink-0"></div>
+				{/if}
+			{/each}
+		</div>
+	{/if}
 
 	{#if error}<div
 			class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
@@ -655,733 +698,771 @@
 			></div>
 		</div>
 	{:else}
-		<!-- Support Portal Section (moved to top - most frequently accessed) -->
-		<section
-			id="support"
-			class="card p-6 border border-neutral-800 space-y-6 scroll-mt-4"
-		>
-			<h2 class="text-2xl font-bold text-white">Support Portal</h2>
-			<p class="text-neutral-500 text-sm">
-				Access your support dashboard and knowledge base
-			</p>
+		<!-- Step 1: Support Portal -->
+		{#if currentStep === 1}
+			<section
+				id="support"
+				class="card p-6 border border-neutral-800 space-y-6"
+			>
+				<div>
+					<h2 class="text-2xl font-bold text-white">Support Portal</h2>
+					<p class="text-neutral-500 text-sm mt-1">
+						Create and manage your Chatwoot support account
+					</p>
+				</div>
 
-			<!-- Quick Links -->
-			<div class="grid md:grid-cols-2 gap-4">
-				<a
-					href={supportDashboardUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="flex items-start gap-4 p-4  bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
-				>
-					<span class="text-3xl">🎧</span>
-					<div>
-						<h3
-							class="text-white font-semibold group-hover:text-primary-300 transition-colors"
-						>
-							Support Dashboard <span class="text-xs opacity-50"
-								>↗</span
-							>
-						</h3>
-						<p class="text-neutral-500 text-sm mt-1">
-							View and respond to customer tickets, manage
-							conversations
-						</p>
-					</div>
-				</a>
-				{#if helpCenterEditUrl}
+				<!-- Quick Links -->
+				<div class="grid md:grid-cols-2 gap-4">
 					<a
-						href={helpCenterEditUrl}
+						href={supportDashboardUrl}
 						target="_blank"
 						rel="noopener noreferrer"
-						class="flex items-start gap-4 p-4  bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+						class="flex items-start gap-4 p-4  bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
 					>
-						<span class="text-3xl">📝</span>
+						<span class="text-3xl">🎧</span>
 						<div>
 							<h3
-								class="text-white font-semibold group-hover:text-green-300 transition-colors"
+								class="text-white font-semibold group-hover:text-primary-300 transition-colors"
 							>
-								Help Center <span class="text-xs opacity-50"
+								Support Dashboard <span class="text-xs opacity-50"
 									>↗</span
 								>
 							</h3>
 							<p class="text-neutral-500 text-sm mt-1">
-								Edit and publish support articles for your
-								customers
+								View and respond to customer tickets, manage
+								conversations
 							</p>
 						</div>
 					</a>
-				{:else}
-					<div
-						class="flex items-start gap-4 p-4  bg-surface-elevated border border-neutral-800"
-					>
-						<span class="text-3xl opacity-50">📝</span>
-						<div>
-							<h3 class="text-neutral-500 font-semibold">
-								Help Center
-							</h3>
-							<p class="text-neutral-600 text-sm mt-1">
-								Create your portal account first to access the
-								Help Center
+					{#if helpCenterEditUrl}
+						<a
+							href={helpCenterEditUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							class="flex items-start gap-4 p-4  bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+						>
+							<span class="text-3xl">📝</span>
+							<div>
+								<h3
+									class="text-white font-semibold group-hover:text-green-300 transition-colors"
+								>
+									Help Center <span class="text-xs opacity-50"
+										>↗</span
+									>
+								</h3>
+								<p class="text-neutral-500 text-sm mt-1">
+									Edit and publish support articles for your
+									customers
+								</p>
+							</div>
+						</a>
+					{:else}
+						<div
+							class="flex items-start gap-4 p-4  bg-surface-elevated border border-neutral-800"
+						>
+							<span class="text-3xl opacity-50">📝</span>
+							<div>
+								<h3 class="text-neutral-500 font-semibold">
+									Help Center
+								</h3>
+								<p class="text-neutral-600 text-sm mt-1">
+									Create your portal account first to access the
+									Help Center
+								</p>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Portal Account Status -->
+				<div class="bg-surface-elevated  p-4 space-y-4">
+					<h3 class="text-white font-medium">Portal Account</h3>
+					{#if newPassword}
+						<div
+							class="bg-green-500/20 border border-green-500/50  p-4 space-y-3"
+						>
+							<p class="text-green-300 font-semibold">
+								Password generated:
+							</p>
+							<div class="flex items-center gap-2">
+								<code
+									class="bg-black/30 px-3 py-2 rounded font-mono text-white flex-1 text-sm"
+									>{newPassword}</code
+								>
+								<button
+									onclick={copyPassword}
+									class="px-4 py-2 bg-surface-elevated rounded hover:bg-surface-elevated text-white transition-colors text-sm"
+									>Copy</button
+								>
+							</div>
+							<p class="text-neutral-500 text-xs">
+								Save this password now - it won't be shown again.
 							</p>
 						</div>
-					</div>
-				{/if}
-			</div>
-
-			<!-- Portal Account Status -->
-			<div class="bg-surface-elevated  p-4 space-y-4">
-				<h3 class="text-white font-medium">Portal Account</h3>
-				{#if newPassword}
-					<div
-						class="bg-green-500/20 border border-green-500/50  p-4 space-y-3"
-					>
-						<p class="text-green-300 font-semibold">
-							Password generated:
-						</p>
-						<div class="flex items-center gap-2">
-							<code
-								class="bg-black/30 px-3 py-2 rounded font-mono text-white flex-1 text-sm"
-								>{newPassword}</code
-							>
-							<button
-								onclick={copyPassword}
-								class="px-4 py-2 bg-surface-elevated rounded hover:bg-surface-elevated text-white transition-colors text-sm"
-								>Copy</button
-							>
+					{/if}
+					{#if portalStatus}
+						<div class="flex flex-wrap items-center gap-4 text-sm">
+							<div>
+								<span class="text-neutral-500">Status:</span>
+								<span
+									class="text-white font-medium {portalStatus.hasAccount
+										? 'text-green-400'
+										: 'text-yellow-400'}"
+									>{portalStatus.hasAccount
+										? "Active"
+										: "Not created"}</span
+								>
+							</div>
+							{#if portalStatus.email}<div>
+									<span class="text-neutral-500">Email:</span>
+									<span class="text-white"
+										>{portalStatus.email}</span
+									>
+								</div>{/if}
 						</div>
-						<p class="text-neutral-500 text-xs">
-							Save this password now - it won't be shown again.
-						</p>
-					</div>
-				{/if}
-				{#if portalStatus}
-					<div class="flex flex-wrap items-center gap-4 text-sm">
-						<div>
-							<span class="text-neutral-500">Status:</span>
-							<span
-								class="text-white font-medium {portalStatus.hasAccount
-									? 'text-green-400'
-									: 'text-yellow-400'}"
-								>{portalStatus.hasAccount
-									? "Active"
-									: "Not created"}</span
-							>
+						<div class="flex flex-wrap gap-3">
+							{#if portalStatus.hasAccount}
+								<button
+									onclick={handlePortalReset}
+									disabled={resetting}
+									class="px-4 py-2 bg-surface-elevated hover:bg-surface-elevated  text-white text-sm transition-colors disabled:opacity-50"
+									>{resetting
+										? "Resetting..."
+										: "Reset Password"}</button
+								>
+							{:else}
+								<button
+									onclick={handlePortalCreate}
+									disabled={creating}
+									class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600  text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
+									>{creating
+										? "Creating..."
+										: "Create Account"}</button
+								>
+							{/if}
 						</div>
-						{#if portalStatus.email}<div>
-								<span class="text-neutral-500">Email:</span>
-								<span class="text-white"
-									>{portalStatus.email}</span
-								>
-							</div>{/if}
-					</div>
-					<div class="flex flex-wrap gap-3">
-						{#if portalStatus.hasAccount}
-							<button
-								onclick={handlePortalReset}
-								disabled={resetting}
-								class="px-4 py-2 bg-surface-elevated hover:bg-surface-elevated  text-white text-sm transition-colors disabled:opacity-50"
-								>{resetting
-									? "Resetting..."
-									: "Reset Password"}</button
-							>
-						{:else}
-							<button
-								onclick={handlePortalCreate}
-								disabled={creating}
-								class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600  text-white text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-								>{creating
-									? "Creating..."
-									: "Create Account"}</button
-							>
-						{/if}
-					</div>
-				{:else}
-					<p class="text-neutral-500 text-sm">
-						Unable to load portal status
-					</p>
-				{/if}
-			</div>
-
-			<!-- How to use the support portal -->
-			<details class="bg-surface-elevated ">
-				<summary
-					class="cursor-pointer p-4 text-white font-medium hover:bg-surface-elevated  transition-colors"
-					>How to use the Support Portal</summary
-				>
-				<div class="px-4 pb-4 space-y-3 text-neutral-400 text-sm">
-					<div class="space-y-2">
-						<h4 class="text-white font-medium">Getting Started</h4>
-						<ol class="list-decimal list-inside space-y-1">
-							<li>
-								Create your portal account using the button
-								above (if not already done)
-							</li>
-							<li>
-								Copy the generated password and save it securely
-							</li>
-							<li>
-								Click "Support Dashboard" to open the portal
-							</li>
-							<li>
-								Log in with your email and the generated
-								password
-							</li>
-						</ol>
-					</div>
-					<div class="space-y-2">
-						<h4 class="text-white font-medium">
-							Managing Customer Tickets
-						</h4>
-						<ul class="list-disc list-inside space-y-1">
-							<li>
-								<strong>Dashboard:</strong> Shows all open conversations
-								and tickets
-							</li>
-							<li>
-								<strong>Conversations:</strong> Chat with customers
-								in real-time
-							</li>
-							<li>
-								<strong>Assign:</strong> Take ownership of tickets
-								to resolve them
-							</li>
-							<li>
-								<strong>Resolve:</strong> Mark tickets as resolved
-								when completed
-							</li>
-						</ul>
-					</div>
-					<div class="space-y-2">
-						<h4 class="text-white font-medium">Help Center</h4>
-						<ul class="list-disc list-inside space-y-1">
-							<li>
-								Create and edit support articles for your
-								customers
-							</li>
-							<li>Publish FAQs, guides, and documentation</li>
-							<li>
-								Help customers find answers without creating
-								tickets
-							</li>
-						</ul>
-					</div>
-					<div class="space-y-2">
-						<h4 class="text-white font-medium">Mobile App</h4>
-						<p>Respond to tickets on the go:</p>
-						<ul class="list-disc list-inside space-y-1">
-							<li>
-								<a
-									href="https://apps.apple.com/app/chatwoot/id1495796682"
-									target="_blank"
-									rel="noopener"
-									class="text-primary-400 hover:underline"
-									>iOS App Store</a
-								>
-							</li>
-							<li>
-								<a
-									href="https://play.google.com/store/apps/details?id=com.chatwoot.app"
-									target="_blank"
-									rel="noopener"
-									class="text-primary-400 hover:underline"
-									>Android Play Store</a
-								>
-							</li>
-							<li>
-								Server URL: <code
-									class="bg-black/30 px-1.5 py-0.5 rounded text-xs"
-									>{CHATWOOT_BASE_URL}</code
-								>
-							</li>
-						</ul>
-					</div>
+					{:else}
+						<p class="text-neutral-500 text-sm">
+							Unable to load portal status
+						</p>
+					{/if}
 				</div>
-			</details>
-		</section>
 
-		<!-- Provider Contacts Section -->
-		{#if providerApiClient && providerPubkeyHex}
-			<div id="contacts" class="scroll-mt-4">
-				<ContactsEditor
-					username=""
-					apiClient={providerApiClient}
-					{providerPubkeyHex}
-				/>
-			</div>
+				<!-- How to use the support portal -->
+				<details class="bg-surface-elevated ">
+					<summary
+						class="cursor-pointer p-4 text-white font-medium hover:bg-surface-elevated  transition-colors"
+						>How to use the Support Portal</summary
+					>
+					<div class="px-4 pb-4 space-y-3 text-neutral-400 text-sm">
+						<div class="space-y-2">
+							<h4 class="text-white font-medium">Getting Started</h4>
+							<ol class="list-decimal list-inside space-y-1">
+								<li>
+									Create your portal account using the button
+									above (if not already done)
+								</li>
+								<li>
+									Copy the generated password and save it securely
+								</li>
+								<li>
+									Click "Support Dashboard" to open the portal
+								</li>
+								<li>
+									Log in with your email and the generated
+									password
+								</li>
+							</ol>
+						</div>
+						<div class="space-y-2">
+							<h4 class="text-white font-medium">
+								Managing Customer Tickets
+							</h4>
+							<ul class="list-disc list-inside space-y-1">
+								<li>
+									<strong>Dashboard:</strong> Shows all open conversations
+									and tickets
+								</li>
+								<li>
+									<strong>Conversations:</strong> Chat with customers
+									in real-time
+								</li>
+								<li>
+									<strong>Assign:</strong> Take ownership of tickets
+									to resolve them
+								</li>
+								<li>
+									<strong>Resolve:</strong> Mark tickets as resolved
+									when completed
+								</li>
+							</ul>
+						</div>
+						<div class="space-y-2">
+							<h4 class="text-white font-medium">Help Center</h4>
+							<ul class="list-disc list-inside space-y-1">
+								<li>
+									Create and edit support articles for your
+									customers
+								</li>
+								<li>Publish FAQs, guides, and documentation</li>
+								<li>
+									Help customers find answers without creating
+									tickets
+								</li>
+							</ul>
+						</div>
+						<div class="space-y-2">
+							<h4 class="text-white font-medium">Mobile App</h4>
+							<p>Respond to tickets on the go:</p>
+							<ul class="list-disc list-inside space-y-1">
+								<li>
+									<a
+										href="https://apps.apple.com/app/chatwoot/id1495796682"
+										target="_blank"
+										rel="noopener"
+										class="text-primary-400 hover:underline"
+										>iOS App Store</a
+									>
+								</li>
+								<li>
+									<a
+										href="https://play.google.com/store/apps/details?id=com.chatwoot.app"
+										target="_blank"
+										rel="noopener"
+										class="text-primary-400 hover:underline"
+										>Android Play Store</a
+									>
+								</li>
+								<li>
+									Server URL: <code
+										class="bg-black/30 px-1.5 py-0.5 rounded text-xs"
+										>{CHATWOOT_BASE_URL}</code
+									>
+								</li>
+							</ul>
+						</div>
+					</div>
+				</details>
+			</section>
 		{/if}
 
-		<!-- Notifications Section -->
-		<section
-			id="notifications"
-			class="card p-6 border border-neutral-800 space-y-6 scroll-mt-4"
-		>
-			<h2 class="text-2xl font-bold text-white">Notifications</h2>
-			<p class="text-neutral-500 text-sm">
-				Get alerted when customers need support
-			</p>
-
-			<div class="space-y-4">
-				<label
-					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyEmail
-						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
-				>
-					<input
-						type="checkbox"
-						bind:checked={notifyEmail}
-						disabled={!accountEmail}
-						class="mt-1 w-5 h-5"
+		<!-- Step 2: Contacts & Notifications -->
+		{#if currentStep === 2}
+			<!-- Provider Contacts -->
+			{#if providerApiClient && providerPubkeyHex}
+				<div id="contacts">
+					<ContactsEditor
+						username=""
+						apiClient={providerApiClient}
+						{providerPubkeyHex}
 					/>
-					<div class="flex-1">
-						<div class="flex items-center gap-2">
-							<span class="text-2xl">📧</span><span
-								class="text-white font-medium">Email</span
-							><span
-								class="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded"
-								>Free</span
-							>
-						</div>
-						{#if accountEmail}<p class="text-neutral-500 text-sm mt-1">
-								Notifications to <span class="text-white"
-									>{accountEmail}</span
-								>
-							</p>
-							{#if notifyEmail}<button
-									type="button"
-									onclick={(e) => {
-										e.preventDefault();
-										e.stopPropagation();
-										handleTestChannel("email");
-									}}
-									disabled={testingChannel === "email"}
-									class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
-									>{testingChannel === "email"
-										? "Sending..."
-										: "Send Test"}</button
-								>{/if}
-						{:else}<p class="text-yellow-400/80 text-sm mt-1">
-								Add email in <a
-									href="/dashboard/account/profile"
-									class="underline">Profile</a
-								>
-							</p>{/if}
-					</div>
-				</label>
-
-				<label
-					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyTelegram
-						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
-				>
-					<input
-						type="checkbox"
-						bind:checked={notifyTelegram}
-						class="mt-1 w-5 h-5"
-					/>
-					<div class="flex-1">
-						<div class="flex items-center gap-2">
-							<span class="text-2xl">📱</span><span
-								class="text-white font-medium">Telegram</span
-							><span
-								class="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded"
-								>Free (50/day)</span
-							>
-						</div>
-						<p class="text-neutral-500 text-sm mt-1">
-							Instant notifications via Telegram
-						</p>
-						{#if notifyTelegram}
-							{@const botUsername =
-								import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
-								"DecentCloudBot"}
-							<div class="mt-3 space-y-2">
-								<input
-									type="text"
-									bind:value={telegramChatId}
-									placeholder="Chat ID"
-									class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
-								/>
-								<p class="text-xs text-neutral-500">
-									Message <a
-										href="https://t.me/{botUsername}"
-										target="_blank"
-										class="text-primary-400 hover:underline"
-										>@{botUsername}</a
-									> with /start
-								</p>
-								{#if telegramChatId}<button
-										type="button"
-										onclick={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											handleTestChannel("telegram");
-										}}
-										disabled={testingChannel === "telegram"}
-										class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
-										>{testingChannel === "telegram"
-											? "Sending..."
-											: "Send Test"}</button
-									>{/if}
-							</div>
-						{/if}
-					</div>
-				</label>
-
-				<label
-					class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifySms
-						? 'bg-primary-500/20 border-primary-500/50'
-						: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
-				>
-					<input
-						type="checkbox"
-						bind:checked={notifySms}
-						class="mt-1 w-5 h-5"
-					/>
-					<div class="flex-1">
-						<div class="flex items-center gap-2">
-							<span class="text-2xl">💬</span><span
-								class="text-white font-medium">SMS</span
-							><span
-								class="text-xs bg-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded"
-								>5 free/day</span
-							>
-						</div>
-						<p class="text-neutral-500 text-sm mt-1">
-							SMS alerts to your phone
-						</p>
-						{#if notifySms}
-							<div class="mt-3 space-y-2">
-								<input
-									type="tel"
-									bind:value={notifyPhone}
-									placeholder="+1 555-123-4567"
-									class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
-								/>
-								{#if notifyPhone}<button
-										type="button"
-										onclick={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											handleTestChannel("sms");
-										}}
-										disabled={testingChannel === "sms"}
-										class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
-										>{testingChannel === "sms"
-											? "Sending..."
-											: "Send Test"}</button
-									>{/if}
-							</div>
-						{/if}
-					</div>
-				</label>
-			</div>
-
-			{#if usage}
-				<div
-					class="grid grid-cols-3 gap-4 text-center bg-surface-elevated  p-4"
-				>
-					<div>
-						<div class="text-xl font-bold text-white">
-							{usage.emailCount}
-						</div>
-						<div class="text-neutral-500 text-xs">Email</div>
-					</div>
-					<div>
-						<div class="text-xl font-bold text-white">
-							{usage.telegramCount}/{usage.telegramLimit}
-						</div>
-						<div class="text-neutral-500 text-xs">Telegram</div>
-					</div>
-					<div>
-						<div class="text-xl font-bold text-white">
-							{usage.smsCount}/{usage.smsLimit}
-						</div>
-						<div class="text-neutral-500 text-xs">SMS</div>
-					</div>
 				</div>
 			{/if}
 
-			<button
-				onclick={saveNotifications}
-				disabled={savingNotif}
-				class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
-				>{savingNotif ? "Saving..." : "Save Notifications"}</button
+			<!-- Notifications -->
+			<section
+				id="notifications"
+				class="card p-6 border border-neutral-800 space-y-6"
 			>
-		</section>
+				<div>
+					<h2 class="text-2xl font-bold text-white">Notifications</h2>
+					<p class="text-neutral-500 text-sm mt-1">
+						Get alerted when customers need support
+					</p>
+				</div>
 
-		<!-- Help Center Profile Section (moved to bottom - one-time setup) -->
-		<section id="helpcenter" class="scroll-mt-4">
-			<form onsubmit={saveOnboarding} class="space-y-6">
-				<div
-					class="card p-6 border border-neutral-800 space-y-6"
-				>
-					<div>
-						<h2 class="text-2xl font-bold text-white">
-							Help Center Profile
-						</h2>
-						<p class="text-neutral-500 text-sm mt-1">
-							Configure your provider profile - this
-							auto-generates a help article for customers
-						</p>
-					</div>
-
-					<div class="grid md:grid-cols-2 gap-6">
-						<div>
-							<span class="block text-neutral-300 mb-2"
-								>Support Email <span class="text-red-400"
-									>*</span
-								></span
-							>
-							{#if accountEmail}
-								<div
-									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-neutral-300"
+				<div class="space-y-4">
+					<label
+						class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyEmail
+							? 'bg-primary-500/20 border-primary-500/50'
+							: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
+					>
+						<input
+							type="checkbox"
+							bind:checked={notifyEmail}
+							disabled={!accountEmail}
+							class="mt-1 w-5 h-5"
+						/>
+						<div class="flex-1">
+							<div class="flex items-center gap-2">
+								<span class="text-2xl">📧</span><span
+									class="text-white font-medium">Email</span
+								><span
+									class="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded"
+									>Free</span
 								>
-									{accountEmail}
-								</div>
-								<p class="text-neutral-500 text-xs mt-1">
-									Using your account email. <a
-										href="/dashboard/account/profile"
-										class="text-primary-400 hover:underline"
-										>Change in Profile</a
+							</div>
+							{#if accountEmail}<p class="text-neutral-500 text-sm mt-1">
+									Notifications to <span class="text-white"
+										>{accountEmail}</span
 									>
 								</p>
-							{:else}
-								<div
-									class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30  text-yellow-300"
-								>
-									No email set
-								</div>
-								<p class="text-yellow-400/80 text-sm mt-1">
-									Please <a
+								{#if notifyEmail}<button
+										type="button"
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											handleTestChannel("email");
+										}}
+										disabled={testingChannel === "email"}
+										class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
+										>{testingChannel === "email"
+											? "Sending..."
+											: "Send Test"}</button
+									>{/if}
+							{:else}<p class="text-yellow-400/80 text-sm mt-1">
+									Add email in <a
 										href="/dashboard/account/profile"
-										class="underline">add your email</a
-									> in Account settings first
-								</p>
+										class="underline">Profile</a
+									>
+								</p>{/if}
+						</div>
+					</label>
+
+					<label
+						class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifyTelegram
+							? 'bg-primary-500/20 border-primary-500/50'
+							: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
+					>
+						<input
+							type="checkbox"
+							bind:checked={notifyTelegram}
+							class="mt-1 w-5 h-5"
+						/>
+						<div class="flex-1">
+							<div class="flex items-center gap-2">
+								<span class="text-2xl">📱</span><span
+									class="text-white font-medium">Telegram</span
+								><span
+									class="text-xs bg-green-500/30 text-green-300 px-2 py-0.5 rounded"
+									>Free (50/day)</span
+								>
+							</div>
+							<p class="text-neutral-500 text-sm mt-1">
+								Instant notifications via Telegram
+							</p>
+							{#if notifyTelegram}
+								{@const botUsername =
+									import.meta.env.VITE_TELEGRAM_BOT_USERNAME ||
+									"DecentCloudBot"}
+								<div class="mt-3 space-y-2">
+									<input
+										type="text"
+										bind:value={telegramChatId}
+										placeholder="Chat ID"
+										class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+									/>
+									<p class="text-xs text-neutral-500">
+										Message <a
+											href="https://t.me/{botUsername}"
+											target="_blank"
+											class="text-primary-400 hover:underline"
+											>@{botUsername}</a
+										> with /start
+									</p>
+									{#if telegramChatId}<button
+											type="button"
+											onclick={(e) => {
+												e.preventDefault();
+												e.stopPropagation();
+												handleTestChannel("telegram");
+											}}
+											disabled={testingChannel === "telegram"}
+											class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
+											>{testingChannel === "telegram"
+												? "Sending..."
+												: "Send Test"}</button
+										>{/if}
+								</div>
 							{/if}
 						</div>
-						<div>
-							<label
-								for="support-hours"
-								class="block text-neutral-300 mb-2"
-								>Support Hours <span class="text-red-400"
-									>*</span
-								></label
-							>
-							<select
-								id="support-hours"
-								bind:value={supportHours}
-								required
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
-							>
-								<option value="">Select...</option>
-								{#each supportHoursOptions as opt}<option
-										value={opt}
-										>{opt === "custom"
-											? "Custom..."
-											: opt}</option
-									>{/each}
-							</select>
-							{#if supportHours === "custom"}<input
-									type="text"
-									bind:value={customSupportHours}
-									placeholder="e.g., Mon-Fri 9-17 PST"
-									class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-								/>{/if}
-						</div>
-					</div>
+					</label>
 
-					<div>
-						<div class="text-neutral-300 mb-2">
-							Support Channels <span class="text-red-400">*</span>
-						</div>
-						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-							{#each supportChannelOptions as ch}<label
-									class="flex items-center space-x-2 cursor-pointer"
-									><input
-										type="checkbox"
-										checked={supportChannels.includes(ch)}
-										onchange={() =>
-											(supportChannels = toggleArray(
-												supportChannels,
-												ch,
-											))}
-										class="w-4 h-4 rounded"
-									/><span class="text-neutral-300">{ch}</span
-									></label
-								>{/each}
-						</div>
-					</div>
-
-					<div>
-						<div class="text-neutral-300 mb-2">
-							Regions <span class="text-red-400">*</span>
-						</div>
-						<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-							{#each regionOptions as r}<label
-									class="flex items-center space-x-2 cursor-pointer"
-									><input
-										type="checkbox"
-										checked={regions.includes(r)}
-										onchange={() =>
-											(regions = toggleArray(regions, r))}
-										class="w-4 h-4 rounded"
-									/><span class="text-neutral-300">{r}</span
-									></label
-								>{/each}
-						</div>
-					</div>
-
-					<div>
-						<div class="text-neutral-300 mb-2">
-							Payment Methods <span class="text-red-400">*</span>
-						</div>
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-							{#each paymentMethodOptions as m}<label
-									class="flex items-center space-x-2 cursor-pointer"
-									><input
-										type="checkbox"
-										checked={paymentMethods.includes(m)}
-										onchange={() =>
-											(paymentMethods = toggleArray(
-												paymentMethods,
-												m,
-											))}
-										class="w-4 h-4 rounded"
-									/><span class="text-neutral-300">{m}</span
-									></label
-								>{/each}
-						</div>
-					</div>
-
-					<div class="grid md:grid-cols-2 gap-6">
-						<div>
-							<label
-								for="refund-policy"
-								class="block text-neutral-300 mb-2"
-								>Refund Policy</label
-							>
-							<select
-								id="refund-policy"
-								bind:value={refundPolicy}
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
-							>
-								<option value="">Select...</option>
-								{#each refundPolicyOptions as opt}<option
-										value={opt}
-										>{opt === "custom"
-											? "Custom..."
-											: opt}</option
-									>{/each}
-							</select>
-							{#if refundPolicy === "custom"}<input
-									type="text"
-									bind:value={customRefundPolicy}
-									placeholder="Describe policy"
-									class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-								/>{/if}
-						</div>
-						<div>
-							<label
-								for="sla-guarantee"
-								class="block text-neutral-300 mb-2"
-								>SLA Guarantee</label
-							>
-							<select
-								id="sla-guarantee"
-								bind:value={slaGuarantee}
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
-							>
-								<option value="">Select...</option>
-								{#each slaGuaranteeOptions as opt}<option
-										value={opt}>{opt}</option
-									>{/each}
-							</select>
-						</div>
-					</div>
-
-					<div>
-						<div class="text-neutral-300 mb-2">
-							Unique Selling Points <span class="text-neutral-500"
-								>(max 200 chars)</span
-							>
-						</div>
-						<div class="space-y-3">
-							<input
-								type="text"
-								bind:value={usp1}
-								maxlength="200"
-								placeholder="Key differentiator #1"
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-							/>
-							<input
-								type="text"
-								bind:value={usp2}
-								maxlength="200"
-								placeholder="Key differentiator #2"
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-							/>
-							<input
-								type="text"
-								bind:value={usp3}
-								maxlength="200"
-								placeholder="Key differentiator #3"
-								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-							/>
-						</div>
-					</div>
-
-					<div>
-						<div class="flex justify-between items-center mb-2">
-							<span class="text-neutral-300"
-								>Common Issues / FAQ</span
-							>
-							{#if commonIssues.length < 10}<button
-									type="button"
-									onclick={addCommonIssue}
-									class="text-sm px-3 py-1 bg-primary-600 rounded hover:bg-primary-700 text-white"
-									>Add</button
-								>{/if}
-						</div>
-						{#each commonIssues as issue, i}
-							<div
-								class="border border-neutral-800  p-3 mb-2 space-y-2"
-							>
-								<div class="flex justify-between">
-									<span class="text-neutral-500 text-sm"
-										>#{i + 1}</span
-									><button
-										type="button"
-										onclick={() => removeCommonIssue(i)}
-										class="text-red-400 text-sm"
-										>Remove</button
-									>
+					<label
+						class="flex items-start gap-4 p-4  border cursor-pointer transition-all {notifySms
+							? 'bg-primary-500/20 border-primary-500/50'
+							: 'bg-surface-elevated border-neutral-800 hover:border-white/40'}"
+					>
+						<input
+							type="checkbox"
+							bind:checked={notifySms}
+							class="mt-1 w-5 h-5"
+						/>
+						<div class="flex-1">
+							<div class="flex items-center gap-2">
+								<span class="text-2xl">💬</span><span
+									class="text-white font-medium">SMS</span
+								><span
+									class="text-xs bg-yellow-500/30 text-yellow-300 px-2 py-0.5 rounded"
+									>5 free/day</span
+								>
+							</div>
+							<p class="text-neutral-500 text-sm mt-1">
+								SMS alerts to your phone
+							</p>
+							{#if notifySms}
+								<div class="mt-3 space-y-2">
+									<input
+										type="tel"
+										bind:value={notifyPhone}
+										placeholder="+1 555-123-4567"
+										class="w-full px-3 py-2 bg-black/30 border border-neutral-800  text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+									/>
+									{#if notifyPhone}<button
+											type="button"
+											onclick={(e) => {
+												e.preventDefault();
+												e.stopPropagation();
+												handleTestChannel("sms");
+											}}
+											disabled={testingChannel === "sms"}
+											class="mt-2 px-3 py-1 text-xs bg-surface-elevated hover:bg-surface-elevated rounded border border-neutral-800 text-neutral-300 disabled:opacity-50"
+											>{testingChannel === "sms"
+												? "Sending..."
+												: "Send Test"}</button
+										>{/if}
 								</div>
+							{/if}
+						</div>
+					</label>
+				</div>
+
+				{#if usage}
+					<div
+						class="grid grid-cols-3 gap-4 text-center bg-surface-elevated  p-4"
+					>
+						<div>
+							<div class="text-xl font-bold text-white">
+								{usage.emailCount}
+							</div>
+							<div class="text-neutral-500 text-xs">Email</div>
+						</div>
+						<div>
+							<div class="text-xl font-bold text-white">
+								{usage.telegramCount}/{usage.telegramLimit}
+							</div>
+							<div class="text-neutral-500 text-xs">Telegram</div>
+						</div>
+						<div>
+							<div class="text-xl font-bold text-white">
+								{usage.smsCount}/{usage.smsLimit}
+							</div>
+							<div class="text-neutral-500 text-xs">SMS</div>
+						</div>
+					</div>
+				{/if}
+
+				<button
+					onclick={saveNotifications}
+					disabled={savingNotif}
+					class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+					>{savingNotif ? "Saving..." : "Save Notifications"}</button
+				>
+			</section>
+		{/if}
+
+		<!-- Step 3: Help Center Profile -->
+		{#if currentStep === 3}
+			<section id="helpcenter">
+				<form onsubmit={saveOnboarding} class="space-y-6">
+					<div
+						class="card p-6 border border-neutral-800 space-y-6"
+					>
+						<div>
+							<h2 class="text-2xl font-bold text-white">
+								Help Center Profile
+							</h2>
+							<p class="text-neutral-500 text-sm mt-1">
+								Configure your provider profile - this
+								auto-generates a help article for customers
+							</p>
+						</div>
+
+						<div class="grid md:grid-cols-2 gap-6">
+							<div>
+								<span class="block text-neutral-300 mb-2"
+									>Support Email <span class="text-red-400"
+										>*</span
+									></span
+								>
+								{#if accountEmail}
+									<div
+										class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-neutral-300"
+									>
+										{accountEmail}
+									</div>
+									<p class="text-neutral-500 text-xs mt-1">
+										Using your account email. <a
+											href="/dashboard/account/profile"
+											class="text-primary-400 hover:underline"
+											>Change in Profile</a
+										>
+									</p>
+								{:else}
+									<div
+										class="w-full px-4 py-3 bg-yellow-500/10 border border-yellow-500/30  text-yellow-300"
+									>
+										No email set
+									</div>
+									<p class="text-yellow-400/80 text-sm mt-1">
+										Please <a
+											href="/dashboard/account/profile"
+											class="underline">add your email</a
+										> in Account settings first
+									</p>
+								{/if}
+							</div>
+							<div>
+								<label
+									for="support-hours"
+									class="block text-neutral-300 mb-2"
+									>Support Hours <span class="text-red-400"
+										>*</span
+									></label
+								>
+								<select
+									id="support-hours"
+									bind:value={supportHours}
+									required
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
+								>
+									<option value="">Select...</option>
+									{#each supportHoursOptions as opt}<option
+											value={opt}
+											>{opt === "custom"
+												? "Custom..."
+												: opt}</option
+										>{/each}
+								</select>
+								{#if supportHours === "custom"}<input
+										type="text"
+										bind:value={customSupportHours}
+										placeholder="e.g., Mon-Fri 9-17 PST"
+										class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									/>{/if}
+							</div>
+						</div>
+
+						<div>
+							<div class="text-neutral-300 mb-2">
+								Support Channels <span class="text-red-400">*</span>
+							</div>
+							<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+								{#each supportChannelOptions as ch}<label
+										class="flex items-center space-x-2 cursor-pointer"
+										><input
+											type="checkbox"
+											checked={supportChannels.includes(ch)}
+											onchange={() =>
+												(supportChannels = toggleArray(
+													supportChannels,
+													ch,
+												))}
+											class="w-4 h-4 rounded"
+										/><span class="text-neutral-300">{ch}</span
+										></label
+									>{/each}
+							</div>
+						</div>
+
+						<div>
+							<div class="text-neutral-300 mb-2">
+								Regions <span class="text-red-400">*</span>
+							</div>
+							<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+								{#each regionOptions as r}<label
+										class="flex items-center space-x-2 cursor-pointer"
+										><input
+											type="checkbox"
+											checked={regions.includes(r)}
+											onchange={() =>
+												(regions = toggleArray(regions, r))}
+											class="w-4 h-4 rounded"
+										/><span class="text-neutral-300">{r}</span
+										></label
+									>{/each}
+							</div>
+						</div>
+
+						<div>
+							<div class="text-neutral-300 mb-2">
+								Payment Methods <span class="text-red-400">*</span>
+							</div>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+								{#each paymentMethodOptions as m}<label
+										class="flex items-center space-x-2 cursor-pointer"
+										><input
+											type="checkbox"
+											checked={paymentMethods.includes(m)}
+											onchange={() =>
+												(paymentMethods = toggleArray(
+													paymentMethods,
+													m,
+												))}
+											class="w-4 h-4 rounded"
+										/><span class="text-neutral-300">{m}</span
+										></label
+									>{/each}
+							</div>
+						</div>
+
+						<div class="grid md:grid-cols-2 gap-6">
+							<div>
+								<label
+									for="refund-policy"
+									class="block text-neutral-300 mb-2"
+									>Refund Policy</label
+								>
+								<select
+									id="refund-policy"
+									bind:value={refundPolicy}
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
+								>
+									<option value="">Select...</option>
+									{#each refundPolicyOptions as opt}<option
+											value={opt}
+											>{opt === "custom"
+												? "Custom..."
+												: opt}</option
+										>{/each}
+								</select>
+								{#if refundPolicy === "custom"}<input
+										type="text"
+										bind:value={customRefundPolicy}
+										placeholder="Describe policy"
+										class="w-full mt-2 px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									/>{/if}
+							</div>
+							<div>
+								<label
+									for="sla-guarantee"
+									class="block text-neutral-300 mb-2"
+									>SLA Guarantee</label
+								>
+								<select
+									id="sla-guarantee"
+									bind:value={slaGuarantee}
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400"
+								>
+									<option value="">Select...</option>
+									{#each slaGuaranteeOptions as opt}<option
+											value={opt}>{opt}</option
+										>{/each}
+								</select>
+							</div>
+						</div>
+
+						<div>
+							<div class="text-neutral-300 mb-2">
+								Unique Selling Points <span class="text-neutral-500"
+									>(max 200 chars)</span
+								>
+							</div>
+							<div class="space-y-3">
 								<input
 									type="text"
-									bind:value={issue.question}
-									placeholder="Question"
-									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									bind:value={usp1}
+									maxlength="200"
+									placeholder="Key differentiator #1"
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
 								/>
-								<textarea
-									bind:value={issue.answer}
-									rows="2"
-									placeholder="Answer"
-									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
-								></textarea>
+								<input
+									type="text"
+									bind:value={usp2}
+									maxlength="200"
+									placeholder="Key differentiator #2"
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+								/>
+								<input
+									type="text"
+									bind:value={usp3}
+									maxlength="200"
+									placeholder="Key differentiator #3"
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+								/>
 							</div>
-						{/each}
-					</div>
+						</div>
 
+						<div>
+							<div class="flex justify-between items-center mb-2">
+								<span class="text-neutral-300"
+									>Common Issues / FAQ</span
+								>
+								{#if commonIssues.length < 10}<button
+										type="button"
+										onclick={addCommonIssue}
+										class="text-sm px-3 py-1 bg-primary-600 rounded hover:bg-primary-700 text-white"
+										>Add</button
+									>{/if}
+							</div>
+							{#each commonIssues as issue, i}
+								<div
+									class="border border-neutral-800  p-3 mb-2 space-y-2"
+								>
+									<div class="flex justify-between">
+										<span class="text-neutral-500 text-sm"
+											>#{i + 1}</span
+										><button
+											type="button"
+											onclick={() => removeCommonIssue(i)}
+											class="text-red-400 text-sm"
+											>Remove</button
+										>
+									</div>
+									<input
+										type="text"
+										bind:value={issue.question}
+										placeholder="Question"
+										class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									/>
+									<textarea
+										bind:value={issue.answer}
+										rows="2"
+										placeholder="Answer"
+										class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400"
+									></textarea>
+								</div>
+							{/each}
+						</div>
+
+						<button
+							type="submit"
+							disabled={savingOnboarding}
+							class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
+							>{savingOnboarding
+								? "Saving & Publishing..."
+								: "Save & Publish"}</button
+						>
+					</div>
+				</form>
+			</section>
+		{/if}
+
+		<!-- Wizard Navigation -->
+		<div class="flex justify-between items-center pt-2">
+			<div>
+				{#if canGoBack(currentStep)}
 					<button
-						type="submit"
-						disabled={savingOnboarding}
-						class="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all disabled:opacity-50"
-						>{savingOnboarding
-							? "Saving & Publishing..."
-							: "Save & Publish"}</button
+						onclick={goBack}
+						class="px-5 py-2.5 bg-surface-elevated border border-neutral-700 text-white text-sm font-medium hover:border-neutral-500 transition-colors"
 					>
-				</div>
-			</form>
-		</section>
+						← Back
+					</button>
+				{/if}
+			</div>
+			<div class="flex items-center gap-3">
+				<span class="text-neutral-600 text-sm">
+					Step {currentStep} of {WIZARD_STEP_COUNT}
+				</span>
+				{#if currentStep < WIZARD_STEP_COUNT}
+					<button
+						onclick={goNext}
+						class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm font-semibold hover:brightness-110 transition-all"
+					>
+						Save & Continue →
+					</button>
+				{/if}
+			</div>
+		</div>
 	{/if}
 </div>

@@ -1229,6 +1229,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "/api/v1/providers/:pubkey/password-reset-events",
             get(openapi::password_reset_events),
         )
+        // SSE: real-time contract status stream for users (tenants)
+        .at(
+            "/api/v1/users/:pubkey/contract-events",
+            get(openapi::contract_status_events),
+        )
         // acme-dns protocol endpoint (used by Caddy acmedns plugin)
         .at("/api/v1/acme-dns/update", post(acme_dns_update))
         // NOTE: CSV operations are now included in OpenAPI schema above

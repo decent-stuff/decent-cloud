@@ -885,5 +885,46 @@ pub async fn authenticate_agent_from_request(
     })
 }
 
+/// Authenticate a user from a plain poem request (for use in non-OpenAPI handlers like SSE).
+///
+/// Reads X-Public-Key, X-Signature, X-Timestamp, X-Nonce headers and verifies signature.
+/// Returns the authenticated user's pubkey bytes.
+pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>, AuthError> {
+    let headers = request.headers();
+
+    let pubkey_hex = headers
+        .get("X-Public-Key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Public-Key".to_string()))?;
+
+    let signature_hex = headers
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+
+    let timestamp = headers
+        .get("X-Timestamp")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+
+    let nonce = headers
+        .get("X-Nonce")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+
+    let full_path = format!("/api/v1{}", request.uri().path());
+
+    verify_request_signature(
+        pubkey_hex,
+        signature_hex,
+        timestamp,
+        nonce,
+        request.method().as_str(),
+        &full_path,
+        &[], // SSE GET has no body
+        None,
+    )
+}
+
 #[cfg(test)]
 mod tests;

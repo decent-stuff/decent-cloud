@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import {
 		getOffering,
+		searchOfferings,
 		fetchIcpPrice,
 		getProviderTrustMetrics,
 		getProviderProfile,
@@ -23,6 +24,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncatePubkey } from '$lib/utils/identity';
+	import { recordView } from '$lib/utils/recently-viewed';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 
 	const offeringId = parseInt($page.params.id ?? '', 10);
@@ -40,6 +42,7 @@
 	let icpPriceUsd = $state<number | null>(null);
 	let savedIds = $state(new Set<number>());
 	let trustWarningDismissed = $state(false);
+	let similarOfferings = $state<Offering[]>([]);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -49,10 +52,15 @@
 		try {
 			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
 			if (offering) {
+				recordView(offeringId);
 				[trustMetrics, providerProfile] = await Promise.all([
 					getProviderTrustMetrics(offering.pubkey).catch(() => null),
 					getProviderProfile(offering.pubkey).catch(() => null)
 				]);
+				try {
+					const all = await searchOfferings({ limit: 10, in_stock_only: true });
+					similarOfferings = all.filter(o => o.product_type === offering!.product_type && o.id !== offering!.id).slice(0, 4);
+				} catch { /* ignore */ }
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offering';
@@ -291,6 +299,9 @@
 						class="text-sm text-neutral-500 hover:text-primary-400 {offering.owner_username ? '' : 'font-mono'}"
 					>
 						{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
+					</a>
+					<a href="/dashboard/marketplace?provider={offering.pubkey}" class="text-xs text-neutral-500 hover:text-primary-400 transition-colors">
+						View all offerings →
 					</a>
 				</div>
 			</div>
@@ -619,6 +630,25 @@
 			</div>
 		</div>
 		</div>
+
+	{#if similarOfferings.length > 0}
+		<div class="mt-8">
+			<h3 class="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-3">Similar Offerings</h3>
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+				{#each similarOfferings as o}
+					<a href="/dashboard/marketplace/{o.id}" class="card p-4 border border-neutral-800 hover:border-neutral-600 transition-colors block">
+						<div class="flex items-center justify-between">
+							<span class="text-white font-medium text-sm">{o.offer_name}</span>
+							{#if o.monthly_price}
+								<span class="text-primary-400 text-sm font-semibold">{o.monthly_price.toFixed(2)} {o.currency}/mo</span>
+							{/if}
+						</div>
+						<div class="text-neutral-500 text-xs mt-1">{o.product_type}{o.datacenter_country ? ` · ${o.datacenter_country}` : ''}</div>
+					</a>
+				{/each}
+			</div>
+		</div>
+	{/if}
 	{/if}
 </div>
 

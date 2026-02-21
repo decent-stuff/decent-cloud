@@ -13,6 +13,7 @@
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncatePubkey } from "$lib/utils/identity";
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
+	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
@@ -52,6 +53,9 @@
 	let showDemoOfferings = $state(false);
 	let showOfflineOfferings = $state(false);
 	let recipesOnly = $state(false);
+	let inStockOnly = $state(true);
+	let providerFilter = $state<string>('');
+	let recentlyViewedIds = $state<number[]>([]);
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -217,6 +221,11 @@
 			result = result.filter((o) => (o.created_at_ns ?? 0) >= RECENT_CUTOFF_NS!);
 		}
 
+		// Provider filter (from ?provider= URL param or "View all from provider" link)
+		if (providerFilter) {
+			result = result.filter(o => o.pubkey === providerFilter);
+		}
+
 		// Sort by selected field
 		result.sort((a, b) => {
 			if (sortField === "trust") {
@@ -236,6 +245,13 @@
 
 		return result;
 	});
+
+	let recentlyViewedOfferings = $derived(
+		recentlyViewedIds
+			.map(id => offerings.find(o => o.id === id))
+			.filter((o): o is Offering => o !== undefined)
+			.slice(0, 5)
+	);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -282,7 +298,7 @@
 			error = null;
 			offerings = await searchOfferings({
 				limit: 100,
-				in_stock_only: true,
+				in_stock_only: inStockOnly || undefined,
 				has_recipe: recipesOnly || undefined,
 				q: searchQuery.trim() || undefined,
 				country: selectedCountry || undefined,
@@ -327,10 +343,12 @@
 		showDemoOfferings = p.get('demo') === '1';
 		showOfflineOfferings = p.get('offline') === '1';
 		recipesOnly = p.get('recipes') === '1';
+		inStockOnly = p.get('inStock') !== '0';
 		sortField = (p.get('sort') as 'price' | 'trust' | 'newest') ?? 'price';
 		sortDir = (p.get('dir') as 'asc' | 'desc') ?? 'asc';
 		quickFilter = (p.get('quick') as 'newest' | 'trusted' | null) ?? null;
 		selectedPreset = (p.get('preset') as 'gpu' | 'budget' | 'na' | 'europe' | null) ?? null;
+		providerFilter = p.get('provider') ?? '';
 	}
 
 	function syncFiltersToUrl() {
@@ -351,10 +369,12 @@
 		if (showDemoOfferings) params.set('demo', '1');
 		if (showOfflineOfferings) params.set('offline', '1');
 		if (recipesOnly) params.set('recipes', '1');
+		if (!inStockOnly) params.set('inStock', '0');
 		if (sortField !== 'price') params.set('sort', sortField);
 		if (sortDir !== 'asc') params.set('dir', sortDir);
 		if (quickFilter) params.set('quick', quickFilter);
 		if (selectedPreset) params.set('preset', selectedPreset);
+		if (providerFilter) params.set('provider', providerFilter);
 		// Preserve expanded offering deep-link if present
 		if (expandedRow !== null) params.set('offering', String(expandedRow));
 		const url = params.toString() ? `?${params.toString()}` : '/dashboard/marketplace';
@@ -362,6 +382,7 @@
 	}
 
 	onMount(async () => {
+		recentlyViewedIds = getRecentlyViewed();
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
 		const hintVisits = parseInt(localStorage.getItem(FIRST_TIME_HINT_KEY) ?? '0', 10);
 		if (hintVisits < 3) {
@@ -443,11 +464,13 @@
 		showDemoOfferings = false;
 		showOfflineOfferings = false;
 		recipesOnly = false;
+		inStockOnly = true;
 		searchQuery = "";
 		quickFilter = null;
 		selectedPreset = null;
 		sortField = "price";
 		sortDir = "asc";
+		providerFilter = '';
 		fetchOfferings();
 		syncFiltersToUrl();
 	}
@@ -710,7 +733,7 @@
 		selectedTypes.size > 0 || searchQuery !== '' || selectedRegion !== '' || selectedCountry !== '' ||
 		selectedCity !== '' || minPrice !== null || maxPrice !== null || minCores !== null ||
 		minMemoryGb !== null || minSsdGb !== null || selectedVirt !== '' || unmeteredOnly ||
-		minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly ||
+		minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly || !inStockOnly ||
 		quickFilter !== null || selectedPreset !== null
 	);
 
@@ -767,6 +790,9 @@
 		}
 		if (recipesOnly) {
 			chips.push({ label: "Recipes only", remove: () => { recipesOnly = false; handleFilterChange(); } });
+		}
+		if (!inStockOnly) {
+			chips.push({ label: "Including out-of-stock", remove: () => { inStockOnly = true; handleFilterChange(); } });
 		}
 
 		return chips;
@@ -1224,6 +1250,29 @@
 					>Trust ↓</button>
 				</div>
 			</div>
+
+			{#if providerFilter}
+				<div class="bg-primary-500/10 border border-primary-500/30 p-3 flex items-center justify-between text-sm">
+					<span class="text-primary-300">Showing offerings from one provider</span>
+					<button onclick={() => { providerFilter = ''; syncFiltersToUrl(); }} class="text-neutral-400 hover:text-white text-xs">Clear filter ×</button>
+				</div>
+			{/if}
+
+			{#if recentlyViewedOfferings.length > 0}
+				<div class="mb-4">
+					<div class="text-xs text-neutral-500 mb-2 uppercase tracking-wide">Recently Viewed</div>
+					<div class="flex flex-wrap gap-2">
+						{#each recentlyViewedOfferings as o}
+							<a href="/dashboard/marketplace/{o.id}" class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 text-sm text-neutral-300 hover:text-white transition-colors">
+								{o.offer_name}
+								{#if o.monthly_price}
+									<span class="text-neutral-500 text-xs">{o.monthly_price.toFixed(2)} {o.currency}</span>
+								{/if}
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
 
 			{#if loading}
 				<div class="flex justify-center py-12">

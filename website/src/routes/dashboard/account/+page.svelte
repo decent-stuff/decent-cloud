@@ -143,6 +143,32 @@
 							: "keys"}
 					</p>
 				</div>
+				<div>
+					<p class="text-neutral-400 text-sm">Email</p>
+					{#if currentIdentity.account.email}
+						<div class="flex items-center gap-2 mt-0.5">
+							<span class="text-white text-sm">{currentIdentity.account.email}</span>
+							{#if currentIdentity.account.emailVerified}
+								<span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-green-500/20 text-green-400 border border-green-500/30">
+									✓ Verified
+								</span>
+							{:else}
+								<span class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30">
+									⚠ Unverified
+								</span>
+							{/if}
+						</div>
+						{#if !currentIdentity.account.emailVerified}
+							<p class="text-neutral-500 text-xs mt-1">Check your inbox or <a href="/dashboard/account/notifications" class="text-primary-400 hover:text-primary-300">manage notifications →</a></p>
+						{/if}
+					{:else}
+						<div class="flex items-center gap-2 mt-0.5">
+							<span class="text-neutral-500 text-sm">Not set</span>
+							<a href="/dashboard/account/profile" class="text-xs text-primary-400 hover:text-primary-300">Add email →</a>
+						</div>
+						<p class="text-neutral-500 text-xs mt-1">Required for notifications and account recovery.</p>
+					{/if}
+				</div>
 			</div>
 		</div>
 

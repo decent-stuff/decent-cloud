@@ -1,4 +1,84 @@
 import { describe, it, expect } from 'vitest';
+import { formatUsdPrice, filterInStock, isOfferingPaused } from './marketplace-filters';
+
+// ---------- formatUsdPrice ----------
+describe('formatUsdPrice', () => {
+	it('formats ICP amount and rate as USD monthly string', () => {
+		expect(formatUsdPrice(10, 5)).toBe('≈ $50.00/mo');
+	});
+
+	it('formats zero ICP amount as $0.00/mo', () => {
+		expect(formatUsdPrice(0, 5)).toBe('≈ $0.00/mo');
+	});
+
+	it('returns null when icpAmount is null', () => {
+		expect(formatUsdPrice(null, 5)).toBeNull();
+	});
+
+	it('returns null when icpAmount is undefined', () => {
+		expect(formatUsdPrice(undefined, 5)).toBeNull();
+	});
+
+	it('returns null when icpUsdRate is null (no rate available)', () => {
+		expect(formatUsdPrice(10, null)).toBeNull();
+	});
+
+	it('returns null when icpUsdRate is undefined', () => {
+		expect(formatUsdPrice(10, undefined)).toBeNull();
+	});
+
+	it('rounds to two decimal places', () => {
+		expect(formatUsdPrice(1, 3.333)).toBe('≈ $3.33/mo');
+	});
+});
+
+// ---------- isOfferingPaused ----------
+describe('isOfferingPaused', () => {
+	it('returns false for in_stock offering', () => {
+		expect(isOfferingPaused({ stock_status: 'in_stock' })).toBe(false);
+	});
+
+	it('returns true for out_of_stock offering', () => {
+		expect(isOfferingPaused({ stock_status: 'out_of_stock' })).toBe(true);
+	});
+
+	it('returns true for discontinued offering', () => {
+		expect(isOfferingPaused({ stock_status: 'discontinued' })).toBe(true);
+	});
+
+	it('returns false for null offering', () => {
+		expect(isOfferingPaused(null)).toBe(false);
+	});
+
+	it('returns false for undefined offering', () => {
+		expect(isOfferingPaused(undefined)).toBe(false);
+	});
+});
+
+// ---------- filterInStock ----------
+describe('filterInStock', () => {
+	const inStock = { stock_status: 'in_stock' };
+	const outOfStock = { stock_status: 'out_of_stock' };
+	const discontinued = { stock_status: 'discontinued' };
+
+	it('excludes paused offerings when inStockOnly is true', () => {
+		const result = filterInStock([inStock, outOfStock, discontinued], true);
+		expect(result).toEqual([inStock]);
+	});
+
+	it('includes all offerings when inStockOnly is false', () => {
+		const result = filterInStock([inStock, outOfStock, discontinued], false);
+		expect(result).toEqual([inStock, outOfStock, discontinued]);
+	});
+
+	it('returns empty array for empty input when inStockOnly is true', () => {
+		expect(filterInStock([], true)).toEqual([]);
+	});
+
+	it('returns empty array for empty input when inStockOnly is false', () => {
+		expect(filterInStock([], false)).toEqual([]);
+	});
+});
 
 // Test the pure logic of URL param encoding/decoding for marketplace filters
 describe('marketplace filter URL encoding', () => {

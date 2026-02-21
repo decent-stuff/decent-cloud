@@ -335,3 +335,65 @@ fn test_signature_crypto_only() {
 
     verify_result.expect("Cryptographic signature should be valid");
 }
+
+#[test]
+fn test_authenticate_user_from_request_missing_headers() {
+    use poem::{http::Method, Request};
+
+    // Build a minimal GET request with no auth headers
+    let req = Request::builder()
+        .uri("http://localhost/api/v1/users/abc123/contract-events".parse::<poem::http::Uri>().expect("valid URI"))
+        .method(Method::GET)
+        .finish();
+
+    let result = authenticate_user_from_request(&req);
+    assert!(result.is_err());
+    assert!(
+        matches!(result.unwrap_err(), AuthError::MissingHeader(_)),
+        "Missing X-Public-Key should produce MissingHeader error"
+    );
+}
+
+#[test]
+fn test_authenticate_user_from_request_valid_signature() {
+    use dcc_common::DccIdentity;
+
+    let seed = [99u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let pubkey = identity.to_bytes_verifying();
+    let pubkey_hex = hex::encode(&pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    // full_path is what the frontend signs (full path including /api/v1 prefix)
+    let full_path = "/api/v1/users/abc/contract-events";
+    // stripped_path is what poem passes to the handler after stripping the /api/v1 nest prefix
+    // authenticate_user_from_request prepends /api/v1 to reconstruct the full path
+    let stripped_path = "/users/abc/contract-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    // SSE GET has no body; sign with the full path (as the frontend does)
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path).parse().expect("valid URI");
+    let req = poem::Request::builder()
+        .uri(uri)
+        .method(poem::http::Method::GET)
+        .header("X-Public-Key", &pubkey_hex)
+        .header("X-Signature", &sig_hex)
+        .header("X-Timestamp", &timestamp_str)
+        .header("X-Nonce", &nonce_str)
+        .finish();
+
+    let result = authenticate_user_from_request(&req);
+    assert!(result.is_ok(), "Valid signature should authenticate: {:?}", result.err());
+    assert_eq!(result.unwrap(), pubkey);
+}

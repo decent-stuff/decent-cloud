@@ -116,6 +116,11 @@
 	let eventsLoading = $state(false);
 	let eventsError = $state<string | null>(null);
 
+	// Port forwarding examples state
+	let showPortExamples = $state(false);
+	let portExampleTab = $state<'nginx' | 'caddy'>('nginx');
+	let copiedPortExample = $state(false);
+
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
 			copiedSsh = true;
@@ -795,9 +800,10 @@
 			<div class="flex items-center gap-3">
 				<button
 					onclick={contactProvider}
-					class="px-3 py-1.5 text-sm bg-primary-600/80 text-white border border-primary-500/30 hover:bg-primary-700 transition-colors"
+					class="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary-600 text-white border border-primary-500/40 hover:bg-primary-500 transition-colors"
 					title="Message the provider about this contract"
 				>
+					<Icons name="headphones" size={16} />
 					Contact Provider
 				</button>
 				<button
@@ -1029,6 +1035,36 @@
 				</div>
 			</div>
 
+			<!-- Auto-renew toggle (active contracts with a fixed end date, no Stripe subscription) -->
+			{#if contract.status === 'active' && contract.end_timestamp_ns && !contract.stripe_subscription_id}
+				<div class="bg-surface-elevated border border-neutral-800 p-4 mb-4">
+					<div class="flex items-center justify-between">
+						<div>
+							<div class="text-white font-medium text-sm">Auto-renew</div>
+							<p class="text-neutral-500 text-xs mt-0.5">
+								When this contract expires, a new rental request will be created automatically with the same settings.
+							</p>
+						</div>
+						<button
+							onclick={() => handleAutoRenewToggle(!contract!.auto_renew)}
+							disabled={autoRenewSaving}
+							class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none {contract.auto_renew ? 'bg-primary-600' : 'bg-neutral-700'} {autoRenewSaving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}"
+							title={contract.auto_renew ? 'Disable auto-renew' : 'Enable auto-renew'}
+						>
+							<span
+								class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {contract.auto_renew ? 'translate-x-6' : 'translate-x-1'}"
+							></span>
+						</button>
+					</div>
+					{#if autoRenewSuccess}
+						<p class="text-emerald-400 text-xs mt-2">Preference saved.</p>
+					{/if}
+					{#if autoRenewError}
+						<p class="text-red-400 text-xs mt-2">{autoRenewError}</p>
+					{/if}
+				</div>
+			{/if}
+
 			{#if contract.request_memo}
 				<div class="bg-surface-elevated  p-3 border border-neutral-800 mb-4">
 					<div class="text-neutral-500 text-xs mb-1">Memo</div>
@@ -1141,6 +1177,43 @@
 									<div class="text-neutral-600 text-xs mt-2">
 										Run services on VM ports 10001-10009 to expose them externally
 									</div>
+								</div>
+								<div class="bg-black/20 p-3 mt-1">
+									<button
+										onclick={() => showPortExamples = !showPortExamples}
+										class="text-xs text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-1"
+									>
+										<span class="inline-block transition-transform duration-200" style="transform: rotate({showPortExamples ? '180deg' : '0deg'})">&#9660;</span>
+										Service Examples
+									</button>
+									{#if showPortExamples}
+									{@const firstTcpPort = contract.gateway_ssh_port! + 1}
+									{@const nginxSnippet = `# On your VM, listen on port 10001 (maps to external port ${firstTcpPort})\nserver {\n    listen 10001;\n    location / {\n        proxy_pass http://localhost:8080;\n    }\n}\n# Access at: ${contract.gateway_subdomain}:${firstTcpPort}`}
+									{@const caddySnippet = `# On your VM, save as Caddyfile and run: caddy run\n:10001 {\n    reverse_proxy localhost:8080\n}\n# Access at: ${contract.gateway_subdomain}:${firstTcpPort}`}
+										<div class="mt-2">
+											<div class="flex gap-1 mb-2">
+												{#each (['nginx', 'caddy'] as const) as tab}
+													<button
+														onclick={() => portExampleTab = tab}
+														class="text-xs px-2 py-0.5 border transition-colors {portExampleTab === tab ? 'bg-green-500/20 border-green-500/50 text-green-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:text-white'}"
+													>
+														{tab}
+													</button>
+												{/each}
+											</div>
+											<div class="flex items-start justify-between mt-1">
+												<pre class="text-xs text-green-300 font-mono whitespace-pre-wrap flex-1 bg-black/20 p-2">{portExampleTab === 'nginx' ? nginxSnippet : caddySnippet}</pre>
+												<button
+													onclick={() => {
+														navigator.clipboard.writeText(portExampleTab === 'nginx' ? nginxSnippet : caddySnippet);
+														copiedPortExample = true;
+														setTimeout(() => copiedPortExample = false, 2000);
+													}}
+													class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
+												>{copiedPortExample ? 'Copied!' : '📋 Copy'}</button>
+											</div>
+										</div>
+									{/if}
 								</div>
 							{/if}
 						</div>
@@ -1286,36 +1359,6 @@
 						<p class="text-purple-400/70 text-xs mt-3">
 							Your subscription will automatically renew. To cancel, use the Cancel button above.
 						</p>
-					{/if}
-				</div>
-			{/if}
-
-			<!-- Auto-renew toggle (active contracts with a fixed end date, no Stripe subscription) -->
-			{#if contract.status === 'active' && contract.end_timestamp_ns && !contract.stripe_subscription_id}
-				<div class="bg-surface-elevated border border-neutral-800 p-4 mt-4">
-					<div class="flex items-center justify-between">
-						<div>
-							<div class="text-white font-medium text-sm">Auto-renew</div>
-							<p class="text-neutral-500 text-xs mt-0.5">
-								When this contract expires, a new rental request will be created automatically with the same settings.
-							</p>
-						</div>
-						<button
-							onclick={() => handleAutoRenewToggle(!contract!.auto_renew)}
-							disabled={autoRenewSaving}
-							class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none {contract.auto_renew ? 'bg-primary-600' : 'bg-neutral-700'} {autoRenewSaving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}"
-							title={contract.auto_renew ? 'Disable auto-renew' : 'Enable auto-renew'}
-						>
-							<span
-								class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {contract.auto_renew ? 'translate-x-6' : 'translate-x-1'}"
-							></span>
-						</button>
-					</div>
-					{#if autoRenewSuccess}
-						<p class="text-emerald-400 text-xs mt-2">Preference saved.</p>
-					{/if}
-					{#if autoRenewError}
-						<p class="text-red-400 text-xs mt-2">{autoRenewError}</p>
 					{/if}
 				</div>
 			{/if}
@@ -1466,7 +1509,12 @@
 				{#each extensions as ext (ext.id)}
 					<div class="bg-surface-elevated p-3 border border-neutral-800">
 						<div class="flex items-center justify-between">
-							<div class="text-sm text-white">+{ext.extension_hours}h extended</div>
+							<div class="flex items-center gap-3">
+								<div class="text-sm text-white">+{ext.extension_hours}h extended</div>
+								{#if ext.extension_payment_e9s > 0}
+									<div class="text-xs text-neutral-400">{(ext.extension_payment_e9s / 1e9).toFixed(4)} ICP</div>
+								{/if}
+							</div>
 							<div class="text-xs text-neutral-500">{new Date(ext.created_at_ns / 1_000_000).toLocaleString()}</div>
 						</div>
 						<div class="text-xs text-neutral-500 mt-1">

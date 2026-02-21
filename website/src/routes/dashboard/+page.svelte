@@ -13,6 +13,7 @@
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import WelcomeModal from "$lib/components/WelcomeModal.svelte";
+	import ExpiryBanner from "$lib/components/ExpiryBanner.svelte";
 	import Icon from "$lib/components/Icons.svelte";
 
 	let dashboardData = $state<DashboardData>({
@@ -265,6 +266,10 @@
 			</div>
 			<Icon name="arrow-right" size={16} class="text-amber-400 shrink-0" />
 		</a>
+	{/if}
+
+	{#if currentIdentity && !activityLoading}
+		<ExpiryBanner {activity} />
 	{/if}
 
 	{#if error}

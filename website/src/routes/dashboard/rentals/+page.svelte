@@ -24,8 +24,11 @@
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
+	import { buildContractEventsUrl, parseContractEvent } from "$lib/utils/contract-sse";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
+
+	const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 	let contracts = $state<Contract[]>([]);
 	let offeringNames = $state<Map<number, string>>(new Map());
@@ -54,11 +57,9 @@
 		contracts.filter(c => ['requested', 'pending'].includes(c.status.toLowerCase())).length
 	);
 
-	// Auto-refresh state
-	let refreshInterval: ReturnType<typeof setInterval> | null = null;
-	let autoRefreshEnabled = $state(true);
-	let lastRefresh = $state<number>(Date.now());
-	const REFRESH_INTERVAL_MS = 15_000; // 15 seconds
+	// SSE state
+	let sseConnected = $state(false);
+	let eventSource: EventSource | null = null;
 
 	const PENDING_STATUSES = new Set(['requested', 'pending', 'accepted', 'provisioning', 'provisioned']);
 	const CANCELLED_STATUSES = new Set(['cancelled', 'rejected', 'failed']);
@@ -151,28 +152,31 @@
 		offeringNames = updated;
 	}
 
-	function startAutoRefresh() {
-		stopAutoRefresh();
-		if (autoRefreshEnabled && isAuthenticated) {
-			refreshInterval = setInterval(() => {
-				refreshContracts();
-			}, REFRESH_INTERVAL_MS);
-		}
+	function connectSSE(pubkeyHex: string) {
+		closeSSE();
+		const url = buildContractEventsUrl(pubkeyHex, API_BASE_URL);
+		eventSource = new EventSource(url);
+		eventSource.addEventListener('contract-status', (ev) => {
+			try {
+				const update = parseContractEvent(ev.data);
+				contracts = contracts.map((c) =>
+					c.contract_id === update.contract_id
+						? { ...c, status: update.status, status_updated_at_ns: update.updated_at_ns }
+						: c
+				);
+			} catch (e) {
+				console.error('[Rentals] Failed to parse contract SSE event:', e);
+			}
+		});
+		eventSource.onopen = () => { sseConnected = true; };
+		eventSource.onerror = () => { sseConnected = false; };
 	}
 
-	function stopAutoRefresh() {
-		if (refreshInterval) {
-			clearInterval(refreshInterval);
-			refreshInterval = null;
-		}
-	}
-
-	function toggleAutoRefresh() {
-		autoRefreshEnabled = !autoRefreshEnabled;
-		if (autoRefreshEnabled) {
-			startAutoRefresh();
-		} else {
-			stopAutoRefresh();
+	function closeSSE() {
+		if (eventSource) {
+			eventSource.close();
+			eventSource = null;
+			sseConnected = false;
 		}
 	}
 
@@ -193,7 +197,6 @@
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
 			contracts = updated;
-			lastRefresh = Date.now();
 			await fetchOfferingNames(updated);
 		} catch (e) {
 			console.error("Error refreshing contracts:", e);
@@ -227,7 +230,6 @@
 				hexEncode(signingIdentityInfo.publicKeyBytes),
 			);
 			contracts = loaded;
-			lastRefresh = Date.now();
 			await fetchOfferingNames(loaded);
 			icpPriceUsd = await fetchIcpPrice();
 		} catch (e) {
@@ -277,9 +279,12 @@
 			await loadContracts();
 			scrollToHighlightedContract();
 			if (isAuth) {
-				startAutoRefresh();
+				const signingIdentityInfo = await authStore.getSigningIdentity();
+				if (signingIdentityInfo) {
+					connectSSE(hexEncode(signingIdentityInfo.publicKeyBytes));
+				}
 			} else {
-				stopAutoRefresh();
+				closeSSE();
 			}
 		});
 	});
@@ -404,7 +409,7 @@
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
-		stopAutoRefresh();
+		closeSSE();
 	});
 </script>
 
@@ -418,19 +423,15 @@
 		</div>
 		{#if isAuthenticated && contracts.length > 0}
 			<div class="flex items-center gap-3">
-				<button
-					onclick={toggleAutoRefresh}
-					class="flex items-center gap-2 px-3 py-1.5  text-sm transition-colors {autoRefreshEnabled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}"
-					title={autoRefreshEnabled ? 'Auto-refresh enabled (15s)' : 'Auto-refresh disabled'}
-				>
+				<div class="flex items-center gap-2 px-3 py-1.5 text-sm {sseConnected ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-surface-elevated text-neutral-500 border border-neutral-800'}">
 					<span class="relative flex h-2 w-2">
-						{#if autoRefreshEnabled}
-							<span class="animate-ping absolute inline-flex h-full w-full  bg-emerald-400 opacity-75"></span>
+						{#if sseConnected}
+							<span class="animate-ping absolute inline-flex h-full w-full bg-emerald-400 opacity-75"></span>
 						{/if}
-						<span class="relative inline-flex  h-2 w-2 {autoRefreshEnabled ? 'bg-emerald-400' : 'bg-white/30'}"></span>
+						<span class="relative inline-flex h-2 w-2 {sseConnected ? 'bg-emerald-400' : 'bg-white/30'}"></span>
 					</span>
-					Auto-refresh
-				</button>
+					{sseConnected ? 'Live' : 'Disconnected'}
+				</div>
 				<button
 					onclick={refreshContracts}
 					class="px-3 py-1.5  text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:bg-surface-elevated transition-colors"
