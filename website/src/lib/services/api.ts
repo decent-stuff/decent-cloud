@@ -618,6 +618,39 @@ export async function bulkUpdateOfferingPrices(
 	return payload.data ?? 0;
 }
 
+export interface BulkPublishResponse {
+	published_count: number;
+	published_ids: number[];
+}
+
+export async function bulkPublishOfferings(
+	offeringIds: number[],
+	headers: SignedRequestHeaders
+): Promise<BulkPublishResponse> {
+	const url = `${API_BASE_URL}/api/v1/offerings/bulk-publish`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({ offering_ids: offeringIds })
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(
+			`Failed to bulk-publish offerings: ${response.status} ${response.statusText}\n${errorText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BulkPublishResponse>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to bulk-publish offerings');
+	}
+
+	return payload.data!;
+}
+
 // Visibility Allowlist API functions
 export interface AllowlistEntry {
 	id: number;
@@ -2942,6 +2975,49 @@ export async function getProviderOfferingConversionStats(
 
 	if (!payload.success) {
 		throw new Error(payload.error ?? 'Failed to fetch offering conversion stats');
+	}
+
+	return payload.data ?? [];
+}
+
+// ==================== Offering Satisfaction Types ====================
+
+export interface OfferingSatisfactionStats {
+	offeringId: string;
+	offerName: string;
+	totalFeedback: number;
+	serviceMatchedYes: number;
+	wouldRentAgainYes: number;
+	satisfactionRatePct: number;
+}
+
+/**
+ * Get per-offering tenant satisfaction stats for a provider.
+ * Requires provider authentication.
+ */
+export async function getProviderOfferingSatisfactionStats(
+	pubkeyHex: string,
+	headers: SignedRequestHeaders
+): Promise<OfferingSatisfactionStats[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offering-satisfaction-stats`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch offering satisfaction stats: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingSatisfactionStats[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch offering satisfaction stats');
 	}
 
 	return payload.data ?? [];

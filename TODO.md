@@ -89,20 +89,20 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Multi-session: the app is currently dark-only; adding a light theme requires defining a full light-mode color palette and updating all components with conditional classes. Not trivial.)*
 
-- **[Provider] Provider performance analytics** — DONE: `/dashboard/provider/analytics` page shows per-offering view-to-rental conversion rates (views 7d/30d, rentals 7d/30d, conversion %, revenue 30d). Backend: `GET /providers/{pubkey}/offering-conversion-stats` (authenticated, provider-only). Sidebar nav item added.
-  - **Remaining:** Tenant satisfaction trends on analytics page, pricing elasticity insights. *(Single-session: needs feedback data joined with offering performance data.)*
+- **[Provider] Provider performance analytics** — DONE: `/dashboard/provider/analytics` page shows per-offering view-to-rental conversion rates (views 7d/30d, rentals 7d/30d, conversion %, revenue 30d). Backend: `GET /providers/{pubkey}/offering-conversion-stats` (authenticated, provider-only). Sidebar nav item added. DONE: Tenant satisfaction trends — `GET /providers/{pubkey}/offering-satisfaction-stats` returns per-offering `service_matched` and `would_rent_again` counts + composite satisfaction rate %; color-coded table on analytics page.
+  - **Remaining:** Pricing elasticity insights. *(Multi-session: needs price-history tracking joined with rental volume data.)*
 
-- **[Provider] Request filtering and bulk actions** — DONE: Provider can filter pending rental requests by offering (dropdown) and duration range (min/max hours). Filtered set is used by Accept All / Reject All batch actions. Auto-accept rules panel (coming soon) previewed in UI.
-  - **Remaining:** Rule-based auto-accept (per-offering, per-duration threshold). *(Needs new DB table `auto_accept_rules`, API endpoints, and backend enforcement in the provisioning service. Single-session.)*
+- **[Provider] Request filtering and bulk actions** — DONE: Provider can filter pending rental requests by offering (dropdown) and duration range (min/max hours). Filtered set is used by Accept All / Reject All batch actions. DONE: Rule-based auto-accept — `auto_accept_rules` table (migration 032), full CRUD API, duration-threshold enforcement in provisioning service, UI panel on requests page.
+  - **Remaining:** Nothing — auto-accept is fully implemented.
 
 - **[Tenant] SSH key onboarding guidance** — DONE: Rental request dialog now has platform-specific tabbed SSH key generation guide (macOS/Linux, Windows PowerShell, Windows PuTTY) with copy buttons for each command.
 
-- **[Marketplace] Trending and new providers sections** — DONE: `GET /api/v1/offerings/trending` (top offerings by 7-day views) + "Trending this week" carousel. DONE: `GET /api/v1/providers/new` (providers joined last 90 days with public offerings) + "New to the platform" provider cards on marketplace. Migration 031 adds `created_at` to `provider_profiles`.
+- **[Marketplace] Trending and new providers sections** — DONE: `GET /api/v1/offerings/trending` (top offerings by 7-day views) + "Trending this week" carousel. DONE: `GET /api/v1/providers/new` (providers joined last 90 days with public offerings) + "New to the platform" provider cards on marketplace. Migration 031 adds `created_at` to `provider_profiles`. DONE: Plain-text search — `text_search` field on `SearchOfferingsParams`; queries without `:` now route to ILIKE name/description match instead of DSL parser (which required `field:value` syntax).
   - **Remaining:** "Recommended for you" personalized section. *(Needs user behavior tracking and personalization logic. Multi-session.)*
 
 - **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown by offering type, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page with timeline, comparison view.)*
 
-- **[Offerings] Draft offerings scheduling** — DONE: `publish_at` field (migration 030) on offerings. When `is_draft=true` and `publish_at <= NOW()`, `PublishScheduledService` (60s interval) auto-publishes. UI: schedule picker on create/edit pages (shown when draft=true), "Scheduled" badge with publish time on offerings list.
-  - **Remaining:** Bulk-publish drafts, "what changed since last save" diff view.
+- **[Offerings] Draft offerings scheduling** — DONE: `publish_at` field (migration 030) on offerings. When `is_draft=true` and `publish_at <= NOW()`, `PublishScheduledService` (60s interval) auto-publishes. UI: schedule picker on create/edit pages (shown when draft=true), "Scheduled" badge with publish time on offerings list. DONE: Bulk-publish — `POST /offerings/bulk-publish` (provider-only, 1-100 ids) with checkbox UI on offerings page.
+  - **Remaining:** "What changed since last save" diff view. *(Multi-session: needs per-field change tracking.)*
 
 - **[Tenant] Saved offerings price-change alerts** — Tenants can save offerings but receive no notification when a saved offering changes price or goes out of stock. *(Multi-session: needs price-history tracking table, notification integration.)*

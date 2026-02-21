@@ -284,3 +284,156 @@ export async function updateAutoAcceptSetting(
 		throw new Error(result.error || 'Failed to update auto-accept setting');
 	}
 }
+
+/**
+ * Per-offering auto-accept rule
+ */
+export interface AutoAcceptRule {
+	id: number;
+	offeringId: string;
+	minDurationHours: number | null;
+	maxDurationHours: number | null;
+	enabled: boolean;
+}
+
+export interface CreateAutoAcceptRuleRequest {
+	offeringId: string;
+	minDurationHours: number | null;
+	maxDurationHours: number | null;
+}
+
+export interface UpdateAutoAcceptRuleRequest {
+	minDurationHours: number | null;
+	maxDurationHours: number | null;
+	enabled: boolean;
+}
+
+/**
+ * List all auto-accept rules for the authenticated provider
+ */
+export async function getAutoAcceptRules(identity: Ed25519KeyIdentity): Promise<AutoAcceptRule[]> {
+	const { headers } = await signRequest(identity, 'GET', '/api/v1/provider/auto-accept-rules');
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/provider/auto-accept-rules`, {
+		method: 'GET',
+		headers: headers as HeadersInit
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to get auto-accept rules (HTTP ${response.status})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) errorMessage = errorData.error;
+		} catch { /* ignore parse errors */ }
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<AutoAcceptRule[]> = await response.json();
+	if (!result.success) {
+		throw new Error(result.error || 'Failed to get auto-accept rules');
+	}
+	return result.data ?? [];
+}
+
+/**
+ * Create a per-offering auto-accept rule
+ */
+export async function createAutoAcceptRule(
+	identity: Ed25519KeyIdentity,
+	rule: CreateAutoAcceptRuleRequest
+): Promise<AutoAcceptRule> {
+	const { headers, body } = await signRequest(
+		identity,
+		'POST',
+		'/api/v1/provider/auto-accept-rules',
+		rule
+	);
+
+	const response = await fetch(`${API_BASE_URL}/api/v1/provider/auto-accept-rules`, {
+		method: 'POST',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to create auto-accept rule (HTTP ${response.status})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) errorMessage = errorData.error;
+		} catch { /* ignore parse errors */ }
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<AutoAcceptRule> = await response.json();
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to create auto-accept rule');
+	}
+	return result.data;
+}
+
+/**
+ * Update a per-offering auto-accept rule
+ */
+export async function updateAutoAcceptRule(
+	identity: Ed25519KeyIdentity,
+	ruleId: number,
+	rule: UpdateAutoAcceptRuleRequest
+): Promise<AutoAcceptRule> {
+	const path = `/api/v1/provider/auto-accept-rules/${ruleId}`;
+	const { headers, body } = await signRequest(identity, 'PUT', path, rule);
+
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		method: 'PUT',
+		headers: headers as HeadersInit,
+		body
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to update auto-accept rule (HTTP ${response.status})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) errorMessage = errorData.error;
+		} catch { /* ignore parse errors */ }
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<AutoAcceptRule> = await response.json();
+	if (!result.success || !result.data) {
+		throw new Error(result.error || 'Failed to update auto-accept rule');
+	}
+	return result.data;
+}
+
+/**
+ * Delete a per-offering auto-accept rule
+ */
+export async function deleteAutoAcceptRule(
+	identity: Ed25519KeyIdentity,
+	ruleId: number
+): Promise<void> {
+	const path = `/api/v1/provider/auto-accept-rules/${ruleId}`;
+	const { headers } = await signRequest(identity, 'DELETE', path);
+
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		method: 'DELETE',
+		headers: headers as HeadersInit
+	});
+
+	if (!response.ok) {
+		const text = await response.text().catch(() => '');
+		let errorMessage = `Failed to delete auto-accept rule (HTTP ${response.status})`;
+		try {
+			const errorData = JSON.parse(text);
+			if (errorData.error) errorMessage = errorData.error;
+		} catch { /* ignore parse errors */ }
+		throw new Error(errorMessage);
+	}
+
+	const result: ApiResponse<null> = await response.json();
+	if (!result.success) {
+		throw new Error(result.error || 'Failed to delete auto-accept rule');
+	}
+}

@@ -21,7 +21,15 @@
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
-	import { getAutoAcceptSetting, updateAutoAcceptSetting } from "$lib/services/notification-api";
+	import {
+		getAutoAcceptSetting,
+		updateAutoAcceptSetting,
+		getAutoAcceptRules,
+		createAutoAcceptRule,
+		deleteAutoAcceptRule,
+		updateAutoAcceptRule,
+		type AutoAcceptRule,
+	} from "$lib/services/notification-api";
 	import { authStore } from "$lib/stores/auth";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -43,6 +51,13 @@
 	let unsubscribeAuth: (() => void) | null = null;
 	let autoAcceptEnabled = $state(false),
 		autoAcceptUpdating = $state(false);
+	let autoAcceptRules = $state<AutoAcceptRule[]>([]);
+	let rulesLoading = $state(false);
+	let newRuleOfferingId = $state('');
+	let newRuleMinHours = $state<number | null>(null);
+	let newRuleMaxHours = $state<number | null>(null);
+	let rulesSaving = $state(false);
+	let rulesError = $state<string | null>(null);
 	let providerOfferings = $state<Offering[]>([]);
 	let filterOfferingId = $state('');
 	let filterMinDuration = $state<number | null>(null);
@@ -190,8 +205,9 @@
 				`/api/v1/providers/${providerHex}/bandwidth`,
 			);
 			bandwidthStats = await getProviderBandwidthStats(providerHex, bandwidthSigned.headers);
-			// Load auto-accept setting
+			// Load auto-accept setting and rules
 			autoAcceptEnabled = await getAutoAcceptSetting(normalizedIdentity.identity);
+			autoAcceptRules = await getAutoAcceptRules(normalizedIdentity.identity).catch(() => []);
 			lastRefresh = Date.now();
 		} catch (e) {
 			error =
@@ -231,6 +247,61 @@
 			error = e instanceof Error ? e.message : "Failed to update auto-accept setting";
 		} finally {
 			autoAcceptUpdating = false;
+		}
+	}
+
+	async function handleCreateRule() {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) { rulesError = "Missing signing identity"; return; }
+		if (!newRuleOfferingId) { rulesError = "Select an offering"; return; }
+		if (newRuleMinHours !== null && newRuleMaxHours !== null && newRuleMinHours > newRuleMaxHours) {
+			rulesError = "Min duration must not exceed max duration";
+			return;
+		}
+		rulesError = null;
+		rulesSaving = true;
+		try {
+			await createAutoAcceptRule(activeIdentity.identity, {
+				offeringId: newRuleOfferingId,
+				minDurationHours: newRuleMinHours,
+				maxDurationHours: newRuleMaxHours,
+			});
+			newRuleOfferingId = '';
+			newRuleMinHours = null;
+			newRuleMaxHours = null;
+			autoAcceptRules = await getAutoAcceptRules(activeIdentity.identity);
+		} catch (e) {
+			rulesError = e instanceof Error ? e.message : "Failed to create rule";
+		} finally {
+			rulesSaving = false;
+		}
+	}
+
+	async function handleToggleRule(rule: AutoAcceptRule) {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) { rulesError = "Missing signing identity"; return; }
+		rulesError = null;
+		try {
+			await updateAutoAcceptRule(activeIdentity.identity, rule.id, {
+				minDurationHours: rule.minDurationHours,
+				maxDurationHours: rule.maxDurationHours,
+				enabled: !rule.enabled,
+			});
+			autoAcceptRules = await getAutoAcceptRules(activeIdentity.identity);
+		} catch (e) {
+			rulesError = e instanceof Error ? e.message : "Failed to update rule";
+		}
+	}
+
+	async function handleDeleteRule(ruleId: number) {
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) { rulesError = "Missing signing identity"; return; }
+		rulesError = null;
+		try {
+			await deleteAutoAcceptRule(activeIdentity.identity, ruleId);
+			autoAcceptRules = await getAutoAcceptRules(activeIdentity.identity);
+		} catch (e) {
+			rulesError = e instanceof Error ? e.message : "Failed to delete rule";
 		}
 	}
 
@@ -459,44 +530,111 @@
 		</section>
 
 		{#if autoAcceptEnabled}
-		<!-- Auto-Accept Rules Panel (UI preview - rule-based backend support coming soon) -->
+		<!-- Auto-Accept Rules Panel -->
 		<section class="bg-surface-elevated border border-neutral-800  p-6 space-y-4">
 			<div>
 				<h3 class="text-base font-semibold text-white">Auto-Accept Rules</h3>
-				<p class="text-neutral-500 text-sm mt-1">Configure which requests are automatically accepted.</p>
+				<p class="text-neutral-500 text-sm mt-1">
+					Optionally restrict auto-accept to specific offerings and duration ranges.
+					If no rule exists for an offering, <strong class="text-neutral-300">all</strong> requests for that offering are auto-accepted.
+				</p>
 			</div>
-			<div class="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/30  text-amber-300 text-sm">
-				<svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-					<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-				</svg>
-				<span>Rule-based auto-accept is coming soon. Currently, auto-accept applies to <strong>all</strong> requests after payment.</span>
-			</div>
-			<div class="space-y-4 opacity-60 pointer-events-none select-none">
-				<div>
-					<p class="text-sm font-medium text-neutral-300 mb-2">Allowed offerings</p>
-					{#if providerOfferings.length === 0}
-						<p class="text-neutral-500 text-sm">No offerings found.</p>
-					{:else}
-						<div class="space-y-1.5">
-							{#each providerOfferings as offering}
-								<label class="flex items-center gap-2 text-sm text-neutral-400">
-									<input type="checkbox" class="rounded border-neutral-700 bg-surface-elevated text-primary-500" disabled />
-									<span>{offering.offer_name}</span>
-									<span class="text-neutral-600 text-xs">(ID: {offering.offering_id})</span>
-								</label>
-							{/each}
+
+			{#if rulesError}
+				<div class="p-3 bg-red-500/15 border border-red-500/30 text-red-300 text-sm">{rulesError}</div>
+			{/if}
+
+			<!-- Existing rules list -->
+			{#if rulesLoading}
+				<div class="text-neutral-500 text-sm">Loading rules...</div>
+			{:else if autoAcceptRules.length > 0}
+				<div class="space-y-2">
+					{#each autoAcceptRules as rule (rule.id)}
+						{@const offering = providerOfferings.find(o => String(o.offering_id) === rule.offeringId)}
+						<div class="flex items-center justify-between gap-3 p-3 border border-neutral-700  text-sm {rule.enabled ? 'bg-neutral-900' : 'bg-neutral-900/40 opacity-60'}">
+							<div class="flex flex-col gap-0.5">
+								<span class="text-neutral-200 font-medium">{offering?.offer_name ?? rule.offeringId}</span>
+								<span class="text-neutral-500 text-xs">
+									{#if rule.minDurationHours !== null && rule.maxDurationHours !== null}
+										{rule.minDurationHours}h – {rule.maxDurationHours}h
+									{:else if rule.minDurationHours !== null}
+										≥ {rule.minDurationHours}h
+									{:else if rule.maxDurationHours !== null}
+										≤ {rule.maxDurationHours}h
+									{:else}
+										Any duration
+									{/if}
+								</span>
+							</div>
+							<div class="flex items-center gap-2">
+								<button
+									onclick={() => handleToggleRule(rule)}
+									class="text-xs px-2.5 py-1 border transition-colors {rule.enabled ? 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10' : 'border-neutral-700 text-neutral-500 hover:bg-neutral-800'}"
+									title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+								>
+									{rule.enabled ? 'Enabled' : 'Disabled'}
+								</button>
+								<button
+									onclick={() => handleDeleteRule(rule.id)}
+									class="text-xs px-2.5 py-1 border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+									title="Delete rule"
+								>
+									Delete
+								</button>
+							</div>
 						</div>
-					{/if}
+					{/each}
 				</div>
-				<div class="flex items-center gap-4">
+			{:else}
+				<p class="text-neutral-500 text-sm">No rules configured — all requests are auto-accepted after payment.</p>
+			{/if}
+
+			<!-- Add new rule form -->
+			<div class="pt-2 border-t border-neutral-800">
+				<p class="text-sm font-medium text-neutral-300 mb-3">Add rule</p>
+				<div class="flex flex-wrap items-end gap-3">
 					<div>
-						<label for="aa-min-hours" class="block text-sm font-medium text-neutral-300 mb-1">Min duration (hours)</label>
-						<input id="aa-min-hours" type="number" min="0" placeholder="e.g. 24" class="w-32 px-3 py-1.5 bg-surface-elevated border border-neutral-700  text-sm text-neutral-300" disabled />
+						<label for="rule-offering" class="block text-xs text-neutral-500 mb-1">Offering</label>
+						<select
+							id="rule-offering"
+							bind:value={newRuleOfferingId}
+							class="px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+						>
+							<option value="">Select offering</option>
+							{#each providerOfferings.filter(o => !autoAcceptRules.some(r => r.offeringId === String(o.offering_id))) as offering}
+								<option value={String(offering.offering_id)}>{offering.offer_name}</option>
+							{/each}
+						</select>
 					</div>
 					<div>
-						<label for="aa-max-hours" class="block text-sm font-medium text-neutral-300 mb-1">Max duration (hours)</label>
-						<input id="aa-max-hours" type="number" min="0" placeholder="e.g. 720" class="w-32 px-3 py-1.5 bg-surface-elevated border border-neutral-700  text-sm text-neutral-300" disabled />
+						<label for="rule-min-hours" class="block text-xs text-neutral-500 mb-1">Min hours (optional)</label>
+						<input
+							id="rule-min-hours"
+							type="number"
+							min="0"
+							placeholder="e.g. 24"
+							bind:value={newRuleMinHours}
+							class="w-32 px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+						/>
 					</div>
+					<div>
+						<label for="rule-max-hours" class="block text-xs text-neutral-500 mb-1">Max hours (optional)</label>
+						<input
+							id="rule-max-hours"
+							type="number"
+							min="0"
+							placeholder="e.g. 720"
+							bind:value={newRuleMaxHours}
+							class="w-32 px-3 py-1.5 bg-neutral-900 border border-neutral-700  text-sm text-neutral-300 focus:outline-none focus:border-primary-500"
+						/>
+					</div>
+					<button
+						onclick={handleCreateRule}
+						disabled={rulesSaving || !newRuleOfferingId}
+						class="px-4 py-1.5 text-sm bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+					>
+						{rulesSaving ? 'Adding...' : 'Add Rule'}
+					</button>
 				</div>
 			</div>
 		</section>

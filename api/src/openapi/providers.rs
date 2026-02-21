@@ -2,7 +2,7 @@ use super::common::{
     check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest, AllowlistAddRequest,
     ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdatePricesRequest,
     BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
-    CsvImportResult, DuplicateOfferingRequest, GenerateOfferingsRequest, GenerateOfferingsResponse,
+    CsvImportResult, DuplicateOfferingRequest, EmptyResponse, GenerateOfferingsRequest, GenerateOfferingsResponse,
     HelpcenterSyncResponse, LockResponse, NotificationConfigResponse, NotificationUsageResponse,
     OfferingSuggestionsResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
     ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
@@ -4704,6 +4704,192 @@ impl ProvidersApi {
             }),
         }
     }
+
+    /// Get per-offering tenant satisfaction stats for the authenticated provider
+    #[oai(
+        path = "/providers/:pubkey/offering-satisfaction-stats",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_offering_satisfaction_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::OfferingSatisfactionStats>>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_offering_satisfaction_stats(&provider_pubkey).await {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get offering satisfaction stats: {e:#}")),
+            }),
+        }
+    }
+
+    /// List auto-accept rules for the authenticated provider
+    #[oai(
+        path = "/provider/auto-accept-rules",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn list_auto_accept_rules(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<Vec<crate::database::providers::AutoAcceptRule>>> {
+        match db.list_auto_accept_rules(&auth.pubkey).await {
+            Ok(rules) => Json(ApiResponse {
+                success: true,
+                data: Some(rules),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("{e:#}")),
+            }),
+        }
+    }
+
+    /// Create a per-offering auto-accept rule for the authenticated provider
+    #[oai(
+        path = "/provider/auto-accept-rules",
+        method = "post",
+        tag = "ApiTags::Providers"
+    )]
+    async fn create_auto_accept_rule(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<CreateAutoAcceptRuleRequest>,
+    ) -> Json<ApiResponse<crate::database::providers::AutoAcceptRule>> {
+        match db
+            .create_auto_accept_rule(
+                &auth.pubkey,
+                &req.offering_id,
+                req.min_duration_hours,
+                req.max_duration_hours,
+            )
+            .await
+        {
+            Ok(rule) => Json(ApiResponse {
+                success: true,
+                data: Some(rule),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("{e:#}")),
+            }),
+        }
+    }
+
+    /// Update a per-offering auto-accept rule for the authenticated provider
+    #[oai(
+        path = "/provider/auto-accept-rules/:rule_id",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn update_auto_accept_rule(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        rule_id: Path<i64>,
+        req: Json<UpdateAutoAcceptRuleRequest>,
+    ) -> Json<ApiResponse<crate::database::providers::AutoAcceptRule>> {
+        match db
+            .update_auto_accept_rule(
+                &auth.pubkey,
+                rule_id.0,
+                req.min_duration_hours,
+                req.max_duration_hours,
+                req.enabled,
+            )
+            .await
+        {
+            Ok(rule) => Json(ApiResponse {
+                success: true,
+                data: Some(rule),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("{e:#}")),
+            }),
+        }
+    }
+
+    /// Delete a per-offering auto-accept rule for the authenticated provider
+    #[oai(
+        path = "/provider/auto-accept-rules/:rule_id",
+        method = "delete",
+        tag = "ApiTags::Providers"
+    )]
+    async fn delete_auto_accept_rule(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        rule_id: Path<i64>,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        match db.delete_auto_accept_rule(&auth.pubkey, rule_id.0).await {
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: Some(EmptyResponse {}),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("{e:#}")),
+            }),
+        }
+    }
+}
+
+/// Request to create a per-offering auto-accept rule
+#[derive(Debug, serde::Deserialize, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAutoAcceptRuleRequest {
+    pub offering_id: String,
+    pub min_duration_hours: Option<i64>,
+    pub max_duration_hours: Option<i64>,
+}
+
+/// Request to update a per-offering auto-accept rule
+#[derive(Debug, serde::Deserialize, poem_openapi::Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateAutoAcceptRuleRequest {
+    pub min_duration_hours: Option<i64>,
+    pub max_duration_hours: Option<i64>,
+    pub enabled: bool,
 }
 
 /// Bandwidth stats for a contract

@@ -1284,7 +1284,12 @@
 					<div class="flex justify-center mb-3">
 						<Icon name="search" size={48} class="text-neutral-600" />
 					</div>
-					<p class="text-neutral-500 mb-2">No offerings found</p>
+					{#if searchQuery}
+						<p class="text-neutral-400 mb-1 font-medium">No results for "{searchQuery}"</p>
+						<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">product_type:gpu</code></p>
+					{:else}
+						<p class="text-neutral-500 mb-2">No offerings found</p>
+					{/if}
 					{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || !showDemoOfferings || showOfflineOfferings || recipesOnly || searchQuery}
 						<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
 						<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">

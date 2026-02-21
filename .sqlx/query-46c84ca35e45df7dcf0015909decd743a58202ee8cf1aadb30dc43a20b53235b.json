@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO auto_accept_rules (provider_pubkey, offering_id, min_duration_hours, max_duration_hours)\n               VALUES ($1, $2, $3, $4)\n               RETURNING id as \"id!\", offering_id, min_duration_hours, max_duration_hours, enabled",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "offering_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "min_duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "max_duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "46c84ca35e45df7dcf0015909decd743a58202ee8cf1aadb30dc43a20b53235b"
+}

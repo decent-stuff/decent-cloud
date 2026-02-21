@@ -433,3 +433,235 @@ async fn test_get_new_providers_respects_limit() {
 fn export_new_provider_typescript_type() {
     NewProvider::export().expect("Failed to export NewProvider type");
 }
+
+#[test]
+fn export_auto_accept_rule_typescript_type() {
+    AutoAcceptRule::export().expect("Failed to export AutoAcceptRule type");
+}
+
+// ── Auto-accept rules ────────────────────────────────────────────────────────
+
+/// Insert a minimal provider profile sufficient for FK constraints.
+async fn insert_provider(db: &super::Database, pubkey: &[u8]) {
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, 'v1', '1.0', $3)",
+    )
+    .bind(pubkey)
+    .bind("Test Provider")
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_create_auto_accept_rule_and_list() {
+    let db = setup_test_db().await;
+    let pubkey = vec![70u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-1", Some(24), Some(720))
+        .await
+        .unwrap();
+
+    assert_eq!(rule.offering_id, "offer-1");
+    assert_eq!(rule.min_duration_hours, Some(24));
+    assert_eq!(rule.max_duration_hours, Some(720));
+    assert!(rule.enabled);
+
+    let rules = db.list_auto_accept_rules(&pubkey).await.unwrap();
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].offering_id, "offer-1");
+}
+
+#[tokio::test]
+async fn test_create_auto_accept_rule_invalid_range() {
+    let db = setup_test_db().await;
+    let pubkey = vec![71u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let result = db
+        .create_auto_accept_rule(&pubkey, "offer-1", Some(720), Some(24))
+        .await;
+    assert!(result.is_err(), "min > max must be rejected");
+    let msg = result.unwrap_err().to_string();
+    assert!(msg.contains("must not exceed"), "Error: {msg}");
+}
+
+#[tokio::test]
+async fn test_create_auto_accept_rule_duplicate_offering_fails() {
+    let db = setup_test_db().await;
+    let pubkey = vec![72u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    db.create_auto_accept_rule(&pubkey, "offer-dup", None, None)
+        .await
+        .unwrap();
+
+    let result = db
+        .create_auto_accept_rule(&pubkey, "offer-dup", None, None)
+        .await;
+    assert!(result.is_err(), "Duplicate (pubkey, offering_id) must be rejected");
+}
+
+#[tokio::test]
+async fn test_update_auto_accept_rule() {
+    let db = setup_test_db().await;
+    let pubkey = vec![73u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-upd", Some(10), Some(100))
+        .await
+        .unwrap();
+
+    let updated = db
+        .update_auto_accept_rule(&pubkey, rule.id, Some(5), Some(200), false)
+        .await
+        .unwrap();
+
+    assert_eq!(updated.min_duration_hours, Some(5));
+    assert_eq!(updated.max_duration_hours, Some(200));
+    assert!(!updated.enabled);
+}
+
+#[tokio::test]
+async fn test_update_auto_accept_rule_wrong_provider_fails() {
+    let db = setup_test_db().await;
+    let pubkey = vec![74u8; 32];
+    let other = vec![75u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-x", None, None)
+        .await
+        .unwrap();
+
+    let result = db
+        .update_auto_accept_rule(&other, rule.id, None, None, false)
+        .await;
+    assert!(result.is_err(), "Wrong provider must not update another's rule");
+}
+
+#[tokio::test]
+async fn test_delete_auto_accept_rule() {
+    let db = setup_test_db().await;
+    let pubkey = vec![76u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-del", None, None)
+        .await
+        .unwrap();
+
+    db.delete_auto_accept_rule(&pubkey, rule.id)
+        .await
+        .unwrap();
+
+    let rules = db.list_auto_accept_rules(&pubkey).await.unwrap();
+    assert!(rules.is_empty());
+}
+
+#[tokio::test]
+async fn test_delete_auto_accept_rule_not_found() {
+    let db = setup_test_db().await;
+    let pubkey = vec![77u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let result = db.delete_auto_accept_rule(&pubkey, 999999).await;
+    assert!(result.is_err(), "Deleting nonexistent rule must fail");
+}
+
+#[tokio::test]
+async fn test_check_auto_accept_rule_no_rule_matches() {
+    let db = setup_test_db().await;
+    let pubkey = vec![78u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    // No rule for this offering → always true (backward compatible)
+    let ok = db
+        .check_auto_accept_rule_matches(&pubkey, "offer-none", Some(48))
+        .await
+        .unwrap();
+    assert!(ok, "No rule should mean auto-accept (backward compatible)");
+}
+
+#[tokio::test]
+async fn test_check_auto_accept_rule_within_range() {
+    let db = setup_test_db().await;
+    let pubkey = vec![79u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    db.create_auto_accept_rule(&pubkey, "offer-rng", Some(24), Some(720))
+        .await
+        .unwrap();
+
+    // Within range
+    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(48)).await.unwrap());
+    // Exactly at min
+    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(24)).await.unwrap());
+    // Exactly at max
+    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(720)).await.unwrap());
+}
+
+#[tokio::test]
+async fn test_check_auto_accept_rule_outside_range() {
+    let db = setup_test_db().await;
+    let pubkey = vec![80u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    db.create_auto_accept_rule(&pubkey, "offer-out", Some(24), Some(720))
+        .await
+        .unwrap();
+
+    // Below min
+    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1)).await.unwrap());
+    // Above max
+    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1000)).await.unwrap());
+    // No duration provided (defaults to 0 which is below min)
+    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", None).await.unwrap());
+}
+
+#[tokio::test]
+async fn test_check_auto_accept_rule_disabled_never_matches() {
+    let db = setup_test_db().await;
+    let pubkey = vec![81u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-dis", None, None)
+        .await
+        .unwrap();
+
+    // Disable the rule
+    db.update_auto_accept_rule(&pubkey, rule.id, None, None, false)
+        .await
+        .unwrap();
+
+    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-dis", Some(48)).await.unwrap(),
+        "Disabled rule must never match");
+}
+
+#[tokio::test]
+async fn test_check_auto_accept_rule_delete_reverts_to_accept_all() {
+    let db = setup_test_db().await;
+    let pubkey = vec![82u8; 32];
+    insert_provider(&db, &pubkey).await;
+
+    let rule = db
+        .create_auto_accept_rule(&pubkey, "offer-rev", Some(100), Some(200))
+        .await
+        .unwrap();
+
+    // Outside range → no match
+    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50)).await.unwrap());
+
+    // Delete the rule
+    db.delete_auto_accept_rule(&pubkey, rule.id).await.unwrap();
+
+    // After deletion, no rule → accept all
+    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50)).await.unwrap(),
+        "After rule deletion, should revert to accept-all");
+}

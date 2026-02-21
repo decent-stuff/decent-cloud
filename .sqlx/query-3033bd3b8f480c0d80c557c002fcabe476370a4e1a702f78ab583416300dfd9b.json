@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE provider_offerings SET is_draft = false, publish_at = NULL WHERE is_draft = true AND publish_at IS NOT NULL AND publish_at <= NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "3033bd3b8f480c0d80c557c002fcabe476370a4e1a702f78ab583416300dfd9b"
+}

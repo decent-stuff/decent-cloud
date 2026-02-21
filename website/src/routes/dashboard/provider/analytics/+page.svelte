@@ -4,8 +4,10 @@
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import {
 		getProviderOfferingConversionStats,
+		getProviderOfferingSatisfactionStats,
 		hexEncode,
 		type OfferingConversionStats,
+		type OfferingSatisfactionStats,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
 	import { signRequest } from "$lib/services/auth-api";
@@ -14,6 +16,7 @@
 	import { getProviderOnboarding } from "$lib/services/api";
 
 	let conversionStats = $state<OfferingConversionStats[]>([]);
+	let satisfactionStats = $state<OfferingSatisfactionStats[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isAuthenticated = $state(false);
@@ -49,6 +52,17 @@
 	);
 	let totalRevenue30d = $derived(conversionStats.reduce((s, r) => s + r.revenue30dE9s, 0));
 
+	let totalFeedback = $derived(satisfactionStats.reduce((s, r) => s + r.totalFeedback, 0));
+	let overallSatisfactionRate = $derived(
+		satisfactionStats.length > 0 && totalFeedback > 0
+			? satisfactionStats.reduce((s, r) => s + r.satisfactionRatePct * r.totalFeedback, 0) / totalFeedback
+			: 0
+	);
+
+	let sortedSatisfactionStats = $derived(
+		[...satisfactionStats].sort((a, b) => b.satisfactionRatePct - a.satisfactionRatePct)
+	);
+
 	function toggleSort(key: SortKey) {
 		if (sortKey === key) {
 			sortAsc = !sortAsc;
@@ -66,6 +80,12 @@
 	function conversionClass(rate: number): string {
 		if (rate >= 5) return 'text-emerald-400';
 		if (rate >= 1) return 'text-yellow-400';
+		return 'text-red-400';
+	}
+
+	function satisfactionClass(rate: number): string {
+		if (rate >= 75) return 'text-emerald-400';
+		if (rate >= 50) return 'text-yellow-400';
 		return 'text-red-400';
 	}
 
@@ -102,7 +122,7 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			const [conversionStats_, onboarding] = await Promise.all([
+			const [conversionStats_, satisfactionStats_, onboarding] = await Promise.all([
 				(async () => {
 					const signed = await signRequest(
 						info.identity as Ed25519KeyIdentity,
@@ -111,10 +131,19 @@
 					);
 					return getProviderOfferingConversionStats(providerHex, signed.headers).catch(() => []);
 				})(),
+				(async () => {
+					const signed = await signRequest(
+						info.identity as Ed25519KeyIdentity,
+						"GET",
+						`/api/v1/providers/${providerHex}/offering-satisfaction-stats`,
+					);
+					return getProviderOfferingSatisfactionStats(providerHex, signed.headers).catch(() => []);
+				})(),
 				getProviderOnboarding(providerHex).catch(() => null),
 			]);
 
 			conversionStats = conversionStats_;
+			satisfactionStats = satisfactionStats_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load analytics data";
@@ -271,6 +300,84 @@
 					</p>
 				{/if}
 			</section>
-		{/if}
+		<!-- Tenant Satisfaction -->
+		<section class="space-y-4">
+			<h2 class="text-xl font-semibold text-white">Tenant Satisfaction</h2>
+			<p class="text-neutral-500 text-sm">Based on post-contract boolean feedback from tenants</p>
+
+			<!-- Satisfaction summary card -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				<div class="bg-surface-elevated border border-neutral-800 p-6">
+					<p class="text-neutral-500 text-sm">Overall Satisfaction Rate</p>
+					<p class="text-3xl font-bold mt-1 {satisfactionClass(overallSatisfactionRate)}">
+						{overallSatisfactionRate.toFixed(1)}%
+					</p>
+					<p class="text-neutral-600 text-xs mt-1">Weighted across all offerings</p>
+				</div>
+				<div class="bg-surface-elevated border border-neutral-800 p-6">
+					<p class="text-neutral-500 text-sm">Total Feedback Received</p>
+					<p class="text-3xl font-bold text-white mt-1">{totalFeedback.toLocaleString()}</p>
+					<p class="text-neutral-600 text-xs mt-1">Tenant responses across all offerings</p>
+				</div>
+			</div>
+
+			<!-- Per-offering satisfaction table -->
+			{#if sortedSatisfactionStats.length === 0}
+				<div class="bg-surface-elevated border border-neutral-800 p-8 text-center">
+					<p class="text-neutral-400 text-sm">No offerings found. Create offerings to see satisfaction data.</p>
+				</div>
+			{:else}
+				<div class="bg-surface-elevated border border-neutral-800 overflow-x-auto">
+					<table class="w-full text-sm">
+						<thead>
+							<tr class="border-b border-neutral-800">
+								<th class="text-left text-neutral-500 font-medium px-4 py-3">Offering</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Feedback</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Service Matched</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Would Rent Again</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Satisfaction Rate</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each sortedSatisfactionStats as row}
+								<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/30 transition-colors">
+									<td class="px-4 py-3">
+										<div class="font-medium text-neutral-200">{row.offerName}</div>
+										<div class="text-neutral-500 font-mono text-xs mt-0.5">{row.offeringId}</div>
+									</td>
+									<td class="px-4 py-3 text-right text-neutral-300">
+										{row.totalFeedback.toLocaleString()}
+									</td>
+									<td class="px-4 py-3 text-right text-neutral-300">
+										{#if row.totalFeedback > 0}
+											{row.serviceMatchedYes}/{row.totalFeedback}
+										{:else}
+											<span class="text-neutral-600">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right text-neutral-300">
+										{#if row.totalFeedback > 0}
+											{row.wouldRentAgainYes}/{row.totalFeedback}
+										{:else}
+											<span class="text-neutral-600">—</span>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-right font-semibold {satisfactionClass(row.satisfactionRatePct)}">
+										{#if row.totalFeedback > 0}
+											{row.satisfactionRatePct.toFixed(1)}%
+										{:else}
+											<span class="text-neutral-600 font-normal">No data</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+				<p class="text-xs text-neutral-600">
+					Satisfaction rate: composite of "service matched description" and "would rent again" responses. Green &ge;75%, yellow 50–75%, red &lt;50%.
+				</p>
+			{/if}
+		</section>
 	{/if}
 </div>

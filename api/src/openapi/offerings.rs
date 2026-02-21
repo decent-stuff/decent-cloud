@@ -72,6 +72,22 @@ pub struct ContactOfferingRequest {
     pub message: String,
 }
 
+/// Request body for bulk-publishing draft offerings
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct BulkPublishRequest {
+    /// IDs of draft offerings to publish (1–100 entries)
+    pub offering_ids: Vec<i64>,
+}
+
+/// Response body for bulk-publish
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct BulkPublishResponse {
+    /// Number of offerings that were actually published (only counts those that were drafts)
+    pub published_count: i64,
+    /// IDs of offerings that were actually published
+    pub published_ids: Vec<i64>,
+}
+
 pub struct OfferingsApi;
 
 fn default_trending_limit() -> i64 {
@@ -155,25 +171,25 @@ impl OfferingsApi {
         max_price_monthly: poem_openapi::param::Query<Option<f64>>,
         q: poem_openapi::param::Query<Option<String>>,
     ) -> Json<ApiResponse<Vec<crate::database::offerings::Offering>>> {
-        // If DSL query is provided, use search_offerings_dsl
-        if let Some(query) = q.0.as_ref() {
-            if !query.trim().is_empty() {
-                return match db.search_offerings_dsl(query, limit.0, offset.0).await {
-                    Ok(offerings) => Json(ApiResponse {
-                        success: true,
-                        data: Some(offerings),
-                        error: None,
-                    }),
-                    Err(e) => Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some(e.to_string()),
-                    }),
-                };
-            }
+        // If DSL query (contains field:value syntax), use search_offerings_dsl.
+        // Otherwise, treat as plain-text ILIKE search via search_offerings.
+        let q_str = q.0.as_deref().unwrap_or("").trim();
+        if !q_str.is_empty() && q_str.contains(':') {
+            return match db.search_offerings_dsl(q_str, limit.0, offset.0).await {
+                Ok(offerings) => Json(ApiResponse {
+                    success: true,
+                    data: Some(offerings),
+                    error: None,
+                }),
+                Err(e) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                }),
+            };
         }
 
-        // Otherwise, use traditional parameter-based search for backward compatibility
+        let text_search = if q_str.is_empty() { None } else { Some(q_str) };
         let search_params = crate::database::offerings::SearchOfferingsParams {
             product_type: product_type.0.as_deref(),
             country: country.0.as_deref(),
@@ -183,6 +199,7 @@ impl OfferingsApi {
             max_price_monthly: max_price_monthly.0,
             limit: limit.0,
             offset: offset.0,
+            text_search,
         };
 
         match db.search_offerings(search_params).await {
@@ -620,6 +637,55 @@ impl OfferingsApi {
         }
     }
 
+    /// Bulk-publish draft offerings
+    ///
+    /// Provider-only endpoint. Sets `is_draft = false` for all specified offering IDs.
+    /// Only offerings owned by the authenticated provider and currently in draft state are published.
+    /// Already-published offerings are silently skipped (not an error).
+    #[oai(path = "/offerings/bulk-publish", method = "post", tag = "ApiTags::Offerings")]
+    async fn bulk_publish_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        body: Json<BulkPublishRequest>,
+    ) -> Json<ApiResponse<BulkPublishResponse>> {
+        let ids = &body.0.offering_ids;
+
+        if ids.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("offering_ids must not be empty".to_string()),
+            });
+        }
+        if ids.len() > 100 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("offering_ids must not exceed 100 entries".to_string()),
+            });
+        }
+
+        match db.bulk_publish_offerings(&auth.pubkey, ids).await {
+            Ok(published_ids) => Json(ApiResponse {
+                success: true,
+                data: Some(BulkPublishResponse {
+                    published_count: published_ids.len() as i64,
+                    published_ids,
+                }),
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to bulk-publish offerings: {:#}", e);
+                Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to publish offerings: {e:#}")),
+                })
+            }
+        }
+    }
+
     /// Get daily view trends for an offering
     ///
     /// Provider-only endpoint. Returns daily view counts for the last `days` days (1–90).
@@ -799,6 +865,31 @@ mod tests {
         let json = r#"{"message":"Hello provider"}"#;
         let req: ContactOfferingRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.message, "Hello provider");
+    }
+
+    #[test]
+    fn test_bulk_publish_request_serialization() {
+        let req = BulkPublishRequest { offering_ids: vec![1, 2, 3] };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["offering_ids"], serde_json::json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn test_bulk_publish_request_deserialization() {
+        let json = r#"{"offering_ids":[10,20,30]}"#;
+        let req: BulkPublishRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.offering_ids, vec![10i64, 20, 30]);
+    }
+
+    #[test]
+    fn test_bulk_publish_response_serialization() {
+        let resp = BulkPublishResponse {
+            published_count: 2,
+            published_ids: vec![10, 20],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["published_count"], 2);
+        assert_eq!(json["published_ids"], serde_json::json!([10, 20]));
     }
 
     #[test]

@@ -477,6 +477,215 @@ fn export_typescript_types() {
     AccountSearchResult::export().expect("Failed to export AccountSearchResult type");
     ProviderTrustMetrics::export().expect("Failed to export ProviderTrustMetrics type");
     ProviderContractFeedback::export().expect("Failed to export ProviderContractFeedback type");
+    OfferingSatisfactionStats::export().expect("Failed to export OfferingSatisfactionStats type");
+}
+
+#[tokio::test]
+async fn test_get_offering_satisfaction_stats_empty() {
+    let db = setup_test_db().await;
+    // Provider with no offerings returns empty vec
+    let result = db
+        .get_offering_satisfaction_stats(&[99u8; 32])
+        .await
+        .unwrap();
+    assert!(result.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_offering_satisfaction_stats_no_feedback() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![20u8; 32];
+
+    // Insert offering but no contracts or feedback
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'sat-off-1', 'Sat Server A', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let result = db
+        .get_offering_satisfaction_stats(&provider_pubkey)
+        .await
+        .unwrap();
+    assert_eq!(result.len(), 1);
+    assert_eq!(result[0].offering_id, "sat-off-1");
+    assert_eq!(result[0].offer_name, "Sat Server A");
+    assert_eq!(result[0].total_feedback, 0);
+    assert_eq!(result[0].service_matched_yes, 0);
+    assert_eq!(result[0].would_rent_again_yes, 0);
+    assert_eq!(result[0].satisfaction_rate_pct, 0.0);
+}
+
+#[tokio::test]
+async fn test_get_offering_satisfaction_stats_with_feedback() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![21u8; 32];
+    let tenant_pubkey = vec![22u8; 32];
+
+    // Two offerings
+    for (off_id, off_name) in [("sat-off-2", "Sat Server B"), ("sat-off-3", "Sat Server C")] {
+        sqlx::query(
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+        )
+        .bind(provider_pubkey.as_slice())
+        .bind(off_id)
+        .bind(off_name)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Contract 1 → offering sat-off-2 (both yes)
+    let contract_id1 = vec![31u8; 32];
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 100, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id1.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, true, true, 200)",
+    )
+    .bind(contract_id1.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Contract 2 → offering sat-off-2 (service=yes, rent_again=no)
+    let contract_id2 = vec![32u8; 32];
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 300, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id2.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, true, false, 400)",
+    )
+    .bind(contract_id2.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Contract 3 → offering sat-off-3 (both no)
+    let contract_id3 = vec![33u8; 32];
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-3', 1000, 'memo', 500, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id3.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, false, false, 600)",
+    )
+    .bind(contract_id3.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let result = db
+        .get_offering_satisfaction_stats(&provider_pubkey)
+        .await
+        .unwrap();
+
+    // Ordered by total_feedback DESC then offer_name ASC → sat-off-2 first (2 feedbacks), sat-off-3 second (1 feedback)
+    assert_eq!(result.len(), 2);
+
+    let b = &result[0]; // sat-off-2: 2 feedbacks
+    assert_eq!(b.offering_id, "sat-off-2");
+    assert_eq!(b.total_feedback, 2);
+    assert_eq!(b.service_matched_yes, 2); // both yes
+    assert_eq!(b.would_rent_again_yes, 1); // one yes
+    // (2+1) / (2*2) * 100 = 3/4 * 100 = 75.0
+    assert!((b.satisfaction_rate_pct - 75.0).abs() < 0.001);
+
+    let c = &result[1]; // sat-off-3: 1 feedback, all no
+    assert_eq!(c.offering_id, "sat-off-3");
+    assert_eq!(c.total_feedback, 1);
+    assert_eq!(c.service_matched_yes, 0);
+    assert_eq!(c.would_rent_again_yes, 0);
+    assert_eq!(c.satisfaction_rate_pct, 0.0);
+}
+
+#[tokio::test]
+async fn test_get_offering_satisfaction_stats_isolates_providers() {
+    let db = setup_test_db().await;
+    let provider_a = vec![40u8; 32];
+    let provider_b = vec![41u8; 32];
+    let tenant = vec![42u8; 32];
+
+    for provider in [provider_a.as_slice(), provider_b.as_slice()] {
+        sqlx::query(
+            "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, 'Server', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+        )
+        .bind(provider)
+        .bind(if provider == provider_a.as_slice() { "sat-iso-off-a" } else { "sat-iso-off-b" })
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Contract + feedback for provider A only
+    let contract_id = vec![50u8; 32];
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-iso-off-a', 1000, 'memo', 100, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id.as_slice())
+    .bind(tenant.as_slice())
+    .bind(provider_a.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, true, true, 200)",
+    )
+    .bind(contract_id.as_slice())
+    .bind(tenant.as_slice())
+    .bind(provider_a.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Provider A: 1 feedback with 100% satisfaction
+    let result_a = db
+        .get_offering_satisfaction_stats(&provider_a)
+        .await
+        .unwrap();
+    assert_eq!(result_a.len(), 1);
+    assert_eq!(result_a[0].total_feedback, 1);
+    assert_eq!(result_a[0].service_matched_yes, 1);
+    assert_eq!(result_a[0].would_rent_again_yes, 1);
+    assert!((result_a[0].satisfaction_rate_pct - 100.0).abs() < 0.001);
+
+    // Provider B: 1 offering but no feedback
+    let result_b = db
+        .get_offering_satisfaction_stats(&provider_b)
+        .await
+        .unwrap();
+    assert_eq!(result_b.len(), 1);
+    assert_eq!(result_b[0].total_feedback, 0);
+    assert_eq!(result_b[0].satisfaction_rate_pct, 0.0);
 }
 
 #[tokio::test]

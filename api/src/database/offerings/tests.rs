@@ -203,6 +203,7 @@ async fn test_search_offerings_no_filters() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings");
@@ -248,6 +249,7 @@ async fn test_search_offerings_excludes_private() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings");
@@ -279,6 +281,7 @@ async fn test_search_offerings_by_country() {
             max_price_monthly: None,
             limit: 10,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings by country");
@@ -304,6 +307,7 @@ async fn test_search_offerings_price_range() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings by price range");
@@ -333,6 +337,7 @@ async fn test_search_offerings_min_price_filter() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings with min price filter");
@@ -360,6 +365,7 @@ async fn test_search_offerings_max_price_filter() {
             max_price_monthly: Some(200.0),
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings with max price filter");
@@ -387,6 +393,7 @@ async fn test_search_offerings_price_range_both() {
             max_price_monthly: Some(200.0),
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings with price range filter");
@@ -425,6 +432,7 @@ async fn test_search_offerings_has_recipe_filter() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("search without has_recipe filter failed");
@@ -441,6 +449,7 @@ async fn test_search_offerings_has_recipe_filter() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("search with has_recipe filter failed");
@@ -485,6 +494,7 @@ async fn test_search_offerings_pagination() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search all offerings for pagination test");
@@ -505,6 +515,7 @@ async fn test_search_offerings_pagination() {
             max_price_monthly: None,
             limit: 3,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search first page for pagination test");
@@ -2369,6 +2380,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings");
@@ -2681,6 +2693,7 @@ async fn test_get_subscription_offering_fields() {
             max_price_monthly: None,
             limit: 100,
             offset: 0,
+            text_search: None,
         })
         .await
         .expect("Failed to search offerings");
@@ -3506,6 +3519,7 @@ async fn test_draft_offering_hidden_from_public_search() {
         max_price_monthly: None,
         limit: 50,
         offset: 0,
+        text_search: None,
     };
     let results = db.search_offerings(params).await.expect("search offerings");
     assert!(
@@ -3537,6 +3551,7 @@ async fn test_published_offering_visible_in_public_search() {
         max_price_monthly: None,
         limit: 50,
         offset: 0,
+        text_search: None,
     };
     let results = db.search_offerings(params).await.expect("search offerings");
     assert!(
@@ -3906,4 +3921,150 @@ async fn test_publish_scheduled_offerings_keeps_future_drafts() {
     let after = db.get_offering(db_id).await.expect("get failed").expect("not found");
     assert!(after.is_draft, "future-scheduled offering must remain a draft");
     assert!(after.publish_at.is_some(), "publish_at must not be cleared for future offering");
+}
+
+// ==================== Bulk Publish Tests ====================
+
+#[tokio::test]
+async fn test_bulk_publish_offerings_publishes_drafts() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA1u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    let o1 = make_draft_offering(9010, &pubkey, "bulk-pub-1", None);
+    let o2 = make_draft_offering(9011, &pubkey, "bulk-pub-2", None);
+    let id1 = db.create_offering(&pubkey, o1).await.expect("create failed");
+    let id2 = db.create_offering(&pubkey, o2).await.expect("create failed");
+
+    let published = db
+        .bulk_publish_offerings(&pubkey, &[id1, id2])
+        .await
+        .expect("bulk_publish_offerings should succeed");
+
+    assert_eq!(published.len(), 2, "both drafts must be published");
+    assert!(published.contains(&id1));
+    assert!(published.contains(&id2));
+
+    let after1 = db.get_offering(id1).await.unwrap().unwrap();
+    let after2 = db.get_offering(id2).await.unwrap().unwrap();
+    assert!(!after1.is_draft, "offering 1 must be published");
+    assert!(after1.publish_at.is_none(), "publish_at must be cleared");
+    assert!(!after2.is_draft, "offering 2 must be published");
+    assert!(after2.publish_at.is_none(), "publish_at must be cleared");
+}
+
+#[tokio::test]
+async fn test_bulk_publish_offerings_skips_already_published() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA2u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    // One draft, one already published
+    let draft = make_draft_offering(9020, &pubkey, "bulk-pub-draft", None);
+    let already_published = {
+        let mut o = make_draft_offering(9021, &pubkey, "bulk-pub-published", None);
+        o.is_draft = false;
+        o
+    };
+    let draft_id = db.create_offering(&pubkey, draft).await.expect("create draft failed");
+    let published_id = db
+        .create_offering(&pubkey, already_published)
+        .await
+        .expect("create published failed");
+
+    let result = db
+        .bulk_publish_offerings(&pubkey, &[draft_id, published_id])
+        .await
+        .expect("bulk_publish_offerings should succeed");
+
+    // Only the draft should appear in the returned list
+    assert_eq!(result.len(), 1, "only the draft must be counted as published");
+    assert!(result.contains(&draft_id));
+    assert!(!result.contains(&published_id), "already-published ID must not be re-published");
+}
+
+#[tokio::test]
+async fn test_bulk_publish_offerings_rejects_wrong_owner() {
+    let db = setup_test_db().await;
+    let owner = vec![0xA3u8; 32];
+    let attacker = vec![0xA4u8; 32];
+    register_provider(&db, &owner).await;
+
+    let draft = make_draft_offering(9030, &owner, "bulk-pub-owner-check", None);
+    let id = db.create_offering(&owner, draft).await.expect("create failed");
+
+    // Attacker tries to publish owner's draft — must return empty (no rows match)
+    let result = db
+        .bulk_publish_offerings(&attacker, &[id])
+        .await
+        .expect("call should succeed but return empty");
+
+    assert!(
+        result.is_empty(),
+        "attacker must not be able to publish another provider's offering"
+    );
+
+    // Offering must remain a draft
+    let after = db.get_offering(id).await.unwrap().unwrap();
+    assert!(after.is_draft, "offering must still be a draft after failed attacker attempt");
+}
+
+#[tokio::test]
+async fn test_bulk_publish_offerings_empty_returns_error() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xA5u8; 32];
+
+    let result = db.bulk_publish_offerings(&pubkey, &[]).await;
+    assert!(result.is_err(), "empty offering_ids must return an error");
+    assert!(
+        result.unwrap_err().to_string().contains("must not be empty"),
+        "error message must mention empty input"
+    );
+}
+
+#[tokio::test]
+async fn test_text_search_matches_offer_name_and_excludes_non_matching() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xB1u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'ts-gpu-1', 'GPU Compute Node', 'Fast GPU for ML', 'USD', 50.0, 0, 'public', 'gpu', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0)",
+        &pubkey[..]
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert GPU offering");
+
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'ts-vps-1', 'Standard VPS', 'Basic compute', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0)",
+        &pubkey[..]
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert VPS offering");
+
+    let gpu_results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+            text_search: Some("GPU"),
+        })
+        .await
+        .expect("text search for GPU");
+
+    assert!(
+        gpu_results.iter().any(|o| o.offering_id == "ts-gpu-1"),
+        "GPU offering must match text search for 'GPU'"
+    );
+    assert!(
+        !gpu_results.iter().any(|o| o.offering_id == "ts-vps-1"),
+        "VPS offering must not match text search for 'GPU'"
+    );
 }

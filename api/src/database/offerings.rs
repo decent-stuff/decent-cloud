@@ -520,6 +520,8 @@ pub struct SearchOfferingsParams<'a> {
     pub max_price_monthly: Option<f64>,
     pub limit: i64,
     pub offset: i64,
+    /// Plain-text ILIKE search across offer_name, description, and product_type
+    pub text_search: Option<&'a str>,
 }
 
 impl Database {
@@ -555,6 +557,12 @@ impl Database {
         if params.has_recipe {
             query.push_str(" AND o.post_provision_script IS NOT NULL");
         }
+        if params.text_search.is_some() {
+            idx += 1;
+            query.push_str(&format!(
+                " AND (o.offer_name ILIKE ${idx} OR o.description ILIKE ${idx} OR o.product_type ILIKE ${idx})"
+            ));
+        }
         if params.min_price_monthly.is_some() {
             idx += 1;
             query.push_str(&format!(" AND o.monthly_price >= ${}", idx));
@@ -585,6 +593,9 @@ impl Database {
         }
         if params.in_stock_only {
             query_builder = query_builder.bind("in_stock");
+        }
+        if let Some(ts) = params.text_search {
+            query_builder = query_builder.bind(format!("%{}%", ts));
         }
         if let Some(min_price) = params.min_price_monthly {
             query_builder = query_builder.bind(min_price);
@@ -1441,6 +1452,33 @@ impl Database {
         .execute(&self.pool)
         .await?;
         Ok(result.rows_affected())
+    }
+
+    /// Publish multiple draft offerings belonging to the given provider.
+    ///
+    /// Sets `is_draft = false` and `publish_at = NULL` for all matching IDs.
+    /// Only offerings that are currently drafts and owned by the provider are affected.
+    /// Returns the list of IDs that were actually published (IDs that were drafts).
+    pub async fn bulk_publish_offerings(
+        &self,
+        provider_pubkey: &[u8],
+        offering_ids: &[i64],
+    ) -> Result<Vec<i64>> {
+        if offering_ids.is_empty() {
+            return Err(anyhow::anyhow!("offering_ids must not be empty"));
+        }
+
+        let result = sqlx::query_scalar!(
+            "UPDATE provider_offerings SET is_draft = false, publish_at = NULL \
+             WHERE id = ANY($1) AND pubkey = $2 AND is_draft = TRUE \
+             RETURNING id",
+            offering_ids,
+            provider_pubkey,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(result)
     }
 
     /// Delete an offering

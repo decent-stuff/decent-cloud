@@ -1147,6 +1147,86 @@ impl Database {
     }
 }
 
+/// Per-offering satisfaction stats derived from tenant boolean feedback
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct OfferingSatisfactionStats {
+    /// The offering_id text identifier
+    pub offering_id: String,
+    /// Human-readable offering name
+    pub offer_name: String,
+    /// Total feedback responses for this offering
+    #[ts(type = "number")]
+    pub total_feedback: i64,
+    /// Count of "service matched description" = yes
+    #[ts(type = "number")]
+    pub service_matched_yes: i64,
+    /// Count of "would rent again" = yes
+    #[ts(type = "number")]
+    pub would_rent_again_yes: i64,
+    /// Composite satisfaction rate: average of both boolean metrics, 0.0–100.0
+    pub satisfaction_rate_pct: f64,
+}
+
+impl Database {
+    /// Get per-offering satisfaction stats (tenant feedback) for a provider
+    pub async fn get_offering_satisfaction_stats(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<OfferingSatisfactionStats>> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            offering_id: String,
+            offer_name: String,
+            total_feedback: i64,
+            service_matched_yes: i64,
+            would_rent_again_yes: i64,
+        }
+
+        let rows = sqlx::query_as::<_, Row>(
+            r#"SELECT
+                o.offering_id,
+                o.offer_name,
+                COUNT(cf.id)::BIGINT AS total_feedback,
+                COUNT(cf.id) FILTER (WHERE cf.service_matched_description = true)::BIGINT AS service_matched_yes,
+                COUNT(cf.id) FILTER (WHERE cf.would_rent_again = true)::BIGINT AS would_rent_again_yes
+            FROM provider_offerings o
+            LEFT JOIN contract_sign_requests csr ON csr.offering_id = o.offering_id
+                AND csr.provider_pubkey = $1
+            LEFT JOIN contract_feedback cf ON cf.contract_id = csr.contract_id
+            WHERE o.pubkey = $1
+            GROUP BY o.offering_id, o.offer_name
+            ORDER BY total_feedback DESC, o.offer_name ASC"#,
+        )
+        .bind(provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let satisfaction_rate_pct = if r.total_feedback > 0 {
+                    ((r.service_matched_yes + r.would_rent_again_yes) as f64
+                        / (r.total_feedback * 2) as f64)
+                        * 100.0
+                } else {
+                    0.0
+                };
+                OfferingSatisfactionStats {
+                    offering_id: r.offering_id,
+                    offer_name: r.offer_name,
+                    total_feedback: r.total_feedback,
+                    service_matched_yes: r.service_matched_yes,
+                    would_rent_again_yes: r.would_rent_again_yes,
+                    satisfaction_rate_pct,
+                }
+            })
+            .collect())
+    }
+}
+
 /// Contract feedback from renters (structured Y/N survey)
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]

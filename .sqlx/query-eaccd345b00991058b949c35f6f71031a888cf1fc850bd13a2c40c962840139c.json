@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id as \"id!\", offering_id, min_duration_hours, max_duration_hours, enabled\n               FROM auto_accept_rules WHERE provider_pubkey = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "offering_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "min_duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "max_duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "eaccd345b00991058b949c35f6f71031a888cf1fc850bd13a2c40c962840139c"
+}

@@ -429,6 +429,7 @@ async fn test_offerings_with_pools_included_in_search() {
         max_price_monthly: None,
         limit: 100,
         offset: 0,
+        text_search: None,
     };
 
     let search_results = db.search_offerings(search_params).await.unwrap();

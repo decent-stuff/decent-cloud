@@ -8,6 +8,7 @@
 		deleteProviderOffering,
 		getProviderOnboarding,
 		bulkUpdateOfferingPrices,
+		bulkPublishOfferings,
 		getOfferingAnalytics,
 		getOfferingViewTrends,
 		type Offering,
@@ -47,6 +48,10 @@
 	let bulkPrices = $state<Record<number, string>>({});
 	let savingBulk = $state(false);
 	let bulkError = $state<string | null>(null);
+	let bulkPublishMode = $state(false);
+	let bulkPublishSelected = $state<Set<number>>(new Set());
+	let savingBulkPublish = $state(false);
+	let bulkPublishError = $state<string | null>(null);
 	let analyticsMap = $state<Record<number, OfferingAnalytics>>({});
 	let trendsMap = $state<Record<number, DailyViewTrend[]>>({});
 
@@ -375,6 +380,67 @@
 		}
 	}
 
+	function enterBulkPublish() {
+		bulkPublishSelected = new Set();
+		bulkPublishError = null;
+		bulkPublishMode = true;
+	}
+
+	function exitBulkPublish() {
+		bulkPublishMode = false;
+		bulkPublishSelected = new Set();
+		bulkPublishError = null;
+	}
+
+	function toggleDraftSelection(id: number) {
+		const next = new Set(bulkPublishSelected);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		bulkPublishSelected = next;
+	}
+
+	function selectAllDrafts() {
+		bulkPublishSelected = new Set(
+			offerings.filter((o) => o.is_draft && o.id !== undefined).map((o) => o.id as number)
+		);
+	}
+
+	async function saveBulkPublish() {
+		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes) {
+			bulkPublishError = 'Authentication required';
+			return;
+		}
+		if (bulkPublishSelected.size === 0) {
+			bulkPublishError = 'Select at least one draft to publish';
+			return;
+		}
+
+		savingBulkPublish = true;
+		bulkPublishError = null;
+
+		try {
+			const ids = Array.from(bulkPublishSelected);
+			const path = '/api/v1/offerings/bulk-publish';
+			const { signRequest: sign } = await import('$lib/services/auth-api');
+			const signed = await sign(currentIdentity.identity, 'POST', path, { offering_ids: ids });
+
+			const result = await bulkPublishOfferings(ids, signed.headers);
+
+			importSuccess = `Published ${result.published_count} offering${result.published_count !== 1 ? 's' : ''}`;
+			setTimeout(() => { importSuccess = null; }, 5000);
+			exitBulkPublish();
+			await loadOfferings();
+		} catch (e) {
+			bulkPublishError = e instanceof Error ? e.message : 'Failed to publish offerings';
+			console.error('Error bulk-publishing offerings:', e);
+		} finally {
+			savingBulkPublish = false;
+		}
+	}
+
 	onMount(() => {
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			currentIdentity = identity;
@@ -450,6 +516,39 @@
 				>
 					Cancel
 				</button>
+			{:else if bulkPublishMode}
+				<button
+					onclick={selectAllDrafts}
+					disabled={savingBulkPublish}
+					class="px-4 py-3 bg-surface-elevated backdrop-blur font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2 border border-neutral-700 disabled:opacity-50"
+				>
+					Select All Drafts
+				</button>
+				<button
+					onclick={saveBulkPublish}
+					disabled={savingBulkPublish || bulkPublishSelected.size === 0}
+					class="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 font-semibold hover:brightness-110 hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					{#if savingBulkPublish}
+						<svg class="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+						</svg>
+						Publishing...
+					{:else}
+						<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Publish Selected ({bulkPublishSelected.size})
+					{/if}
+				</button>
+				<button
+					onclick={exitBulkPublish}
+					disabled={savingBulkPublish}
+					class="px-6 py-3 bg-surface-elevated backdrop-blur font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2 disabled:opacity-50"
+				>
+					Cancel
+				</button>
 			{:else}
 				<a
 					href="/dashboard/offerings/create"
@@ -506,6 +605,18 @@
 						Bulk Edit Prices
 					</button>
 				{/if}
+				{#if offerings.some((o) => o.is_draft)}
+					<button
+						onclick={enterBulkPublish}
+						class="px-6 py-3 bg-surface-elevated backdrop-blur font-semibold hover:bg-surface-elevated transition-all flex items-center gap-2 border border-amber-700/50"
+						title="Select and publish multiple draft offerings at once"
+					>
+						<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						Publish Drafts
+					</button>
+				{/if}
 			{/if}
 		</div>
 	</div>
@@ -526,12 +637,30 @@
 		</div>
 	{/if}
 
+	{#if bulkPublishError}
+		<div class="bg-red-500/20 border border-red-500/30  p-4 text-red-400">
+			<p class="font-semibold">Bulk publish failed</p>
+			<p class="text-sm mt-1">{bulkPublishError}</p>
+		</div>
+	{/if}
+
 	{#if bulkEditMode}
 		<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-center gap-3">
 			<Icon name="alert" size={20} class="text-amber-400 shrink-0" />
 			<p class="text-amber-300 text-sm">
 				Bulk edit mode active — edit prices below and click <strong>Save All Prices</strong> to apply atomically.
 			</p>
+		</div>
+	{/if}
+
+	{#if bulkPublishMode}
+		<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-center justify-between gap-3">
+			<div class="flex items-center gap-3">
+				<Icon name="alert" size={20} class="text-amber-400 shrink-0" />
+				<p class="text-amber-300 text-sm">
+					Select draft offerings below and click <strong>Publish Selected</strong> to make them live.
+				</p>
+			</div>
 		</div>
 	{/if}
 
@@ -605,12 +734,30 @@
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="card p-6 border border-neutral-800 hover:border-white/40 transition-all group cursor-pointer"
-					onclick={() => handleEditClick(offering)}
+					class="card p-6 border transition-all group cursor-pointer
+						{bulkPublishMode && offering.is_draft && offering.id !== undefined && bulkPublishSelected.has(offering.id)
+							? 'border-amber-500/60 bg-amber-500/5'
+							: 'border-neutral-800 hover:border-white/40'}"
+					onclick={() => {
+						if (bulkPublishMode && offering.is_draft && offering.id !== undefined) {
+							toggleDraftSelection(offering.id);
+						} else if (!bulkPublishMode) {
+							handleEditClick(offering);
+						}
+					}}
 				>
 					<!-- Header: Icon and Badges -->
 					<div class="flex items-start justify-between mb-4">
-						<Icon name={getTypeIcon(offering.product_type)} size={36} class="text-primary-400" />
+						{#if bulkPublishMode && offering.is_draft && offering.id !== undefined}
+							<input
+								type="checkbox"
+								checked={bulkPublishSelected.has(offering.id)}
+								onclick={(e) => { e.stopPropagation(); toggleDraftSelection(offering.id!); }}
+								class="w-5 h-5 mt-1 accent-amber-500 cursor-pointer"
+							/>
+						{:else}
+							<Icon name={getTypeIcon(offering.product_type)} size={36} class="text-primary-400" />
+						{/if}
 						<div class="flex items-center gap-2 flex-wrap justify-end">
 							<!-- Offline indicator -->
 							{#if !offering.provider_online}

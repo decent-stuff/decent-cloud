@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE provider_offerings SET is_draft = false, publish_at = NULL WHERE id = ANY($1) AND pubkey = $2 AND is_draft = TRUE RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "675484d51602d1c0592a3b619fa50b790d0c8071ee5facd8767d7c1ed032709e"
+}

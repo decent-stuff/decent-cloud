@@ -2251,6 +2251,25 @@ impl Database {
             return Ok(false);
         }
 
+        // Check per-offering rules (if any exist for this offering)
+        let rule_matches = self
+            .check_auto_accept_rule_matches(
+                &provider_pubkey,
+                &contract.offering_id,
+                contract.duration_hours,
+            )
+            .await?;
+
+        if !rule_matches {
+            tracing::debug!(
+                "Contract {} not auto-accepted: offering {} duration {:?}h outside rule range",
+                hex::encode(contract_id),
+                contract.offering_id,
+                contract.duration_hours,
+            );
+            return Ok(false);
+        }
+
         // Auto-accept the contract
         let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let new_status = ContractStatus::Accepted.to_string();

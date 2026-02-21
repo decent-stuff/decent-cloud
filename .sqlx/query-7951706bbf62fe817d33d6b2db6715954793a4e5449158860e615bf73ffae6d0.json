@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE email_verification_tokens SET expires_at = $1 WHERE token = $2",
+  "query": "DELETE FROM auto_accept_rules WHERE id = $1 AND provider_pubkey = $2",
   "describe": {
     "columns": [],
     "parameters": {
@@ -11,5 +11,5 @@
     },
     "nullable": []
   },
-  "hash": "1bbda1b1c0d8e6835c63d91a150335ab667839e0f715c02cbc4375d459d56af5"
+  "hash": "7951706bbf62fe817d33d6b2db6715954793a4e5449158860e615bf73ffae6d0"
 }

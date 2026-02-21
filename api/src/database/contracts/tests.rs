@@ -1558,6 +1558,131 @@ async fn test_try_auto_accept_contract_idempotent() {
     assert_eq!(contract.status, "accepted");
 }
 
+/// Helper: insert a provider profile with auto_accept_rentals=TRUE.
+async fn insert_provider_with_auto_accept(db: &Database, provider_pk: &[u8]) {
+    sqlx::query!(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Test Provider', 'v1', '1.0', 0, TRUE)",
+        provider_pk
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+/// Helper: insert a contract with specified offering_id and duration_hours in "requested" status.
+async fn insert_requested_contract_with_duration(
+    db: &Database,
+    contract_id: &[u8],
+    requester_pk: &[u8],
+    provider_pk: &[u8],
+    offering_id: &str,
+    duration_hours: Option<i64>,
+) {
+    let payment_method = "icpay";
+    let payment_status = "succeeded";
+    let stripe_payment_intent_id: Option<&str> = None;
+    let stripe_customer_id: Option<&str> = None;
+    sqlx::query!(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, duration_hours, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, $4, 1000, $5, 'memo', 0, 'requested', $6, $7, $8, $9, 'usd')",
+        contract_id,
+        requester_pk,
+        provider_pk,
+        offering_id,
+        duration_hours,
+        payment_method,
+        stripe_payment_intent_id,
+        stripe_customer_id,
+        payment_status
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_with_matching_rule() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![85u8; 32];
+    let requester_pk = vec![86u8; 32];
+    let contract_id = vec![87u8; 32];
+
+    insert_provider_with_auto_accept(&db, &provider_pk).await;
+    // Create a rule: accept offering "off-rule" for 24–720 hours
+    db.create_auto_accept_rule(&provider_pk, "off-rule", Some(24), Some(720))
+        .await
+        .unwrap();
+
+    insert_requested_contract_with_duration(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-rule",
+        Some(48), // within range
+    )
+    .await;
+
+    let accepted = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(accepted, "Contract within rule range should be auto-accepted");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "accepted");
+}
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_with_non_matching_rule() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![88u8; 32];
+    let requester_pk = vec![89u8; 32];
+    let contract_id = vec![90u8; 32];
+
+    insert_provider_with_auto_accept(&db, &provider_pk).await;
+    // Rule: only accept 720–8760 hours
+    db.create_auto_accept_rule(&provider_pk, "off-strict", Some(720), Some(8760))
+        .await
+        .unwrap();
+
+    insert_requested_contract_with_duration(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-strict",
+        Some(48), // below min → should NOT auto-accept
+    )
+    .await;
+
+    let accepted = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(!accepted, "Contract outside rule range must not be auto-accepted");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "requested");
+}
+
+#[tokio::test]
+async fn test_try_auto_accept_contract_no_rule_means_accept_all() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![91u8; 32];
+    let requester_pk = vec![92u8; 32];
+    let contract_id = vec![93u8; 32];
+
+    insert_provider_with_auto_accept(&db, &provider_pk).await;
+    // No rule for "off-any" → accept all
+
+    insert_requested_contract_with_duration(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-any",
+        Some(1), // any duration
+    )
+    .await;
+
+    let accepted = db.try_auto_accept_contract(&contract_id).await.unwrap();
+    assert!(accepted, "No rule for offering means accept all");
+}
+
 #[tokio::test]
 async fn test_cancel_active_contract_with_prorated_refund() {
     let db = setup_test_db().await;
