@@ -14,10 +14,13 @@
 		extendContract,
 		getContractExtensions,
 		getContractHealthChecks,
+		submitContractFeedback,
+		getContractFeedback,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
 		type ContractHealthCheck,
+		type ContractFeedback,
 		hexEncode,
 	} from "$lib/services/api";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
@@ -67,6 +70,14 @@
 
 	// SSH copy state
 	let copiedSsh = $state(false);
+
+	// Feedback state
+	let feedback = $state<ContractFeedback | null>(null);
+	let feedbackLoading = $state(false);
+	let feedbackSubmitting = $state(false);
+	let feedbackError = $state<string | null>(null);
+	let feedbackServiceMatched = $state<boolean | null>(null);
+	let feedbackWouldRentAgain = $state<boolean | null>(null);
 
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
@@ -253,6 +264,7 @@
 				// Load extension history
 				await loadExtensions(signingIdentityInfo);
 				await loadHealthChecks(signingIdentityInfo);
+				await loadFeedback(signingIdentityInfo);
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -322,6 +334,57 @@
 			passwordResetError = e instanceof Error ? e.message : String(e);
 		} finally {
 			passwordResetLoading = false;
+		}
+	}
+
+	function isTerminalState(status: string): boolean {
+		return ['cancelled', 'rejected', 'failed'].includes(status.toLowerCase());
+	}
+
+	async function loadFeedback(signingIdentityInfo: any) {
+		if (!contract || !isTerminalState(contract.status)) return;
+		try {
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				'GET',
+				`/api/v1/contracts/${contractId}/feedback`,
+			);
+			feedback = await getContractFeedback(contractId, headers);
+		} catch {
+			// Feedback not available is not an error
+		}
+	}
+
+	async function handleSubmitFeedback() {
+		if (!contract || feedbackServiceMatched === null || feedbackWouldRentAgain === null) return;
+
+		try {
+			feedbackSubmitting = true;
+			feedbackError = null;
+
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				feedbackError = 'You must be authenticated to submit feedback';
+				return;
+			}
+
+			const body = {
+				service_matched_description: feedbackServiceMatched,
+				would_rent_again: feedbackWouldRentAgain,
+			};
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				'POST',
+				`/api/v1/contracts/${contractId}/feedback`,
+				body,
+			);
+
+			feedback = await submitContractFeedback(contractId, body, headers);
+		} catch (e) {
+			feedbackError = e instanceof Error ? e.message : 'Failed to submit feedback';
+		} finally {
+			feedbackSubmitting = false;
 		}
 	}
 
@@ -1111,6 +1174,71 @@
 					</tbody>
 				</table>
 			</div>
+		</div>
+	{/if}
+
+	<!-- Feedback card (shown for terminal-state contracts) -->
+	{#if isTerminalState(contract.status)}
+		<div class="card p-6 border border-neutral-800" id="feedback">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-4">Rate Your Experience</h3>
+			{#if feedback}
+				<div class="space-y-3 text-sm">
+					<div class="text-emerald-400 font-medium mb-3">Thank you for your feedback!</div>
+					<div class="flex items-center gap-3">
+						<span class="text-neutral-500 w-52">Service matched description:</span>
+						<span class="{feedback.service_matched_description ? 'text-emerald-400' : 'text-red-400'} font-medium">
+							{feedback.service_matched_description ? 'Yes' : 'No'}
+						</span>
+					</div>
+					<div class="flex items-center gap-3">
+						<span class="text-neutral-500 w-52">Would rent again:</span>
+						<span class="{feedback.would_rent_again ? 'text-emerald-400' : 'text-red-400'} font-medium">
+							{feedback.would_rent_again ? 'Yes' : 'No'}
+						</span>
+					</div>
+				</div>
+			{:else if feedbackLoading}
+				<div class="text-neutral-500 text-sm">Loading...</div>
+			{:else}
+				<div class="space-y-5">
+					<div>
+						<p class="text-neutral-400 text-sm mb-2">Did the service match its description?</p>
+						<div class="flex gap-2">
+							<button
+								onclick={() => { feedbackServiceMatched = true; }}
+								class="px-4 py-1.5 text-sm border transition-colors {feedbackServiceMatched === true ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:border-neutral-500'}"
+							>Yes</button>
+							<button
+								onclick={() => { feedbackServiceMatched = false; }}
+								class="px-4 py-1.5 text-sm border transition-colors {feedbackServiceMatched === false ? 'bg-red-500/20 border-red-500/60 text-red-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:border-neutral-500'}"
+							>No</button>
+						</div>
+					</div>
+					<div>
+						<p class="text-neutral-400 text-sm mb-2">Would you rent from this provider again?</p>
+						<div class="flex gap-2">
+							<button
+								onclick={() => { feedbackWouldRentAgain = true; }}
+								class="px-4 py-1.5 text-sm border transition-colors {feedbackWouldRentAgain === true ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:border-neutral-500'}"
+							>Yes</button>
+							<button
+								onclick={() => { feedbackWouldRentAgain = false; }}
+								class="px-4 py-1.5 text-sm border transition-colors {feedbackWouldRentAgain === false ? 'bg-red-500/20 border-red-500/60 text-red-300' : 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:border-neutral-500'}"
+							>No</button>
+						</div>
+					</div>
+					{#if feedbackError}
+						<div class="text-red-400 text-sm">{feedbackError}</div>
+					{/if}
+					<button
+						onclick={handleSubmitFeedback}
+						disabled={feedbackServiceMatched === null || feedbackWouldRentAgain === null || feedbackSubmitting}
+						class="px-5 py-2 text-sm bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+					>
+						{#if feedbackSubmitting}Submitting...{:else}Submit Feedback{/if}
+					</button>
+				</div>
+			{/if}
 		</div>
 	{/if}
 

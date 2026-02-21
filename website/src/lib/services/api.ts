@@ -13,6 +13,7 @@ import type { PoolCapabilities } from '$lib/types/generated/PoolCapabilities';
 import type { OfferingSuggestion } from '$lib/types/generated/OfferingSuggestion';
 import type { UnavailableTier } from '$lib/types/generated/UnavailableTier';
 import type { ContractHealthCheck } from '$lib/types/generated/ContractHealthCheck';
+import type { ContractFeedback } from '$lib/types/generated/ContractFeedback';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
@@ -1307,6 +1308,64 @@ export async function getContractUsage(
 
 export { type ContractUsage };
 export { type ContractHealthCheck };
+
+export { type ContractFeedback };
+
+export async function submitContractFeedback(
+	contractId: string,
+	input: { service_matched_description: boolean; would_rent_again: boolean },
+	headers: SignedRequestHeaders
+): Promise<ContractFeedback> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/feedback`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify(input)
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to submit feedback: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractFeedback>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to submit feedback');
+	}
+
+	if (!payload.data) {
+		throw new Error('Submit feedback response did not include data');
+	}
+
+	return payload.data;
+}
+
+export async function getContractFeedback(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractFeedback | null> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/feedback`;
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		if (response.status === 404) {
+			return null;
+		}
+		throw new Error(`Failed to fetch feedback: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractFeedback>;
+
+	if (!payload.success) {
+		return null;
+	}
+
+	return payload.data ?? null;
+}
 
 /**
  * Get recipe execution log for a contract

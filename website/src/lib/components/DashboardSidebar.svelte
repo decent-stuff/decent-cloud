@@ -7,11 +7,15 @@
 	import {
 		getProviderOfferings,
 		getProviderOnboarding,
+		getPendingProviderRequests,
 		hexEncode
 	} from '$lib/services/api';
 	import type { ProviderOnboarding } from '$lib/services/api';
+	import { signRequest } from '$lib/services/auth-api';
+	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
+	import UnreadBadge from './UnreadBadge.svelte';
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
@@ -22,6 +26,7 @@
 	let onboardingData = $state<ProviderOnboarding | null>(null);
 	let providerDataLoading = $state(false);
 	let providerDataError = $state(false);
+	let pendingRequestsCount = $state(0);
 
 	const CHATWOOT_BASE_URL =
 		import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
@@ -93,6 +98,23 @@
 
 			offeringsCount = offerings.length;
 			onboardingData = onboarding;
+
+			if (onboarding?.onboarding_completed_at) {
+				try {
+					const info = await authStore.getSigningIdentity();
+					if (info?.identity instanceof Ed25519KeyIdentity) {
+						const signed = await signRequest(
+							info.identity,
+							'GET',
+							'/api/v1/provider/rental-requests/pending'
+						);
+						const requests = await getPendingProviderRequests(signed.headers);
+						pendingRequestsCount = requests.length;
+					}
+				} catch {
+					// keep count at 0 - don't break sidebar on error
+				}
+			}
 		} catch (err) {
 			console.error('Failed to load provider data:', err);
 			providerDataError = true;
@@ -115,6 +137,7 @@
 			} else {
 				offeringsCount = 0;
 				onboardingData = null;
+				pendingRequestsCount = 0;
 			}
 		});
 		// Listen for provider data updates from other components
@@ -287,7 +310,11 @@
 				>
 					<Icon name={item.icon} size={20} />
 					<span class="text-sm">{item.label}</span>
-					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+					{#if item.href === '/dashboard/provider/requests' && !providerLocked}
+						<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
+					{:else if providerLocked}
+						<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
+					{/if}
 				</a>
 			{/each}
 

@@ -68,31 +68,30 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
 **FIXME in code:** `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). Needs ICPSwap/KongSwap integration. *(Blocked on choosing exchange API. Single-session once decided.)*
 
+### Per-Agent Status Accuracy
+
+**Issue:** `provider_agent_status` is keyed by `provider_pubkey`, so all agents for the same provider share one heartbeat row — per-agent status is inaccurate if a provider runs multiple agents.
+**Location:** Agent pool detail page and sidebar.
+**Fix:** Add per-agent heartbeat rows keyed by agent ID instead of provider pubkey. *(Single-session: DB migration + API change + frontend update.)*
+
 ---
 
 ## UX Improvements
 
-### Tenant (Renter) Experience
+### Future UX (discovered via codebase audit, single-session each)
 
-- **[Rental flow] Stripe path SSH key save** — ✅ Fixed.
-- **[Contract lifecycle] No email notification link to rentals page** — ✅ Fixed: `send_email_provisioned_notification` in `rental_notifications.rs` already includes `https://decent-cloud.org/dashboard/rentals?contract={id}` in the email body.
-- **[Marketplace UX] No "become a provider" CTA on marketplace** — ✅ Fixed: dismissible banner added for authenticated users (`dc-provider-cta-dismissed` localStorage key).
-- **[Rentals page] SSH key display is truncated** — ✅ Fixed: `formatSshKeyDisplay()` now shows the key comment (e.g. `user@host`) if present, or last 20 chars of key data. No more identical-looking truncations.
+- **[Marketplace] Offering allowlist management** — API exists (`get_offering_allowlist`, `add_to_offering_allowlist`, `remove_from_offering_allowlist`) but no UI. Providers can't restrict which tenants can rent their offerings from the UI.
 
-### Provider Experience
+- **[Provider] Trust metrics dedicated page** — `get_provider_trust_metrics` API exists and data is shown on the dashboard's TrustDashboard component, but no dedicated shareable/bookmarkable page exists. *(Single-session: new route + data fetch.)*
 
-- **[Provider onboarding] Direct navigation to gated routes** — ✅ Fixed.
+- **[Contracts] Bandwidth usage chart** — `get_contract_bandwidth` API exists. Bandwidth stats are on the earnings page but not on the contract detail page where tenants would expect them. *(Single-session.)*
 
-- **[Provider earnings] No chart for revenue over time** — ✅ Fixed: Added `GET /api/v1/providers/{pubkey}/revenue-by-month` endpoint (bucketed by month, last 12 months) and a pure-SVG bar chart on the earnings page. No external chart library dependencies.
+- **[Navigation] Breadcrumbs missing from detail pages** — Agent pool detail, contract detail, marketplace item detail — none have breadcrumb navigation back to the list. *(Single-session: shared Breadcrumb component.)*
 
-- **[Provider agents] Setup token UX is opaque** — ✅ Fixed: (1) Added numbered "How it works" step guide in SetupTokenDialog. (2) Color-coded dot indicator in the pool list (green = online agents, amber = registered but offline, gray dash = no agents). (3) Added "Status / Last Seen" column to pool detail agent table showing "Online · 3m ago" / "Offline · 2h ago". Remaining architectural limitation: `provider_agent_status` is keyed by `provider_pubkey`, so all agents for the same provider share one heartbeat row—per-agent status is inaccurate if a provider runs multiple agents. *(Architecture decision needed before fixing.)*
+- **[Contracts] Provisioning failure details not visible to tenant** — When a contract fails, tenants see only "Failed" with no actionable error detail. *(Single-session: parse and surface error details on contract detail page.)*
 
-- **[Rentals page] No SSH connection details for active contracts** — ✅ Fixed: Structured "Connection Details" card now shows: (1) Gateway SSH command `ssh -p {port} root@{subdomain}` if `gateway_subdomain` + `gateway_ssh_port` are set; (2) Direct SSH `ssh root@{ip}` if `provisioning_instance_details` JSON has `ip_address`; (3) Raw text fallback otherwise. Each command has a copy-to-clipboard button with 2-second ✓ feedback.
+- **[Provider] Batch actions on rental requests** — Providers with many simultaneous requests have no "Accept All" or "Dismiss All" action. *(Single-session.)*
 
-- **[Marketplace] No provider profile pages linked from offerings** — ✅ Fixed: "View provider profile" link added to both the desktop expanded row and mobile expanded card. (The provider link also already appeared in the main table row and mobile card header.)
+- **[Account] External keys management page** — SSH keys added during rentals are stored but no dedicated management UI exists (only sections embedded in other pages). *(Single-session.)*
 
-- **[Rentals page] No "filtered tab is empty" state** — ✅ Fixed: `{:else}` block added to `{#each filteredContracts}`. Each tab shows a contextual message: Active → link to marketplace; Pending → link to create request; Cancelled → simple message.
-
-- **[Offerings] Pool assignment UX** — ✅ Fixed: "No pool" indicator is now a clickable link to `/dashboard/provider/agents` with a `→` affordance.
-
-- **[Dashboard] Quick Actions link to "My Offerings" is ungated** — ✅ Fixed: Quick Actions now shows "Provider Setup → /dashboard/provider/support" when the user has no offerings loaded, and "My Offerings" otherwise. Uses `myOfferings` state already loaded on the dashboard.
+- **[Stats] Platform stats widget** — `get_platform_stats` endpoint returns aggregated metrics (total providers, contracts, volume). A small widget on the landing page/dashboard would build trust. *(Single-session.)*

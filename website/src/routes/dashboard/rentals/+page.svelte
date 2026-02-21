@@ -8,7 +8,9 @@
 		cancelRentalRequest,
 		downloadContractInvoice,
 		getOffering,
+		getProviderOfferings,
 		type Contract,
+		type Offering,
 		hexEncode,
 	} from "$lib/services/api";
 	import { getContractStatusBadge as getStatusBadge } from "$lib/utils/contract-status";
@@ -22,6 +24,7 @@
 	import { UserApiClient } from "$lib/services/user-api";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
+	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 
 	let contracts = $state<Contract[]>([]);
 	let offeringNames = $state<Map<number, string>>(new Map());
@@ -34,6 +37,9 @@
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
+	let rentAgainOffering = $state<Offering | null>(null);
+	let rentAgainLoading = $state<string | null>(null);
+	let rentAgainError = $state<string | null>(null);
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -257,6 +263,24 @@
 			}
 		});
 	});
+
+	async function handleRentAgain(contract: Contract) {
+		rentAgainLoading = contract.contract_id;
+		rentAgainError = null;
+		try {
+			const offerings = await getProviderOfferings(contract.provider_pubkey);
+			const offering = offerings.find((o) => o.offering_id === contract.offering_id);
+			if (!offering) {
+				rentAgainError = "This offering is no longer available.";
+				return;
+			}
+			rentAgainOffering = offering;
+		} catch (e) {
+			rentAgainError = e instanceof Error ? e.message : "Failed to fetch offering.";
+		} finally {
+			rentAgainLoading = null;
+		}
+	}
 
 	function isCancellable(status: string): boolean {
 		return ["requested", "pending", "accepted", "provisioning", "provisioned", "active"].includes(
@@ -571,6 +595,40 @@
 										Cancelling...
 									</div>
 								{/if}
+								<!-- Rent Again button for terminal contracts -->
+								{#if CANCELLED_STATUSES.has(contract.status.toLowerCase())}
+									<button
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											handleRentAgain(contract);
+										}}
+										disabled={rentAgainLoading === contract.contract_id}
+										class="px-2 py-1 text-xs bg-primary-600/80 text-white rounded hover:bg-primary-700 transition-colors flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
+										title="Rent again from the same provider"
+									>
+										{#if rentAgainLoading === contract.contract_id}
+											<div class="animate-spin h-3 w-3 border-t border-b border-white rounded-full"></div>
+											Loading...
+										{:else}
+											&#8635; Rent Again
+										{/if}
+									</button>
+									{#if rentAgainError}
+										<span class="text-xs text-red-400">{rentAgainError}</span>
+									{/if}
+								{/if}
+								<!-- Rate provider button for terminal contracts -->
+								{#if CANCELLED_STATUSES.has(contract.status.toLowerCase())}
+									<button
+										type="button"
+										onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto(`/dashboard/rentals/${contract.contract_id}#feedback`); }}
+										class="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors"
+										title="Rate this provider"
+									>
+										Rate Provider
+									</button>
+								{/if}
 							</div>
 							<p class="text-neutral-500 text-sm">
 								Contract ID: {truncateHash(
@@ -783,3 +841,9 @@
 		</div>
 	{/if}
 </div>
+
+<RentalRequestDialog
+	offering={rentAgainOffering}
+	onClose={() => { rentAgainOffering = null; rentAgainError = null; }}
+	onSuccess={() => { rentAgainOffering = null; rentAgainError = null; loadContracts(); }}
+/>
