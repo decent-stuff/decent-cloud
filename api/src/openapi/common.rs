@@ -204,6 +204,14 @@ pub struct CancelContractRequest {
     pub memo: Option<String>,
 }
 
+/// Request to set auto-renewal preference on a contract
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct SetAutoRenewRequest {
+    pub auto_renew: bool,
+}
+
 /// Request to record a usage event for a contract
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

@@ -1019,6 +1019,8 @@ export interface Contract {
 	gateway_ssh_port?: number;
 	gateway_port_range_start?: number;
 	gateway_port_range_end?: number;
+	// Auto-renewal preference
+	auto_renew: boolean;
 }
 
 export interface RentalRequestParams {
@@ -1273,6 +1275,36 @@ export async function cancelRentalRequest(
 
 	if (!payload.data) {
 		throw new Error('Cancel rental request response did not include confirmation message');
+	}
+
+	return payload.data;
+}
+
+export async function setContractAutoRenew(
+	contractId: string,
+	autoRenew: boolean,
+	headers: SignedRequestHeaders
+): Promise<Contract> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/auto-renew`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify({ auto_renew: autoRenew })
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to update auto-renew: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<Contract>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to update auto-renew');
+	}
+
+	if (!payload.data) {
+		throw new Error('Auto-renew update response did not include contract data');
 	}
 
 	return payload.data;

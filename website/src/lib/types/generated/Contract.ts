@@ -14,6 +14,10 @@ stripe_invoice_id: string | null,
  */
 receipt_number: number | undefined, receipt_sent_at_ns: number | undefined, stripe_subscription_id: string | null, subscription_status: string | null, current_period_end_ns: number | undefined, cancel_at_period_end: boolean, 
 /**
+ * Tenant opt-in for automatic renewal when contract is about to expire
+ */
+auto_renew: boolean, 
+/**
  * Gateway slug (6-char alphanumeric) for subdomain routing
  */
 gateway_slug: string | null, 

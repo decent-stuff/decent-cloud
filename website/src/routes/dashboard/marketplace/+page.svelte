@@ -25,6 +25,7 @@
 	let sortDir = $state<"asc" | "desc">("asc");
 	let sortField = $state<"price" | "trust" | "newest">("price");
 	let quickFilter = $state<"newest" | "trusted" | null>(null);
+	let selectedPreset = $state<"gpu" | "budget" | "na" | "europe" | null>(null);
 	let showFilters = $state(false);
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -285,6 +286,7 @@
 	}
 
 	function handleFilterChange() {
+		selectedPreset = null;
 		fetchOfferings();
 	}
 
@@ -293,6 +295,29 @@
 		if (newSet.has(type)) newSet.delete(type);
 		else newSet.add(type);
 		selectedTypes = newSet;
+		selectedPreset = null;
+	}
+
+	function setPreset(preset: "gpu" | "budget" | "na" | "europe") {
+		if (selectedPreset === preset) {
+			// Toggle off: clear only the filters this preset set
+			selectedPreset = null;
+			if (preset === "gpu") selectedTypes = new Set();
+			else if (preset === "budget") { maxPrice = null; fetchOfferings(); }
+			else if (preset === "na" || preset === "europe") { selectedRegion = ""; selectedCountry = ""; selectedCity = ""; }
+			return;
+		}
+		// Clear all preset-controlled filters first, then apply
+		selectedTypes = new Set();
+		maxPrice = null;
+		selectedRegion = "";
+		selectedCountry = "";
+		selectedCity = "";
+		if (preset === "gpu") selectedTypes = new Set(["gpu"]);
+		else if (preset === "budget") { maxPrice = 20; fetchOfferings(); }
+		else if (preset === "na") selectedRegion = "na";
+		else if (preset === "europe") selectedRegion = "europe";
+		selectedPreset = preset;
 	}
 
 	function clearFilters() {
@@ -313,6 +338,7 @@
 		recipesOnly = false;
 		searchQuery = "";
 		quickFilter = null;
+		selectedPreset = null;
 		sortField = "price";
 		sortDir = "asc";
 		fetchOfferings();
@@ -713,6 +739,7 @@
 							onchange={() => {
 								selectedCountry = "";
 								selectedCity = "";
+								selectedPreset = null;
 							}}
 							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 						>
@@ -923,7 +950,7 @@
 		<!-- Main Content -->
 		<div class="flex-1 min-w-0 space-y-4">
 			<!-- Quick-filter preset pills -->
-			<div class="flex items-center gap-2">
+			<div class="flex flex-wrap items-center gap-2">
 				<span class="text-xs text-neutral-500 shrink-0">Quick:</span>
 				<button
 					onclick={() => toggleQuickFilter("newest")}
@@ -936,6 +963,31 @@
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'trusted' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
 				>
 					<Icon name="shield" size={14} /> Most Trusted
+				</button>
+				<span class="text-neutral-700 text-xs select-none">|</span>
+				<button
+					onclick={() => setPreset("gpu")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'gpu' ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					<Icon name="gpu" size={14} /> GPU Servers
+				</button>
+				<button
+					onclick={() => setPreset("budget")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'budget' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					Budget (&lt;$20/mo)
+				</button>
+				<button
+					onclick={() => setPreset("na")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'na' ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					North America
+				</button>
+				<button
+					onclick={() => setPreset("europe")}
+					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'europe' ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+				>
+					Europe
 				</button>
 			</div>
 

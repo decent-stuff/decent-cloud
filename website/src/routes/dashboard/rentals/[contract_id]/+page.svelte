@@ -17,6 +17,7 @@
 		submitContractFeedback,
 		getContractFeedback,
 		getUserContractBandwidthHistory,
+		setContractAutoRenew,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
@@ -87,6 +88,11 @@
 
 	// Bandwidth history state
 	let bandwidthHistory = $state<BandwidthHistoryResponse[]>([]);
+
+	// Auto-renew state
+	let autoRenewSaving = $state(false);
+	let autoRenewError = $state<string | null>(null);
+	let autoRenewSuccess = $state(false);
 
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
@@ -597,6 +603,37 @@
 		} else {
 			// Fallback if Chatwoot not loaded - show error
 			error = "Chat widget not available. Please refresh the page and try again.";
+		}
+	}
+
+	async function handleAutoRenewToggle(newValue: boolean) {
+		if (!contract) return;
+
+		try {
+			autoRenewSaving = true;
+			autoRenewError = null;
+			autoRenewSuccess = false;
+
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				autoRenewError = "You must be authenticated";
+				return;
+			}
+
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"PUT",
+				`/api/v1/contracts/${contractId}/auto-renew`,
+				{ auto_renew: newValue },
+			);
+
+			contract = await setContractAutoRenew(contractId, newValue, headers);
+			autoRenewSuccess = true;
+			setTimeout(() => { autoRenewSuccess = false; }, 3000);
+		} catch (e) {
+			autoRenewError = e instanceof Error ? e.message : "Failed to update auto-renew";
+		} finally {
+			autoRenewSaving = false;
 		}
 	}
 
@@ -1141,6 +1178,36 @@
 						<p class="text-purple-400/70 text-xs mt-3">
 							Your subscription will automatically renew. To cancel, use the Cancel button above.
 						</p>
+					{/if}
+				</div>
+			{/if}
+
+			<!-- Auto-renew toggle (active contracts with a fixed end date, no Stripe subscription) -->
+			{#if contract.status === 'active' && contract.end_timestamp_ns && !contract.stripe_subscription_id}
+				<div class="bg-surface-elevated border border-neutral-800 p-4 mt-4">
+					<div class="flex items-center justify-between">
+						<div>
+							<div class="text-white font-medium text-sm">Auto-renew</div>
+							<p class="text-neutral-500 text-xs mt-0.5">
+								When this contract expires, a new rental request will be created automatically with the same settings.
+							</p>
+						</div>
+						<button
+							onclick={() => handleAutoRenewToggle(!contract!.auto_renew)}
+							disabled={autoRenewSaving}
+							class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none {contract.auto_renew ? 'bg-primary-600' : 'bg-neutral-700'} {autoRenewSaving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}"
+							title={contract.auto_renew ? 'Disable auto-renew' : 'Enable auto-renew'}
+						>
+							<span
+								class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {contract.auto_renew ? 'translate-x-6' : 'translate-x-1'}"
+							></span>
+						</button>
+					</div>
+					{#if autoRenewSuccess}
+						<p class="text-emerald-400 text-xs mt-2">Preference saved.</p>
+					{/if}
+					{#if autoRenewError}
+						<p class="text-red-400 text-xs mt-2">{autoRenewError}</p>
 					{/if}
 				</div>
 			{/if}

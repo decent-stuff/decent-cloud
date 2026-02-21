@@ -1,6 +1,6 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
-    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse,
+    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, SetAutoRenewRequest,
     UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
@@ -712,6 +712,62 @@ impl ContractsApi {
                 data: Some("Rental request cancelled successfully".to_string()),
                 error: None,
             }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Set auto-renew preference
+    ///
+    /// Opts in or out of automatic renewal before the contract expires.
+    /// Only the contract requester may change this setting.
+    #[oai(
+        path = "/contracts/:id/auto-renew",
+        method = "put",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn set_auto_renew(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<SetAutoRenewRequest>,
+    ) -> Json<ApiResponse<crate::database::contracts::Contract>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        match db
+            .set_contract_auto_renew(&contract_id, &auth.pubkey, req.0.auto_renew)
+            .await
+        {
+            Ok(()) => match db.get_contract(&contract_id).await {
+                Ok(Some(contract)) => Json(ApiResponse {
+                    success: true,
+                    data: Some(contract),
+                    error: None,
+                }),
+                Ok(None) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found after update".to_string()),
+                }),
+                Err(e) => Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                }),
+            },
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
@@ -1503,6 +1559,7 @@ mod tests {
             subscription_status: None,
             current_period_end_ns: None,
             cancel_at_period_end: false,
+            auto_renew: false,
             gateway_slug: None,
             gateway_subdomain: None,
             gateway_ssh_port: None,

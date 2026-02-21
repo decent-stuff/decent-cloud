@@ -102,10 +102,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Security] Seed phrase backup reminder** ✅ (2026-02-21) — Dismissible amber banner in dashboard layout for seed-phrase-type identities; persisted via `localStorage`; "Back Up Now" links to `/dashboard/account/security`; mutually exclusive with email verification banner.
 - **[Marketplace] "Recently Added" and "Most Trusted" quick-filter badges** ✅ (2026-02-21) — Two pill buttons above marketplace search: "Recently Added" (filters to offerings ≤7 days old, sorts newest-first using new `created_at_ns` DB field) and "Most Trusted" (sorts by trust score descending). Added `created_at_ns: Option<i64>` to `Offering` struct + SELECT queries; sqlx cache updated.
 - **[Provider] Offering performance time-series chart** ✅ (2026-02-21) — New authenticated endpoint `GET /api/v1/providers/:pubkey/offering-stats-history?weeks=N` returning `OfferingStatsWeek[]` (week, offering, requests, active, revenue). SVG bar chart added to `/dashboard/provider/earnings` showing weekly requests (indigo) + active contracts (emerald) for the last 8 weeks.
+- **[Marketplace] Quick filter presets** ✅ (2026-02-21) — Four preset pill buttons (GPU Servers, Budget <$20/mo, North America, Europe) above marketplace search. Toggle behavior: clicking active preset deactivates; active preset highlighted in theme color.
+- **[Contracts] Auto-renewal opt-in** ✅ (2026-02-21) — DB migration adds `auto_renew` flag to contracts; `PUT /api/v1/contracts/:id/auto-renew` endpoint; background `AutoRenewalService` (runs every 6 h, renews contracts expiring within 48 h by creating a new rental request and clearing the flag); toggle UI on contract detail page.
+- **[Provider] Earnings fee breakdown** ✅ (2026-02-21) — Revenue Overview restructured to show Gross Revenue / Platform Fee (0 ICP) / Net Earnings rows; Contract Earnings table adds Platform Fee and Net columns.
 
 ---
 
 ## UX Improvements (Backlog)
-
-- **[Contracts] Automated contract renewal / subscription mode** — Allow tenants to opt into auto-renewal before a contract expires. Currently all contracts are one-shot; tenants must manually re-rent. *(Backend change needed: renewal field on contract + scheduler.)*
 

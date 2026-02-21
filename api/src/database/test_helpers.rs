@@ -336,6 +336,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/018_recipe_log.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/019_per_agent_status.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/020_reliability_score.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/021_auto_renew.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -577,6 +578,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "020_reliability_score.sql",
                     include_str!("../../migrations_pg/020_reliability_score.sql"),
+                ),
+                (
+                    "021_auto_renew.sql",
+                    include_str!("../../migrations_pg/021_auto_renew.sql"),
                 ),
             ];
 

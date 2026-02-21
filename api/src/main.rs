@@ -1,5 +1,6 @@
 mod acme_dns;
 mod auth;
+mod auto_renewal_service;
 mod chatwoot;
 mod cleanup_service;
 mod cloud;
@@ -45,6 +46,7 @@ use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use price_cache::PriceCache;
+use auto_renewal_service::AutoRenewalService;
 use payment_release_service::PaymentReleaseService;
 use poem::web::{Data, Redirect};
 use poem::{
@@ -1311,6 +1313,23 @@ async fn serve_command() -> Result<(), std::io::Error> {
         payment_release_service.run().await;
     });
 
+    // Start auto-renewal service in background (runs every 6 hours)
+    let auto_renewal_interval_hours = env::var("AUTO_RENEWAL_INTERVAL_HOURS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(6);
+
+    let db_for_renewal = ctx.database.clone();
+    let auto_renewal_task = tokio::spawn(async move {
+        let auto_renewal_service =
+            AutoRenewalService::new(db_for_renewal, auto_renewal_interval_hours);
+        tracing::info!(
+            "Starting auto-renewal service (interval: {}h)",
+            auto_renewal_interval_hours
+        );
+        auto_renewal_service.run().await;
+    });
+
     // Start cloud provisioning service in background
     let cloud_provisioning_interval_secs = env::var("CLOUD_PROVISIONING_INTERVAL_SECS")
         .ok()
@@ -1341,6 +1360,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     metadata_cache_task.abort();
     cleanup_task.abort();
     payment_release_task.abort();
+    auto_renewal_task.abort();
     cloud_provisioning_task.abort();
     if let Some(task) = email_processor_task {
         task.abort();

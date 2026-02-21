@@ -114,6 +114,10 @@ pub struct Contract {
     #[ts(type = "boolean")]
     #[sqlx(default)]
     pub cancel_at_period_end: bool,
+    /// Tenant opt-in for automatic renewal when contract is about to expire
+    #[ts(type = "boolean")]
+    #[sqlx(default)]
+    pub auto_renew: bool,
     // Gateway configuration (DC-level reverse proxy)
     /// Gateway slug (6-char alphanumeric) for subdomain routing
     #[oai(skip_serializing_if_is_none)]
@@ -246,6 +250,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE requester_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
@@ -267,6 +272,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
             pubkey
@@ -288,6 +294,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE provider_pubkey = $1 AND status IN ('requested', 'pending') ORDER BY created_at_ns DESC"#,
             pubkey
@@ -358,6 +365,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests WHERE contract_id = $1"#,
             contract_id
@@ -379,6 +387,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests ORDER BY created_at_ns DESC LIMIT $1 OFFSET $2"#,
             limit,
@@ -1805,6 +1814,7 @@ impl Database {
                currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
                tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
                stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
                FROM contract_sign_requests
                WHERE payment_method = 'icpay'
@@ -2808,6 +2818,78 @@ impl Database {
             period_start_ns,
             period_end_ns: now_ns,
         })
+    }
+
+    /// Return active contracts where auto_renew is true and expiry is within 48 hours.
+    ///
+    /// Only contracts with a confirmed payment (succeeded or self_rental) are returned.
+    pub async fn get_contracts_for_renewal(&self) -> Result<Vec<Contract>> {
+        // 48 hours in nanoseconds
+        let window_ns: i64 = 48 * 3600 * 1_000_000_000;
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let deadline_ns = now_ns + window_ns;
+
+        let contracts = sqlx::query_as!(
+            Contract,
+            r#"SELECT lower(encode(contract_id, 'hex')) as "contract_id!: String", lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String", requester_ssh_pubkey as "requester_ssh_pubkey!", requester_contact as "requester_contact!", lower(encode(provider_pubkey, 'hex')) as "provider_pubkey!: String",
+               offering_id as "offering_id!", region_name, instance_config, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+               duration_hours, original_duration_hours, request_memo as "request_memo!", created_at_ns, status as "status!",
+               provisioning_instance_details, provisioning_completed_at_ns, payment_method as "payment_method!", stripe_payment_intent_id, stripe_customer_id, icpay_transaction_id, payment_status as "payment_status!",
+               currency as "currency!", refund_amount_e9s, stripe_refund_id, refund_created_at_ns, status_updated_at_ns, icpay_payment_id, icpay_refund_id, total_released_e9s, last_release_at_ns,
+               tax_amount_e9s, tax_rate_percent, tax_type, tax_jurisdiction, customer_tax_id, reverse_charge, buyer_address, stripe_invoice_id, receipt_number, receipt_sent_at_ns,
+               stripe_subscription_id, subscription_status, current_period_end_ns, COALESCE(cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
+               COALESCE(auto_renew, FALSE) as "auto_renew!: bool",
+               gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end
+               FROM contract_sign_requests
+               WHERE auto_renew = TRUE
+                 AND status = 'active'
+                 AND end_timestamp_ns IS NOT NULL
+                 AND end_timestamp_ns <= $1
+                 AND (payment_status = 'succeeded' OR payment_method = 'self_rental')"#,
+            deadline_ns
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(contracts)
+    }
+
+    /// Set auto_renew flag on a contract.
+    ///
+    /// Only the original requester may change this setting.
+    pub async fn set_contract_auto_renew(
+        &self,
+        contract_id: &[u8],
+        requester_pubkey: &[u8],
+        auto_renew: bool,
+    ) -> Result<()> {
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id)))?;
+
+        if contract.requester_pubkey != hex::encode(requester_pubkey) {
+            return Err(anyhow::anyhow!(
+                "Unauthorized: only the contract requester can change auto-renew"
+            ));
+        }
+
+        let result = sqlx::query!(
+            "UPDATE contract_sign_requests SET auto_renew = $1 WHERE contract_id = $2",
+            auto_renew,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(anyhow::anyhow!(
+                "Contract not found (ID: {})",
+                hex::encode(contract_id)
+            ));
+        }
+
+        Ok(())
     }
 }
 

@@ -228,17 +228,34 @@
 			<!-- Revenue Overview -->
 			<section class="space-y-4">
 				<h2 class="text-xl font-semibold text-white">Revenue Overview</h2>
-				<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+				<!-- Fee breakdown -->
+				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
-						<p class="text-neutral-500 text-sm">Total Revenue</p>
+						<p class="text-neutral-500 text-sm">Gross Revenue</p>
 						<p class="text-3xl font-bold text-primary-400 mt-1">
-							${formatRevenue(stats.total_revenue_e9s)}
+							{formatRevenue(stats.total_revenue_e9s)} ICP
 						</p>
+						<p class="text-neutral-600 text-xs mt-1">Total paid by tenants</p>
 					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-6">
+						<p class="text-neutral-500 text-sm">Platform Fee</p>
+						<p class="text-3xl font-bold text-neutral-400 mt-1">0 ICP</p>
+						<p class="text-neutral-600 text-xs mt-1">No fee on marketplace contracts</p>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-6 border-l-2 border-l-emerald-500/50">
+						<p class="text-neutral-500 text-sm">Net Earnings</p>
+						<p class="text-3xl font-bold text-emerald-400 mt-1">
+							{formatRevenue(stats.total_revenue_e9s)} ICP
+						</p>
+						<p class="text-neutral-600 text-xs mt-1">Your take-home amount</p>
+					</div>
+				</div>
+				<!-- Contract stats -->
+				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Token Balance</p>
 						<p class="text-3xl font-bold text-white mt-1">
-							{formatBalance(tokenBalance)}
+							{formatBalance(tokenBalance)} ICP
 						</p>
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
@@ -279,7 +296,9 @@
 									<th
 										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
 										onclick={() => toggleSort('payment_amount_e9s')}
-									>Payment (ICP){sortIndicator('payment_amount_e9s')}</th>
+									>Gross (ICP){sortIndicator('payment_amount_e9s')}</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Platform Fee</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Net (ICP)</th>
 									<th
 										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
 										onclick={() => toggleSort('duration_hours')}
@@ -303,6 +322,12 @@
 											</span>
 										</td>
 										<td class="px-4 py-3 text-right text-neutral-300 font-mono">
+											{(contract.payment_amount_e9s / 1e9).toFixed(4)}
+										</td>
+										<td class="px-4 py-3 text-right text-neutral-500 font-mono text-xs">
+											0.0000
+										</td>
+										<td class="px-4 py-3 text-right text-emerald-400 font-mono">
 											{(contract.payment_amount_e9s / 1e9).toFixed(4)}
 										</td>
 										<td class="px-4 py-3 text-right text-neutral-400">
