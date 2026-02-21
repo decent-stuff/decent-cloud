@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM spending_alerts WHERE pubkey = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a0c18f8248218ddb67133e8a13469922138fe305d356260eb742e7ae67b75481"
+}

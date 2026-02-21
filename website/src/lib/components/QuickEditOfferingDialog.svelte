@@ -211,6 +211,7 @@
 				has_critical_flags: undefined,
 				reliability_score: undefined,
 				is_example: offering.is_example,
+				is_draft: offering.is_draft ?? false,
 				offering_source: offering.offering_source || undefined,
 				external_checkout_url: offering.external_checkout_url || undefined,
 				reseller_name: undefined,

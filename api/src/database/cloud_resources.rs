@@ -1624,6 +1624,7 @@ mod tests {
             has_critical_flags: None,
             reliability_score: None,
             is_example: false,
+            is_draft: false,
             offering_source: Some("self_provisioned".to_string()),
             external_checkout_url: None,
             reseller_name: None,

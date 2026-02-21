@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT SUM(payment_amount_e9s)::BIGINT as \"sum: i64\"\n               FROM contract_sign_requests\n               WHERE requester_pubkey = $1\n                 AND status IN ('active', 'provisioning', 'provisioned')\n                 AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sum: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a181840c29492674fdf0ee5f3e8c7e7e7dba3fd02ef5d4fc47a53fa510c4fa4e"
+}

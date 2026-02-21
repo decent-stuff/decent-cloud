@@ -11,6 +11,7 @@ use super::common::ApiTags;
 #[serde(rename_all = "camelCase")]
 pub struct IcpPriceResponse {
     /// ICP/USD price, or null if the price feed is unavailable
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub price_usd: Option<f64>,
 }
@@ -22,7 +23,7 @@ impl PricesApi {
     /// ICP/USD price
     ///
     /// Returns the current ICP/USD price from CoinGecko, cached for 5 minutes.
-    /// Returns `{"priceUsd": null}` when the price feed is unavailable.
+    /// Returns `{}` when the price feed is unavailable (field omitted when None).
     #[oai(path = "/prices/icp", method = "get", tag = "ApiTags::System")]
     async fn get_icp_price(
         &self,
@@ -51,6 +52,6 @@ mod tests {
         let resp = IcpPriceResponse { price_usd: None };
         let json = serde_json::to_value(&resp).unwrap();
         // poem_openapi's Object derive serializes None as JSON null (not omitted)
-        assert!(json["priceUsd"].is_null());
+        assert!(json.get("priceUsd").is_none());
     }
 }

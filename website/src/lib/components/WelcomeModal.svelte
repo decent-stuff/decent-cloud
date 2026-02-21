@@ -1,11 +1,12 @@
+<script module lang="ts">
+	export const ONBOARDING_KEY = 'onboarding_completed';
+	export const ROLE_PREF_KEY = 'user_role_preference';
+	export type UserRolePreference = 'tenant' | 'provider';
+</script>
+
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import Icon from '$lib/components/Icons.svelte';
-
-	export const ONBOARDING_KEY = 'onboarding_completed';
-	export const ROLE_PREF_KEY = 'user_role_preference';
-
-	export type UserRolePreference = 'tenant' | 'provider';
 
 	function isOnboardingCompleted(): boolean {
 		if (!browser) return true;

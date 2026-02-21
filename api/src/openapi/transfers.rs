@@ -116,13 +116,13 @@ mod tests {
     }
 
     #[test]
-    fn test_token_transfer_memo_none_serializes_as_null() {
+    fn test_token_transfer_memo_none_omitted_from_json() {
         let transfer = TokenTransfer {
             memo: None,
             ..sample_transfer()
         };
         let json = serde_json::to_value(&transfer).unwrap();
-        assert!(json["memo"].is_null(), "None memo should serialize as null");
+        assert!(json.get("memo").is_none(), "None memo should be absent from JSON");
     }
 
     #[test]
@@ -159,7 +159,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "database connection failed");
     }
 

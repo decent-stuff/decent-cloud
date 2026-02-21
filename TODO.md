@@ -76,23 +76,10 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
 
-- **[Provider] Offering creation wizard** — `/dashboard/offerings/create` is a long single-page form. Break into wizard steps: (1) Basic Info + Pricing, (2) Specs + Location, (3) Recipe/Script, (4) Preview. Reduces cognitive load for new providers. *(Single-session once decided.)*
-
-- **[Marketplace] Pre-rental contact flow** — Let tenants ask a question before creating a contract. "Ask Provider" button opens Chatwoot pre-auth conversation. Reduces failed rentals from unmet expectations. *(Single-session: Chatwoot conversation creation + UI.)*
-
-- **[Offerings] Marketplace preview before publishing** — Side panel on offering create/edit showing exactly how the card will look in the marketplace. Prevents providers from publishing with broken descriptions. *(Single-session: reuse existing offering card component.)*
-
-- **[Offerings] Pricing guidance** — On offering creation form, show "Median price for this spec in this region: X ICP/mo" pulled from marketplace data. Helps new providers price competitively. *(Single-session: new API endpoint aggregating offering stats.)*
-
 - **[Offerings] Per-offering analytics** — Impression count, click-through rate, conversion rate (views → rentals) per offering on the offerings list. Helps providers optimize. *(Multi-session: needs impression tracking in DB, analytics aggregation endpoint.)*
   - Dependency: Requires impression/view event logging (new DB table `offering_views`).
-
-- **[Offerings] Save as Draft** — Offering creation allows saving incomplete form without publishing. Draft offerings visible only to provider, not in marketplace. *(Single-session: add `is_draft` boolean on offerings table + DB migration + filter from public endpoints.)*
-
-- **[Account] Account deletion / Danger Zone** — Secure account deletion with data wipe confirmation (type "DELETE" prompt). Required for GDPR compliance. *(Single-session: new DELETE endpoint + modal UI.)*
 
 - **[Security] Two-factor authentication (TOTP)** — TOTP-based 2FA for accounts using email/password (not seed-phrase accounts which already have key-based auth). *(Multi-session: TOTP secret generation, QR code display, verification middleware.)*
 
 - **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Single-session: Tailwind dark: classes + toggle component. Note: requires adding dark: classes across all components.)*
 
-- **[Tenant] Budget alerts / spending cap** — Set monthly ICP spending limit; receive notification when approaching or exceeding cap. *(Single-session: new `spending_alert_config` table + background check against monthly contract costs.)*

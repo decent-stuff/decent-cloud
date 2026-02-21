@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT provisioning_instance_details FROM contract_sign_requests WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provisioning_instance_details",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "78d7c4aeecc03c32bf999c9d7320557279e5e792ba8ae3d924badcadf37e7846"
+}

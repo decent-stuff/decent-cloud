@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import { deleteMyAccount } from "$lib/services/account-api";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -10,6 +11,11 @@
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 	let currentPath = $state("");
+
+	let showDeleteModal = $state(false);
+	let deleteConfirmText = $state('');
+	let deleteLoading = $state(false);
+	let deleteError = $state<string | null>(null);
 
 	onMount(() => {
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
@@ -33,6 +39,26 @@
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
 	});
+
+	async function handleDeleteAccount() {
+		if (deleteConfirmText !== 'DELETE') return;
+		const identity = currentIdentity?.identity;
+		if (!identity) {
+			deleteError = 'Not authenticated';
+			return;
+		}
+		deleteLoading = true;
+		deleteError = null;
+		try {
+			await deleteMyAccount(identity);
+			await authStore.logout();
+			window.location.href = '/';
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'Failed to delete account';
+		} finally {
+			deleteLoading = false;
+		}
+	}
 
 	const settingsTabs = [
 		{
@@ -198,6 +224,64 @@
 				{/each}
 			</div>
 		</div>
+
+		<!-- Danger Zone -->
+		<div class="card p-6 border border-red-800/50">
+			<h2 class="text-xl font-semibold text-red-400 mb-2">Danger Zone</h2>
+			<p class="text-neutral-500 text-sm mb-4">
+				Permanently delete your account and all associated data. This cannot be undone.
+			</p>
+			<button
+				onclick={() => { showDeleteModal = true; deleteConfirmText = ''; deleteError = null; }}
+				class="px-4 py-2 bg-red-900/30 border border-red-700 text-red-400 hover:bg-red-900/50 transition-all text-sm"
+			>
+				Delete Account
+			</button>
+		</div>
+
+		{#if showDeleteModal}
+		<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+			<div class="card p-8 border border-red-800 max-w-md w-full mx-4 space-y-4">
+				<h3 class="text-xl font-bold text-red-400">Delete Account</h3>
+				<p class="text-neutral-300 text-sm">
+					This will permanently delete your account, all offerings, and all associated data.
+					Active contracts will be preserved but unlinked from your account.
+					<strong class="text-white"> This cannot be undone.</strong>
+				</p>
+				<div>
+					<label for="delete-confirm" class="block text-neutral-400 text-sm mb-1">
+						Type <span class="font-mono font-bold text-white">DELETE</span> to confirm:
+					</label>
+					<input
+						type="text"
+						id="delete-confirm"
+						bind:value={deleteConfirmText}
+						placeholder="DELETE"
+						class="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 text-white font-mono"
+					/>
+				</div>
+				{#if deleteError}
+					<p class="text-red-400 text-sm">{deleteError}</p>
+				{/if}
+				<div class="flex gap-3 justify-end">
+					<button
+						onclick={() => showDeleteModal = false}
+						class="px-4 py-2 text-neutral-400 hover:text-white transition-colors text-sm"
+						disabled={deleteLoading}
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleDeleteAccount}
+						disabled={deleteConfirmText !== 'DELETE' || deleteLoading}
+						class="px-4 py-2 bg-red-700 text-white hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm"
+					>
+						{deleteLoading ? 'Deleting...' : 'Delete Account'}
+					</button>
+				</div>
+			</div>
+		</div>
+		{/if}
 	{:else}
 		<p class="text-neutral-500">Loading...</p>
 	{/if}

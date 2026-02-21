@@ -14,6 +14,7 @@ use std::sync::Arc;
 pub struct CreateApiTokenRequest {
     pub name: String,
     /// Expiry in days. None = never expires.
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub expires_in_days: Option<i64>,
 }
@@ -28,6 +29,7 @@ pub struct CreatedApiTokenResponse {
     /// The raw token value — store it securely, it will not be shown again.
     pub token: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub expires_at: Option<i64>,
 }
@@ -40,8 +42,10 @@ pub struct ApiTokenSummary {
     pub id: String,
     pub name: String,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub last_used_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub expires_at: Option<i64>,
     pub is_active: bool,
@@ -650,7 +654,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "Unauthorized: can only access your own activity");
     }
 

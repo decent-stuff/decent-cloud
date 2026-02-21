@@ -120,14 +120,14 @@ describe('WelcomeModal: step navigation logic', () => {
 	});
 
 	it('step 3 shows provider CTA when role is provider', () => {
-		const selectedRole: UserRolePreference = 'provider';
+		const selectedRole = 'provider' as UserRolePreference;
 		const expectedHref = '/dashboard/provider/support';
 		const actualHref = selectedRole === 'provider' ? '/dashboard/provider/support' : '/dashboard/marketplace';
 		expect(actualHref).toBe(expectedHref);
 	});
 
 	it('step 3 shows marketplace CTA when role is tenant', () => {
-		const selectedRole: UserRolePreference = 'tenant';
+		const selectedRole = 'tenant' as UserRolePreference;
 		const expectedHref = '/dashboard/marketplace';
 		const actualHref = selectedRole === 'provider' ? '/dashboard/provider/support' : '/dashboard/marketplace';
 		expect(actualHref).toBe(expectedHref);

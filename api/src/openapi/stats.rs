@@ -27,6 +27,7 @@ pub struct PlatformOverview {
     #[ts(type = "number")]
     pub validator_count_24h: i64,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub latest_block_timestamp_ns: Option<u64>,
     // All canister metadata (flexible, future-proof)
@@ -223,10 +224,7 @@ mod tests {
             metadata: BTreeMap::new(),
         };
         let json = serde_json::to_value(&overview).unwrap();
-        // serde will serialize None as null (serde skip_serializing_if_is_none is an OAI attr, not serde)
-        // The key should still be present with null value via serde
-        assert!(json.get("latest_block_timestamp_ns").is_some());
-        assert!(json["latest_block_timestamp_ns"].is_null());
+        assert!(json.get("latest_block_timestamp_ns").is_none());
     }
 
     #[test]
@@ -299,7 +297,7 @@ mod tests {
         };
         let json = serde_json::to_value(&result).unwrap();
         assert_eq!(json["username"], "bob");
-        assert!(json["display_name"].is_null());
+        assert!(json.get("display_name").is_none());
         assert_eq!(json["contract_count"], 0);
     }
 }

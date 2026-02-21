@@ -92,6 +92,7 @@ pub struct AccountSocial {
     pub id: i64,
     pub platform: String,
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub profile_url: Option<String>,
 }
@@ -110,8 +111,10 @@ pub struct AccountExternalKey {
     pub id: i64,
     pub key_type: String,
     pub key_data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub key_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub label: Option<String>,
 }

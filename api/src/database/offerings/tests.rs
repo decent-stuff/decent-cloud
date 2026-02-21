@@ -575,6 +575,7 @@ async fn test_create_offering_success() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -697,6 +698,7 @@ async fn test_create_offering_duplicate_id() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -783,6 +785,7 @@ async fn test_create_offering_missing_required_fields() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -866,6 +869,7 @@ async fn test_update_offering_success() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -966,6 +970,7 @@ async fn test_update_offering_unauthorized() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -1858,6 +1863,7 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -1961,6 +1967,7 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2061,6 +2068,7 @@ async fn test_get_provider_offerings_no_matching_pool() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2167,6 +2175,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2242,6 +2251,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2317,6 +2327,7 @@ async fn test_search_offerings_filters_by_pool_existence() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2428,6 +2439,7 @@ async fn test_create_subscription_offering() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2520,6 +2532,7 @@ async fn test_create_yearly_subscription_offering() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2612,6 +2625,7 @@ async fn test_get_subscription_offering_fields() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2729,6 +2743,7 @@ async fn test_one_time_offering_default_subscription_fields() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2821,6 +2836,7 @@ async fn test_template_name_generates_provisioner_config() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -2919,6 +2935,7 @@ async fn test_template_name_non_numeric_no_config() {
         has_critical_flags: None,
         reliability_score: None,
         is_example: false,
+        is_draft: false,
         offering_source: None,
         external_checkout_url: None,
         reseller_name: None,
@@ -3356,5 +3373,181 @@ async fn test_bulk_update_offering_prices_rejects_wrong_owner() {
     assert!(
         result.unwrap_err().to_string().contains("Not all offerings belong to this provider"),
         "error message should mention ownership"
+    );
+}
+
+#[tokio::test]
+async fn test_pricing_stats_returns_correct_median() {
+    let db = setup_test_db().await;
+    let pubkey = [20u8; 32];
+
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    // Insert 3 offerings with prices 10, 20, 30 using unique IDs to avoid conflicts
+    for (i, price) in [(201i64, 10.0f64), (202, 20.0), (203, 30.0)] {
+        sqlx::query(
+            "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) \
+             VALUES ($1, $2, $3, 'Stats Test', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0) \
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(i)
+        .bind(pubkey.as_ref())
+        .bind(format!("stats-off-{}", i))
+        .bind(price)
+        .execute(&db.pool)
+        .await
+        .expect("insert pricing stats offering");
+    }
+
+    let stats = db
+        .get_offering_pricing_stats("compute", Some("US"))
+        .await
+        .expect("get pricing stats");
+    // There may be other compute/US offerings from seed data, so check relative values
+    assert!(stats.count >= 3, "expected at least 3 offerings, got {}", stats.count);
+    assert!(stats.min_price <= 10.0, "min should be <= 10, got {}", stats.min_price);
+    assert!(stats.max_price >= 30.0, "max should be >= 30, got {}", stats.max_price);
+    assert!(stats.avg_price > 0.0, "avg should be positive");
+    assert!(stats.median_price > 0.0, "median should be positive");
+}
+
+#[tokio::test]
+async fn test_pricing_stats_empty_for_unknown_type() {
+    let db = setup_test_db().await;
+    let stats = db
+        .get_offering_pricing_stats("nonexistent_type_xyz", None)
+        .await
+        .expect("get pricing stats for unknown type");
+    assert_eq!(stats.count, 0);
+    assert!((stats.min_price - 0.0).abs() < 0.01);
+    assert!((stats.max_price - 0.0).abs() < 0.01);
+    assert!((stats.avg_price - 0.0).abs() < 0.01);
+    assert!((stats.median_price - 0.0).abs() < 0.01);
+}
+
+#[tokio::test]
+async fn test_pricing_stats_country_filter() {
+    let db = setup_test_db().await;
+    let pubkey = [21u8; 32];
+
+    ensure_provider_with_pool(&db, &pubkey, "DE").await;
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) \
+         VALUES (204, $1, 'stats-de-off', 'DE Stats', 'USD', 50.0, 0, 'public', 'storage', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0) \
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(pubkey.as_ref())
+    .execute(&db.pool)
+    .await
+    .expect("insert DE offering");
+
+    // Without country filter: storage type exists
+    let stats_all = db
+        .get_offering_pricing_stats("storage", None)
+        .await
+        .expect("get pricing stats for all countries");
+    assert!(stats_all.count >= 1);
+
+    // With DE filter: exactly our offering
+    let stats_de = db
+        .get_offering_pricing_stats("storage", Some("DE"))
+        .await
+        .expect("get pricing stats for DE");
+    assert!(stats_de.count >= 1);
+    assert!(stats_de.min_price <= 50.0);
+    assert!(stats_de.max_price >= 50.0);
+
+    // With US filter for storage: should be 0 (no US storage offerings)
+    let stats_us = db
+        .get_offering_pricing_stats("storage", Some("ZZ"))
+        .await
+        .expect("get pricing stats for ZZ");
+    assert_eq!(stats_us.count, 0);
+}
+
+#[tokio::test]
+async fn test_draft_offering_hidden_from_public_search() {
+    let db = setup_test_db().await;
+    let pubkey = [200u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'draft-test-off', 'Draft Test Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'New York', FALSE, TRUE, 0)",
+        &pubkey[..]
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert draft offering");
+
+    let params = SearchOfferingsParams {
+        product_type: None,
+        country: Some("US"),
+        in_stock_only: false,
+        has_recipe: false,
+        min_price_monthly: None,
+        max_price_monthly: None,
+        limit: 50,
+        offset: 0,
+    };
+    let results = db.search_offerings(params).await.expect("search offerings");
+    assert!(
+        !results.iter().any(|o| o.offering_id == "draft-test-off"),
+        "Draft offering must not appear in public marketplace search"
+    );
+}
+
+#[tokio::test]
+async fn test_published_offering_visible_in_public_search() {
+    let db = setup_test_db().await;
+    let pubkey = [201u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "DE").await;
+
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'pub-test-off', 'Published Test Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, FALSE, 0)",
+        &pubkey[..]
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert published offering");
+
+    let params = SearchOfferingsParams {
+        product_type: None,
+        country: Some("DE"),
+        in_stock_only: false,
+        has_recipe: false,
+        min_price_monthly: None,
+        max_price_monthly: None,
+        limit: 50,
+        offset: 0,
+    };
+    let results = db.search_offerings(params).await.expect("search offerings");
+    assert!(
+        results.iter().any(|o| o.offering_id == "pub-test-off"),
+        "Published offering must appear in public marketplace search"
+    );
+}
+
+#[tokio::test]
+async fn test_draft_offering_visible_in_provider_own_listings() {
+    let db = setup_test_db().await;
+    let pubkey = [202u8; 32];
+    ensure_provider_with_pool(&db, &pubkey, "JP").await;
+
+    sqlx::query!(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'draft-provider-view', 'My Draft Offer', 'USD', 20.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'JP', 'Tokyo', FALSE, TRUE, 0)",
+        &pubkey[..]
+    )
+    .execute(&db.pool)
+    .await
+    .expect("insert draft offering for provider view test");
+
+    let results = db
+        .get_provider_offerings(&pubkey)
+        .await
+        .expect("get provider offerings");
+    assert!(
+        results.iter().any(|o| o.offering_id == "draft-provider-view"),
+        "Provider's own draft must be visible in their own offerings list"
     );
 }

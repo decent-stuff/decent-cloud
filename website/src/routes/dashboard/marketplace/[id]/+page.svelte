@@ -10,6 +10,7 @@
 		getSavedOfferingIds,
 		saveOffering,
 		unsaveOffering,
+		contactOffering,
 		hexEncode,
 		type Offering,
 		type ProviderTrustMetrics,
@@ -196,6 +197,39 @@
 	const estimatedCost = $derived(
 		offering?.monthly_price != null ? (offering.monthly_price / 720) * selectedDurationHours : null
 	);
+
+	// Contact provider dialog
+	let showContactDialog = $state(false);
+	let contactMessage = $state('');
+	let contactSubmitting = $state(false);
+	let contactError = $state<string | null>(null);
+	let contactSuccess = $state(false);
+
+	async function handleContactSubmit() {
+		if (!isAuthenticated) {
+			showAuthModal = true;
+			return;
+		}
+		if (!offering?.id || !contactMessage.trim()) return;
+		const info = await authStore.getSigningIdentity();
+		if (!info || !(info.identity instanceof Ed25519KeyIdentity)) return;
+		contactSubmitting = true;
+		contactError = null;
+		try {
+			const { headers } = await signRequest(info.identity, 'POST', `/api/v1/offerings/${offering.id}/contact`, { message: contactMessage.trim() });
+			await contactOffering(offering.id, contactMessage.trim(), headers);
+			contactSuccess = true;
+			contactMessage = '';
+			setTimeout(() => {
+				showContactDialog = false;
+				contactSuccess = false;
+			}, 2000);
+		} catch (e) {
+			contactError = e instanceof Error ? e.message : 'Failed to send inquiry';
+		} finally {
+			contactSubmitting = false;
+		}
+	}
 </script>
 
 <div class="space-y-6 max-w-5xl">
@@ -337,6 +371,13 @@
 						Visit Provider <Icon name="external" size={16} class="text-white" />
 					</a>
 				{:else}
+					<button
+						onclick={() => { if (!isAuthenticated) { showAuthModal = true; } else { showContactDialog = true; } }}
+						class="px-4 py-2.5 bg-surface-elevated border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors text-sm font-medium flex items-center gap-1.5"
+						title="Ask the provider a question before renting"
+					>
+						<Icon name="mail" size={15} />Ask Provider
+					</button>
 					<button
 						onclick={handleRentClick}
 						disabled={offering.is_example}
@@ -663,3 +704,64 @@
 	onClose={() => (showAuthModal = false)}
 	message="Create an account or login to rent cloud resources"
 />
+
+{#if showContactDialog}
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" role="dialog" aria-modal="true">
+		<div class="bg-surface-elevated border border-neutral-700 w-full max-w-md space-y-5 p-6">
+			<div class="flex items-center justify-between">
+				<h2 class="text-lg font-semibold text-white">Ask the Provider</h2>
+				<button onclick={() => { showContactDialog = false; contactError = null; contactMessage = ''; contactSuccess = false; }} class="text-neutral-400 hover:text-white transition-colors">
+					<Icon name="x" size={20} />
+				</button>
+			</div>
+
+			{#if contactSuccess}
+				<div class="bg-success/10 border border-success/20 p-4 text-success text-sm text-center">
+					Message sent! The provider will see it in their notifications.
+				</div>
+			{:else}
+				<p class="text-sm text-neutral-400">
+					Send a question to <span class="text-white">{offering?.owner_username ? `@${offering.owner_username}` : 'this provider'}</span> about their offering. They'll receive it as a notification.
+				</p>
+
+				{#if contactError}
+					<div class="bg-red-500/20 border border-red-500/30 p-3 text-red-400 text-sm">{contactError}</div>
+				{/if}
+
+				<div>
+					<label for="contact-message" class="block text-sm font-medium text-neutral-400 mb-1.5">Your Message</label>
+					<textarea
+						id="contact-message"
+						bind:value={contactMessage}
+						rows={5}
+						placeholder="Hi, I have a question about this offering..."
+						maxlength={2000}
+						class="w-full bg-base border border-neutral-700 text-white px-3 py-2 focus:border-primary-500 focus:outline-none resize-y text-sm"
+					></textarea>
+					<p class="text-xs text-neutral-600 mt-1">{contactMessage.length}/2000</p>
+				</div>
+
+				<div class="flex items-center justify-end gap-3">
+					<button
+						onclick={() => { showContactDialog = false; contactError = null; contactMessage = ''; }}
+						class="text-neutral-400 hover:text-white transition-colors text-sm"
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleContactSubmit}
+						disabled={contactSubmitting || !contactMessage.trim()}
+						class="px-5 py-2 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2"
+					>
+						{#if contactSubmitting}
+							<div class="animate-spin rounded-full h-3.5 w-3.5 border-t-2 border-b-2 border-white"></div>
+							Sending...
+						{:else}
+							Send Message
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}

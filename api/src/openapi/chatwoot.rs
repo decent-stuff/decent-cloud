@@ -24,17 +24,21 @@ pub struct SupportPortalStatus {
     /// Whether the user has a support portal account
     pub has_account: bool,
     /// Chatwoot user ID (if account exists)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub user_id: Option<i64>,
     /// Email address used for support portal
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub email: Option<String>,
     /// Login URL for the support portal
     pub login_url: String,
     /// Help Center portal slug for this provider (if set up)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub portal_slug: Option<String>,
     /// Provider's inbox ID for filtering conversations
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub inbox_id: Option<u32>,
 }
@@ -410,10 +414,10 @@ mod tests {
         };
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["hasAccount"], false);
-        assert!(json["userId"].is_null());
-        assert!(json["email"].is_null());
-        assert!(json["portalSlug"].is_null());
-        assert!(json["inboxId"].is_null());
+        assert!(json.get("userId").is_none());
+        assert!(json.get("email").is_none());
+        assert!(json.get("portalSlug").is_none());
+        assert!(json.get("inboxId").is_none());
     }
 
     #[test]

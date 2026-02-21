@@ -4481,6 +4481,7 @@ impl ProvidersApi {
                 has_critical_flags: None,
                 reliability_score: None,
                 is_example: false,
+                is_draft: false,
                 offering_source: Some("generated".to_string()),
                 external_checkout_url: None,
                 reseller_name: None,
@@ -5155,7 +5156,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"][0]["bytesIn"], 4096_u64);
     }
 
@@ -5168,7 +5169,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "Invalid pubkey format");
     }
 
@@ -5215,7 +5216,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"][0]["offeringId"], "pool-large");
         assert_eq!(json["data"][0]["totalRequests"], 5_i64);
     }
@@ -5257,7 +5258,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"][0]["weekStart"], "2024-02-05");
         assert_eq!(json["data"][0]["revenueE9s"], 14_000_000_000_i64);
     }

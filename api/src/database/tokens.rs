@@ -11,6 +11,7 @@ pub struct TokenTransfer {
     pub to_account: String,
     pub amount_e9s: i64,
     pub fee_e9s: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub memo: Option<String>,
     pub created_at_ns: i64,

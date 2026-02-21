@@ -1244,7 +1244,7 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
         assert_eq!(json["data"]["username"], "alice");
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
     }
 
     #[test]
@@ -1257,7 +1257,7 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "Account not found");
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
     }
 
     // ---- ApiResponse<AdminAccountListResponse> ----

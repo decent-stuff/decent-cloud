@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE spending_alerts SET last_notified_at = NOW() WHERE pubkey = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9c1c4793a245308896abbb33f2a29e1c235d7d25e082009e93757ed933c2ade"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spending_alerts (pubkey, monthly_limit_usd, alert_at_pct)\n               VALUES ($1, $2, $3)\n               ON CONFLICT (pubkey) DO UPDATE\n               SET monthly_limit_usd = EXCLUDED.monthly_limit_usd,\n                   alert_at_pct = EXCLUDED.alert_at_pct,\n                   updated_at = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "801a3046709b059e0cf5546e5b7791cc522291c56f35357dc31446e4fbe9c303"
+}

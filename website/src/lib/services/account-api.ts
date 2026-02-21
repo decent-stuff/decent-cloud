@@ -618,6 +618,22 @@ export async function updateAccountEmail(
 	return result.data;
 }
 
+/**
+ * Delete the authenticated account permanently.
+ * Throws on failure.
+ */
+export async function deleteMyAccount(identity: Ed25519KeyIdentity): Promise<void> {
+	const { headers, body } = await signRequest(identity, 'DELETE', '/api/v1/accounts/me', { confirm: 'DELETE' });
+	const res = await fetch(`${API_BASE_URL}/api/v1/accounts/me`, {
+		method: 'DELETE',
+		headers: headers as HeadersInit,
+		body
+	});
+	const data: ApiResponse<unknown> = await res.json();
+	if (!data.success) {
+		throw new Error(data.error || 'Failed to delete account');
+	}
+}
 function bytesToHex(bytes: Uint8Array): string {
 	return Array.from(bytes)
 		.map((b) => b.toString(16).padStart(2, '0'))

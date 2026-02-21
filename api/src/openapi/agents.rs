@@ -93,6 +93,7 @@ pub struct GatewayDnsRequest {
     /// Datacenter identifier (2-20 chars [a-z0-9-], no leading/trailing hyphen)
     pub dc_id: String,
     /// Public IP address (required for create, ignored for delete)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub public_ip: Option<String>,
 }

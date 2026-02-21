@@ -26,7 +26,7 @@ describe('parseContractEvent', () => {
 		expect(event.updated_at_ns).toBe(1700000000000000000);
 	});
 
-	it('parses valid event with null updated_at_ns', () => {
+	it('treats non-numeric updated_at_ns as undefined', () => {
 		const data = JSON.stringify({
 			contract_id: 'def456',
 			status: 'pending',
@@ -35,13 +35,13 @@ describe('parseContractEvent', () => {
 		const event = parseContractEvent(data);
 		expect(event.contract_id).toBe('def456');
 		expect(event.status).toBe('pending');
-		expect(event.updated_at_ns).toBeNull();
+		expect(event.updated_at_ns).toBeUndefined();
 	});
 
-	it('treats missing updated_at_ns as null', () => {
+	it('treats missing updated_at_ns as undefined', () => {
 		const data = JSON.stringify({ contract_id: 'ghi789', status: 'provisioning' });
 		const event = parseContractEvent(data);
-		expect(event.updated_at_ns).toBeNull();
+		expect(event.updated_at_ns).toBeUndefined();
 	});
 
 	it('throws on malformed JSON', () => {

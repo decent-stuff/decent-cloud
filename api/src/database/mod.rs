@@ -21,6 +21,7 @@ pub mod recovery;
 pub mod reputation;
 pub mod reseller;
 pub mod rewards;
+pub mod spending_alerts;
 pub mod stats;
 pub mod subscriptions;
 pub mod telegram_tracking;

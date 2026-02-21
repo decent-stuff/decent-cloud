@@ -11,6 +11,86 @@ use std::sync::Arc;
 
 pub struct ContractsApi;
 
+/// Check whether the requester has exceeded their spending alert threshold and send a
+/// notification if needed. Only fires once per day to avoid spam.
+///
+/// This is best-effort: any error is logged but does NOT affect contract creation.
+pub async fn check_spending_alert_and_notify(db: &Database, requester_pubkey: &[u8]) {
+    let pubkey_hex = hex::encode(requester_pubkey);
+
+    let alert = match db.get_spending_alert(&pubkey_hex).await {
+        Ok(Some(a)) => a,
+        Ok(None) => return, // No alert configured
+        Err(e) => {
+            tracing::warn!("Failed to fetch spending alert for {}: {:#}", pubkey_hex, e);
+            return;
+        }
+    };
+
+    // Throttle: only notify once per day
+    let now_secs = chrono::Utc::now().timestamp();
+    if let Some(last) = alert.last_notified_at {
+        if now_secs - last < 86_400 {
+            return;
+        }
+    }
+
+    let spending_usd = match db.get_current_month_spending_usd(requester_pubkey).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to fetch monthly spending for {}: {:#}",
+                pubkey_hex,
+                e
+            );
+            return;
+        }
+    };
+
+    let limit = alert.monthly_limit_usd;
+    let threshold_usd = limit * alert.alert_at_pct as f64 / 100.0;
+
+    let (title, body) = if spending_usd >= limit {
+        (
+            "Budget cap reached".to_string(),
+            format!(
+                "Your monthly spending (${:.2}) has reached your ${:.2} budget limit.",
+                spending_usd, limit
+            ),
+        )
+    } else if spending_usd >= threshold_usd {
+        (
+            "Spending alert".to_string(),
+            format!(
+                "You've reached {}% of your monthly budget (${:.2} of ${:.2}).",
+                alert.alert_at_pct, spending_usd, limit
+            ),
+        )
+    } else {
+        return; // Below threshold
+    };
+
+    if let Err(e) = db
+        .insert_user_notification(requester_pubkey, "spending_alert", &title, &body, None)
+        .await
+    {
+        tracing::warn!(
+            "Failed to insert spending alert notification for {}: {:#}",
+            pubkey_hex,
+            e
+        );
+        return;
+    }
+
+    if let Err(e) = db.touch_spending_alert_notified_at(&pubkey_hex).await {
+        tracing::warn!(
+            "Failed to update last_notified_at for spending alert {}: {:#}",
+            pubkey_hex,
+            e
+        );
+    }
+}
+
 /// Helper function to create Stripe checkout session and update contract
 async fn create_stripe_checkout_session(
     db: &Database,
@@ -600,6 +680,9 @@ impl ContractsApi {
                         }
                     }
                 };
+
+                // Best-effort: check spending alert and notify if threshold exceeded
+                check_spending_alert_and_notify(&db, &auth.pubkey).await;
 
                 let message = if is_self_rental {
                     "Self-rental created successfully (no payment required)".to_string()
@@ -1793,7 +1876,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["contractId"], "cafebabe");
-        assert!(json["checkoutUrl"].is_null());
+        assert!(json.get("checkoutUrl").is_none());
     }
 
     #[test]
@@ -1806,7 +1889,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"]["contract_id"], "deadbeef");
         assert_eq!(json["data"]["status"], "requested");
         assert_eq!(json["data"]["payment_amount_e9s"], 5_000_000_000_i64);
@@ -1821,7 +1904,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "Contract not found");
     }
 
@@ -1838,7 +1921,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"]["extensionPaymentE9s"], 500_000_000_i64);
     }
 
@@ -1851,7 +1934,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "Invalid contract ID format");
     }
 
@@ -1899,8 +1982,8 @@ mod tests {
         };
         let json = serde_json::to_value(&ext).unwrap();
         assert!(
-            json["extension_memo"].is_null(),
-            "None memo should serialize as null"
+            json.get("extension_memo").is_none(),
+            "None memo should be absent from JSON"
         );
     }
 
@@ -1929,7 +2012,7 @@ mod tests {
         assert_eq!(json["overage_units"], 0.0_f64);
         assert_eq!(json["estimated_charge_cents"], 50_i64);
         assert_eq!(json["reported_to_stripe"], false);
-        assert!(json["stripe_usage_record_id"].is_null());
+        assert!(json.get("stripe_usage_record_id").is_none());
         assert_eq!(json["billing_unit"], "hour");
     }
 
@@ -2143,7 +2226,7 @@ mod tests {
         };
         let v = serde_json::to_value(&resp).unwrap();
         assert_eq!(v["success"], false);
-        assert!(v["data"].is_null());
+        assert!(v.get("data").is_none());
         assert_eq!(
             v["error"],
             "Unauthorized: you are not a party to this contract"

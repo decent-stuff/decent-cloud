@@ -17,36 +17,50 @@ pub struct ProviderProfile {
     #[oai(skip)]
     pub pubkey: Vec<u8>,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub website_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub logo_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub why_choose_us: Option<String>,
     pub api_version: String,
     pub profile_version: String,
     #[ts(type = "number")]
     pub updated_at_ns: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_hours: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_channels: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub regions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub payment_methods: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub refund_policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub sla_guarantee: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub unique_selling_points: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub common_issues: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | null")]
     pub onboarding_completed_at: Option<i64>,
@@ -79,24 +93,34 @@ pub struct ProviderContact {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(skip_serializing_if_is_none)]
 pub struct ProviderOnboarding {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_hours: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub support_channels: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub regions: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub payment_methods: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub refund_policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub sla_guarantee: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub unique_selling_points: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub common_issues: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | null")]
     pub onboarding_completed_at: Option<i64>,
@@ -109,12 +133,16 @@ pub struct ProviderOnboarding {
 #[serde(rename_all = "camelCase")]
 pub struct Validator {
     pub pubkey: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub website_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub logo_url: Option<String>,
     #[ts(type = "number")]
@@ -141,6 +169,7 @@ pub struct ExternalProvider {
     pub name: String,
     pub domain: String,
     pub website_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub logo_url: Option<String>,
     pub data_source: String,

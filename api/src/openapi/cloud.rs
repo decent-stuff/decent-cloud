@@ -1103,6 +1103,7 @@ impl CloudApi {
             trust_score: None,
             has_critical_flags: None,
             is_example: false,
+            is_draft: false,
             offering_source: Some("self_provisioned".to_string()),
             external_checkout_url: None,
             reseller_name: None,
@@ -1395,7 +1396,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["error"].is_null());
+        assert!(json.get("error").is_none());
         assert_eq!(json["data"]["backendType"], "hetzner");
         assert_eq!(json["data"]["isValid"], true);
     }
@@ -1409,7 +1410,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert_eq!(json["error"], "Cloud account not found");
     }
 
@@ -1466,7 +1467,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
         assert!(json["error"]
             .as_str()
             .unwrap()

@@ -95,11 +95,10 @@ mod tests {
             ..sample_validator()
         };
         let json = serde_json::to_value(&v).unwrap();
-        // serde serializes Option::None as null (oai skip_serializing_if_is_none only affects poem-openapi)
-        assert!(json["logoUrl"].is_null());
-        assert!(json["name"].is_null());
-        assert!(json["description"].is_null());
-        assert!(json["websiteUrl"].is_null());
+        assert!(json.get("logoUrl").is_none());
+        assert!(json.get("name").is_none());
+        assert!(json.get("description").is_none());
+        assert!(json.get("websiteUrl").is_none());
         // Required fields still present
         assert_eq!(json["totalCheckIns"], 1500);
     }
@@ -129,7 +128,7 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "query timeout");
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
     }
 
     #[test]

@@ -170,6 +170,31 @@ export async function searchOfferings(params: OfferingSearchParams = {}): Promis
 	}));
 }
 
+
+export interface OfferingPricingStats {
+	count: number;
+	min_price: number;
+	max_price: number;
+	avg_price: number;
+	median_price: number;
+}
+
+export async function getOfferingPricingStats(
+	productType: string,
+	country?: string
+): Promise<OfferingPricingStats | null> {
+	const params = new URLSearchParams({ product_type: productType });
+	if (country) params.set('country', country);
+	try {
+		const res = await fetch(`${API_BASE_URL}/api/v1/offerings/stats?${params}`);
+		const data = (await res.json()) as ApiResponse<OfferingPricingStats>;
+		if (data.success && data.data) return data.data;
+		return null;
+	} catch {
+		return null;
+	}
+}
+
 export async function getActiveProviders(days: number = 1): Promise<ProviderProfile[]> {
 	const url = `${API_BASE_URL}/api/v1/providers/active/${days}`;
 	const response = await fetch(url);
@@ -1060,6 +1085,8 @@ export interface Contract {
 	payment_method: string;
 	stripe_payment_intent_id?: string;
 	stripe_customer_id?: string;
+	icpay_transaction_id?: string;
+	icpay_payment_id?: string;
 	payment_status: string;
 	currency: string;
 	refund_amount_e9s?: number;
@@ -1067,6 +1094,19 @@ export interface Contract {
 	icpay_refund_id?: string;
 	refund_created_at_ns?: number;
 	status_updated_at_ns?: number;
+	total_released_e9s?: number;
+	last_release_at_ns?: number;
+	// Tax/invoicing fields
+	tax_amount_e9s?: number;
+	tax_rate_percent?: number;
+	tax_type?: string;
+	tax_jurisdiction?: string;
+	customer_tax_id?: string;
+	reverse_charge?: boolean;
+	buyer_address?: string;
+	stripe_invoice_id?: string;
+	receipt_number?: number;
+	receipt_sent_at_ns?: number;
 	// Subscription fields
 	stripe_subscription_id?: string;
 	subscription_status?: string;
@@ -3570,4 +3610,104 @@ export async function getSavedOfferingIds(
 	}
 
 	return payload.data ?? [];
+}
+
+export async function contactOffering(
+	offeringId: number,
+	message: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${offeringId}/contact`;
+	const body = JSON.stringify({ message });
+	const response = await fetch(url, { method: 'POST', headers, body });
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to send inquiry: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<unknown>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to send inquiry');
+	}
+}
+
+// ============ Spending Alert Endpoints ============
+
+export interface SpendingAlert {
+	monthlyLimitUsd: number;
+	alertAtPct: number;
+	lastNotifiedAt?: number;
+}
+
+export async function getSpendingAlert(
+	headers: SignedRequestHeaders,
+	pubkey: string
+): Promise<SpendingAlert | null> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/spending-alert`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch spending alert: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SpendingAlert>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch spending alert');
+	}
+
+	return payload.data ?? null;
+}
+
+export async function upsertSpendingAlert(
+	headers: SignedRequestHeaders,
+	pubkey: string,
+	monthlyLimitUsd: number,
+	alertAtPct: number
+): Promise<SpendingAlert> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/spending-alert`;
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers,
+		body: JSON.stringify({ monthlyLimitUsd, alertAtPct })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to set spending alert: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<SpendingAlert>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to set spending alert');
+	}
+
+	if (!payload.data) {
+		throw new Error('Spending alert response missing data');
+	}
+
+	return payload.data;
+}
+
+export async function deleteSpendingAlert(
+	headers: SignedRequestHeaders,
+	pubkey: string
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/spending-alert`;
+	const response = await fetch(url, { method: 'DELETE', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to delete spending alert: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<void>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to delete spending alert');
+	}
 }

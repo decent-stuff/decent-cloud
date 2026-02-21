@@ -2117,6 +2117,95 @@ impl AccountsApi {
             }),
         }
     }
+    /// Delete my account
+    ///
+    /// Permanently deletes the authenticated account and all associated data.
+    /// Requires confirmation in request body: {"confirm": "DELETE"}
+    /// Admin accounts cannot be self-deleted.
+    #[oai(path = "/accounts/me", method = "delete", tag = "ApiTags::Accounts")]
+    async fn delete_my_account(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        req: Json<crate::openapi::common::DeleteAccountRequest>,
+    ) -> Json<ApiResponse<crate::openapi::common::AdminAccountDeletionSummary>> {
+        if req.0.confirm != "DELETE" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Confirmation must be exactly 'DELETE'".to_string()),
+            });
+        }
+        // Resolve account from authenticated public key
+        let account = match db.get_account_id_by_public_key(&auth.pubkey).await {
+            Ok(Some(account_id)) => match db.get_account(&account_id).await {
+                Ok(Some(acc)) => acc,
+                Ok(None) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Account not found".to_string()),
+                    })
+                }
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to fetch account: {:#?}", e)),
+                    })
+                }
+            },
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("No account found for this key".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to look up account: {:#?}", e)),
+                })
+            }
+        };
+        if account.is_admin {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Admin accounts cannot be self-deleted. Contact system administrator."
+                        .to_string(),
+                ),
+            });
+        }
+        match db.admin_delete_account(&account.id).await {
+            Ok(summary) => {
+                tracing::info!(
+                    "Account '{}' self-deleted: {:?}",
+                    account.username,
+                    summary
+                );
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(crate::openapi::common::AdminAccountDeletionSummary {
+                        offerings_deleted: summary.offerings_deleted,
+                        contracts_as_requester: summary.contracts_as_requester,
+                        contracts_as_provider: summary.contracts_as_provider,
+                        public_keys_deleted: summary.public_keys_deleted,
+                        provider_profile_deleted: summary.provider_profile_deleted,
+                    }),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to delete account: {:#?}", e)),
+            }),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2358,7 +2447,7 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "Account not found");
-        assert!(json["data"].is_null());
+        assert!(json.get("data").is_none());
     }
 
     // ---- ApiResponse<()> for void endpoints ----
@@ -2413,9 +2502,9 @@ mod tests {
             billing_country_code: None,
         };
         let json = serde_json::to_value(&settings).unwrap();
-        assert!(json["billingAddress"].is_null());
-        assert!(json["billingVatId"].is_null());
-        assert!(json["billingCountryCode"].is_null());
+        assert!(json.get("billingAddress").is_none());
+        assert!(json.get("billingVatId").is_none());
+        assert!(json.get("billingCountryCode").is_none());
     }
 
     // ---- PublicKeyInfo ----

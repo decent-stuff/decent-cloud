@@ -1,7 +1,7 @@
 export interface ContractStatusEvent {
 	contract_id: string;
 	status: string;
-	updated_at_ns: number | null;
+	updated_at_ns: number | undefined;
 }
 
 export function buildContractEventsUrl(pubkey: string, apiUrl: string): string {
@@ -23,6 +23,6 @@ export function parseContractEvent(data: string): ContractStatusEvent {
 		contract_id: obj.contract_id as string,
 		status: obj.status as string,
 		updated_at_ns:
-			typeof obj.updated_at_ns === 'number' ? (obj.updated_at_ns as number) : null
+			typeof obj.updated_at_ns === 'number' ? (obj.updated_at_ns as number) : undefined
 	};
 }

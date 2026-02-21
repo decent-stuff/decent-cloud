@@ -22,8 +22,10 @@ pub struct EmptyResponse {}
 #[oai(skip_serializing_if_is_none)]
 pub struct ApiResponse<T: poem_openapi::types::ParseFromJSON + poem_openapi::types::ToJSON> {
     pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub error: Option<String>,
 }
@@ -172,6 +174,7 @@ pub struct ResponseMetricsResponse {
 pub struct RentalRequestResponse {
     pub contract_id: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub checkout_url: Option<String>,
 }
@@ -424,6 +427,15 @@ pub struct AdminSetAccountEmailRequest {
     pub email: Option<String>,
 }
 
+/// Request body for self-service account deletion. Requires explicit confirmation.
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAccountRequest {
+    /// Must be exactly "DELETE" to confirm permanent deletion.
+    pub confirm: String,
+}
+
 /// Summary of resources deleted when deleting an account
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
@@ -452,10 +464,13 @@ pub struct NotificationConfigResponse {
     pub notify_telegram: bool,
     pub notify_email: bool,
     pub notify_sms: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub telegram_chat_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub notify_phone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub notify_email_address: Option<String>,
 }
@@ -692,8 +707,10 @@ pub struct UserNotificationResponse {
     pub notification_type: String,
     pub title: String,
     pub body: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub contract_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub read_at: Option<i64>,
     pub created_at: i64,

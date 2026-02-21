@@ -18,97 +18,129 @@ pub struct Contract {
     #[ts(type = "string")]
     pub provider_pubkey: String,
     pub offering_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub region_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub instance_config: Option<String>,
     #[ts(type = "number")]
     pub payment_amount_e9s: i64,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub start_timestamp_ns: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub end_timestamp_ns: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub duration_hours: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub original_duration_hours: Option<i64>,
     pub request_memo: String,
     #[ts(type = "number")]
     pub created_at_ns: i64,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub provisioning_instance_details: Option<String>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub provisioning_completed_at_ns: Option<i64>,
     pub payment_method: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_payment_intent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_customer_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub icpay_transaction_id: Option<String>,
     pub payment_status: String,
     pub currency: String,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub refund_amount_e9s: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_refund_id: Option<String>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub refund_created_at_ns: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub status_updated_at_ns: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub icpay_payment_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub icpay_refund_id: Option<String>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub total_released_e9s: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub last_release_at_ns: Option<i64>,
     // Tax tracking (from Stripe Tax or manual entry)
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub tax_amount_e9s: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub tax_rate_percent: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub tax_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub tax_jurisdiction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub customer_tax_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub reverse_charge: Option<bool>,
     /// Buyer address for B2B invoices
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub buyer_address: Option<String>,
     /// Stripe invoice ID for invoice PDF retrieval
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_invoice_id: Option<String>,
     /// Receipt tracking
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub receipt_number: Option<i64>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub receipt_sent_at_ns: Option<i64>,
     // Subscription tracking (for recurring billing)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_subscription_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub subscription_status: Option<String>,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub current_period_end_ns: Option<i64>,
     #[ts(type = "boolean")]
@@ -120,25 +152,31 @@ pub struct Contract {
     pub auto_renew: bool,
     // Gateway configuration (DC-level reverse proxy)
     /// Gateway slug (6-char alphanumeric) for subdomain routing
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_slug: Option<String>,
     /// Full gateway subdomain (e.g., "k7m2p4.a3x9f2b1.dev-gw.decent-cloud.org")
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_subdomain: Option<String>,
     /// SSH port accessible via gateway (0-65535)
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_ssh_port: Option<i32>,
     /// Start of allocated port range (0-65535)
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_port_range_start: Option<i32>,
     /// End of allocated port range (0-65535)
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub gateway_port_range_end: Option<i32>,
     /// Timestamp (ns) when user requested a password reset; cleared by agent after completion.
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub password_reset_requested_at_ns: Option<i64>,
 }
@@ -170,17 +208,23 @@ pub struct ProviderPendingReleases {
 #[oai(skip_serializing_if_is_none)]
 pub struct RentalRequestParams {
     pub offering_db_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub ssh_pubkey: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub contact_method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub request_memo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub duration_hours: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub payment_method: Option<String>,
     /// Buyer address for B2B invoices (street, city, postal code, country)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub buyer_address: Option<String>,
 }
@@ -197,6 +241,7 @@ pub struct ContractExtension {
     pub extension_payment_e9s: i64,
     pub previous_end_timestamp_ns: i64,
     pub new_end_timestamp_ns: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub extension_memo: Option<String>,
     pub created_at_ns: i64,
@@ -210,25 +255,32 @@ pub struct ContractWithSpecs {
     pub contract_id: String,
     pub offering_id: String,
     pub requester_ssh_pubkey: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub instance_config: Option<String>,
     /// CPU cores from offering (processor_cores)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub cpu_cores: Option<i64>,
     /// Memory amount from offering (e.g. "16 GB")
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub memory_amount: Option<String>,
     /// Storage capacity from offering (e.g. "100 GB")
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub storage_capacity: Option<String>,
     /// Provisioner type from offering (e.g. "proxmox", "script", "manual")
     /// NULL = use agent's default provisioner
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub provisioner_type: Option<String>,
     /// Provisioner config JSON from offering
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub provisioner_config: Option<String>,
     /// Script to execute via SSH after VM provisioning (uses shebang for interpreter)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub post_provision_script: Option<String>,
 }
@@ -3123,14 +3175,17 @@ pub struct ContractUsage {
     #[ts(type = "number")]
     pub units_used: f64,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub units_included: Option<f64>,
     #[ts(type = "number")]
     pub overage_units: f64,
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub estimated_charge_cents: Option<i64>,
     pub reported_to_stripe: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub stripe_usage_record_id: Option<String>,
     #[ts(type = "number")]
@@ -3169,6 +3224,7 @@ pub struct ProviderHealthSummary {
     /// Uptime percentage (0.0 - 100.0)
     pub uptime_percent: f64,
     /// Average latency in milliseconds (None if no latency data)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub avg_latency_ms: Option<f64>,
     /// Number of contracts with health data in the period
@@ -3203,10 +3259,12 @@ pub struct ContractHealthSummary {
     /// Uptime percentage (0.0 - 100.0)
     pub uptime_percent: f64,
     /// Average latency in milliseconds (None if no latency data)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub avg_latency_ms: Option<f64>,
     /// Timestamp of the most recent check (nanoseconds since epoch), None if no checks
     #[ts(type = "number | null")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub last_checked_at: Option<i64>,
 }
@@ -3228,9 +3286,11 @@ pub struct ContractHealthCheck {
     pub status: String,
     /// Optional latency measurement in milliseconds
     #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub latency_ms: Option<i32>,
     /// Optional JSON with additional diagnostic details
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub details: Option<String>,
     /// Timestamp when this record was created (nanoseconds since epoch)
@@ -3251,13 +3311,16 @@ pub struct ContractEvent {
     pub contract_id: String,
     /// Event type: 'status_change', 'payment_confirmed', 'provisioned', 'extension', 'password_reset', 'note'
     pub event_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub old_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub new_status: Option<String>,
     /// Who caused the event: 'tenant', 'provider', 'system'
     pub actor: String,
     /// Optional JSON or plain text details
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub details: Option<String>,
     /// Nanoseconds since epoch

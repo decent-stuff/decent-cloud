@@ -56,17 +56,22 @@ pub struct AccountWithKeys {
     pub created_at: i64,
     pub updated_at: i64,
     // Profile fields (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub profile_updated_at: Option<i64>,
     pub public_keys: Vec<PublicKeyInfo>,
     pub is_admin: bool,
     pub email_verified: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub email: Option<String>,
 }
@@ -80,10 +85,13 @@ pub struct PublicKeyInfo {
     pub public_key: String,
     pub added_at: i64,
     pub is_active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub device_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub disabled_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub disabled_by_key_id: Option<String>,
 }
@@ -97,12 +105,16 @@ pub struct AccountProfile {
     pub username: String,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub bio: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub avatar_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub profile_updated_at: Option<i64>,
 }
@@ -127,10 +139,13 @@ impl From<Account> for AccountProfile {
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct BillingSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub billing_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub billing_vat_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub billing_country_code: Option<String>,
 }

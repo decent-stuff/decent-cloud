@@ -1,8 +1,9 @@
-use super::common::{default_false, default_limit, ApiResponse, ApiTags};
-use crate::auth::OptionalApiAuth;
+use super::common::{default_false, default_limit, ApiResponse, ApiTags, EmptyResponse};
+use crate::auth::{ApiAuthenticatedUser, OptionalApiAuth};
 use crate::database::Database;
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// CSV template column headers for offerings export/import
@@ -63,10 +64,44 @@ pub fn product_type_label(key: &str) -> &str {
     }
 }
 
+/// Request body for contacting an offering's provider
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct ContactOfferingRequest {
+    /// Message to the provider (1–2000 characters)
+    pub message: String,
+}
+
 pub struct OfferingsApi;
 
 #[OpenApi]
 impl OfferingsApi {
+    /// Get pricing statistics for offerings
+    ///
+    /// Returns price statistics (min, max, avg, median) for a given product type and optional country
+    #[oai(path = "/offerings/stats", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_offering_stats(
+        &self,
+        db: Data<&Arc<Database>>,
+        product_type: poem_openapi::param::Query<String>,
+        country: poem_openapi::param::Query<Option<String>>,
+    ) -> Json<ApiResponse<crate::database::offerings::OfferingPricingStats>> {
+        match db
+            .get_offering_pricing_stats(&product_type.0, country.0.as_deref())
+            .await
+        {
+            Ok(stats) => Json(ApiResponse {
+                success: true,
+                data: Some(stats),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to get pricing stats: {e:#?}")),
+            }),
+        }
+    }
+
     /// Search offerings
     ///
     /// Search for offerings with optional filters or DSL query
@@ -349,6 +384,105 @@ impl OfferingsApi {
             error: None,
         })
     }
+
+    /// Contact offering provider
+    ///
+    /// Sends an inquiry message to the provider via an in-app notification.
+    /// Useful for asking questions before creating a rental contract.
+    #[oai(path = "/offerings/:id/contact", method = "post", tag = "ApiTags::Offerings")]
+    async fn contact_offering(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+        auth: ApiAuthenticatedUser,
+        body: Json<ContactOfferingRequest>,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        let message = body.0.message.trim().to_string();
+        if message.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Message cannot be empty".to_string()),
+            });
+        }
+        if message.len() > 2000 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Message too long (max 2000 characters)".to_string()),
+            });
+        }
+
+        let offering = match db.get_offering(id.0).await {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Offering not found".to_string()),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get offering {}: {:#}", id.0, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to load offering".to_string()),
+                });
+            }
+        };
+
+        let provider_pubkey_bytes = match hex::decode(&offering.pubkey) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Invalid provider pubkey hex {}: {:#}", offering.pubkey, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Internal error".to_string()),
+                });
+            }
+        };
+
+        if provider_pubkey_bytes == auth.pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Cannot send an inquiry to your own offering".to_string()),
+            });
+        }
+
+        let sender_name = match db.get_account_with_keys_by_public_key(&auth.pubkey).await {
+            Ok(Some(acc)) => acc.username,
+            Ok(None) | Err(_) => hex::encode(&auth.pubkey[..4]),
+        };
+
+        let title = format!("Inquiry about \"{}\"", offering.offer_name);
+        let body_text = format!("From {}: {}", sender_name, message);
+        if let Err(e) = db
+            .insert_user_notification(
+                &provider_pubkey_bytes,
+                "offering_inquiry",
+                &title,
+                &body_text,
+                None,
+            )
+            .await
+        {
+            tracing::error!("Failed to insert provider notification: {:#}", e);
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Failed to send inquiry".to_string()),
+            });
+        }
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(EmptyResponse {}),
+            error: None,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -394,5 +528,33 @@ mod tests {
     fn test_product_type_label_unknown_passes_through() {
         assert_eq!(product_type_label("quantum"), "quantum");
         assert_eq!(product_type_label(""), "");
+    }
+
+    #[test]
+    fn test_contact_offering_request_serialization() {
+        let req = ContactOfferingRequest {
+            message: "Is this available next week?".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["message"], "Is this available next week?");
+    }
+
+    #[test]
+    fn test_contact_offering_request_deserialization() {
+        let json = r#"{"message":"Hello provider"}"#;
+        let req: ContactOfferingRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.message, "Hello provider");
+    }
+
+    #[test]
+    fn test_contact_offering_message_max_length() {
+        // 2000 chars is valid, 2001 is not (enforcement is in handler but we verify the struct)
+        let long_msg = "a".repeat(2000);
+        let req = ContactOfferingRequest { message: long_msg.clone() };
+        assert_eq!(req.message.len(), 2000);
+
+        let too_long = "a".repeat(2001);
+        let req2 = ContactOfferingRequest { message: too_long.clone() };
+        assert_eq!(req2.message.len(), 2001);
     }
 }

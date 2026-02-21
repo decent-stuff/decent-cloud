@@ -928,6 +928,7 @@ pub struct ProviderTrustMetrics {
     /// Composite trust score 0-100
     pub trust_score: i64,
     /// Median hours from payment to provisioned service
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub time_to_delivery_hours: Option<f64>,
@@ -948,18 +949,22 @@ pub struct ProviderTrustMetrics {
 
     // Red flag metrics
     /// Percentage of contracts cancelled within first 10% of duration
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub early_cancellation_rate_pct: Option<f64>,
     /// Average hours to first response after contract request
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub avg_response_time_hours: Option<f64>,
     /// Percentage of accepted contracts never provisioned
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub provisioning_failure_rate_pct: Option<f64>,
     /// Percentage of contract requests rejected
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub rejection_rate_pct: Option<f64>,
@@ -987,15 +992,18 @@ pub struct ProviderTrustMetrics {
     /// Provider tenure classification: "new" (<5), "growing" (5-20), "established" (>20)
     pub provider_tenure: String,
     /// Ratio of actual contract duration to expected (avg_actual/avg_expected)
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub avg_contract_duration_ratio: Option<f64>,
     /// Percentage of requests that received no response (>7 days old, still "requested")
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub no_response_rate_pct: Option<f64>,
     /// Abandonment velocity: ratio of recent (30d) to baseline (31-90d) cancellation rates.
     /// >1.5 = concerning, >2.0 = critical. None if insufficient baseline data.
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub abandonment_velocity: Option<f64>,
@@ -1005,16 +1013,19 @@ pub struct ProviderTrustMetrics {
     #[ts(type = "number")]
     pub feedback_count: i64,
     /// Percentage of renters who said service matched description (0-100). None if no feedback.
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub feedback_service_match_rate_pct: Option<f64>,
     /// Percentage of renters who would rent again (0-100). None if no feedback.
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub feedback_would_rent_again_rate_pct: Option<f64>,
 
     /// Composite reliability score 0-100: uptime 40% + completion rate 35% + response rate 25%.
     /// None if insufficient data (< 3 health checks AND < 3 contracts total).
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub reliability_score: Option<f64>,
@@ -1025,6 +1036,7 @@ pub struct ProviderTrustMetrics {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct AccountSearchResult {
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub display_name: Option<String>,
     pub pubkey: String,
@@ -1096,6 +1108,7 @@ pub struct ProviderContractFeedback {
     #[ts(type = "number")]
     pub created_at_ns: i64,
     /// When the contract was created (nanoseconds), if available
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     #[ts(type = "number | undefined")]
     pub contract_created_at_ns: Option<i64>,

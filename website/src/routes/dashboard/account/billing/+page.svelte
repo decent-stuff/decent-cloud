@@ -4,7 +4,17 @@
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import { signRequest } from "$lib/services/auth-api";
-	import { getBillingSettings, updateBillingSettings, validateVatId, type BillingSettings } from "$lib/services/api";
+	import {
+		getBillingSettings,
+		updateBillingSettings,
+		validateVatId,
+		getSpendingAlert,
+		upsertSpendingAlert,
+		deleteSpendingAlert,
+		hexEncode,
+		type BillingSettings,
+		type SpendingAlert,
+	} from "$lib/services/api";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -22,6 +32,15 @@
 	let error = $state("");
 	let success = $state("");
 	let vatValidationResult = $state<{ valid: boolean; name?: string; error?: string } | null>(null);
+
+	// Spending alert state
+	let spendingAlert = $state<SpendingAlert | null>(null);
+	let alertLimitInput = $state("100");
+	let alertPctInput = $state("80");
+	let alertLoading = $state(false);
+	let alertSaving = $state(false);
+	let alertError = $state("");
+	let alertSuccess = $state("");
 
 	// EU country codes for VAT
 	const euCountries = [
@@ -86,6 +105,74 @@
 			error = e instanceof Error ? e.message : "Failed to load billing settings";
 		} finally {
 			loading = false;
+		}
+		await loadSpendingAlert();
+	}
+
+	async function loadSpendingAlert() {
+		if (!currentIdentity?.identity) return;
+		alertLoading = true;
+		alertError = "";
+		try {
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const { headers } = await signRequest(currentIdentity.identity, "GET", `/api/v1/users/${pubkeyHex}/spending-alert`);
+			spendingAlert = await getSpendingAlert(headers, pubkeyHex);
+			if (spendingAlert) {
+				alertLimitInput = String(spendingAlert.monthlyLimitUsd);
+				alertPctInput = String(spendingAlert.alertAtPct);
+			}
+		} catch (e) {
+			alertError = e instanceof Error ? e.message : "Failed to load spending alert";
+		} finally {
+			alertLoading = false;
+		}
+	}
+
+	async function handleSaveSpendingAlert() {
+		if (!currentIdentity?.identity) return;
+		const limit = parseFloat(alertLimitInput);
+		const pct = parseInt(alertPctInput, 10);
+		if (isNaN(limit) || limit <= 0) {
+			alertError = "Monthly limit must be a positive number";
+			return;
+		}
+		if (isNaN(pct) || pct < 1 || pct > 100) {
+			alertError = "Alert threshold must be between 1 and 100";
+			return;
+		}
+		alertSaving = true;
+		alertError = "";
+		alertSuccess = "";
+		try {
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const body = { monthlyLimitUsd: limit, alertAtPct: pct };
+			const { headers } = await signRequest(currentIdentity.identity, "PUT", `/api/v1/users/${pubkeyHex}/spending-alert`, body);
+			spendingAlert = await upsertSpendingAlert(headers, pubkeyHex, limit, pct);
+			alertSuccess = "Spending alert saved";
+		} catch (e) {
+			alertError = e instanceof Error ? e.message : "Failed to save spending alert";
+		} finally {
+			alertSaving = false;
+		}
+	}
+
+	async function handleDeleteSpendingAlert() {
+		if (!currentIdentity?.identity) return;
+		alertSaving = true;
+		alertError = "";
+		alertSuccess = "";
+		try {
+			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const { headers } = await signRequest(currentIdentity.identity, "DELETE", `/api/v1/users/${pubkeyHex}/spending-alert`);
+			await deleteSpendingAlert(headers, pubkeyHex);
+			spendingAlert = null;
+			alertLimitInput = "100";
+			alertPctInput = "80";
+			alertSuccess = "Spending alert removed";
+		} catch (e) {
+			alertError = e instanceof Error ? e.message : "Failed to remove spending alert";
+		} finally {
+			alertSaving = false;
 		}
 	}
 
@@ -266,6 +353,105 @@
 					</button>
 				</div>
 			</div>
+		</div>
+
+		<!-- Spending Alert -->
+		<div class="card p-6 border border-neutral-800">
+			<h2 class="text-xl font-semibold text-white mb-1">Spending Alerts</h2>
+			<p class="text-neutral-500 text-sm mb-6">
+				Get notified when your monthly spending reaches a threshold. A notification is sent when you reach the alert percentage and again when you hit the cap.
+			</p>
+
+			{#if alertLoading}
+				<p class="text-neutral-500 text-sm">Loading spending alert...</p>
+			{:else}
+				{#if alertError}
+					<div class="mb-4 p-3 bg-red-500/20 border border-red-500/50 text-red-200 text-sm">
+						{alertError}
+					</div>
+				{/if}
+				{#if alertSuccess}
+					<div class="mb-4 p-3 bg-green-500/20 border border-green-500/50 text-green-200 text-sm">
+						{alertSuccess}
+					</div>
+				{/if}
+
+				{#if spendingAlert}
+					<!-- Current config summary -->
+					<div class="mb-4 p-4 bg-primary-500/10 border border-primary-500/30 text-sm">
+						<p class="text-primary-300 font-medium mb-1">Active spending alert</p>
+						<p class="text-neutral-400">
+							Cap: <span class="text-white font-medium">${spendingAlert.monthlyLimitUsd.toFixed(2)}/month</span>
+							&nbsp;&bull;&nbsp;
+							Alert at: <span class="text-white font-medium">{spendingAlert.alertAtPct}%</span>
+							(${(spendingAlert.monthlyLimitUsd * spendingAlert.alertAtPct / 100).toFixed(2)})
+						</p>
+					</div>
+				{/if}
+
+				<div class="space-y-4">
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div>
+							<label for="alertLimit" class="block text-neutral-400 text-sm mb-1">
+								Monthly limit (USD)
+							</label>
+							<div class="relative">
+								<span class="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500">$</span>
+								<input
+									id="alertLimit"
+									type="number"
+									min="1"
+									step="1"
+									bind:value={alertLimitInput}
+									placeholder="100"
+									class="w-full pl-8 pr-4 py-2 bg-surface-elevated border border-neutral-800 text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+								/>
+							</div>
+						</div>
+
+						<div>
+							<label for="alertPct" class="block text-neutral-400 text-sm mb-1">
+								Alert threshold (%)
+							</label>
+							<div class="relative">
+								<input
+									id="alertPct"
+									type="number"
+									min="1"
+									max="100"
+									step="1"
+									bind:value={alertPctInput}
+									placeholder="80"
+									class="w-full px-4 py-2 bg-surface-elevated border border-neutral-800 text-white placeholder-white/40 focus:outline-none focus:border-primary-500 pr-8"
+								/>
+								<span class="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500">%</span>
+							</div>
+							<p class="text-neutral-600 text-xs mt-1">
+								Alert fires at this percentage of the monthly cap
+							</p>
+						</div>
+					</div>
+
+					<div class="pt-2 flex gap-3">
+						<button
+							onclick={handleSaveSpendingAlert}
+							disabled={alertSaving}
+							class="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+						>
+							{alertSaving ? "Saving..." : spendingAlert ? "Update Alert" : "Set Alert"}
+						</button>
+						{#if spendingAlert}
+							<button
+								onclick={handleDeleteSpendingAlert}
+								disabled={alertSaving}
+								class="px-6 py-2 border border-red-500/50 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								Remove Alert
+							</button>
+						{/if}
+					</div>
+				</div>
+			{/if}
 		</div>
 
 		<div class="bg-surface-elevated backdrop-blur-lg  p-6 border border-neutral-800">

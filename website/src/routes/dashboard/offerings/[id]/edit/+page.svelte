@@ -19,6 +19,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import { signRequest } from '$lib/services/auth-api';
 	import Icon from '$lib/components/Icons.svelte';
+	import OfferingPreviewCard from '$lib/components/OfferingPreviewCard.svelte';
 	import type { IdentityInfo } from '$lib/stores/auth';
 	import type { Offering } from '$lib/services/api';
 
@@ -47,6 +48,7 @@
 	let description = $state('');
 	let productType = $state('compute');
 	let visibility = $state('private');
+	let isDraft = $state(false);
 	let monthlyPrice = $state<number | null>(null);
 	let currency = $state('USD');
 	let setupFee = $state(0);
@@ -61,6 +63,24 @@
 	// Recipe template state
 	let selectedTemplate = $state('');
 	import { RECIPE_TEMPLATES } from '$lib/data/recipe-templates';
+
+	// Derived preview object for OfferingPreviewCard
+	const previewOffering = $derived({
+		offer_name: offerName,
+		offering_id: existing?.offering_id,
+		description,
+		product_type: productType,
+		monthly_price: monthlyPrice ?? undefined,
+		currency,
+		setup_fee: setupFee,
+		datacenter_city: selectedLocation?.city ?? existing?.datacenter_city,
+		datacenter_country: selectedLocation?.country ?? existing?.datacenter_country,
+		processor_cores: selectedServerType?.cores ?? existing?.processor_cores,
+		memory_amount: selectedServerType ? `${selectedServerType.memoryGb} GB` : (existing?.memory_amount ?? undefined),
+		total_ssd_capacity: selectedServerType ? `${selectedServerType.diskGb} GB` : (existing?.total_ssd_capacity ?? undefined),
+		post_provision_script: postProvisionScript || undefined,
+		is_draft: isDraft
+	});
 
 	function applyTemplate() {
 		const tpl = RECIPE_TEMPLATES.find((t) => t.key === selectedTemplate);
@@ -161,6 +181,7 @@
 
 			const offering = {
 				...existing,
+				is_draft: isDraft,
 				offer_name: offerName.trim(),
 				description: description.trim() || null,
 				currency,
@@ -224,6 +245,7 @@
 					currency = offering.currency;
 					setupFee = offering.setup_fee;
 					postProvisionScript = offering.post_provision_script ?? '';
+					isDraft = offering.is_draft ?? false;
 				} catch (e) {
 					error = e instanceof Error ? e.message : 'Failed to load offering';
 				}
@@ -493,6 +515,14 @@
 				</div>
 			</div>
 
+			<!-- Draft mode toggle -->
+			<div class="flex items-center gap-3 p-3 bg-surface-elevated border border-neutral-700">
+				<input type="checkbox" id="isDraft" bind:checked={isDraft} class="w-4 h-4 accent-primary-400" />
+				<label for="isDraft" class="text-neutral-300 text-sm cursor-pointer">
+					Save as draft <span class="text-neutral-500">(hidden from marketplace until published)</span>
+				</label>
+			</div>
+
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 				<div>
 					<label for="monthly-price" class="block text-sm font-medium text-neutral-400 mb-1.5">
@@ -577,7 +607,10 @@
 			</div>
 		</div>
 
-		<!-- Submit -->
+		<!-- Marketplace preview -->
+	<OfferingPreviewCard offering={previewOffering} />
+
+	<!-- Submit -->
 		<div class="flex items-center justify-between">
 			<a href="/dashboard/offerings" class="text-neutral-400 hover:text-white transition-colors">
 				Cancel

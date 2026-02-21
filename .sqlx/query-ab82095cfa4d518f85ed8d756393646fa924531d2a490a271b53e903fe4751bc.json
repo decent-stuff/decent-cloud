@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT monthly_limit_usd,\n                      alert_at_pct,\n                      EXTRACT(EPOCH FROM last_notified_at)::BIGINT as \"last_notified_at: i64\"\n               FROM spending_alerts WHERE pubkey = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "monthly_limit_usd",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "alert_at_pct",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_notified_at: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "ab82095cfa4d518f85ed8d756393646fa924531d2a490a271b53e903fe4751bc"
+}
