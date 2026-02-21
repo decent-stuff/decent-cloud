@@ -11,6 +11,7 @@
 		saveOffering,
 		unsaveOffering,
 		contactOffering,
+		trackOfferingView,
 		hexEncode,
 		type Offering,
 		type ProviderTrustMetrics,
@@ -54,6 +55,8 @@
 			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
 			if (offering) {
 				recordView(offeringId);
+				// Fire-and-forget: log a view on the backend for analytics (errors are non-fatal)
+				trackOfferingView(offeringId).catch((err) => console.warn('Failed to track offering view:', err));
 				[trustMetrics, providerProfile] = await Promise.all([
 					getProviderTrustMetrics(offering.pubkey).catch(() => null),
 					getProviderProfile(offering.pubkey).catch(() => null)

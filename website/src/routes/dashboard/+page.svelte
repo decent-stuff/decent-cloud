@@ -52,6 +52,53 @@
 	// Derived role for personalized stats
 	let userRole = $derived(detectUserRole(activity, myOfferings));
 
+	// Spending insights derived from tenant rental activity
+	let spendingInsights = $derived.by(() => {
+		const rentals = activity?.rentals_as_requester ?? [];
+		if (rentals.length === 0) return null;
+
+		const now = new Date();
+		const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+		const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+		const lastMonthEnd = thisMonthStart;
+		const daysLeftInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate();
+
+		let thisMonth = 0;
+		let lastMonth = 0;
+		const activeContracts: typeof rentals = [];
+
+		for (const c of rentals) {
+			const createdMs = (c.created_at_ns ?? 0) / 1_000_000;
+			const amountIcp = (c.payment_amount_e9s ?? 0) / 1e9;
+
+			if (createdMs >= thisMonthStart) thisMonth += amountIcp;
+			else if (createdMs >= lastMonthStart && createdMs < lastMonthEnd) lastMonth += amountIcp;
+
+			if (c.status === 'active' || c.status === 'provisioned') activeContracts.push(c);
+		}
+
+		// Sort active contracts by payment descending, take top 3
+		const top3 = [...activeContracts]
+			.sort((a, b) => (b.payment_amount_e9s ?? 0) - (a.payment_amount_e9s ?? 0))
+			.slice(0, 3);
+
+		// Projected: for active contracts with an end_timestamp_ns, compute remaining daily rate
+		let projected = 0;
+		for (const c of activeContracts) {
+			if (!c.end_timestamp_ns || !c.duration_hours || !c.payment_amount_e9s) continue;
+			const totalIcp = c.payment_amount_e9s / 1e9;
+			const dailyRate = totalIcp / (c.duration_hours / 24);
+			projected += dailyRate * daysLeftInMonth;
+		}
+
+		const trend: 'up' | 'down' | 'same' =
+			lastMonth === 0 ? 'same' :
+			thisMonth > lastMonth * 1.05 ? 'up' :
+			thisMonth < lastMonth * 0.95 ? 'down' : 'same';
+
+		return { thisMonth, lastMonth, trend, top3, projected, daysLeftInMonth };
+	});
+
 	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
 		if (!publicKeyBytes) {
 			trustMetrics = null;
@@ -400,6 +447,82 @@
 				<p class="metric-subtext">All time</p>
 			</div>
 		</div>
+
+		<!-- Spending Insights Widget -->
+		{#if spendingInsights}
+			<div class="card p-5">
+				<div class="flex items-center justify-between mb-4">
+					<h2 class="text-base font-semibold text-white">Spending Insights</h2>
+					<a href="/dashboard/rentals" class="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1">
+						<span>View rentals</span>
+						<Icon name="arrow-right" size={16} />
+					</a>
+				</div>
+
+				<!-- Monthly comparison row -->
+				<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="download" size={16} class="text-primary-500" />
+							<span class="metric-label mb-0 text-xs">This Month</span>
+						</div>
+						<p class="text-lg font-bold text-white">{spendingInsights.thisMonth.toFixed(2)}</p>
+						<p class="metric-subtext">ICP</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="clock" size={16} class="text-neutral-600" />
+							<span class="metric-label mb-0 text-xs">Last Month</span>
+						</div>
+						<p class="text-lg font-bold text-white">{spendingInsights.lastMonth.toFixed(2)}</p>
+						<p class="metric-subtext">ICP</p>
+					</div>
+					<div class="metric-card">
+						<div class="flex items-center gap-2 mb-2">
+							<Icon name="arrow-right" size={16} class={spendingInsights.trend === 'up' ? 'text-danger' : spendingInsights.trend === 'down' ? 'text-success' : 'text-neutral-500'} />
+							<span class="metric-label mb-0 text-xs">Trend</span>
+						</div>
+						<p class="text-lg font-bold {spendingInsights.trend === 'up' ? 'text-danger' : spendingInsights.trend === 'down' ? 'text-success' : 'text-neutral-400'}">
+							{spendingInsights.trend === 'up' ? '↑↑' : spendingInsights.trend === 'down' ? '↓↓' : '→'}
+						</p>
+						<p class="metric-subtext">vs last month</p>
+					</div>
+					{#if spendingInsights.projected > 0}
+						<div class="metric-card">
+							<div class="flex items-center gap-2 mb-2">
+								<Icon name="file" size={16} class="text-amber-500" />
+								<span class="metric-label mb-0 text-xs">Projected</span>
+							</div>
+							<p class="text-lg font-bold text-white">{spendingInsights.projected.toFixed(2)}</p>
+							<p class="metric-subtext">{spendingInsights.daysLeftInMonth}d remaining</p>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Top 3 most expensive active contracts -->
+				{#if spendingInsights.top3.length > 0}
+					<div>
+						<p class="text-xs text-neutral-500 font-medium mb-2">Top Active Contracts</p>
+						<div class="space-y-2">
+							{#each spendingInsights.top3 as contract (contract.contract_id)}
+								<a
+									href="/dashboard/rentals/{contract.contract_id}"
+									class="flex items-center justify-between p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 transition-colors"
+								>
+									<div class="flex-1 min-w-0">
+										<p class="text-sm text-neutral-300 font-mono truncate">{contract.offering_id}</p>
+										<p class="text-xs text-neutral-600 font-mono">{contract.contract_id.slice(0, 12)}…</p>
+									</div>
+									<span class="text-sm font-mono text-primary-400 ml-3">
+										{(contract.payment_amount_e9s / 1e9).toFixed(2)} ICP
+									</span>
+								</a>
+							{/each}
+						</div>
+					</div>
+				{/if}
+			</div>
+		{/if}
 	{:else}
 		<!-- Provider personalized stats -->
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">

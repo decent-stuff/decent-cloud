@@ -8,8 +8,10 @@
 		deleteProviderOffering,
 		getProviderOnboarding,
 		bulkUpdateOfferingPrices,
+		getOfferingAnalytics,
 		type Offering,
 		type CsvImportResult,
+		type OfferingAnalytics,
 		getExampleOfferingsCSV,
 		getProductTypes,
 		type ProductType
@@ -43,6 +45,7 @@
 	let bulkPrices = $state<Record<number, string>>({});
 	let savingBulk = $state(false);
 	let bulkError = $state<string | null>(null);
+	let analyticsMap = $state<Record<number, OfferingAnalytics>>({});
 
 	async function loadOfferings() {
 		try {
@@ -61,6 +64,23 @@
 			]);
 			offerings = fetchedOfferings;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
+
+			// Load analytics for each offering (fire individually, best-effort)
+			analyticsMap = {};
+			await Promise.all(
+				fetchedOfferings
+					.filter((o) => o.id !== undefined)
+					.map(async (o) => {
+						try {
+							const path = `/api/v1/offerings/${o.id}/analytics`;
+										const signed = await signRequest(currentIdentity!.identity, 'GET', path);
+							const analytics = await getOfferingAnalytics(o.id!, signed.headers);
+							analyticsMap = { ...analyticsMap, [o.id!]: analytics };
+						} catch {
+							// Analytics are non-critical; silently skip on error
+						}
+					})
+			);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offerings';
 			console.error('Error loading offerings:', e);
@@ -665,6 +685,15 @@
 							<div class="flex items-center justify-between text-neutral-400">
 								<span>Template</span>
 								<span class="text-white font-medium font-mono text-xs">{offering.template_name}</span>
+							</div>
+						{/if}
+						{#if offering.id !== undefined && analyticsMap[offering.id] !== undefined}
+							<div class="flex items-center justify-between text-neutral-400">
+								<span>Views (30d)</span>
+								<span class="text-white font-medium">
+									{analyticsMap[offering.id].views_30d}
+									<span class="text-neutral-500 text-xs font-normal">({analyticsMap[offering.id].unique_viewers_30d} unique)</span>
+								</span>
 							</div>
 						{/if}
 						{#if offering.description}

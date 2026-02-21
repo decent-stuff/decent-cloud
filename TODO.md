@@ -76,10 +76,32 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
 
-- **[Offerings] Per-offering analytics** — Impression count, click-through rate, conversion rate (views → rentals) per offering on the offerings list. Helps providers optimize. *(Multi-session: needs impression tracking in DB, analytics aggregation endpoint.)*
-  - Dependency: Requires impression/view event logging (new DB table `offering_views`).
+- **[Offerings] Per-offering analytics** — DONE: `offering_views` table (migration 029), `POST /offerings/{id}/view` (public, IP-hash deduplication per day), `GET /offerings/{id}/analytics` (provider-only), view tracking on marketplace detail page, views shown on provider offerings list.
+  - **Remaining:** Time-series analytics (trend over weeks), click-through rate (views → rentals), conversion funnel. *(Multi-session: needs additional DB aggregation and UI charts.)*
+
+- **[Marketplace] Offering comparison page** — DONE: `/dashboard/marketplace/compare?ids=1,2,3` with side-by-side specs, best-value highlighting, rent buttons, and compare toolbar on marketplace listing.
+
+- **[Rentals] Contract lifecycle timing** — DONE: Expected time estimates per stage and overdue warning (with Contact Provider / Cancel actions) in rental detail page.
+
+- **[Dashboard] Tenant spending insights** — DONE: Monthly spending widget on dashboard for tenants, showing this month vs. last month, trend direction, top 3 active contracts by cost, and projected month-end spend.
 
 - **[Security] Two-factor authentication (TOTP)** — TOTP-based 2FA for accounts using email/password (not seed-phrase accounts which already have key-based auth). *(Multi-session: TOTP secret generation, QR code display, verification middleware.)*
 
-- **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Single-session: Tailwind dark: classes + toggle component. Note: requires adding dark: classes across all components.)*
+- **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Multi-session: the app is currently dark-only; adding a light theme requires defining a full light-mode color palette and updating all components with conditional classes. Not trivial.)*
 
+- **[Provider] Provider performance insights dashboard** — Providers have separate earnings, feedback, and SLA pages but no unified analytics view. Needs: a new `/dashboard/provider/analytics` page showing which offerings are most rented, view-to-rental conversion rates, tenant satisfaction trends, and pricing elasticity insights. *(Multi-session: needs time-series offering analytics backend endpoints.)*
+
+- **[Provider] Request filtering and bulk actions** — Provider cannot filter pending rental requests by offering type, duration, or tenant trust score; cannot bulk-accept/reject; cannot set auto-accept rules. *(Single-session: client-side filtering + bulk action UI on existing endpoint.)*
+  - Dependency: Would benefit from offering analytics (views vs. rentals) to inform auto-accept thresholds.
+
+- **[Tenant] SSH key onboarding guidance** — Tenants renting for the first time receive connection details with no guidance on generating SSH keys, no platform-specific instructions (Windows/Mac/Linux), and no "test connection" button. *(Single-session: expand connection details section in rental detail page with collapsible SSH help.)*
+
+- **[Marketplace] Trending and recommendations section** — Marketplace has search but no proactive discovery: no "Trending this week", "New providers", or "Recommended for you" sections. Needs: trending endpoint (most-viewed/rented in last 7d from `offering_views`), frontend recommendation cards. *(Single-session backend + frontend once `offering_views` accumulates data.)*
+  - Dependency: Requires `offering_views` data (migration 029, now live).
+
+- **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's full public profile: historical trust score trend, feedback breakdown by offering type, response-time statistics, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page, comparison view.)*
+
+- **[Offerings] Draft offerings scheduling** — Providers can create draft offerings but cannot schedule a future publish date, bulk-publish drafts, or see what changed since last save. *(Single-session: add `publish_at` field to offerings, scheduled publish logic in backend, UI controls.)*
+  - Dependency: `is_draft` field already exists (migration 027).
+
+- **[Tenant] Saved offerings price-change alerts** — Tenants can save offerings but receive no notification when a saved offering changes price or goes out of stock. *(Multi-session: needs price-history tracking table, notification integration.)*

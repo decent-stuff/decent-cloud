@@ -4,6 +4,7 @@ use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 /// CSV template column headers for offerings export/import
@@ -483,11 +484,161 @@ impl OfferingsApi {
             error: None,
         })
     }
+
+    /// Record a view for an offering
+    ///
+    /// Public endpoint — no auth required. Deduplicates by hashed IP + day,
+    /// so refreshing the page does not inflate the count.
+    #[oai(path = "/offerings/:id/view", method = "post", tag = "ApiTags::Offerings")]
+    async fn record_offering_view(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+        req: &poem::Request,
+        auth: OptionalApiAuth,
+    ) -> Json<ApiResponse<EmptyResponse>> {
+        let ip = extract_client_ip(req);
+        let ip_hash = daily_ip_hash(&ip);
+        let viewer_pubkey = auth.pubkey.as_deref();
+
+        match db.record_offering_view(id.0, viewer_pubkey, &ip_hash).await {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some(EmptyResponse {}),
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to record view for offering {}: {:#}", id.0, e);
+                Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to record view".to_string()),
+                })
+            }
+        }
+    }
+
+    /// Get analytics for an offering
+    ///
+    /// Provider-only endpoint. Returns view counts and unique viewer counts
+    /// for the last 7 and 30 days. Only the offering's provider may call this.
+    #[oai(path = "/offerings/:id/analytics", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_offering_analytics(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<crate::database::offerings::OfferingAnalytics>> {
+        // Verify the caller owns this offering
+        let offering = match db.get_offering(id.0).await {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Offering not found".to_string()),
+                })
+            }
+            Err(e) => {
+                tracing::error!("Failed to get offering {}: {:#}", id.0, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to load offering".to_string()),
+                });
+            }
+        };
+
+        let provider_pubkey_bytes = match hex::decode(&offering.pubkey) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Invalid provider pubkey hex {}: {:#}", offering.pubkey, e);
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Internal error".to_string()),
+                });
+            }
+        };
+
+        if provider_pubkey_bytes != auth.pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Forbidden".to_string()),
+            });
+        }
+
+        match db.get_offering_analytics(id.0).await {
+            Ok(analytics) => Json(ApiResponse {
+                success: true,
+                data: Some(analytics),
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to get analytics for offering {}: {:#}", id.0, e);
+                Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to load analytics".to_string()),
+                })
+            }
+        }
+    }
+}
+
+/// Extract the client IP from the request, preferring X-Forwarded-For.
+fn extract_client_ip(req: &poem::Request) -> String {
+    if let Some(forwarded) = req.headers().get("X-Forwarded-For") {
+        if let Ok(val) = forwarded.to_str() {
+            // X-Forwarded-For can be a comma-separated list; take the first entry
+            if let Some(ip) = val.split(',').next() {
+                let ip = ip.trim().to_string();
+                if !ip.is_empty() {
+                    return ip;
+                }
+            }
+        }
+    }
+    req.remote_addr()
+        .as_socket_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Hash IP + current day (UTC) with SHA-256 to get a privacy-preserving dedup key.
+fn daily_ip_hash(ip: &str) -> Vec<u8> {
+    let day = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(ip.as_bytes());
+    hasher.update(b"|");
+    hasher.update(day.as_bytes());
+    hasher.finalize().to_vec()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_daily_ip_hash_length() {
+        let hash = daily_ip_hash("192.168.1.1");
+        assert_eq!(hash.len(), 32, "SHA-256 hash must be 32 bytes");
+    }
+
+    #[test]
+    fn test_daily_ip_hash_same_ip_same_day_is_equal() {
+        let h1 = daily_ip_hash("10.0.0.1");
+        let h2 = daily_ip_hash("10.0.0.1");
+        assert_eq!(h1, h2, "Same IP on same day must produce same hash");
+    }
+
+    #[test]
+    fn test_daily_ip_hash_different_ips_differ() {
+        let h1 = daily_ip_hash("10.0.0.1");
+        let h2 = daily_ip_hash("10.0.0.2");
+        assert_ne!(h1, h2, "Different IPs must produce different hashes");
+    }
 
     #[test]
     fn test_csv_headers_count() {

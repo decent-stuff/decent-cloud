@@ -3711,3 +3711,47 @@ export async function deleteSpendingAlert(
 		throw new Error(payload.error ?? 'Failed to delete spending alert');
 	}
 }
+
+/**
+ * Track a view for a marketplace offering (fire-and-forget, public, no auth).
+ * Deduplication is handled server-side by hashed IP + day.
+ * Throws on network/server error so callers can decide how to handle.
+ */
+export async function trackOfferingView(offeringId: number): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${offeringId}/view`;
+	const response = await fetch(url, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(`Failed to track offering view: ${response.status} ${response.statusText}`);
+	}
+	const payload = (await response.json()) as ApiResponse<unknown>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to track offering view');
+	}
+}
+
+export interface OfferingAnalytics {
+	views_7d: number;
+	views_30d: number;
+	unique_viewers_7d: number;
+	unique_viewers_30d: number;
+}
+
+/**
+ * Fetch analytics for an offering (provider-only, requires signed auth headers).
+ */
+export async function getOfferingAnalytics(
+	offeringId: number,
+	headers: SignedRequestHeaders
+): Promise<OfferingAnalytics> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${offeringId}/analytics`;
+	const response = await fetch(url, { method: 'GET', headers });
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch analytics: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+	const payload = (await response.json()) as ApiResponse<OfferingAnalytics>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch offering analytics');
+	}
+	return payload.data;
+}

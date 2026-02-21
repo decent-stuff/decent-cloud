@@ -344,6 +344,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/026_api_tokens.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/027_offering_draft.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/028_spending_alerts.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/029_offering_views.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -617,6 +618,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "028_spending_alerts.sql",
                     include_str!("../../migrations_pg/028_spending_alerts.sql"),
+                ),
+                (
+                    "029_offering_views.sql",
+                    include_str!("../../migrations_pg/029_offering_views.sql"),
                 ),
             ];
 

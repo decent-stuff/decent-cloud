@@ -159,6 +159,16 @@ pub struct OfferingPricingStats {
     pub median_price: f64,
 }
 
+/// View analytics for a single offering
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct OfferingAnalytics {
+    pub views_7d: i64,
+    pub views_30d: i64,
+    pub unique_viewers_7d: i64,
+    pub unique_viewers_30d: i64,
+}
+
 /// A tier definition for auto-generating offerings
 #[derive(Debug, Clone, Serialize, Deserialize, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -1999,6 +2009,54 @@ impl Database {
         .fetch_all(&self.pool)
         .await?;
         Ok(ids)
+    }
+
+    /// Record a view for an offering. Deduplicates by (offering_id, ip_hash, day).
+    /// Returns true if a new view was recorded, false if it was a duplicate.
+    pub async fn record_offering_view(
+        &self,
+        offering_id: i64,
+        viewer_pubkey: Option<&[u8]>,
+        ip_hash: &[u8],
+    ) -> Result<bool> {
+        let viewed_at = chrono::Utc::now().timestamp_millis();
+        let rows_affected = sqlx::query(
+            r#"INSERT INTO offering_views (offering_id, viewer_pubkey, ip_hash, viewed_at)
+               VALUES ($1, $2, $3, $4)
+               ON CONFLICT (offering_id, ip_hash, (viewed_at / 86400000)) DO NOTHING"#,
+        )
+        .bind(offering_id)
+        .bind(viewer_pubkey)
+        .bind(ip_hash)
+        .bind(viewed_at)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        Ok(rows_affected > 0)
+    }
+
+    /// Get analytics for an offering: view counts and unique viewer counts for 7d and 30d windows.
+    pub async fn get_offering_analytics(
+        &self,
+        offering_id: i64,
+    ) -> Result<OfferingAnalytics> {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let cutoff_7d = now_ms - 7 * 24 * 60 * 60 * 1000i64;
+        let cutoff_30d = now_ms - 30 * 24 * 60 * 60 * 1000i64;
+        let row = sqlx::query_as::<_, OfferingAnalytics>(
+            r#"SELECT
+                COUNT(*) FILTER (WHERE viewed_at >= $2) AS views_7d,
+                COUNT(*) FILTER (WHERE viewed_at >= $3) AS views_30d,
+                COUNT(DISTINCT ip_hash) FILTER (WHERE viewed_at >= $2) AS unique_viewers_7d,
+                COUNT(DISTINCT ip_hash) FILTER (WHERE viewed_at >= $3) AS unique_viewers_30d
+               FROM offering_views WHERE offering_id = $1"#,
+        )
+        .bind(offering_id)
+        .bind(cutoff_7d)
+        .bind(cutoff_30d)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
     }
 
     /// Get pricing statistics (min, max, avg, median) for offerings matching the given filters.

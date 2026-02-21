@@ -3551,3 +3551,118 @@ async fn test_draft_offering_visible_in_provider_own_listings() {
         "Provider's own draft must be visible in their own offerings list"
     );
 }
+
+// ── offering view tracking tests ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_record_offering_view_new_view() {
+    let db = setup_test_db().await;
+    let provider = vec![0xA1u8; 32];
+    insert_test_offering(&db, 1, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(1);
+    let ip_hash = vec![0x01u8; 32];
+
+    let recorded = db
+        .record_offering_view(offering_id, None, &ip_hash)
+        .await
+        .expect("record_offering_view failed");
+
+    assert!(recorded, "First view should be recorded");
+}
+
+#[tokio::test]
+async fn test_record_offering_view_deduplicates_same_day() {
+    let db = setup_test_db().await;
+    let provider = vec![0xA2u8; 32];
+    insert_test_offering(&db, 2, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(2);
+    // Use a unique ip_hash to avoid conflicts with other tests
+    let ip_hash = vec![0x02u8; 32];
+
+    let first = db
+        .record_offering_view(offering_id, None, &ip_hash)
+        .await
+        .expect("first record failed");
+    let second = db
+        .record_offering_view(offering_id, None, &ip_hash)
+        .await
+        .expect("second record failed");
+
+    assert!(first, "First view should be recorded");
+    assert!(!second, "Second view with same IP hash same day must be deduplicated");
+
+    let analytics = db
+        .get_offering_analytics(offering_id)
+        .await
+        .expect("get_offering_analytics failed");
+    assert_eq!(analytics.views_7d, 1, "Deduplicated views must count as 1");
+}
+
+#[tokio::test]
+async fn test_record_offering_view_with_viewer_pubkey() {
+    let db = setup_test_db().await;
+    let provider = vec![0xA3u8; 32];
+    insert_test_offering(&db, 3, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(3);
+    let ip_hash = vec![0x03u8; 32];
+    let viewer = vec![0xBBu8; 32];
+
+    let recorded = db
+        .record_offering_view(offering_id, Some(&viewer), &ip_hash)
+        .await
+        .expect("record with viewer pubkey failed");
+
+    assert!(recorded, "Authenticated view should be recorded");
+
+    let analytics = db
+        .get_offering_analytics(offering_id)
+        .await
+        .expect("get_offering_analytics failed");
+    assert_eq!(analytics.views_30d, 1, "View must appear in 30d window");
+    assert_eq!(analytics.unique_viewers_30d, 1, "One unique viewer expected");
+}
+
+#[tokio::test]
+async fn test_get_offering_analytics_empty() {
+    let db = setup_test_db().await;
+    let provider = vec![0xA4u8; 32];
+    insert_test_offering(&db, 4, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(4);
+
+    let analytics = db
+        .get_offering_analytics(offering_id)
+        .await
+        .expect("get_offering_analytics on offering with no views failed");
+
+    assert_eq!(analytics.views_7d, 0, "No views in 7d window");
+    assert_eq!(analytics.views_30d, 0, "No views in 30d window");
+    assert_eq!(analytics.unique_viewers_7d, 0, "No unique viewers in 7d");
+    assert_eq!(analytics.unique_viewers_30d, 0, "No unique viewers in 30d");
+}
+
+#[tokio::test]
+async fn test_get_offering_analytics_multiple_viewers() {
+    let db = setup_test_db().await;
+    let provider = vec![0xA5u8; 32];
+    insert_test_offering(&db, 5, &provider, "US", 5.0).await;
+    let offering_id = test_id_to_db_id(5);
+
+    // Three distinct IP hashes
+    let ip1 = vec![0x11u8; 32];
+    let ip2 = vec![0x22u8; 32];
+    let ip3 = vec![0x33u8; 32];
+
+    db.record_offering_view(offering_id, None, &ip1).await.expect("view ip1 failed");
+    db.record_offering_view(offering_id, None, &ip2).await.expect("view ip2 failed");
+    db.record_offering_view(offering_id, None, &ip3).await.expect("view ip3 failed");
+
+    let analytics = db
+        .get_offering_analytics(offering_id)
+        .await
+        .expect("get_offering_analytics failed");
+
+    assert_eq!(analytics.views_7d, 3, "Three distinct views in 7d window");
+    assert_eq!(analytics.unique_viewers_7d, 3, "Three unique viewers in 7d");
+    assert_eq!(analytics.views_30d, 3, "Three distinct views in 30d window");
+    assert_eq!(analytics.unique_viewers_30d, 3, "Three unique viewers in 30d");
+}

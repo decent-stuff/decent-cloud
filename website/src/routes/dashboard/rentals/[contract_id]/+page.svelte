@@ -142,6 +142,48 @@
 		{ key: "ready", label: "Ready", icon: "✅" },
 	] as const;
 
+	// Expected time range (minutes) per contract status for the current stage
+	const STAGE_TIMING: Record<string, { min: number; max: number; label: string }> = {
+		requested_pending:   { min: 0,  max: 5,    label: "Payment processing (0–5 min)" },
+		requested_succeeded: { min: 0,  max: 1440, label: "Provider review (up to 24 h)" },
+		pending:             { min: 0,  max: 1440, label: "Provider review (up to 24 h)" },
+		accepted:            { min: 0,  max: 15,   label: "Provisioning queue (up to 15 min)" },
+		provisioning:        { min: 5,  max: 20,   label: "VM setup (5–20 min)" },
+		provisioned:         { min: 1,  max: 5,    label: "Final checks (1–5 min)" },
+		active:              { min: 0,  max: 0,    label: "Running" },
+	};
+
+	function getStageTiming(status: string, paymentStatus?: string): { min: number; max: number; label: string } | null {
+		const s = status.toLowerCase();
+		const ps = paymentStatus?.toLowerCase() ?? "";
+		if (s === "requested" && ps === "pending") return STAGE_TIMING["requested_pending"];
+		if (s === "requested" && ps === "succeeded") return STAGE_TIMING["requested_succeeded"];
+		if (s === "pending") return STAGE_TIMING["pending"];
+		if (s === "accepted") return STAGE_TIMING["accepted"];
+		if (s === "provisioning") return STAGE_TIMING["provisioning"];
+		if (s === "provisioned") return STAGE_TIMING["provisioned"];
+		if (s === "active") return STAGE_TIMING["active"];
+		return null;
+	}
+
+	/**
+	 * Elapsed minutes since the contract entered its current stage.
+	 * Uses status_updated_at_ns when available (transition into current state),
+	 * falling back to created_at_ns.
+	 */
+	function stageElapsedMinutes(created_at_ns: number, status_updated_at_ns?: number): number {
+		const ref_ns = status_updated_at_ns ?? created_at_ns;
+		return (Date.now() - ref_ns / 1_000_000) / 60_000;
+	}
+
+	function formatElapsed(minutes: number): string {
+		if (minutes < 1) return "just now";
+		if (minutes < 60) return `${Math.floor(minutes)}m`;
+		const h = Math.floor(minutes / 60);
+		const m = Math.floor(minutes % 60);
+		return m > 0 ? `${h}h ${m}m` : `${h}h`;
+	}
+
 	function getStageIndex(status: string, paymentStatus?: string): number {
 		const s = status.toLowerCase();
 		const ps = paymentStatus?.toLowerCase() ?? "";
@@ -176,7 +218,7 @@
 			return { text: "Provider accepted! Waiting for provisioning to start...", isWaiting: true };
 		}
 		if (s === "provisioning") {
-			return { text: "Provider is setting up your resource (typically 5-15 minutes)", isWaiting: true };
+			return { text: "Provider is setting up your resource (typically 5–20 minutes)", isWaiting: true };
 		}
 		if (s === "provisioned" || s === "active") {
 			return { text: "Your resource is ready! See connection details below.", isWaiting: false };
@@ -790,6 +832,9 @@
 		{@const statusBadge = getStatusBadge(contract.status, contract.payment_status)}
 		{@const stageIndex = getStageIndex(contract.status, contract.payment_status)}
 		{@const nextStep = getNextStepInfo(contract.status, contract.payment_status)}
+		{@const stageTiming = getStageTiming(contract.status, contract.payment_status)}
+		{@const elapsedMin = stageElapsedMinutes(contract.created_at_ns, contract.status_updated_at_ns)}
+		{@const stageOverdue = stageTiming !== null && stageTiming.max > 0 && elapsedMin > stageTiming.max}
 
 		<!-- Header with actions -->
 		<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -922,7 +967,7 @@
 
 			<!-- Progress indicator -->
 			{#if stageIndex >= 0}
-				<div class="mb-4 p-4 bg-surface-elevated  border border-neutral-800">
+				<div class="mb-4 p-4 bg-surface-elevated border {stageOverdue ? 'border-amber-500/40' : 'border-neutral-800'}">
 					<div class="flex items-center justify-between mb-3">
 						{#each LIFECYCLE_STAGES as stage, i}
 							<div class="flex flex-col items-center flex-1">
@@ -949,6 +994,39 @@
 							</div>
 						{/each}
 					</div>
+
+					<!-- Timing estimate and elapsed time for current stage -->
+					{#if stageTiming && stageTiming.max > 0}
+						<div class="flex items-center gap-3 mb-3 text-xs border-t border-neutral-800/60 pt-3">
+							<span class="text-neutral-400">{stageTiming.label}</span>
+							<span class="text-neutral-700">·</span>
+							<span class="{stageOverdue ? 'text-amber-400 font-medium' : 'text-neutral-500'}">
+								In this stage: {formatElapsed(elapsedMin)}
+							</span>
+						</div>
+					{/if}
+
+					<!-- Overdue warning -->
+					{#if stageOverdue && stageTiming}
+						<div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-3 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+							<span class="flex-1">
+								⚠ This is taking longer than usual ({formatElapsed(elapsedMin)} — expected max {stageTiming.max >= 60 ? `${stageTiming.max / 60}h` : `${stageTiming.max}min`}).
+							</span>
+							<div class="flex items-center gap-2 shrink-0">
+								<button
+									onclick={contactProvider}
+									class="px-2 py-1 bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+								>Contact Provider</button>
+								{#if isCancellable(contract.status)}
+									<button
+										onclick={handleCancelContract}
+										class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors"
+									>Cancel Contract</button>
+								{/if}
+							</div>
+						</div>
+					{/if}
+
 					{#if nextStep}
 						<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-primary-400' : 'text-neutral-400'}">
 							{#if nextStep.isWaiting}

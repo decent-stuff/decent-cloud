@@ -487,61 +487,7 @@
 	let copyLinkFeedback = $state<number | null>(null);
 
 	let compareIds = $state(new Set<number>());
-	let showCompareModal = $state(false);
 	let compareWarning = $state<string | null>(null);
-	let compareOfferings = $derived(
-		offerings.filter((o) => o.id !== undefined && compareIds.has(o.id)),
-	);
-
-	function parseRamGb(memory_amount: string | undefined): number | null {
-		if (!memory_amount) return null;
-		const m = memory_amount.match(/^([\d.]+)\s*(GB|GiB|MB|MiB|TB|TiB)/i);
-		if (!m) return null;
-		const val = parseFloat(m[1]);
-		const unit = m[2].toUpperCase();
-		if (unit === 'MB' || unit === 'MIB') return val / 1024;
-		if (unit === 'TB' || unit === 'TIB') return val * 1024;
-		return val; // GB or GiB
-	}
-
-	function findWinner<T>(
-		items: { id: number | undefined; val: T | null | undefined }[],
-		best: (a: T, b: T) => boolean
-	): number | null {
-		const valid = items.filter((x) => x.id !== undefined && x.val !== null && x.val !== undefined) as { id: number; val: T }[];
-		if (valid.length < 2) return null;
-		let winner = valid[0];
-		for (const item of valid.slice(1)) {
-			if (best(item.val, winner.val)) winner = item;
-		}
-		// Ensure no tie
-		const topVal = winner.val;
-		const topCount = valid.filter((x) => !best(topVal, x.val) && !best(x.val, topVal)).length;
-		return topCount === 1 ? winner.id : null;
-	}
-
-	const compareWinners = $derived({
-		price: findWinner(
-			compareOfferings.map((o) => ({ id: o.id, val: o.monthly_price ?? null })),
-			(a: number, b: number) => a < b
-		),
-		cores: findWinner(
-			compareOfferings.map((o) => ({ id: o.id, val: o.processor_cores ?? null })),
-			(a: number, b: number) => a > b
-		),
-		ram: findWinner(
-			compareOfferings.map((o) => ({ id: o.id, val: parseRamGb(o.memory_amount) })),
-			(a: number, b: number) => a > b
-		),
-		trust: findWinner(
-			compareOfferings.map((o) => ({ id: o.id, val: o.trust_score ?? null })),
-			(a: number, b: number) => a > b
-		),
-		reliability: findWinner(
-			compareOfferings.map((o) => ({ id: o.id, val: o.reliability_score ?? null })),
-			(a: number, b: number) => a > b
-		),
-	});
 
 
 	function toggleCompare(e: Event, id: number) {
@@ -1842,6 +1788,18 @@
 									>
 								{/if}
 							</div>
+							{#if offering.id !== undefined}
+								{@const inCompare = compareIds.has(offering.id)}
+								<div class="mt-2">
+									<button
+										onclick={(e) => toggleCompare(e, offering.id!)}
+										title={inCompare ? "Remove from comparison" : "Add to comparison"}
+										class="px-2 py-1 text-xs border rounded transition-colors {inCompare
+											? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
+											: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
+									>{inCompare ? "✓ In compare" : "+ Compare"}</button>
+								</div>
+							{/if}
 							{#if expandedRow === offering.id}
 								<div
 									class="mt-3 pt-3 border-t border-neutral-800 text-sm space-y-2"
@@ -2000,213 +1958,16 @@
 			</span>
 			<div class="flex items-center gap-2">
 				<button
-					onclick={() => {
-						compareIds = new Set();
-					}}
+					onclick={() => { compareIds = new Set(); }}
 					class="px-3 py-1.5 text-xs border border-neutral-600 text-neutral-400 hover:text-white hover:border-neutral-500 rounded transition-colors"
 				>Clear</button>
-				<button
-					onclick={() => {
-						showCompareModal = true;
-					}}
-					disabled={compareIds.size < 2}
+				<a
+					href={compareIds.size >= 2 ? `/dashboard/marketplace/compare?ids=${[...compareIds].join(',')}` : undefined}
+					aria-disabled={compareIds.size < 2}
 					class="px-4 py-1.5 text-xs font-medium rounded transition-colors {compareIds.size >= 2
 						? 'bg-primary-600 hover:bg-primary-500 text-white'
-						: 'bg-neutral-700 text-neutral-500 cursor-not-allowed'}"
-				>Compare</button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Comparison modal -->
-{#if showCompareModal}
-	<div
-		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
-		onclick={(e) => e.target === e.currentTarget && (showCompareModal = false)}
-		role="button"
-		tabindex="0"
-		onkeydown={(e) => e.key === 'Escape' && (showCompareModal = false)}
-	>
-		<div class="bg-surface-elevated border border-neutral-800 shadow-2xl w-full max-w-5xl mt-8 mb-8">
-			<!-- Header -->
-			<div class="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
-				<h2 class="text-lg font-semibold text-white">Compare Offerings</h2>
-				<button
-					onclick={() => (showCompareModal = false)}
-					class="text-neutral-500 hover:text-white transition-colors"
-					aria-label="Close comparison"
-				>
-					<Icon name="x" size={20} />
-				</button>
-			</div>
-
-			<!-- Comparison table -->
-			<div class="overflow-x-auto">
-				<table class="w-full text-sm">
-					<thead>
-						<tr class="border-b border-neutral-800">
-							<th class="px-4 py-3 text-left text-neutral-500 font-medium w-32">Spec</th>
-							{#each compareOfferings as offering}
-								<th class="px-4 py-3 text-left">
-									<a
-										href="/dashboard/marketplace/{offering.id}"
-										class="font-semibold text-white hover:text-primary-400 transition-colors"
-									>{offering.offer_name}</a>
-									<div class="text-xs text-neutral-500 font-normal mt-0.5">
-										{offering.owner_username
-											? `@${offering.owner_username}`
-											: truncatePubkey(offering.pubkey)}
-									</div>
-								</th>
-							{/each}
-						</tr>
-					</thead>
-					<tbody>
-						<!-- Price -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Price</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3">
-									<span class="text-white font-medium">{formatPrice(offering)}</span>
-									{#if formatUsdEquivalent(offering)}
-										<span class="text-xs text-neutral-500 ml-1">{formatUsdEquivalent(offering)}</span>
-									{/if}
-									{#if offering.id !== undefined && compareWinners.price === offering.id}
-										<span class="ml-1 text-emerald-400 font-bold text-xs" title="Best price">✓</span>
-									{/if}
-								</td>
-							{/each}
-						</tr>
-						<!-- CPU -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">CPU Cores</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">
-									{offering.processor_cores ?? '—'}{#if offering.id !== undefined && compareWinners.cores === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Most cores">✓</span>{/if}
-								</td>
-							{/each}
-						</tr>
-						<!-- RAM -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">RAM</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">
-									{offering.memory_amount ?? '—'}{#if offering.id !== undefined && compareWinners.ram === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Most RAM">✓</span>{/if}
-								</td>
-							{/each}
-						</tr>
-						<!-- SSD -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">SSD</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">
-									{offering.total_ssd_capacity ?? offering.total_hdd_capacity ?? '—'}
-								</td>
-							{/each}
-						</tr>
-						<!-- Location -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Location</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">{formatLocation(offering)}</td>
-							{/each}
-						</tr>
-						<!-- Virtualization -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Virtualization</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">{offering.virtualization_type ?? '—'}</td>
-							{/each}
-						</tr>
-						<!-- Bandwidth -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Bandwidth</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">
-									{offering.unmetered_bandwidth ? 'Unmetered' : (offering.uplink_speed ?? '—')}
-								</td>
-							{/each}
-						</tr>
-						<!-- Contract term -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Contract</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">{formatContractTerms(offering)}</td>
-							{/each}
-						</tr>
-						<!-- Trust score -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Trust Score</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3">
-									{#if offering.trust_score !== undefined}
-										<TrustBadge
-											score={offering.trust_score}
-											hasFlags={offering.has_critical_flags ?? false}
-											compact={true}
-										/>{#if offering.id !== undefined && compareWinners.trust === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Highest trust">✓</span>{/if}
-									{:else}
-										<span class="text-neutral-500">—</span>
-									{/if}
-								</td>
-							{/each}
-						</tr>
-						<!-- Reliability score -->
-						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Reliability</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3">
-									{#if offering.reliability_score !== undefined && offering.reliability_score !== null}
-										<span class="font-medium {offering.reliability_score >= 90 ? 'text-emerald-400' : offering.reliability_score >= 70 ? 'text-yellow-400' : 'text-red-400'}">
-											{offering.reliability_score.toFixed(1)}%
-										</span>{#if offering.id !== undefined && compareWinners.reliability === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Highest reliability">✓</span>{/if}
-									{:else}
-										<span class="text-neutral-500">—</span>
-									{/if}
-								</td>
-							{/each}
-						</tr>
-					<!-- Provider -->
-						<tr class="hover:bg-neutral-800/20">
-							<td class="px-4 py-3 text-neutral-500">Provider</td>
-							{#each compareOfferings as offering}
-								<td class="px-4 py-3">
-									<a
-										href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
-										class="text-primary-400 hover:text-primary-300 text-xs transition-colors {offering.owner_username ? '' : 'font-mono'}"
-									>{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}</a>
-								</td>
-							{/each}
-						</tr>
-					</tbody>
-				</table>
-			</div>
-
-			<!-- Action row -->
-			<div class="px-6 py-4 border-t border-neutral-800 flex gap-3">
-				{#each compareOfferings as offering}
-					<div class="flex-1">
-						{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
-							<a
-								href={offering.external_checkout_url}
-								target="_blank"
-								rel="noopener noreferrer"
-								class="inline-flex items-center gap-1 w-full justify-center px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium rounded transition-colors"
-							>Visit Provider <Icon name="external" size={14} class="text-white" /></a>
-						{:else if offering.is_example}
-							<span class="inline-flex w-full justify-center px-3 py-2 bg-neutral-700 text-neutral-500 text-xs font-medium rounded cursor-not-allowed">Demo only</span>
-						{:else}
-							<button
-								onclick={() => {
-									showCompareModal = false;
-									handleRentClick(new MouseEvent('click'), offering);
-								}}
-								class="w-full px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium rounded transition-colors"
-							>Rent {offering.offer_name}</button>
-						{/if}
-					</div>
-				{/each}
+						: 'bg-neutral-700 text-neutral-500 cursor-not-allowed pointer-events-none'}"
+				>Compare ({compareIds.size})</a>
 			</div>
 		</div>
 	</div>
