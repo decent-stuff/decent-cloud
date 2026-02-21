@@ -47,4 +47,23 @@ describe('getContractStatusBadge', () => {
 		const badge = getContractStatusBadge('requested');
 		expect(badge.text).toBe('Pending Provider');
 	});
+
+	it('shows Failed badge for failed status', () => {
+		const badge = getContractStatusBadge('failed');
+		expect(badge.text).toBe('Failed');
+		expect(badge.icon).toBe('❗');
+		expect(badge.class).toContain('red');
+	});
+
+	it('shows Rejected badge for rejected status', () => {
+		const badge = getContractStatusBadge('rejected');
+		expect(badge.text).toBe('Rejected');
+		expect(badge.icon).toBe('🔴');
+		expect(badge.class).toContain('red');
+	});
+
+	it('treats failed status case-insensitively', () => {
+		const badge = getContractStatusBadge('FAILED');
+		expect(badge.text).toBe('Failed');
+	});
 });

@@ -142,6 +142,9 @@
 		if (s === "rejected") {
 			return { text: "Provider rejected this request. You can try another provider.", isWaiting: false };
 		}
+		if (s === "failed") {
+			return { text: "Provisioning failed. You can request a refund or contact support.", isWaiting: false };
+		}
 		if (s === "cancelled") {
 			return null;
 		}
@@ -733,6 +736,25 @@
 				</div>
 			</div>
 
+			<!-- Failure banner (failed status) -->
+			{#if contract.status.toLowerCase() === 'failed'}
+				{@const failureDetails = (() => {
+					if (!contract.provisioning_instance_details) return null;
+					try { return JSON.parse(contract.provisioning_instance_details); } catch { return null; }
+				})()}
+				<div class="mb-4 p-4 bg-red-500/20 border border-red-500/30 text-red-400">
+					<p class="font-semibold mb-1">Provisioning failed</p>
+					{#if failureDetails?.error}
+						<p class="text-sm text-red-300 mb-2">{failureDetails.error}</p>
+					{:else if failureDetails?.message}
+						<p class="text-sm text-red-300 mb-2">{failureDetails.message}</p>
+					{:else if contract.provisioning_instance_details}
+						<pre class="text-xs text-red-300/80 font-mono whitespace-pre-wrap mb-2">{contract.provisioning_instance_details}</pre>
+					{/if}
+					<p class="text-sm text-red-400/70">You can request a refund or <button onclick={contactProvider} class="underline hover:text-red-300 transition-colors">contact support</button>.</p>
+				</div>
+			{/if}
+
 			<!-- Progress indicator -->
 			{#if stageIndex >= 0}
 				<div class="mb-4 p-4 bg-surface-elevated  border border-neutral-800">
@@ -782,13 +804,15 @@
 				</div>
 			{/if}
 
-			<!-- Rejected/Cancelled CTA -->
-			{#if contract.status.toLowerCase() === 'rejected' || contract.status.toLowerCase() === 'cancelled'}
+			<!-- Rejected/Cancelled/Failed CTA -->
+			{#if contract.status.toLowerCase() === 'rejected' || contract.status.toLowerCase() === 'cancelled' || contract.status.toLowerCase() === 'failed'}
 				<div class="mb-4 p-4 bg-surface-elevated border border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
 					<p class="text-neutral-400 text-sm">
 						{contract.status.toLowerCase() === 'rejected'
-							? 'Provider rejected this request. You can try another provider.'
-							: 'This rental has been cancelled.'}
+							? 'Provider declined this request. You can try another provider.'
+							: contract.status.toLowerCase() === 'failed'
+								? 'Your resource could not be provisioned. Try a different provider or contact support.'
+								: 'This rental has been cancelled.'}
 					</p>
 					<a
 						href="/dashboard/marketplace"

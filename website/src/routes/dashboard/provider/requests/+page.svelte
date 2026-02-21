@@ -34,6 +34,8 @@
 		provisioningNotes = $state<Record<string, string>>({});
 	let responding = $state<Record<string, boolean>>({}),
 		updating = $state<Record<string, boolean>>({});
+	let batchProcessing = $state(false),
+		batchProgress = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
@@ -252,6 +254,41 @@
 		}
 	}
 
+	async function handleBatchAction(accept: boolean) {
+		const action = accept ? "Accept" : "Reject";
+		if (!window.confirm(`${action} all ${pendingRequests.length} pending requests?`)) return;
+		const activeIdentity = signingIdentityInfo;
+		if (!activeIdentity) {
+			error = "Missing signing identity";
+			return;
+		}
+		error = null;
+		actionMessage = null;
+		batchProcessing = true;
+		const snapshot = [...pendingRequests];
+		const errors: string[] = [];
+		for (let i = 0; i < snapshot.length; i++) {
+			const contract = snapshot[i];
+			batchProgress = `${action}ing ${i + 1}/${snapshot.length}...`;
+			try {
+				const payload: ProviderRentalResponseParams = { accept };
+				const path = `/api/v1/provider/rental-requests/${contract.contract_id}/respond`;
+				const signed = await signRequest(activeIdentity.identity, "POST", path, payload);
+				await respondToRentalRequest(contract.contract_id, payload, signed.headers);
+			} catch (e) {
+				errors.push(e instanceof Error ? e.message : `Failed on ${contract.contract_id}`);
+			}
+		}
+		batchProcessing = false;
+		batchProgress = null;
+		if (errors.length > 0) {
+			error = `${errors.length} request(s) failed: ${errors.join("; ")}`;
+		} else {
+			actionMessage = `${action}ed all ${snapshot.length} requests`;
+		}
+		await loadData();
+	}
+
 	async function handleStatusUpdate(contract: Contract, nextStatus: string) {
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) {
@@ -410,9 +447,29 @@
 				<h2 class="text-2xl font-semibold text-white">
 					Pending Requests
 				</h2>
-				<span class="text-neutral-500 text-sm"
-					>{pendingRequests.length} awaiting action</span
-				>
+				<div class="flex items-center gap-3">
+					{#if batchProgress}
+						<span class="text-sm text-neutral-400">{batchProgress}</span>
+					{/if}
+					{#if pendingRequests.length > 1}
+						<button
+							onclick={() => handleBatchAction(true)}
+							disabled={batchProcessing || Object.values(responding).some((v) => v)}
+							class="text-sm px-3 py-1.5 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						>
+							Accept All
+						</button>
+						<button
+							onclick={() => handleBatchAction(false)}
+							disabled={batchProcessing || Object.values(responding).some((v) => v)}
+							class="text-sm px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						>
+							Reject All
+						</button>
+					{:else}
+						<span class="text-neutral-500 text-sm">{pendingRequests.length} awaiting action</span>
+					{/if}
+				</div>
 			</div>
 
 			{#if pendingRequests.length === 0}

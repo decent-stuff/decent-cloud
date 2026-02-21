@@ -255,6 +255,13 @@
 </script>
 
 <div class="space-y-6">
+	<!-- Breadcrumb -->
+	<nav class="text-sm text-neutral-500">
+		<a href="/dashboard/provider/agents" class="hover:text-white transition-colors">Agent Pools</a>
+		<span class="mx-2">/</span>
+		<span class="text-white">{pool?.name ?? poolId}</span>
+	</nav>
+
 	{#if loading}
 		<div class="text-center py-16">
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400 mx-auto"></div>
@@ -267,7 +274,6 @@
 	{:else if pool}
 		<!-- Header -->
 		<header>
-			<a href="/dashboard/provider/agents" class="text-sm text-primary-400 hover:underline mb-2 block">&larr; Back to all pools</a>
 			<div class="flex flex-wrap items-center justify-between gap-4">
 				<div>
 					<h1 class="text-3xl font-bold text-white">{pool.name}</h1>

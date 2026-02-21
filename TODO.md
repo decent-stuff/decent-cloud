@@ -80,18 +80,18 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### Future UX (discovered via codebase audit, single-session each)
 
-- **[Marketplace] Offering allowlist management** — API exists (`get_offering_allowlist`, `add_to_offering_allowlist`, `remove_from_offering_allowlist`) but no UI. Providers can't restrict which tenants can rent their offerings from the UI.
+- **[Contracts] Bandwidth usage chart on contract detail** — `getContractBandwidthHistory` API exists (provider-authenticated). Bandwidth stats are on the earnings page but not on the contract detail page where tenants would expect them. *(Single-session: fetch + chart component on contract detail.)*
 
-- **[Provider] Trust metrics dedicated page** — `get_provider_trust_metrics` API exists and data is shown on the dashboard's TrustDashboard component, but no dedicated shareable/bookmarkable page exists. *(Single-session: new route + data fetch.)*
+- **[Provider] Trust metrics dedicated page** — `get_provider_trust_metrics` API exists and data is shown on the dashboard's TrustDashboard component, but no dedicated shareable/bookmarkable page exists. *(Single-session: new route `/dashboard/reputation/[id]/trust` + data fetch.)*
 
-- **[Contracts] Bandwidth usage chart** — `get_contract_bandwidth` API exists. Bandwidth stats are on the earnings page but not on the contract detail page where tenants would expect them. *(Single-session.)*
+- **[Provider] Batch actions on rental requests — "Accept All" / "Reject All"** ✅ Done (2026-02-21)
 
-- **[Navigation] Breadcrumbs missing from detail pages** — Agent pool detail, contract detail, marketplace item detail — none have breadcrumb navigation back to the list. *(Single-session: shared Breadcrumb component.)*
+- **[Marketplace] Offering allowlist management** ✅ Done (2026-02-21) — UI available in `/dashboard/offerings` per-offering "Allowlist" button.
 
-- **[Contracts] Provisioning failure details not visible to tenant** — When a contract fails, tenants see only "Failed" with no actionable error detail. *(Single-session: parse and surface error details on contract detail page.)*
+- **[Account] SSH keys on Security page** ✅ Done (2026-02-21) — `ExternalKeysEditor` added to `/dashboard/account/security`.
 
-- **[Provider] Batch actions on rental requests** — Providers with many simultaneous requests have no "Accept All" or "Dismiss All" action. *(Single-session.)*
+- **[Stats] Platform stats: total volume + transfers on homepage** ✅ Done (2026-02-21) — `DashboardSection` now shows 7 metrics including Total Volume (ICP) and Total Transfers.
 
-- **[Account] External keys management page** — SSH keys added during rentals are stored but no dedicated management UI exists (only sections embedded in other pages). *(Single-session.)*
+- **[Navigation] Breadcrumb on agent pool detail page** ✅ Done (2026-02-21)
 
-- **[Stats] Platform stats widget** — `get_platform_stats` endpoint returns aggregated metrics (total providers, contracts, volume). A small widget on the landing page/dashboard would build trust. *(Single-session.)*
+- **[Contracts] Provisioning failure details visible to tenant** ✅ Done (2026-02-21) — Contract detail shows failure banner with `provisioning_instance_details` content and actionable next steps.

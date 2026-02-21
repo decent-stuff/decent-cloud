@@ -18,6 +18,7 @@
 	import { signRequest } from '$lib/services/auth-api';
 	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
+	import AllowlistDialog from '$lib/components/AllowlistDialog.svelte';
 	import ProviderSetupBanner from '$lib/components/ProviderSetupBanner.svelte';
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -36,6 +37,7 @@
 	let productTypes = $state<ProductType[]>([]);
 	let duplicatingId = $state<number | null>(null);
 	let deletingId = $state<number | null>(null);
+	let allowlistOffering = $state<Offering | null>(null);
 
 	async function loadOfferings() {
 		try {
@@ -546,6 +548,16 @@
 						</a>
 						<div class="flex items-center gap-3">
 							<button
+								onclick={(e) => { e.stopPropagation(); allowlistOffering = offering; }}
+								class="text-xs text-neutral-400 hover:text-white transition-colors flex items-center gap-1"
+								title="Manage allowlist"
+							>
+								<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+								</svg>
+								Allowlist
+							</button>
+							<button
 								onclick={(e) => handleDuplicate(offering, e)}
 								disabled={duplicatingId === offering.id}
 								class="text-xs text-neutral-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
@@ -623,6 +635,17 @@
 	pubkeyBytes={currentIdentity?.publicKeyBytes}
 	on:success={handleEditSuccess}
 />
+
+<!-- Product Type Selection Dialog -->
+{#if allowlistOffering && currentIdentity?.identity && allowlistOffering.id !== undefined}
+	<AllowlistDialog
+		offeringId={allowlistOffering.id}
+		offeringName={allowlistOffering.offer_name}
+		providerPubkey={hexEncode(currentIdentity.publicKeyBytes)}
+		identity={currentIdentity.identity as Ed25519KeyIdentity}
+		onClose={() => { allowlistOffering = null; }}
+	/>
+{/if}
 
 <!-- Product Type Selection Dialog -->
 {#if showTemplateDialog}

@@ -9,18 +9,22 @@
 			totalOfferings: number;
 			totalContracts: number;
 			activeValidators: number;
+			totalTransfers: number;
+			totalVolumeE9s: number;
 		};
 		error?: string | null;
 	}
 
 	let { dashboardData, error = null }: Props = $props();
 
-	const stats: { label: string; key: keyof Props['dashboardData']; icon: IconName }[] = [
+	const stats: { label: string; key: keyof Props['dashboardData']; icon: IconName; format?: (v: number) => string }[] = [
 		{ label: 'Total Providers', key: 'totalProviders', icon: 'server' },
 		{ label: 'Active Providers', key: 'activeProviders', icon: 'activity' },
 		{ label: 'Available Offerings', key: 'totalOfferings', icon: 'package' },
 		{ label: 'Total Contracts', key: 'totalContracts', icon: 'file' },
-		{ label: 'Active Validators', key: 'activeValidators', icon: 'shield' }
+		{ label: 'Active Validators', key: 'activeValidators', icon: 'shield' },
+		{ label: 'Total Transfers', key: 'totalTransfers', icon: 'arrow-right' },
+		{ label: 'Total Volume (ICP)', key: 'totalVolumeE9s', icon: 'star', format: (v) => Math.floor(v / 1_000_000_000).toLocaleString() }
 	];
 </script>
 
@@ -44,7 +48,7 @@
 		{/if}
 
 		<!-- Stats grid -->
-		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+		<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
 			{#each stats as stat, i}
 				<div
 					class="metric-card text-center"
@@ -56,7 +60,7 @@
 						</div>
 					</div>
 					<div class="metric-value mb-1">
-						{dashboardData[stat.key].toLocaleString()}
+						{stat.format ? stat.format(dashboardData[stat.key]) : dashboardData[stat.key].toLocaleString()}
 					</div>
 					<div class="text-[10px] uppercase tracking-label text-neutral-500">
 						{stat.label}

@@ -14,7 +14,9 @@ const mockDashboardData = {
 	activeProviders: 10,
 	totalOfferings: 7,
 	totalContracts: 5,
-	activeValidators: 6
+	activeValidators: 6,
+	totalTransfers: 42,
+	totalVolumeE9s: 5_000_000_000
 };
 
 describe('dashboardStore', () => {
@@ -27,6 +29,8 @@ describe('dashboardStore', () => {
 		expect(data.totalProviders).toBe(0);
 		expect(data.activeProviders).toBe(0);
 		expect(data.totalOfferings).toBe(0);
+		expect(data.totalTransfers).toBe(0);
+		expect(data.totalVolumeE9s).toBe(0);
 		expect(get(dashboardStore.error)).toBeNull();
 		expect(get(dashboardStore.isLoading)).toBe(false);
 	});
@@ -39,6 +43,16 @@ describe('dashboardStore', () => {
 		expect(get(dashboardStore.data)).toEqual(mockDashboardData);
 		expect(get(dashboardStore.error)).toBeNull();
 		expect(get(dashboardStore.isLoading)).toBe(false);
+	});
+
+	it('populates totalTransfers and totalVolumeE9s from platform stats', async () => {
+		mockedFetchDashboardData.mockResolvedValue(mockDashboardData);
+
+		await dashboardStore.load();
+
+		const data = get(dashboardStore.data);
+		expect(data.totalTransfers).toBe(42);
+		expect(data.totalVolumeE9s).toBe(5_000_000_000);
 	});
 
 	it('sets error when load fails', async () => {

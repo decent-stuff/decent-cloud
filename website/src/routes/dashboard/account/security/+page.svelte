@@ -4,6 +4,9 @@
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
 	import AccountOverview from "$lib/components/AccountOverview.svelte";
+	import ExternalKeysEditor from "$lib/components/ExternalKeysEditor.svelte";
+	import { UserApiClient } from "$lib/services/user-api";
+	import { Ed25519KeyIdentity } from "@dfinity/identity";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -58,6 +61,14 @@
 		</div>
 	{:else if currentIdentity?.account}
 		<AccountOverview account={currentIdentity.account} />
+
+		<div>
+			<h2 class="text-xl font-semibold text-white mb-4">SSH Keys</h2>
+			<ExternalKeysEditor
+				username={currentIdentity.account.username}
+				apiClient={new UserApiClient(currentIdentity.identity as Ed25519KeyIdentity)}
+			/>
+		</div>
 	{:else}
 		<p class="text-neutral-500">Loading...</p>
 	{/if}
