@@ -239,7 +239,7 @@ impl Database {
                 COALESCE(SUM(s.active_contracts), 0)::BIGINT as active_contracts
             FROM agent_pools p
             LEFT JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL
-            LEFT JOIN provider_agent_status s ON s.provider_pubkey = p.provider_pubkey
+            LEFT JOIN provider_agent_status s ON s.agent_pubkey = d.agent_pubkey
             WHERE p.provider_pubkey = $2
             GROUP BY p.pool_id
             ORDER BY p.created_at_ns DESC"#,
@@ -307,13 +307,12 @@ impl Database {
         let five_mins_ns = 5 * 60 * 1_000_000_000i64;
         let cutoff_ns = now_ns - five_mins_ns;
 
-        // Query all online agents in this pool that have resources
-        // Use DISTINCT to avoid duplicates when multiple delegations reference the same provider's status
+        // Query all online agents in this pool that have resources (per-agent join)
         let rows: Vec<serde_json::Value> = sqlx::query_scalar(
-            r#"SELECT DISTINCT s.resources
+            r#"SELECT s.resources
                FROM agent_pools p
                JOIN provider_agent_delegations d ON d.pool_id = p.pool_id AND d.revoked_at_ns IS NULL
-               JOIN provider_agent_status s ON s.provider_pubkey = d.provider_pubkey
+               JOIN provider_agent_status s ON s.agent_pubkey = d.agent_pubkey
                WHERE p.pool_id = $1
                  AND s.online = TRUE
                  AND s.last_heartbeat_ns > $2
@@ -685,7 +684,7 @@ impl Database {
         // 5 minutes in nanoseconds for online check
         let online_threshold_ns = now_ns - (5 * 60 * 1_000_000_000i64);
 
-        // Join with status table to get version and online status
+        // Join with status table to get version and online status (per-agent)
         let rows = sqlx::query_as::<_, DelegationWithStatusRow>(
             r#"SELECT
                 d.agent_pubkey, d.provider_pubkey, d.permissions, d.expires_at_ns,
@@ -693,7 +692,7 @@ impl Database {
                 s.version, s.last_heartbeat_ns,
                 COALESCE(s.online = TRUE AND s.last_heartbeat_ns > $2, FALSE) as online
                FROM provider_agent_delegations d
-               LEFT JOIN provider_agent_status s ON d.provider_pubkey = s.provider_pubkey
+               LEFT JOIN provider_agent_status s ON d.agent_pubkey = s.agent_pubkey
                WHERE d.pool_id = $1 AND d.revoked_at_ns IS NULL
                ORDER BY d.created_at_ns DESC"#,
         )
@@ -1009,10 +1008,12 @@ mod tests {
             ]
         });
 
+        // Insert per-agent status for agent1 (agent_pubkey is the PK)
         sqlx::query(
-            "INSERT INTO provider_agent_status (provider_pubkey, online, last_heartbeat_ns, updated_at_ns, resources) VALUES ($1, TRUE, $2, $3, $4)",
+            "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns, resources) VALUES ($1, $2, TRUE, $3, $4, $5)",
         )
-        .bind(&provider_pubkey) // Note: status uses provider_pubkey but delegations link to pool
+        .bind(&agent1_pubkey)
+        .bind(&provider_pubkey)
         .bind(now_ns)
         .bind(now_ns)
         .bind(&resources1)

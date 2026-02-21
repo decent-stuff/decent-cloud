@@ -170,9 +170,7 @@ pub struct AdminAuthenticatedUser {
 /// Used by provisioning agents that have been delegated authority by a provider
 #[derive(Debug, Clone)]
 pub struct AgentAuthenticatedUser {
-    /// The agent's public key (used for signing)
-    /// Stored for audit logging; database queries use provider_pubkey
-    #[allow(dead_code)]
+    /// The agent's public key (used for signing and per-agent status keying)
     pub agent_pubkey: Vec<u8>,
     /// The provider's public key (the delegator)
     pub provider_pubkey: Vec<u8>,

@@ -517,9 +517,10 @@ impl AgentsApi {
             .as_ref()
             .and_then(|r| serde_json::to_value(r).ok());
 
-        // Update heartbeat
+        // Update heartbeat keyed by agent_pubkey for per-agent status isolation
         if let Err(e) = db
             .update_agent_heartbeat(
+                &auth.agent_pubkey,
                 &provider_pubkey,
                 req.version.as_deref(),
                 req.provisioner_type.as_deref(),

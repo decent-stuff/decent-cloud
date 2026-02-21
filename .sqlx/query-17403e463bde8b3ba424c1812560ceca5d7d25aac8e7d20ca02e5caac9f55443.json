@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lower(encode(requester_pubkey, 'hex')) as \"requester_pubkey!: String\"\n               FROM contract_sign_requests WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "requester_pubkey!: String",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "17403e463bde8b3ba424c1812560ceca5d7d25aac8e7d20ca02e5caac9f55443"
+}

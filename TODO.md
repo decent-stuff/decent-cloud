@@ -68,30 +68,30 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
 **FIXME in code:** `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). Needs ICPSwap/KongSwap integration. *(Blocked on choosing exchange API. Single-session once decided.)*
 
-### Per-Agent Status Accuracy
-
-**Issue:** `provider_agent_status` is keyed by `provider_pubkey`, so all agents for the same provider share one heartbeat row — per-agent status is inaccurate if a provider runs multiple agents.
-**Location:** Agent pool detail page and sidebar.
-**Fix:** Add per-agent heartbeat rows keyed by agent ID instead of provider pubkey. *(Single-session: DB migration + API change + frontend update.)*
-
 ---
 
 ## UX Improvements
 
-### Future UX (discovered via codebase audit, single-session each)
+### Completed (2026-02-21)
 
-- **[Contracts] Bandwidth usage chart on contract detail** — `getContractBandwidthHistory` API exists (provider-authenticated). Bandwidth stats are on the earnings page but not on the contract detail page where tenants would expect them. *(Single-session: fetch + chart component on contract detail.)*
+- **[Provider] Batch actions on rental requests — "Accept All" / "Reject All"** ✅
+- **[Marketplace] Offering allowlist management** ✅ — UI available in `/dashboard/offerings` per-offering "Allowlist" button.
+- **[Account] SSH keys on Security page** ✅ — `ExternalKeysEditor` added to `/dashboard/account/security`.
+- **[Stats] Platform stats: total volume + transfers on homepage** ✅ — Dashboard shows 7 metrics including Total Volume (ICP) and Total Transfers.
+- **[Navigation] Breadcrumb on agent pool detail page** ✅
+- **[Contracts] Provisioning failure details visible to tenant** ✅ — Contract detail shows failure banner with `provisioning_instance_details` content and actionable next steps.
+- **[Contracts] Bandwidth usage chart on contract detail** ✅ (2026-02-21) — New tenant-authenticated endpoint `GET /api/v1/users/:pubkey/contracts/:id/bandwidth` + SVG chart on `/dashboard/rentals/[contract_id]`.
+- **[Provider] Trust metrics dedicated shareable page** ✅ (2026-02-21) — New route `/dashboard/reputation/[identifier]/trust` + "Share Trust Report" link on reputation page.
+- **[Agent] Per-agent status accuracy** ✅ (2026-02-21) — DB migration adds `agent_pubkey` as primary key to `provider_agent_status`; heartbeat now keyed per-agent instead of per-provider.
 
-- **[Provider] Trust metrics dedicated page** — `get_provider_trust_metrics` API exists and data is shown on the dashboard's TrustDashboard component, but no dedicated shareable/bookmarkable page exists. *(Single-session: new route `/dashboard/reputation/[id]/trust` + data fetch.)*
+### Future UX (single-session each)
 
-- **[Provider] Batch actions on rental requests — "Accept All" / "Reject All"** ✅ Done (2026-02-21)
+- **[Account] Notifications tab in Account Settings** — Notification config API exists (`GET/PUT /api/v1/providers/me/notification-config`) and `notification-api.ts` service is implemented, but the UI is buried inside Provider Setup. Non-providers cannot access it at all. Need: new `/dashboard/account/notifications/+page.svelte` with email/Telegram toggles + "Test" button + usage display. Add to the Account Settings tabs list in `/dashboard/account/+page.svelte`. *(Single-session: new page reusing notification-api.ts, add tab.)*
 
-- **[Marketplace] Offering allowlist management** ✅ Done (2026-02-21) — UI available in `/dashboard/offerings` per-offering "Allowlist" button.
+- **[Provider] Per-contract earnings breakdown** — Earnings page shows aggregate revenue and bandwidth but no per-contract breakdown. Providers with many contracts cannot see which ones earned the most. Need: sortable table on the earnings page showing offering name, payment amount, duration, status, customer feedback. API: existing user contracts endpoint filtered by `provider_pubkey`. *(Single-session: table component on earnings page.)*
 
-- **[Account] SSH keys on Security page** ✅ Done (2026-02-21) — `ExternalKeysEditor` added to `/dashboard/account/security`.
+- **[Rentals] Search/filter rentals list** — Rentals list has status tabs (all/active/pending/cancelled) but no text search. With many contracts, finding one by offering name or contract ID requires scrolling. Add a text input that client-side filters `contracts` array by `offering_id` or `contract_id`. *(Single-session: ~20 lines of svelte.)*
 
-- **[Stats] Platform stats: total volume + transfers on homepage** ✅ Done (2026-02-21) — `DashboardSection` now shows 7 metrics including Total Volume (ICP) and Total Transfers.
+- **[Marketplace] Default to hiding demo offerings** — Demo offerings are shown by default (`showDemoOfferings = true`), confusing new users who think they can rent placeholder offerings. Change default to `false`; add visible "(show demo)" checkbox. *(Single-session: 1-line default change + UI label.)*
 
-- **[Navigation] Breadcrumb on agent pool detail page** ✅ Done (2026-02-21)
-
-- **[Contracts] Provisioning failure details visible to tenant** ✅ Done (2026-02-21) — Contract detail shows failure banner with `provisioning_instance_details` content and actionable next steps.
+- **[Dashboard] Personalized activity on home for authenticated users** — Dashboard home shows only platform-wide stats after "Getting Started" card is dismissed. For users with history, show: last 3 rentals with status and expiry, and last 3 earnings if provider. Activity data is already fetched (`activity`, `myOfferings` state) but not displayed prominently. *(Single-session: add summary section to dashboard home.)*

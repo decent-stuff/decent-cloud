@@ -2540,6 +2540,40 @@ export async function getContractBandwidthHistory(
 	return payload.data ?? [];
 }
 
+/**
+ * Get bandwidth history for a specific contract (tenant/user view)
+ * Requires user authentication - user must be the contract requester
+ */
+export async function getUserContractBandwidthHistory(
+	userPubkey: string | Uint8Array,
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<BandwidthHistoryResponse[]> {
+	const pubkeyHex = typeof userPubkey === 'string' ? userPubkey : hexEncode(userPubkey);
+	const url = `${API_BASE_URL}/api/v1/users/${pubkeyHex}/contracts/${contractId}/bandwidth`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(
+			response,
+			`Failed to fetch bandwidth history: ${response.status}`
+		);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<BandwidthHistoryResponse[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch bandwidth history');
+	}
+
+	return payload.data ?? [];
+}
+
 // ==================== Offering Generation Types ====================
 
 /** Response from offering suggestions endpoint */

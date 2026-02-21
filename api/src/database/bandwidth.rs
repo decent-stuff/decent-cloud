@@ -105,6 +105,23 @@ impl Database {
             .collect())
     }
 
+    /// Get the requester pubkey (hex) for a contract identified by hex contract_id.
+    /// Returns None if the contract does not exist.
+    pub async fn get_contract_requester_hex(&self, contract_id_hex: &str) -> Result<Option<String>> {
+        let contract_id_bytes = hex::decode(contract_id_hex)
+            .map_err(|e| anyhow::anyhow!("Invalid contract_id hex: {}", e))?;
+
+        let row = sqlx::query!(
+            r#"SELECT lower(encode(requester_pubkey, 'hex')) as "requester_pubkey!: String"
+               FROM contract_sign_requests WHERE contract_id = $1"#,
+            contract_id_bytes.as_slice()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|r| r.requester_pubkey))
+    }
+
     /// Get bandwidth history for a contract (for graphing)
     pub async fn get_bandwidth_history(
         &self,
@@ -148,6 +165,70 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use crate::database::test_helpers::setup_test_db;
+
+    /// Insert a minimal contract row for testing purposes
+    async fn insert_test_contract(
+        db: &crate::database::Database,
+        contract_id: &[u8],
+        requester_pubkey: &[u8],
+    ) {
+        let provider_pk = vec![3u8; 32];
+        sqlx::query!(
+            r#"INSERT INTO contract_sign_requests
+               (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
+                provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns,
+                payment_method, payment_status, currency)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"#,
+            contract_id,
+            requester_pubkey,
+            "ssh-ed25519 AAAA",
+            "email:test@example.com",
+            provider_pk.as_slice(),
+            "offer-1",
+            1_000_000_000i64,
+            "test",
+            0i64,
+            "stripe",
+            "succeeded",
+            "USD"
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_get_contract_requester_hex_found() {
+        let db = setup_test_db().await;
+        let contract_id = vec![0xAAu8; 32];
+        let requester_pk = vec![0xBBu8; 32];
+        insert_test_contract(&db, &contract_id, &requester_pk).await;
+
+        let contract_id_hex = hex::encode(&contract_id);
+        let result = db
+            .get_contract_requester_hex(&contract_id_hex)
+            .await
+            .unwrap();
+        assert_eq!(result, Some(hex::encode(&requester_pk)));
+    }
+
+    #[tokio::test]
+    async fn test_get_contract_requester_hex_not_found() {
+        let db = setup_test_db().await;
+        let contract_id_hex = hex::encode(vec![0xFFu8; 32]);
+        let result = db
+            .get_contract_requester_hex(&contract_id_hex)
+            .await
+            .unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_get_contract_requester_hex_invalid_hex() {
+        let db = setup_test_db().await;
+        let result = db.get_contract_requester_hex("not-valid-hex").await;
+        assert!(result.is_err());
+    }
 
     #[tokio::test]
     async fn test_get_provider_bandwidth_stats() {

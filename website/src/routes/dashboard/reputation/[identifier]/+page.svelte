@@ -498,6 +498,15 @@
 
 		<!-- Trust Dashboard -->
 		{#if trustMetrics}
+			<div class="flex items-center justify-between mb-3">
+				<h2 class="text-lg font-semibold text-white">Provider Trust</h2>
+				<a
+					href="/dashboard/reputation/{identifier}/trust"
+					class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+				>
+					Share Trust Report →
+				</a>
+			</div>
 			<TrustDashboard metrics={trustMetrics} {responseMetrics} {healthSummary} />
 		{/if}
 

@@ -16,11 +16,13 @@
 		getContractHealthChecks,
 		submitContractFeedback,
 		getContractFeedback,
+		getUserContractBandwidthHistory,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
 		type ContractHealthCheck,
 		type ContractFeedback,
+		type BandwidthHistoryResponse,
 		hexEncode,
 	} from "$lib/services/api";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
@@ -78,6 +80,9 @@
 	let feedbackError = $state<string | null>(null);
 	let feedbackServiceMatched = $state<boolean | null>(null);
 	let feedbackWouldRentAgain = $state<boolean | null>(null);
+
+	// Bandwidth history state
+	let bandwidthHistory = $state<BandwidthHistoryResponse[]>([]);
 
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
@@ -268,6 +273,7 @@
 				await loadExtensions(signingIdentityInfo);
 				await loadHealthChecks(signingIdentityInfo);
 				await loadFeedback(signingIdentityInfo);
+				await loadBandwidthHistory(signingIdentityInfo);
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -480,6 +486,20 @@
 			healthChecks = await getContractHealthChecks(contractId, headers);
 		} catch {
 			// Health checks not available is not an error
+		}
+	}
+
+	async function loadBandwidthHistory(signingIdentityInfo: any) {
+		try {
+			const pubkeyHex = hexEncode(signingIdentityInfo.publicKeyBytes);
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/users/${pubkeyHex}/contracts/${contractId}/bandwidth`,
+			);
+			bandwidthHistory = await getUserContractBandwidthHistory(pubkeyHex, contractId, headers);
+		} catch {
+			// Bandwidth history not available is not an error
 		}
 	}
 
@@ -1127,6 +1147,64 @@
 				</div>
 			{/if}
 		</div>
+
+	<!-- Bandwidth Usage Chart (gateway contracts with data) -->
+	{#if bandwidthHistory.length > 0 && contract.gateway_subdomain}
+		{@const points = bandwidthHistory.slice(0, 20).reverse()}
+		{@const maxBytes = Math.max(...points.map(p => Math.max(Number(p.bytesIn), Number(p.bytesOut))), 1)}
+		{@const chartW = 600}
+		{@const chartH = 120}
+		{@const padL = 56}
+		{@const padR = 8}
+		{@const padT = 8}
+		{@const padB = 32}
+		{@const plotW = chartW - padL - padR}
+		{@const plotH = chartH - padT - padB}
+		{@const n = points.length}
+		{@const xStep = n > 1 ? plotW / (n - 1) : plotW}
+		{@const toX = (i: number) => padL + i * xStep}
+		{@const toY = (v: number) => padT + plotH - (v / maxBytes) * plotH}
+		{@const formatBytes = (b: number) => b >= 1_073_741_824 ? `${(b/1_073_741_824).toFixed(1)}G` : b >= 1_048_576 ? `${(b/1_048_576).toFixed(1)}M` : b >= 1024 ? `${(b/1024).toFixed(0)}K` : `${b}B`}
+		{@const formatTime = (ns: number) => { const d = new Date(ns / 1_000_000); return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`; }}
+		<div class="card p-6 border border-neutral-800">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-3">Bandwidth Usage</h3>
+			<div class="overflow-x-auto">
+				<svg viewBox="0 0 {chartW} {chartH}" class="w-full" style="min-width:320px;max-height:160px">
+					<!-- Y axis ticks -->
+					{#each [0, 0.5, 1] as frac}
+						{@const yVal = Math.round(maxBytes * frac)}
+						{@const y = toY(yVal)}
+						<line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="#374151" stroke-width="0.5"/>
+						<text x={padL - 4} y={y + 4} text-anchor="end" class="text-[9px]" fill="#6b7280" font-size="9">{formatBytes(yVal)}</text>
+					{/each}
+					<!-- bytes_in filled area -->
+					{#if n > 1}
+						{@const areaIn = `M${toX(0)},${padT + plotH} ` + points.map((p, i) => `L${toX(i)},${toY(Number(p.bytesIn))}`).join(' ') + ` L${toX(n-1)},${padT + plotH} Z`}
+						{@const areaOut = `M${toX(0)},${padT + plotH} ` + points.map((p, i) => `L${toX(i)},${toY(Number(p.bytesOut))}`).join(' ') + ` L${toX(n-1)},${padT + plotH} Z`}
+						<path d={areaIn} fill="#3b82f6" fill-opacity="0.15"/>
+						<path d={areaOut} fill="#10b981" fill-opacity="0.15"/>
+						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesIn))}`).join(' ')} fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesOut))}`).join(' ')} fill="none" stroke="#10b981" stroke-width="1.5"/>
+					{:else}
+						<!-- Single data point: render dots -->
+						<circle cx={toX(0)} cy={toY(Number(points[0].bytesIn))} r="3" fill="#3b82f6"/>
+						<circle cx={toX(0)} cy={toY(Number(points[0].bytesOut))} r="3" fill="#10b981"/>
+					{/if}
+					<!-- X axis labels (show at most 5 evenly spaced) -->
+					{#each points as p, i}
+						{#if n <= 5 || i % Math.ceil((n - 1) / 4) === 0 || i === n - 1}
+							<text x={toX(i)} y={chartH - 4} text-anchor="middle" fill="#6b7280" font-size="8">{formatTime(Number(p.recordedAtNs))}</text>
+						{/if}
+					{/each}
+				</svg>
+			</div>
+			<div class="flex items-center gap-4 mt-2 text-xs text-neutral-400">
+				<span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-blue-500"></span> In</span>
+				<span class="flex items-center gap-1"><span class="inline-block w-3 h-0.5 bg-emerald-500"></span> Out</span>
+				<span class="text-neutral-600">{points.length} sample{points.length !== 1 ? 's' : ''}</span>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Extension History -->
 	{#if extensions.length > 0}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_agent_status\n               (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns, resources)\n               VALUES ($1, $2, TRUE, $3, $4, $5, $6, $7, $8, $9)\n               ON CONFLICT(agent_pubkey) DO UPDATE SET\n                   provider_pubkey = excluded.provider_pubkey,\n                   online = TRUE,\n                   last_heartbeat_ns = excluded.last_heartbeat_ns,\n                   version = COALESCE(excluded.version, provider_agent_status.version),\n                   provisioner_type = COALESCE(excluded.provisioner_type, provider_agent_status.provisioner_type),\n                   capabilities = COALESCE(excluded.capabilities, provider_agent_status.capabilities),\n                   active_contracts = excluded.active_contracts,\n                   updated_at_ns = excluded.updated_at_ns,\n                   resources = COALESCE(excluded.resources, provider_agent_status.resources)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f7d3ea4cd28f7869f4e14e0466314775a6f7620c21c21c3229332a45d4c87fd2"
+}

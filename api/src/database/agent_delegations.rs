@@ -161,7 +161,7 @@ pub struct DelegationWithStatusRow {
 /// Internal row type for agent status queries
 #[derive(Debug, sqlx::FromRow)]
 struct AgentStatusRow {
-    provider_pubkey: Vec<u8>,
+    agent_pubkey: Vec<u8>,
     online: bool,
     last_heartbeat_ns: Option<i64>,
     version: Option<String>,
@@ -277,7 +277,7 @@ impl Database {
                 s.version, s.last_heartbeat_ns,
                 COALESCE(s.online = TRUE AND s.last_heartbeat_ns > $2, FALSE) as online
                FROM provider_agent_delegations d
-               LEFT JOIN provider_agent_status s ON d.provider_pubkey = s.provider_pubkey
+               LEFT JOIN provider_agent_status s ON d.agent_pubkey = s.agent_pubkey
                WHERE d.provider_pubkey = $1
                ORDER BY d.created_at_ns DESC"#,
         )
@@ -363,9 +363,10 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Update agent heartbeat status.
+    /// Update agent heartbeat status, keyed by agent_pubkey for per-agent isolation.
     pub async fn update_agent_heartbeat(
         &self,
+        agent_pubkey: &[u8],
         provider_pubkey: &[u8],
         version: Option<&str>,
         provisioner_type: Option<&str>,
@@ -380,9 +381,10 @@ impl Database {
 
         sqlx::query!(
             r#"INSERT INTO provider_agent_status
-               (provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns, resources)
-               VALUES ($1, TRUE, $2, $3, $4, $5, $6, $7, $8)
-               ON CONFLICT(provider_pubkey) DO UPDATE SET
+               (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, updated_at_ns, resources)
+               VALUES ($1, $2, TRUE, $3, $4, $5, $6, $7, $8, $9)
+               ON CONFLICT(agent_pubkey) DO UPDATE SET
+                   provider_pubkey = excluded.provider_pubkey,
                    online = TRUE,
                    last_heartbeat_ns = excluded.last_heartbeat_ns,
                    version = COALESCE(excluded.version, provider_agent_status.version),
@@ -391,6 +393,7 @@ impl Database {
                    active_contracts = excluded.active_contracts,
                    updated_at_ns = excluded.updated_at_ns,
                    resources = COALESCE(excluded.resources, provider_agent_status.resources)"#,
+            agent_pubkey,
             provider_pubkey,
             now_ns,
             version,
@@ -407,11 +410,16 @@ impl Database {
     }
 
     /// Get agent status for a provider.
+    ///
+    /// Returns the most recently seen agent's status for the given provider.
+    /// Use `list_agent_delegations` to get per-agent status for all agents.
     pub async fn get_agent_status(&self, provider_pubkey: &[u8]) -> Result<Option<AgentStatus>> {
         let row = sqlx::query_as::<_, AgentStatusRow>(
-            r#"SELECT provider_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, resources
+            r#"SELECT agent_pubkey, online, last_heartbeat_ns, version, provisioner_type, capabilities, active_contracts, resources
                FROM provider_agent_status
-               WHERE provider_pubkey = $1"#,
+               WHERE provider_pubkey = $1
+               ORDER BY last_heartbeat_ns DESC NULLS LAST
+               LIMIT 1"#,
         )
         .bind(provider_pubkey)
         .fetch_optional(&self.pool)
@@ -424,8 +432,8 @@ impl Database {
                         Ok(v) => Some(v),
                         Err(e) => {
                             tracing::warn!(
-                                "Failed to parse capabilities JSON for provider {}: {e}",
-                                hex::encode(&r.provider_pubkey)
+                                "Failed to parse capabilities JSON for agent {}: {e}",
+                                hex::encode(&r.agent_pubkey)
                             );
                             None
                         }
@@ -441,7 +449,7 @@ impl Database {
                         .unwrap_or(false);
 
                 Ok(Some(AgentStatus {
-                    provider_pubkey: hex::encode(&r.provider_pubkey),
+                    provider_pubkey: hex::encode(provider_pubkey),
                     online,
                     last_heartbeat_ns: r.last_heartbeat_ns,
                     version: r.version,
@@ -479,6 +487,82 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::test_helpers::setup_test_db;
+
+    /// Two agents for the same provider must produce separate heartbeat rows.
+    /// Before the fix (provider_pubkey as PK), the second heartbeat would overwrite the first.
+    #[tokio::test]
+    async fn test_per_agent_heartbeat_isolation() {
+        let db = setup_test_db().await;
+        let provider_pubkey = vec![0xAAu8; 32];
+        let agent1_pubkey = vec![0x01u8; 32];
+        let agent2_pubkey = vec![0x02u8; 32];
+
+        // Register provider
+        sqlx::query(
+            "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
+        )
+        .bind(&provider_pubkey)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Agent 1 heartbeat
+        db.update_agent_heartbeat(
+            &agent1_pubkey,
+            &provider_pubkey,
+            Some("v1.0.0"),
+            Some("proxmox"),
+            None,
+            3,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Agent 2 heartbeat — must NOT overwrite agent 1's row
+        db.update_agent_heartbeat(
+            &agent2_pubkey,
+            &provider_pubkey,
+            Some("v1.1.0"),
+            Some("proxmox"),
+            None,
+            7,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Count rows for this provider — must be 2, not 1
+        let row_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM provider_agent_status WHERE provider_pubkey = $1",
+        )
+        .bind(&provider_pubkey)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(row_count, 2, "each agent must have its own status row");
+
+        // Agent 1's data must be preserved
+        let agent1_contracts: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(active_contracts, 0) FROM provider_agent_status WHERE agent_pubkey = $1",
+        )
+        .bind(&agent1_pubkey)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(agent1_contracts, 3, "agent1 active_contracts must be intact");
+
+        // Agent 2's data must be correct
+        let agent2_contracts: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(active_contracts, 0) FROM provider_agent_status WHERE agent_pubkey = $1",
+        )
+        .bind(&agent2_pubkey)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(agent2_contracts, 7, "agent2 active_contracts must be intact");
+    }
 
     #[test]
     fn test_permission_roundtrip() {
