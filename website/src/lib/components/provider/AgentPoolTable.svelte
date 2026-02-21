@@ -75,8 +75,17 @@
 					</td>
 					<td class="px-6 py-4 text-neutral-300">{pool.agentCount}</td>
 					<td class="px-6 py-4 text-neutral-300">
-						<span class="{pool.onlineCount > 0 ? 'text-green-400' : 'text-red-400'}">
-							{pool.onlineCount} / {pool.agentCount}
+						<span class="inline-flex items-center gap-1.5">
+							{#if pool.agentCount === 0}
+								<span class="w-2 h-2 rounded-full bg-neutral-600 shrink-0" title="No agents configured"></span>
+								<span class="text-neutral-600">—</span>
+							{:else if pool.onlineCount > 0}
+								<span class="w-2 h-2 rounded-full bg-green-400 shrink-0" title="Has online agents"></span>
+								<span class="text-green-400">{pool.onlineCount} / {pool.agentCount}</span>
+							{:else}
+								<span class="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Agents registered but none online"></span>
+								<span class="text-amber-400">{pool.onlineCount} / {pool.agentCount}</span>
+							{/if}
 						</span>
 					</td>
 					<td class="px-6 py-4 text-neutral-300">{pool.activeContracts}</td>

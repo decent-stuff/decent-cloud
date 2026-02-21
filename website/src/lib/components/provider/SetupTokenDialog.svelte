@@ -84,6 +84,25 @@
 			</header>
 
 			<div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+				<!-- Step-by-step guide -->
+				<div class="bg-primary-500/10 border border-primary-500/20 p-4 space-y-2">
+					<div class="text-xs font-semibold text-primary-300 uppercase tracking-wide mb-3">How it works</div>
+					<ol class="space-y-2">
+						<li class="flex items-start gap-3 text-sm text-neutral-300">
+							<span class="w-5 h-5 rounded-full bg-primary-500/30 text-primary-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+							<span>Generate a setup token below (it expires, so use it promptly).</span>
+						</li>
+						<li class="flex items-start gap-3 text-sm text-neutral-300">
+							<span class="w-5 h-5 rounded-full bg-primary-500/30 text-primary-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+							<span>Run the install command on your server — it registers the agent and starts it automatically.</span>
+						</li>
+						<li class="flex items-start gap-3 text-sm text-neutral-300">
+							<span class="w-5 h-5 rounded-full bg-primary-500/30 text-primary-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+							<span>Return here — the agent will appear in the <strong class="text-white">Agents</strong> table with a green dot once it's online.</span>
+						</li>
+					</ol>
+				</div>
+
 				<!-- Create Token Form -->
 				<form onsubmit={handleSubmit} class="space-y-3">
 					<div class="text-sm font-medium text-neutral-300">New Token</div>

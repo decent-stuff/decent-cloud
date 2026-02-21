@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration } from './contract-format';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime } from './contract-format';
 
 describe('contract formatting helpers', () => {
 	it('formats timestamps into readable strings', () => {
@@ -47,6 +47,54 @@ describe('contract formatting helpers', () => {
 			// Ed25519 public key is 32 bytes = 64 hex characters
 			expect(hex).toHaveLength(64);
 			expect(hex).toBe('f'.repeat(64));
+		});
+	});
+
+	describe('formatRelativeTime', () => {
+		const NOW_MS = 1_700_000_000_000;
+		const NOW_NS = NOW_MS * 1_000_000;
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		it('returns "never" for null', () => {
+			expect(formatRelativeTime(null)).toBe('never');
+		});
+
+		it('returns "just now" for future timestamps', () => {
+			vi.setSystemTime(NOW_MS);
+			expect(formatRelativeTime(NOW_NS + 5_000_000_000)).toBe('just now');
+		});
+
+		it('returns "just now" for 30 seconds ago', () => {
+			vi.setSystemTime(NOW_MS);
+			const thirtySecondsAgoNs = NOW_NS - 30 * 1_000_000_000;
+			expect(formatRelativeTime(thirtySecondsAgoNs)).toBe('just now');
+		});
+
+		it('returns minutes for 5 minutes ago', () => {
+			vi.setSystemTime(NOW_MS);
+			const fiveMinAgoNs = NOW_NS - 5 * 60 * 1_000_000_000;
+			expect(formatRelativeTime(fiveMinAgoNs)).toBe('5m ago');
+		});
+
+		it('returns hours for 2 hours ago', () => {
+			vi.setSystemTime(NOW_MS);
+			const twoHoursAgoNs = NOW_NS - 2 * 60 * 60 * 1_000_000_000;
+			expect(formatRelativeTime(twoHoursAgoNs)).toBe('2h ago');
+		});
+
+		it('returns days for 3 days ago', () => {
+			vi.setSystemTime(NOW_MS);
+			const threeDaysAgoNs = NOW_NS - 3 * 24 * 60 * 60 * 1_000_000_000;
+			expect(formatRelativeTime(threeDaysAgoNs)).toBe('3d ago');
+		});
+
+		it('returns months for 2 months ago', () => {
+			vi.setSystemTime(NOW_MS);
+			const twoMonthsAgoNs = NOW_NS - 60 * 24 * 60 * 60 * 1_000_000_000;
+			expect(formatRelativeTime(twoMonthsAgoNs)).toBe('2mo ago');
 		});
 	});
 

@@ -71,6 +71,25 @@ export function calculateActualDuration(
 }
 
 /**
+ * Format a nanosecond timestamp as a relative time string.
+ * E.g., "just now", "3m ago", "2h ago", "5d ago", "never"
+ */
+export function formatRelativeTime(ns: number | null): string {
+	if (ns == null) return 'never';
+	const diffMs = Date.now() - ns / 1_000_000;
+	if (diffMs < 0) return 'just now';
+	const diffS = diffMs / 1000;
+	if (diffS < 60) return 'just now';
+	const diffMin = diffS / 60;
+	if (diffMin < 60) return `${Math.floor(diffMin)}m ago`;
+	const diffH = diffMin / 60;
+	if (diffH < 24) return `${Math.floor(diffH)}h ago`;
+	const diffD = diffH / 24;
+	if (diffD < 30) return `${Math.floor(diffD)}d ago`;
+	return `${Math.floor(diffD / 30)}mo ago`;
+}
+
+/**
  * Format duration from nanoseconds to human-readable string.
  */
 export function formatDuration(duration_ns: number): string {

@@ -85,7 +85,13 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Provider earnings] No chart for revenue over time** — ✅ Fixed: Added `GET /api/v1/providers/{pubkey}/revenue-by-month` endpoint (bucketed by month, last 12 months) and a pure-SVG bar chart on the earnings page. No external chart library dependencies.
 
-- **[Provider agents] Setup token UX is opaque** — The agent setup flow requires generating a setup token and running `dc-agent setup token` manually. There is no status indicator showing whether a dc-agent has successfully connected to the API. The Agents page should show: connected agents, last-seen timestamp (`last_heartbeat_ns` from `provider_agent_status` table), and health status for each pool. *(Medium effort: surface `last_heartbeat_ns` in the pool detail page by joining `provider_agent_status`.)*
+- **[Provider agents] Setup token UX is opaque** — ✅ Fixed: (1) Added numbered "How it works" step guide in SetupTokenDialog. (2) Color-coded dot indicator in the pool list (green = online agents, amber = registered but offline, gray dash = no agents). (3) Added "Status / Last Seen" column to pool detail agent table showing "Online · 3m ago" / "Offline · 2h ago". Remaining architectural limitation: `provider_agent_status` is keyed by `provider_pubkey`, so all agents for the same provider share one heartbeat row—per-agent status is inaccurate if a provider runs multiple agents. *(Architecture decision needed before fixing.)*
+
+- **[Rentals page] No SSH connection details for active contracts** — When a contract reaches `active` state, `provisioning_instance_details` contains raw text (SSH host, port). There is no parsed, one-click SSH command or copy button. Users must manually parse the details text. Add: parsed connection box with copy-to-clipboard SSH command, gateway port forwarding display. *(Medium effort: parse `provisioning_instance_details` JSON/text, display structured connection card.)*
+
+- **[Marketplace] No provider profile pages linked from offerings** — Each offering shows a truncated provider pubkey with no clickable link to a provider profile/reputation page. The reputation page at `/dashboard/reputation/{pubkey}` exists but offerings in the marketplace don't link to it. Users cannot easily assess a provider before renting. *(Low effort: add clickable link on provider pubkey in the expanded offering row.)*
+
+- **[Rentals page] No "filtered tab is empty" state** — When a user switches to e.g. "Active" tab and has no active contracts, the list renders empty with no message. Add an empty state per tab explaining what that state means and what the user can do. *(Low effort: conditional empty state per `activeTab` value.)*
 
 - **[Offerings] Pool assignment UX** — ✅ Fixed: "No pool" indicator is now a clickable link to `/dashboard/provider/agents` with a `→` affordance.
 

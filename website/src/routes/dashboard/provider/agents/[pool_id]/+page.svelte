@@ -23,6 +23,7 @@
 	import type { SetupToken } from "$lib/types/generated/SetupToken";
 	import SetupTokenDialog from "$lib/components/provider/SetupTokenDialog.svelte";
 	import GenerateOfferingsDialog from "$lib/components/provider/GenerateOfferingsDialog.svelte";
+	import { formatRelativeTime } from "$lib/utils/contract-format";
 
 	let pool = $state<AgentPoolWithStats | null>(null);
 	let delegations = $state<AgentDelegation[]>([]);
@@ -322,7 +323,7 @@
 						<th scope="col" class="px-6 py-3">Version</th>
 						<th scope="col" class="px-6 py-3">Permissions</th>
 						<th scope="col" class="px-6 py-3">Created</th>
-						<th scope="col" class="px-6 py-3">Status</th>
+						<th scope="col" class="px-6 py-3">Status / Last Seen</th>
 						<th scope="col" class="px-6 py-3">Actions</th>
 					</tr>
 				</thead>
@@ -362,16 +363,19 @@
 									<span class="flex items-center gap-2 text-red-400">
 										<span class="h-2 w-2 rounded-full bg-red-400"></span>
 										Revoked
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
 									</span>
 								{:else if delegation.online}
 									<span class="flex items-center gap-2 text-green-400">
 										<span class="h-2 w-2 rounded-full bg-green-400"></span>
 										Online
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
 									</span>
 								{:else}
 									<span class="flex items-center gap-2 text-amber-400">
 										<span class="h-2 w-2 rounded-full bg-amber-400"></span>
 										Offline
+										<span class="text-neutral-500">· {formatRelativeTime(delegation.lastHeartbeatNs)}</span>
 									</span>
 								{/if}
 							</td>
