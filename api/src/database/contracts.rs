@@ -2820,6 +2820,45 @@ impl Database {
         })
     }
 
+    /// Get health summary for a single contract
+    ///
+    /// Aggregates all health check data for one contract (all-time).
+    pub async fn get_contract_health_summary(
+        &self,
+        contract_id: &[u8],
+    ) -> Result<ContractHealthSummary> {
+        let stats = sqlx::query!(
+            r#"SELECT
+                COUNT(*) as "total_checks!: i64",
+                COALESCE(SUM(CASE WHEN status = 'healthy' THEN 1 ELSE 0 END), 0) as "healthy_checks!: i64",
+                COALESCE(SUM(CASE WHEN status = 'unhealthy' THEN 1 ELSE 0 END), 0) as "unhealthy_checks!: i64",
+                COALESCE(SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END), 0) as "unknown_checks!: i64",
+                AVG(latency_ms)::DOUBLE PRECISION as "avg_latency_ms: f64",
+                MAX(checked_at) as "last_checked_at: i64"
+            FROM contract_health_checks
+            WHERE contract_id = $1"#,
+            contract_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        let uptime_percent = if stats.total_checks > 0 {
+            (stats.healthy_checks as f64 / stats.total_checks as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(ContractHealthSummary {
+            total_checks: stats.total_checks,
+            healthy_checks: stats.healthy_checks,
+            unhealthy_checks: stats.unhealthy_checks,
+            unknown_checks: stats.unknown_checks,
+            uptime_percent,
+            avg_latency_ms: stats.avg_latency_ms,
+            last_checked_at: stats.last_checked_at,
+        })
+    }
+
     /// Return active contracts where auto_renew is true and expiry is within 48 hours.
     ///
     /// Only contracts with a confirmed payment (succeeded or self_rental) are returned.
@@ -2966,6 +3005,35 @@ pub struct ProviderHealthSummary {
     /// End of the measurement period (nanoseconds since epoch)
     #[ts(type = "number")]
     pub period_end_ns: i64,
+}
+
+/// Per-contract health summary with uptime metrics (all-time)
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+#[serde(rename_all = "camelCase")]
+#[oai(rename_all = "camelCase")]
+pub struct ContractHealthSummary {
+    /// Total number of health checks recorded
+    #[ts(type = "number")]
+    pub total_checks: i64,
+    /// Number of healthy checks
+    #[ts(type = "number")]
+    pub healthy_checks: i64,
+    /// Number of unhealthy checks
+    #[ts(type = "number")]
+    pub unhealthy_checks: i64,
+    /// Number of unknown status checks
+    #[ts(type = "number")]
+    pub unknown_checks: i64,
+    /// Uptime percentage (0.0 - 100.0)
+    pub uptime_percent: f64,
+    /// Average latency in milliseconds (None if no latency data)
+    #[oai(skip_serializing_if_is_none)]
+    pub avg_latency_ms: Option<f64>,
+    /// Timestamp of the most recent check (nanoseconds since epoch), None if no checks
+    #[ts(type = "number | null")]
+    #[oai(skip_serializing_if_is_none)]
+    pub last_checked_at: Option<i64>,
 }
 
 /// Health check result for a contract

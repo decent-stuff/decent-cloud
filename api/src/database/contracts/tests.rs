@@ -3269,3 +3269,138 @@ async fn test_extend_contract_accepts_valid_extension() {
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.duration_hours, Some(920));
 }
+
+// === Contract Health Summary Tests ===
+
+#[tokio::test]
+async fn test_get_contract_health_summary_with_checks() {
+    let db = setup_test_db().await;
+    let user_pk = vec![90u8; 32];
+    let provider_pk = vec![91u8; 32];
+    let contract_id = vec![92u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-chk-1",
+        0,
+        "active",
+    )
+    .await;
+
+    let base_ns = 1_700_000_000_000_000_000_i64;
+
+    // 3 healthy, 1 unhealthy, 1 unknown
+    db.record_health_check(&contract_id, base_ns, "healthy", Some(10), None)
+        .await
+        .unwrap();
+    db.record_health_check(&contract_id, base_ns + 60_000_000_000, "healthy", Some(20), None)
+        .await
+        .unwrap();
+    db.record_health_check(&contract_id, base_ns + 120_000_000_000, "unhealthy", None, None)
+        .await
+        .unwrap();
+    db.record_health_check(&contract_id, base_ns + 180_000_000_000, "healthy", Some(30), None)
+        .await
+        .unwrap();
+    db.record_health_check(&contract_id, base_ns + 240_000_000_000, "unknown", None, None)
+        .await
+        .unwrap();
+
+    let summary = db.get_contract_health_summary(&contract_id).await.unwrap();
+
+    assert_eq!(summary.total_checks, 5);
+    assert_eq!(summary.healthy_checks, 3);
+    assert_eq!(summary.unhealthy_checks, 1);
+    assert_eq!(summary.unknown_checks, 1);
+    assert!(
+        (summary.uptime_percent - 60.0).abs() < 0.01,
+        "expected 60% uptime, got {}",
+        summary.uptime_percent
+    );
+    // avg of 10, 20, 30 = 20ms (unhealthy and unknown have no latency)
+    let avg = summary
+        .avg_latency_ms
+        .expect("avg_latency_ms should be Some when latency data exists");
+    assert!(
+        (avg - 20.0).abs() < 0.01,
+        "expected avg latency 20ms, got {}",
+        avg
+    );
+    assert_eq!(summary.last_checked_at, Some(base_ns + 240_000_000_000));
+}
+
+#[tokio::test]
+async fn test_get_contract_health_summary_all_unhealthy_returns_zero_uptime() {
+    let db = setup_test_db().await;
+    let user_pk = vec![93u8; 32];
+    let provider_pk = vec![94u8; 32];
+    let contract_id = vec![95u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-chk-2",
+        0,
+        "active",
+    )
+    .await;
+
+    let base_ns = 1_700_000_000_000_000_000_i64;
+    db.record_health_check(&contract_id, base_ns, "unhealthy", Some(999), None)
+        .await
+        .unwrap();
+    db.record_health_check(
+        &contract_id,
+        base_ns + 60_000_000_000,
+        "unhealthy",
+        Some(999),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let summary = db.get_contract_health_summary(&contract_id).await.unwrap();
+
+    assert_eq!(summary.total_checks, 2);
+    assert_eq!(summary.healthy_checks, 0);
+    assert_eq!(summary.unhealthy_checks, 2);
+    assert_eq!(summary.uptime_percent, 0.0);
+}
+
+#[tokio::test]
+async fn test_get_contract_health_summary_no_checks_returns_none_last_checked_at() {
+    let db = setup_test_db().await;
+    let user_pk = vec![96u8; 32];
+    let provider_pk = vec![97u8; 32];
+    let contract_id = vec![98u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &user_pk,
+        &provider_pk,
+        "off-chk-3",
+        0,
+        "active",
+    )
+    .await;
+
+    let summary = db.get_contract_health_summary(&contract_id).await.unwrap();
+
+    assert_eq!(summary.total_checks, 0);
+    assert_eq!(summary.healthy_checks, 0);
+    assert_eq!(summary.uptime_percent, 0.0);
+    assert!(
+        summary.last_checked_at.is_none(),
+        "last_checked_at should be None when there are no checks"
+    );
+    assert!(
+        summary.avg_latency_ms.is_none(),
+        "avg_latency_ms should be None when there are no checks"
+    );
+}

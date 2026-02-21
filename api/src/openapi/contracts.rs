@@ -224,6 +224,7 @@ impl ContractsApi {
     async fn request_password_reset(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<String>> {
@@ -284,14 +285,32 @@ impl ContractsApi {
         }
 
         match db.request_password_reset(&contract_id).await {
-            Ok(_) => Json(ApiResponse {
-                success: true,
-                data: Some(
-                    "Password reset requested. The provider will reset the password shortly."
-                        .to_string(),
-                ),
-                error: None,
-            }),
+            Ok(_) => {
+                if let Ok(Some(full_contract)) = db.get_contract(&contract_id).await {
+                    if let Err(e) = crate::rental_notifications::notify_provider_password_reset(
+                        db.as_ref(),
+                        email_service.as_ref(),
+                        &full_contract,
+                        false,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to notify provider of password reset for contract {}: {}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
+                }
+                Json(ApiResponse {
+                    success: true,
+                    data: Some(
+                        "Password reset requested. The provider will reset the password shortly."
+                            .to_string(),
+                    ),
+                    error: None,
+                })
+            }
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
@@ -901,6 +920,75 @@ impl ContractsApi {
             Ok(checks) => Json(ApiResponse {
                 success: true,
                 data: Some(checks),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+
+    /// Get contract health summary
+    ///
+    /// Returns aggregated uptime metrics (total checks, uptime %, avg latency) for a contract.
+    /// Both the requester and provider can view the health summary for their contract.
+    #[oai(
+        path = "/contracts/:id/health-summary",
+        method = "get",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn get_contract_health_summary(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+    ) -> Json<ApiResponse<crate::database::contracts::ContractHealthSummary>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Authorization: verify user is a party to this contract
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey && contract.provider_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: you are not a party to this contract".into()),
+            });
+        }
+
+        match db.get_contract_health_summary(&contract_id).await {
+            Ok(summary) => Json(ApiResponse {
+                success: true,
+                data: Some(summary),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1934,4 +2022,64 @@ mod tests {
         assert!(v.get("latencyMs").is_none_or(|d| d.is_null()));
         assert_eq!(v["details"], r#"{"error":"timeout"}"#);
     }
+
+    #[test]
+    fn test_contract_health_summary_serialization() {
+        use crate::database::contracts::ContractHealthSummary;
+        let summary = ContractHealthSummary {
+            total_checks: 10,
+            healthy_checks: 8,
+            unhealthy_checks: 1,
+            unknown_checks: 1,
+            uptime_percent: 80.0,
+            avg_latency_ms: Some(15.5),
+            last_checked_at: Some(1_700_000_000_000_000_000i64),
+        };
+        let v = serde_json::to_value(&summary).unwrap();
+        assert_eq!(v["totalChecks"], 10_i64);
+        assert_eq!(v["healthyChecks"], 8_i64);
+        assert_eq!(v["unhealthyChecks"], 1_i64);
+        assert_eq!(v["unknownChecks"], 1_i64);
+        assert_eq!(v["uptimePercent"], 80.0_f64);
+        assert_eq!(v["avgLatencyMs"], 15.5_f64);
+        assert_eq!(v["lastCheckedAt"], 1_700_000_000_000_000_000_i64);
+    }
+
+    #[test]
+    fn test_contract_health_summary_no_checks_serialization() {
+        use crate::database::contracts::ContractHealthSummary;
+        let summary = ContractHealthSummary {
+            total_checks: 0,
+            healthy_checks: 0,
+            unhealthy_checks: 0,
+            unknown_checks: 0,
+            uptime_percent: 0.0,
+            avg_latency_ms: None,
+            last_checked_at: None,
+        };
+        let v = serde_json::to_value(&summary).unwrap();
+        assert_eq!(v["totalChecks"], 0_i64);
+        assert_eq!(v["uptimePercent"], 0.0_f64);
+        // None fields omitted by skip_serializing_if_is_none
+        assert!(v.get("avgLatencyMs").is_none_or(|d| d.is_null()));
+        assert!(v.get("lastCheckedAt").is_none_or(|d| d.is_null()));
+    }
+
+    #[test]
+    fn test_api_response_health_summary_unauthorized_error() {
+        use crate::database::contracts::ContractHealthSummary;
+        let resp: ApiResponse<ContractHealthSummary> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Unauthorized: you are not a party to this contract".to_string()),
+        };
+        let v = serde_json::to_value(&resp).unwrap();
+        assert_eq!(v["success"], false);
+        assert!(v["data"].is_null());
+        assert_eq!(
+            v["error"],
+            "Unauthorized: you are not a party to this contract"
+        );
+    }
+
 }

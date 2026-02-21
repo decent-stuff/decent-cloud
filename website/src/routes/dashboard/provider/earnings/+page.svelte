@@ -86,6 +86,26 @@
 		return new Date(ns / 1_000_000).toLocaleString();
 	}
 
+	function exportContractsToCsv() {
+		const headers = ['contract_id', 'offering_id', 'status', 'amount_icp', 'duration_hours', 'created_at'];
+		const rows = sortedContracts.map((c) => [
+			c.contract_id,
+			c.offering_id ?? '',
+			c.status,
+			((c.payment_amount_e9s ?? 0) / 1e9).toFixed(4),
+			c.duration_hours ?? '',
+			c.created_at_ns ? new Date(c.created_at_ns / 1_000_000).toISOString() : ''
+		]);
+		const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
+		const blob = new Blob([csv], { type: 'text/csv' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `earnings-${new Date().toISOString().slice(0, 10)}.csv`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
+
 	function statusBadgeClass(status: string): string {
 		if (status === 'active' || status === 'provisioned') return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
 		if (status === 'cancelled' || status === 'failed' || status === 'rejected') return 'bg-red-500/20 text-red-400 border border-red-500/30';
@@ -275,7 +295,16 @@
 
 			<!-- Contract Earnings -->
 			<section class="space-y-4">
-				<h2 class="text-xl font-semibold text-white">Contract Earnings</h2>
+				<div class="flex items-center justify-between">
+					<h2 class="text-xl font-semibold text-white">Contract Earnings</h2>
+					<button
+						onclick={exportContractsToCsv}
+						disabled={sortedContracts.length === 0}
+						class="px-3 py-1.5 text-xs font-medium bg-surface-elevated border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+					>
+						Export CSV
+					</button>
+				</div>
 				{#if sortedContracts.length === 0}
 					<div class="bg-surface-elevated border border-neutral-800 p-6 text-neutral-500 text-sm">
 						No contracts yet

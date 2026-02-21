@@ -8,6 +8,7 @@
 		cancelRentalRequest,
 		downloadContractInvoice,
 		getOffering,
+		fetchIcpPrice,
 		type Contract,
 		hexEncode,
 	} from "$lib/services/api";
@@ -36,6 +37,13 @@
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
+	let icpPriceUsd = $state<number | null>(null);
+
+	const spendingStats = $derived({
+		total: contracts.length,
+		active: contracts.filter(c => ['active', 'provisioned'].includes(c.status)).length,
+		totalSpentIcp: contracts.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+	});
 
 	// Auto-refresh state
 	let refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -212,6 +220,7 @@
 			contracts = loaded;
 			lastRefresh = Date.now();
 			await fetchOfferingNames(loaded);
+			icpPriceUsd = await fetchIcpPrice();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
@@ -499,6 +508,26 @@
 				>×</button>
 			{/if}
 		</div>
+
+		{#if !loading && contracts.length > 0}
+		<div class="grid grid-cols-3 gap-3">
+			<div class="bg-surface-elevated border border-neutral-800 p-4">
+				<p class="text-neutral-500 text-xs">Total Contracts</p>
+				<p class="text-xl font-bold text-white mt-1">{spendingStats.total}</p>
+			</div>
+			<div class="bg-surface-elevated border border-neutral-800 p-4">
+				<p class="text-neutral-500 text-xs">Active Now</p>
+				<p class="text-xl font-bold text-emerald-400 mt-1">{spendingStats.active}</p>
+			</div>
+			<div class="bg-surface-elevated border border-neutral-800 p-4">
+				<p class="text-neutral-500 text-xs">Total Spent</p>
+				<p class="text-xl font-bold text-primary-400 mt-1">{spendingStats.totalSpentIcp.toFixed(2)} ICP</p>
+				{#if icpPriceUsd && spendingStats.totalSpentIcp > 0}
+					<p class="text-neutral-600 text-xs mt-0.5">&#x2248; ${(spendingStats.totalSpentIcp * icpPriceUsd).toFixed(2)}</p>
+				{/if}
+			</div>
+		</div>
+		{/if}
 
 		<!-- Status filter tab bar -->
 		<div class="flex gap-1 border-b border-neutral-800 mb-2">

@@ -36,7 +36,7 @@
 
 ## Provider Trust & Reliability System
 
-DB tables (`contract_health_checks`), API endpoints, and automated health check scheduling in dc-agent are implemented.
+DB tables (`contract_health_checks`), API endpoints, and automated health check scheduling in dc-agent are implemented. Provider SLA Monitor page at `/dashboard/provider/sla` shows per-contract uptime with health check history. Tenant health check view available on contract detail page.
 
 - SLA compliance tracking and provider reputation scoring *(Blocked: needs product decisions on SLA metrics, scoring formula, how reputation affects discovery. Single-session once decisions are made.)*
 
@@ -106,18 +106,23 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Contracts] Auto-renewal opt-in** ✅ (2026-02-21) — DB migration adds `auto_renew` flag to contracts; `PUT /api/v1/contracts/:id/auto-renew` endpoint; background `AutoRenewalService` (runs every 6 h, renews contracts expiring within 48 h by creating a new rental request and clearing the flag); toggle UI on contract detail page.
 - **[Provider] Earnings fee breakdown** ✅ (2026-02-21) — Revenue Overview restructured to show Gross Revenue / Platform Fee (0 ICP) / Net Earnings rows; Contract Earnings table adds Platform Fee and Net columns.
 - **[Rentals] Contract expiry countdown badge** ✅ (2026-02-21) — `formatTimeRemaining()` added to `contract-format.ts`; rentals list shows "Xd left" / "Xh left" badge (neutral/amber/red) for active and provisioned contracts.
-- **[Marketplace] Filter URL persistence** ✅ (2026-02-21) — All 20 marketplace filter state variables (type, price, region, country, city, sort, cores, memory, SSD, virt, unmetered, trust, demo, offline, recipes, quick, preset) synced to URL search params via `syncFiltersToUrl()` / `readFiltersFromUrl()`. Filters survive navigation and are shareable as URLs.
-- **[Provider] Password reset dashboard** ✅ (2026-02-21) — New page `/dashboard/provider/password-resets` lists active contracts with pending password reset requests (from `GET /api/v1/providers/:pubkey/contracts/pending-password-reset`). Auto-refreshes every 30s. Added "Password Resets" nav item to provider sidebar. `getPendingPasswordResets()` API function added to `api.ts`.
-- **[Provider] Onboarding checklist links fixed** ✅ (2026-02-21) — Provider name / description / website / logo completeness items now link to `/dashboard/account/profile` (were incorrectly pointing to `#helpcenter` section which has no edit fields for these).
+- **[Marketplace] Filter URL persistence** ✅ (2026-02-21) — All 20 marketplace filter state variables synced to URL search params via `syncFiltersToUrl()` / `readFiltersFromUrl()`. Filters survive navigation and are shareable as URLs.
+- **[Provider] Password reset dashboard** ✅ (2026-02-21) — New page `/dashboard/provider/password-resets` lists active contracts with pending password reset requests. Auto-refreshes every 30s. Added "Password Resets" nav item to provider sidebar.
+- **[Provider] Onboarding checklist links fixed** ✅ (2026-02-21) — Provider name / description / website / logo completeness items now link to `/dashboard/account/profile`.
 - **[Marketplace] Provider contact info on offering sidebar** ✅ (2026-02-21) — Offering detail page fetches `ProviderProfile` alongside `ProviderTrustMetrics`; sidebar shows website link and support email when set.
+- **[Provider] Per-contract feedback detail view** ✅ (2026-02-21) — Provider feedback page at `/dashboard/provider/feedback` lists individual tenant feedback with contract IDs and aggregate stats. Sidebar entry "Tenant Feedback" added.
+- **[Contracts] SLA / uptime dashboard** ✅ (2026-02-21) — SLA Monitor page at `/dashboard/provider/sla` shows per-contract uptime %, avg latency, total checks, and last-checked timestamp sorted worst-first. Sidebar entry "SLA Monitor" added.
+- **[Marketplace] Offering comparison trust score + reliability** ✅ (2026-02-21) — Comparison modal shows Trust Score row (with TrustBadge) and Reliability row (color-coded %) with winner badges (✓) for both. `compareWinners.trust` and `compareWinners.reliability` computed from all selected offerings.
+- **[Reseller] Order management UI** ✅ (2026-02-21) — `/dashboard/provider/reseller` page fully implemented: reseller relationship manager (create/edit/delete with commission %), order list with status filter (pending/fulfilled/all), order fulfillment modal with external order ID + JSON details, available external providers listing.
+- **[Tenant] Spending summary on rentals page** ✅ (2026-02-21) — 3-metric widget added to `/dashboard/rentals`: total contracts, active now, total spent (ICP + USD equivalent).
+- **[Provider] Earnings CSV export** ✅ (2026-02-21) — "Export CSV" button on `/dashboard/provider/earnings` downloads all contract earnings as CSV (contract_id, offering_id, status, amount_icp, duration_hours, created_at).
+- **[Marketplace] Duration cost calculator on offering detail** ✅ (2026-02-21) — Interactive cost estimator on `/dashboard/marketplace/[id]` with preset duration buttons (1h, 12h, 1d, 7d, 30d, 90d); shows ICP + USD equivalent above Rent button.
+- **[Fix] Feedback contract links + login type display** ✅ (2026-02-21) — Feedback page contract IDs are now copyable buttons instead of dead links. Dashboard login type no longer hardcoded as "Seed Phrase".
+- **[Provider] Password reset completion notification** ✅ (2026-02-21) — Providers receive notification (Telegram/email) when dc-agent completes a password reset on their contract.
 
 ---
 
 ## UX Improvements (Backlog)
 
-- **[Provider] Per-contract feedback detail view** — Tenants submit satisfaction feedback (`POST /contracts/:id/feedback`) and providers see only aggregate stats (`GET /providers/:pubkey/feedback-stats`). Providers have no way to see individual contract feedback comments. Needs: either a new endpoint `GET /providers/:pubkey/contracts/:id/feedback` or exposing `GET /contracts/:id/feedback` to providers. Single-session.
-- **[Contracts] SLA / uptime dashboard** — DB stores `contract_health_checks` with timestamps and status, but there is no provider or tenant dashboard for SLA compliance. Needs: uptime % calculation, incident timeline, and a provider-accessible endpoint for health data per contract (`GET /providers/:pubkey/contracts/:id/health` — currently this endpoint does not exist for providers). Single-session once product decisions on SLA metrics are made.
-- **[Reseller] Order management UI** — `GET /reseller/orders`, `GET /reseller/relationships`, `POST /reseller/orders/:id/fulfill` all work but `/dashboard/provider/reseller` is nearly empty. Needs: order list with status, relationship manager, margin tracking. Multi-session.
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. Blocked: billing decisions first.
-- **[Marketplace] Offering comparison improvements** — Comparison tray (up to 3 offerings) exists but does not show provider trust score or reliability side-by-side. Small enhancement.
-- **[Provider] Password reset: dc-agent notification** — When a tenant requests a password reset, dc-agent picks it up automatically but there is no push notification to the provider that it happened. Consider a notification event on `request_password_reset`.
+- **[Provider] Password reset: dc-agent push notification** — Consider a real-time push notification (WebSocket or SSE) to the provider dashboard when a password reset is picked up by dc-agent, rather than the current polling approach on `/dashboard/provider/password-resets`.

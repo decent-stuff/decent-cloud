@@ -476,6 +476,88 @@ fn export_typescript_types() {
     PlatformStats::export().expect("Failed to export PlatformStats type");
     AccountSearchResult::export().expect("Failed to export AccountSearchResult type");
     ProviderTrustMetrics::export().expect("Failed to export ProviderTrustMetrics type");
+    ProviderContractFeedback::export().expect("Failed to export ProviderContractFeedback type");
+}
+
+#[tokio::test]
+async fn test_get_provider_all_feedback_empty() {
+    let db = setup_test_db().await;
+    let result = db.get_provider_all_feedback(&[1u8; 32]).await.unwrap();
+    assert!(result.is_empty());
+}
+
+#[tokio::test]
+async fn test_get_provider_all_feedback_returns_entries_ordered_by_newest_first() {
+    let db = setup_test_db().await;
+    let provider_pubkey = vec![10u8; 32];
+    let tenant_pubkey = vec![11u8; 32];
+    let contract_id = vec![12u8; 32];
+    let contract_id2 = vec![13u8; 32];
+
+    // Insert two completed contracts via dynamic query (no sqlx cache needed)
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 1000, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 2000, 'memo', 2000, 'completed', 'icpay', NULL, NULL, 'usd')",
+    )
+    .bind(contract_id2.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Insert feedback for first contract (older timestamp)
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, true, false, 500)",
+    )
+    .bind(contract_id.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Insert feedback for second contract (newer timestamp)
+    sqlx::query(
+        "INSERT INTO contract_feedback (contract_id, requester_pubkey, provider_pubkey, service_matched_description, would_rent_again, created_at_ns) VALUES ($1, $2, $3, false, true, 1500)",
+    )
+    .bind(contract_id2.as_slice())
+    .bind(tenant_pubkey.as_slice())
+    .bind(provider_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let feedback = db.get_provider_all_feedback(&provider_pubkey).await.unwrap();
+    assert_eq!(feedback.len(), 2);
+
+    // Newest first: contract_id2 feedback (created_at_ns=1500)
+    assert_eq!(feedback[0].created_at_ns, 1500);
+    assert!(!feedback[0].service_matched_description);
+    assert!(feedback[0].would_rent_again);
+    assert_eq!(feedback[0].contract_created_at_ns, Some(2000));
+
+    // Older: contract_id feedback (created_at_ns=500)
+    assert_eq!(feedback[1].created_at_ns, 500);
+    assert!(feedback[1].service_matched_description);
+    assert!(!feedback[1].would_rent_again);
+    assert_eq!(feedback[1].contract_created_at_ns, Some(1000));
+
+    // Verify hex-encoded provider_pubkey
+    assert_eq!(feedback[0].provider_pubkey, hex::encode(&provider_pubkey));
+
+    // Verify another provider sees no feedback
+    let other_feedback = db.get_provider_all_feedback(&[99u8; 32]).await.unwrap();
+    assert!(other_feedback.is_empty());
 }
 
 // Trust score calculation tests

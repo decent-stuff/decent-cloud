@@ -1080,6 +1080,27 @@ pub struct ProviderFeedbackStats {
     pub would_rent_again_rate_pct: f64,
 }
 
+/// Individual contract feedback entry for a provider's own review
+#[derive(Debug, Clone, Serialize, Deserialize, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct ProviderContractFeedback {
+    /// Contract ID (hex-encoded)
+    pub contract_id: String,
+    /// Provider public key (hex-encoded)
+    pub provider_pubkey: String,
+    /// Did the service match its description?
+    pub service_matched_description: bool,
+    /// Would the renter rent from this provider again?
+    pub would_rent_again: bool,
+    /// When feedback was submitted (nanoseconds)
+    #[ts(type = "number")]
+    pub created_at_ns: i64,
+    /// When the contract was created (nanoseconds), if available
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub contract_created_at_ns: Option<i64>,
+}
+
 /// Input for submitting contract feedback
 #[derive(Debug, Clone, Deserialize, poem_openapi::Object)]
 pub struct SubmitFeedbackInput {
@@ -1243,6 +1264,46 @@ impl Database {
             service_match_rate_pct,
             would_rent_again_rate_pct,
         })
+    }
+
+    /// Get all individual feedback entries for a provider's contracts, ordered newest first
+    pub async fn get_provider_all_feedback(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<ProviderContractFeedback>> {
+        #[derive(sqlx::FromRow)]
+        struct FeedbackRow {
+            contract_id: Vec<u8>,
+            provider_pubkey: Vec<u8>,
+            service_matched_description: bool,
+            would_rent_again: bool,
+            created_at_ns: i64,
+            contract_created_at_ns: Option<i64>,
+        }
+
+        let rows = sqlx::query_as::<_, FeedbackRow>(
+            r#"SELECT cf.contract_id, cf.provider_pubkey, cf.service_matched_description, cf.would_rent_again, cf.created_at_ns,
+                      csr.created_at_ns as contract_created_at_ns
+               FROM contract_feedback cf
+               LEFT JOIN contract_sign_requests csr ON csr.contract_id = cf.contract_id
+               WHERE cf.provider_pubkey = $1
+               ORDER BY cf.created_at_ns DESC"#,
+        )
+        .bind(provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| ProviderContractFeedback {
+                contract_id: hex::encode(r.contract_id),
+                provider_pubkey: hex::encode(r.provider_pubkey),
+                service_matched_description: r.service_matched_description,
+                would_rent_again: r.would_rent_again,
+                created_at_ns: r.created_at_ns,
+                contract_created_at_ns: r.contract_created_at_ns,
+            })
+            .collect())
     }
 }
 

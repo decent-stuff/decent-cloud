@@ -69,6 +69,7 @@
 	// Items locked until onboarding is complete
 	const providerOnboardedItems: NavItem[] = [
 		{ href: '/dashboard/provider/requests', icon: 'inbox', label: 'Rental Requests' },
+		{ href: '/dashboard/provider/feedback', icon: 'star', label: 'Tenant Feedback' },
 		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
 		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
@@ -298,6 +299,21 @@
 			>
 				<Icon name="trending-up" size={20} />
 				<span class="text-sm">Earnings</span>
+				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
+			</a>
+
+			<!-- SLA Monitor -->
+			{@const slaActive =
+				currentPath === '/dashboard/provider/sla' ||
+				currentPath.startsWith('/dashboard/provider/sla')}
+			<a
+				href="/dashboard/provider/sla"
+				onclick={closeSidebar}
+				class="nav-item {slaActive ? 'nav-item-active' : ''} {lockedClass}"
+				title={lockedTitle}
+			>
+				<Icon name="shield" size={20} />
+				<span class="text-sm">SLA Monitor</span>
 				{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 			</a>
 

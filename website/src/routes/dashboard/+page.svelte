@@ -206,7 +206,7 @@
 						{/if}
 					</h2>
 					<p class="text-neutral-500 text-xs mt-1">
-						Logged in via Seed Phrase
+						Logged in via {currentIdentity.type === 'oauth' ? 'OAuth' : 'Seed Phrase'}
 					</p>
 					<p class="text-neutral-600 text-[10px] font-mono mt-2 truncate" title={currentIdentity.principal.toString()}>
 						{currentIdentity.principal.toString()}

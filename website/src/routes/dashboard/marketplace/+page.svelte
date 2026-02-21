@@ -422,6 +422,57 @@
 		offerings.filter((o) => o.id !== undefined && compareIds.has(o.id)),
 	);
 
+	function parseRamGb(memory_amount: string | undefined): number | null {
+		if (!memory_amount) return null;
+		const m = memory_amount.match(/^([\d.]+)\s*(GB|GiB|MB|MiB|TB|TiB)/i);
+		if (!m) return null;
+		const val = parseFloat(m[1]);
+		const unit = m[2].toUpperCase();
+		if (unit === 'MB' || unit === 'MIB') return val / 1024;
+		if (unit === 'TB' || unit === 'TIB') return val * 1024;
+		return val; // GB or GiB
+	}
+
+	function findWinner<T>(
+		items: { id: number | undefined; val: T | null | undefined }[],
+		best: (a: T, b: T) => boolean
+	): number | null {
+		const valid = items.filter((x) => x.id !== undefined && x.val !== null && x.val !== undefined) as { id: number; val: T }[];
+		if (valid.length < 2) return null;
+		let winner = valid[0];
+		for (const item of valid.slice(1)) {
+			if (best(item.val, winner.val)) winner = item;
+		}
+		// Ensure no tie
+		const topVal = winner.val;
+		const topCount = valid.filter((x) => !best(topVal, x.val) && !best(x.val, topVal)).length;
+		return topCount === 1 ? winner.id : null;
+	}
+
+	const compareWinners = $derived({
+		price: findWinner(
+			compareOfferings.map((o) => ({ id: o.id, val: o.monthly_price ?? null })),
+			(a: number, b: number) => a < b
+		),
+		cores: findWinner(
+			compareOfferings.map((o) => ({ id: o.id, val: o.processor_cores ?? null })),
+			(a: number, b: number) => a > b
+		),
+		ram: findWinner(
+			compareOfferings.map((o) => ({ id: o.id, val: parseRamGb(o.memory_amount) })),
+			(a: number, b: number) => a > b
+		),
+		trust: findWinner(
+			compareOfferings.map((o) => ({ id: o.id, val: o.trust_score ?? null })),
+			(a: number, b: number) => a > b
+		),
+		reliability: findWinner(
+			compareOfferings.map((o) => ({ id: o.id, val: o.reliability_score ?? null })),
+			(a: number, b: number) => a > b
+		),
+	});
+
+
 	function toggleCompare(e: Event, id: number) {
 		e.stopPropagation();
 		if (compareIds.has(id)) {
@@ -1887,6 +1938,9 @@
 									{#if formatUsdEquivalent(offering)}
 										<span class="text-xs text-neutral-500 ml-1">{formatUsdEquivalent(offering)}</span>
 									{/if}
+									{#if offering.id !== undefined && compareWinners.price === offering.id}
+										<span class="ml-1 text-emerald-400 font-bold text-xs" title="Best price">✓</span>
+									{/if}
 								</td>
 							{/each}
 						</tr>
@@ -1894,14 +1948,18 @@
 						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
 							<td class="px-4 py-3 text-neutral-500">CPU Cores</td>
 							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">{offering.processor_cores ?? '—'}</td>
+								<td class="px-4 py-3 text-neutral-300">
+									{offering.processor_cores ?? '—'}{#if offering.id !== undefined && compareWinners.cores === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Most cores">✓</span>{/if}
+								</td>
 							{/each}
 						</tr>
 						<!-- RAM -->
 						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
 							<td class="px-4 py-3 text-neutral-500">RAM</td>
 							{#each compareOfferings as offering}
-								<td class="px-4 py-3 text-neutral-300">{offering.memory_amount ?? '—'}</td>
+								<td class="px-4 py-3 text-neutral-300">
+									{offering.memory_amount ?? '—'}{#if offering.id !== undefined && compareWinners.ram === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Most RAM">✓</span>{/if}
+								</td>
 							{/each}
 						</tr>
 						<!-- SSD -->
@@ -1953,14 +2011,29 @@
 											score={offering.trust_score}
 											hasFlags={offering.has_critical_flags ?? false}
 											compact={true}
-										/>
+										/>{#if offering.id !== undefined && compareWinners.trust === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Highest trust">✓</span>{/if}
 									{:else}
 										<span class="text-neutral-500">—</span>
 									{/if}
 								</td>
 							{/each}
 						</tr>
-						<!-- Provider -->
+						<!-- Reliability score -->
+						<tr class="border-b border-neutral-800/50 hover:bg-neutral-800/20">
+							<td class="px-4 py-3 text-neutral-500">Reliability</td>
+							{#each compareOfferings as offering}
+								<td class="px-4 py-3">
+									{#if offering.reliability_score !== undefined && offering.reliability_score !== null}
+										<span class="font-medium {offering.reliability_score >= 90 ? 'text-emerald-400' : offering.reliability_score >= 70 ? 'text-yellow-400' : 'text-red-400'}">
+											{offering.reliability_score.toFixed(1)}%
+										</span>{#if offering.id !== undefined && compareWinners.reliability === offering.id}<span class="ml-1 text-emerald-400 font-bold text-xs" title="Highest reliability">✓</span>{/if}
+									{:else}
+										<span class="text-neutral-500">—</span>
+									{/if}
+								</td>
+							{/each}
+						</tr>
+					<!-- Provider -->
 						<tr class="hover:bg-neutral-800/20">
 							<td class="px-4 py-3 text-neutral-500">Provider</td>
 							{#each compareOfferings as offering}

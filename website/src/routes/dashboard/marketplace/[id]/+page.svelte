@@ -124,6 +124,21 @@
 		}
 		return parts.length > 0 ? parts.join(' · ') : '—';
 	}
+
+	const DURATION_PRESETS = [
+		{ label: '1h', hours: 1 },
+		{ label: '12h', hours: 12 },
+		{ label: '1d', hours: 24 },
+		{ label: '7d', hours: 168 },
+		{ label: '30d', hours: 720 },
+		{ label: '90d', hours: 2160 },
+	] as const;
+
+	let selectedDurationHours = $state<number>(720);
+
+	const estimatedCost = $derived(
+		offering?.monthly_price != null ? (offering.monthly_price / 720) * selectedDurationHours : null
+	);
 </script>
 
 <div class="space-y-6 max-w-5xl">
@@ -248,6 +263,31 @@
 					<span>Contract: {formatContractTerms(offering)}</span>
 				{/if}
 			</div>
+			{#if estimatedCost != null}
+				<div class="mt-4 pt-4 border-t border-neutral-800 space-y-3">
+					<h3 class="text-xs font-medium text-neutral-500 uppercase tracking-wide">Estimate cost</h3>
+					<div class="flex flex-wrap gap-2">
+						{#each DURATION_PRESETS as preset}
+							<button
+								onclick={() => selectedDurationHours = preset.hours}
+								class="px-3 py-1.5 text-xs font-medium border transition-colors {selectedDurationHours === preset.hours
+									? 'bg-primary-600 border-primary-500 text-white'
+									: 'bg-surface-elevated border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-600'}"
+							>
+								{preset.label}
+							</button>
+						{/each}
+					</div>
+					<div class="flex items-baseline gap-2">
+						<span class="text-2xl font-bold text-white">{estimatedCost.toFixed(4)}</span>
+						<span class="text-neutral-400 text-sm">{offering.currency}</span>
+						{#if icpPriceUsd && offering.currency?.toUpperCase() === 'ICP'}
+							<span class="text-neutral-500 text-xs">≈ ${(estimatedCost * icpPriceUsd).toFixed(2)} USD</span>
+						{/if}
+					</div>
+					<p class="text-neutral-600 text-xs">Based on {offering.monthly_price!.toFixed(4)} {offering.currency}/mo rate</p>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Description -->

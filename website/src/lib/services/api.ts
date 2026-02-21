@@ -13,6 +13,7 @@ import type { PoolCapabilities } from '$lib/types/generated/PoolCapabilities';
 import type { OfferingSuggestion } from '$lib/types/generated/OfferingSuggestion';
 import type { UnavailableTier } from '$lib/types/generated/UnavailableTier';
 import type { ContractHealthCheck } from '$lib/types/generated/ContractHealthCheck';
+import type { ContractHealthSummary } from '$lib/types/generated/ContractHealthSummary';
 import type { ContractFeedback } from '$lib/types/generated/ContractFeedback';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
 
@@ -788,6 +789,27 @@ export async function getContractHealthChecks(
 	return payload.data ?? [];
 }
 
+
+export async function getContractHealthSummary(
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractHealthSummary> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/health-summary`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(
+			`Failed to fetch contract health summary: ${response.status} ${response.statusText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractHealthSummary>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch contract health summary');
+	}
+
+	return payload.data;
+}
 export async function requestPasswordReset(
 	contractId: string,
 	headers: SignedRequestHeaders
@@ -1162,6 +1184,50 @@ export async function getProviderContracts(
 	return payload.data ?? [];
 }
 
+export async function getProviderContractHealthSummary(
+	providerPubkey: string,
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractHealthSummary> {
+	const url = `${API_BASE_URL}/api/v1/providers/${providerPubkey}/contracts/${contractId}/health`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(
+			`Failed to fetch contract health summary: ${response.status} ${response.statusText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractHealthSummary>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch contract health summary');
+	}
+
+	return payload.data;
+}
+
+export async function getProviderContractHealthChecks(
+	providerPubkey: string,
+	contractId: string,
+	headers: SignedRequestHeaders
+): Promise<ContractHealthCheck[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${providerPubkey}/contracts/${contractId}/health-checks`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(
+			`Failed to fetch contract health checks: ${response.status} ${response.statusText}`
+		);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ContractHealthCheck[]>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch contract health checks');
+	}
+
+	return payload.data ?? [];
+}
+
 export async function getPendingPasswordResets(
 	providerPubkey: string,
 	headers: SignedRequestHeaders
@@ -1400,6 +1466,7 @@ export async function getContractUsage(
 
 export { type ContractUsage };
 export { type ContractHealthCheck };
+export { type ContractHealthSummary };
 
 export { type ContractFeedback };
 
@@ -2553,6 +2620,41 @@ export async function getProviderFeedbackStats(pubkeyHex: string): Promise<Provi
 
 	if (!payload.success || !payload.data) {
 		throw new Error(payload.error ?? 'Failed to fetch provider feedback stats');
+	}
+
+	return payload.data;
+}
+
+// ==================== Provider Feedback List API ====================
+
+import type { ProviderContractFeedback as ProviderContractFeedbackRaw } from '$lib/types/generated/ProviderContractFeedback';
+
+export type ProviderContractFeedback = ConvertNullToUndefined<ProviderContractFeedbackRaw>;
+
+/**
+ * Get all individual feedback entries for the authenticated provider's contracts.
+ * Requires provider authentication (pubkey must match authenticated user).
+ */
+export async function getProviderFeedbackList(
+	pubkeyHex: string,
+	headers: SignedRequestHeaders
+): Promise<ProviderContractFeedback[]> {
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/feedback`;
+
+	const response = await fetch(url, {
+		method: 'GET',
+		headers
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch feedback list: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderContractFeedback[]>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider feedback list');
 	}
 
 	return payload.data;

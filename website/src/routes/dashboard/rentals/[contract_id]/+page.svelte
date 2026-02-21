@@ -14,16 +14,20 @@
 		extendContract,
 		getContractExtensions,
 		getContractHealthChecks,
+		getContractHealthSummary,
 		submitContractFeedback,
 		getContractFeedback,
 		getUserContractBandwidthHistory,
 		setContractAutoRenew,
+		getProviderProfile,
 		type Contract,
 		type ContractUsage,
 		type ContractExtension,
 		type ContractHealthCheck,
+		type ContractHealthSummary,
 		type ContractFeedback,
 		type BandwidthHistoryResponse,
+		type ProviderProfile,
 		hexEncode,
 	} from "$lib/services/api";
 	import { decryptCredentials } from "$lib/services/credential-crypto";
@@ -67,6 +71,7 @@
 	let extendError = $state<string | null>(null);
 	let extensions = $state<ContractExtension[]>([]);
 	let healthChecks = $state<ContractHealthCheck[]>([]);
+	let healthSummary = $state<ContractHealthSummary | null>(null);
 
 	// Recipe log state
 	let recipeLog = $state<string | null>(null);
@@ -88,6 +93,7 @@
 
 	// Bandwidth history state
 	let bandwidthHistory = $state<BandwidthHistoryResponse[]>([]);
+	let providerProfile = $state<ProviderProfile | null>(null);
 
 	// Auto-renew state
 	let autoRenewSaving = $state(false);
@@ -279,6 +285,9 @@
 					await loadCredentials(signingIdentityInfo);
 				}
 			
+				// Fetch provider contact info (best-effort)
+				providerProfile = await getProviderProfile(contract.provider_pubkey).catch(() => null);
+
 				// Load extension history
 				await loadExtensions(signingIdentityInfo);
 				await loadHealthChecks(signingIdentityInfo);
@@ -494,6 +503,12 @@
 				`/api/v1/contracts/${contractId}/health`,
 			);
 			healthChecks = await getContractHealthChecks(contractId, headers);
+			const summaryHeaders = (await signRequest(
+				signingIdentityInfo.identity as any,
+				"GET",
+				`/api/v1/contracts/${contractId}/health-summary`,
+			)).headers;
+			healthSummary = await getContractHealthSummary(contractId, summaryHeaders);
 		} catch {
 			// Health checks not available is not an error
 		}
@@ -1373,6 +1388,39 @@
 		</div>
 	{/if}
 
+	<!-- Health Summary -->
+	{#if healthSummary !== null && healthSummary.totalChecks > 0}
+		<div class="card p-6 border border-neutral-800">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-4">Uptime Summary</h3>
+			<div class="flex flex-wrap gap-6">
+				<div class="flex flex-col gap-1">
+					<span class="text-xs text-neutral-500">Uptime</span>
+					<span class="text-2xl font-bold {healthSummary.uptimePercent >= 99 ? 'text-green-400' : healthSummary.uptimePercent >= 95 ? 'text-yellow-400' : 'text-red-400'}">
+						{healthSummary.uptimePercent.toFixed(1)}%
+					</span>
+				</div>
+				<div class="flex flex-col gap-1">
+					<span class="text-xs text-neutral-500">Total Checks</span>
+					<span class="text-lg font-semibold text-neutral-200">{healthSummary.totalChecks}</span>
+				</div>
+				{#if healthSummary.avgLatencyMs !== null}
+					<div class="flex flex-col gap-1">
+						<span class="text-xs text-neutral-500">Avg Latency</span>
+						<span class="text-lg font-semibold text-neutral-200">{healthSummary.avgLatencyMs.toFixed(0)}ms</span>
+					</div>
+				{/if}
+				<div class="flex flex-col gap-1">
+					<span class="text-xs text-neutral-500">Healthy / Unhealthy</span>
+					<span class="text-lg font-semibold">
+						<span class="text-green-400">{healthSummary.healthyChecks}</span>
+						<span class="text-neutral-500"> / </span>
+						<span class="text-red-400">{healthSummary.unhealthyChecks}</span>
+					</span>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Health Status -->
 	{#if healthChecks.length > 0}
 		<div class="card p-6 border border-neutral-800">
@@ -1419,6 +1467,30 @@
 						{/each}
 					</tbody>
 				</table>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Get Support (shown for active/provisioned/provisioning contracts with provider contact info) -->
+	{#if ['active', 'provisioned', 'provisioning'].includes(contract.status) && providerProfile && (providerProfile.support_email || providerProfile.website_url)}
+		<div class="card p-6 border border-neutral-800">
+			<h3 class="text-sm font-semibold text-neutral-300 mb-3">Get Support</h3>
+			<p class="text-xs text-neutral-500 mb-3">Contact your provider if you need help with your server.</p>
+			<div class="space-y-2 text-sm">
+				<div class="text-neutral-400 font-medium">{providerProfile.name || truncateHash(contract.provider_pubkey)}</div>
+				{#if providerProfile.website_url}
+					<a href={providerProfile.website_url} target="_blank" rel="noopener noreferrer"
+						class="flex items-center gap-1 text-primary-400 hover:text-primary-300 transition-colors">
+						<span>{providerProfile.website_url}</span>
+						<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+					</a>
+				{/if}
+				{#if providerProfile.support_email}
+					<a href="mailto:{providerProfile.support_email}"
+						class="text-primary-400 hover:text-primary-300 transition-colors">
+						{providerProfile.support_email}
+					</a>
+				{/if}
 			</div>
 		</div>
 	{/if}

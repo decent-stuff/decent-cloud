@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                COUNT(*) as \"total_checks!: i64\",\n                COALESCE(SUM(CASE WHEN status = 'healthy' THEN 1 ELSE 0 END), 0) as \"healthy_checks!: i64\",\n                COALESCE(SUM(CASE WHEN status = 'unhealthy' THEN 1 ELSE 0 END), 0) as \"unhealthy_checks!: i64\",\n                COALESCE(SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END), 0) as \"unknown_checks!: i64\",\n                AVG(latency_ms)::DOUBLE PRECISION as \"avg_latency_ms: f64\",\n                MAX(checked_at) as \"last_checked_at: i64\"\n            FROM contract_health_checks\n            WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "healthy_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "unhealthy_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "unknown_checks!: i64",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "avg_latency_ms: f64",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_checked_at: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "dbcefe83b728d0f2c59a6041d8f94b35c8ae244fa8e3e4142372d853ceb6b623"
+}

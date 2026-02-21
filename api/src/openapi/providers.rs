@@ -499,6 +499,54 @@ impl ProvidersApi {
         }
     }
 
+    /// Get all feedback for a provider's contracts
+    ///
+    /// Returns individual feedback entries for all of the authenticated provider's contracts.
+    /// Only the provider identified by the pubkey path parameter may call this endpoint.
+    #[oai(
+        path = "/providers/:pubkey/feedback",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_feedback_list(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::ProviderContractFeedback>>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        match db.get_provider_all_feedback(&pubkey_bytes).await {
+            Ok(feedback) => Json(ApiResponse {
+                success: true,
+                data: Some(feedback),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Get provider health summary
     ///
     /// Returns uptime metrics and health check statistics for a provider.
@@ -532,6 +580,180 @@ impl ProvidersApi {
             Ok(summary) => Json(ApiResponse {
                 success: true,
                 data: Some(summary),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get per-contract health summary (provider view)
+    ///
+    /// Returns aggregated uptime metrics for a single contract.
+    /// Only the provider who owns the contract can access this endpoint.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/health",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_contract_health_summary(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<crate::database::contracts::ContractHealthSummary>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own contracts".to_string()),
+            });
+        }
+
+        let contract_id_bytes = match hex::decode(&contract_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Validate contract belongs to this provider
+        let contract = match db.get_contract(&contract_id_bytes).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        if contract.provider_pubkey != hex::encode(&pubkey_bytes) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: contract does not belong to this provider".to_string()),
+            });
+        }
+
+        match db.get_contract_health_summary(&contract_id_bytes).await {
+            Ok(summary) => Json(ApiResponse {
+                success: true,
+                data: Some(summary),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get per-contract health checks (provider view)
+    ///
+    /// Returns the last 50 health check records for a single contract.
+    /// Only the provider who owns the contract can access this endpoint.
+    #[oai(
+        path = "/providers/:pubkey/contracts/:contract_id/health-checks",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_contract_health_checks(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        contract_id: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractHealthCheck>>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if auth.pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own contracts".to_string()),
+            });
+        }
+
+        let contract_id_bytes = match hex::decode(&contract_id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        // Validate contract belongs to this provider
+        let contract = match db.get_contract(&contract_id_bytes).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        if contract.provider_pubkey != hex::encode(&pubkey_bytes) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: contract does not belong to this provider".to_string()),
+            });
+        }
+
+        match db.get_recent_health_checks(&contract_id_bytes, 50).await {
+            Ok(checks) => Json(ApiResponse {
+                success: true,
+                data: Some(checks),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1939,6 +2161,7 @@ impl ProvidersApi {
     async fn update_contract_password(
         &self,
         db: Data<&Arc<Database>>,
+        email_service: Data<&Option<Arc<email_utils::EmailService>>>,
         auth: ProviderOrAgentAuth,
         id: Path<String>,
         req: Json<UpdatePasswordRequest>,
@@ -1954,8 +2177,8 @@ impl ProvidersApi {
             }
         };
 
-        // Verify contract exists and belongs to this provider
-        match db.get_contract(&contract_id).await {
+        // Verify contract exists and belongs to this provider; keep it for the notification below.
+        let contract = match db.get_contract(&contract_id).await {
             Ok(Some(contract)) => {
                 if contract.provider_pubkey != hex::encode(&auth.provider_pubkey) {
                     return Json(ApiResponse {
@@ -1966,6 +2189,7 @@ impl ProvidersApi {
                         ),
                     });
                 }
+                contract
             }
             Ok(None) => {
                 return Json(ApiResponse {
@@ -1981,7 +2205,7 @@ impl ProvidersApi {
                     error: Some(e.to_string()),
                 })
             }
-        }
+        };
 
         match db
             .update_encrypted_credentials(&contract_id, &req.new_password)
@@ -1993,6 +2217,21 @@ impl ProvidersApi {
                     tracing::warn!(
                         contract_id = %hex::encode(&contract_id),
                         "Failed to clear password reset request after password update: {:#}",
+                        e
+                    );
+                }
+                // Notify provider that the password reset is complete
+                if let Err(e) = crate::rental_notifications::notify_provider_password_reset(
+                    &db,
+                    email_service.as_ref(),
+                    &contract,
+                    true,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        contract_id = %hex::encode(&contract_id),
+                        "Failed to notify provider of completed password reset: {:#}",
                         e
                     );
                 }
