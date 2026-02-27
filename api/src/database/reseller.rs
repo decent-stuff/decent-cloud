@@ -50,7 +50,7 @@ impl Database {
             );
         }
 
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         let id = sqlx::query_scalar!(
             r#"INSERT INTO reseller_relationships (reseller_pubkey, external_provider_pubkey, commission_percent, status, created_at_ns)
@@ -81,7 +81,7 @@ impl Database {
             }
         }
 
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
 
         // Build dynamic update query based on provided fields
         if let Some(pct) = commission_percent {
@@ -168,7 +168,7 @@ impl Database {
             }
         }
 
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
 
         // Get current values
         let current = sqlx::query!(
@@ -263,7 +263,7 @@ impl Database {
         commission_e9s: i64,
         total_paid_e9s: i64,
     ) -> Result<i64> {
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         let id = sqlx::query_scalar!(
             r#"INSERT INTO reseller_orders (contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, status, created_at_ns)
@@ -361,7 +361,7 @@ impl Database {
         external_order_id: &str,
         external_order_details: &str,
     ) -> Result<()> {
-        let fulfilled_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let fulfilled_at_ns = crate::now_ns()?;
 
         let result = sqlx::query!(
             "UPDATE reseller_orders SET external_order_id = $1, external_order_details = $2, status = 'fulfilled', fulfilled_at_ns = $3 WHERE contract_id = $4",

@@ -665,6 +665,16 @@ impl AgentsApi {
         };
 
         // Return the created health check record
+        let created_at = match crate::now_ns() {
+            Ok(ns) => ns,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
         let health_check = ContractHealthCheck {
             id: check_id,
             contract_id: id.0.clone(),
@@ -672,7 +682,7 @@ impl AgentsApi {
             status: req.status.clone(),
             latency_ms: req.latency_ms,
             details: req.details.clone(),
-            created_at: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
+            created_at,
         };
 
         Json(ApiResponse {

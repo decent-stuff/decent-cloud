@@ -80,7 +80,7 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
         .expect("Failed to register agent delegation in ensure_provider_with_pool");
 
     // Mark agent as online (recent heartbeat), keyed by agent_pubkey
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     sqlx::query("INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4) ON CONFLICT (agent_pubkey) DO UPDATE SET online = TRUE, last_heartbeat_ns = excluded.last_heartbeat_ns, updated_at_ns = excluded.updated_at_ns")
         .bind(&agent_pubkey[..])
         .bind(pubkey)

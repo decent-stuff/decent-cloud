@@ -67,7 +67,7 @@ async fn test_get_platform_stats_with_data() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let nonce_signature = vec![0u8; 64];
     {
         let pubkey_ref: &[u8] = &pubkey;
@@ -1172,7 +1172,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
     }
 
     // Add a check-in
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let nonce = vec![0u8; 64];
     sqlx::query!(
         "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'active', $2, $3)",
@@ -1663,7 +1663,7 @@ async fn test_no_response_rate_pct_zero() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
 
     // Add requests from last 90 days that are NOT in "requested" status
@@ -1709,7 +1709,7 @@ async fn test_no_response_rate_pct_all_ignored() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let cutoff_7d_ns = now_ns - 7 * ns_per_day;
 
@@ -1756,7 +1756,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let cutoff_7d_ns = now_ns - 7 * ns_per_day;
 
@@ -1828,7 +1828,7 @@ async fn test_no_response_rate_pct_recent_requested_not_counted() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
 
     // Add requests <7 days old in "requested" status (should NOT count as ignored)
@@ -1874,7 +1874,7 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let cutoff_90d_ns = now_ns - 90 * ns_per_day;
 
@@ -1920,7 +1920,7 @@ async fn test_abandonment_velocity_none_no_baseline() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
 
     // Add contracts in recent period only (no baseline contracts)
@@ -1963,7 +1963,7 @@ async fn test_abandonment_velocity_zero_no_recent() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
 
     // Add contracts in baseline period only (no recent contracts)
@@ -2010,7 +2010,7 @@ async fn test_abandonment_velocity_stable() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
     let payment_method = "icpay";
@@ -2109,7 +2109,7 @@ async fn test_abandonment_velocity_improving() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
     let payment_method = "icpay";
@@ -2208,7 +2208,7 @@ async fn test_abandonment_velocity_spike() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
     let payment_method = "icpay";
@@ -2307,7 +2307,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
     .await
     .unwrap();
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
     let payment_method = "icpay";
@@ -3004,7 +3004,7 @@ async fn test_get_offering_conversion_stats_with_recent_data() {
     let pubkey = vec![0xA2u8; 32];
     let requester = vec![0xA3u8; 32];
     let now_ms = chrono::Utc::now().timestamp_millis();
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     sqlx::query(
         "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-a2', 'GPU Node', 'USD', 500.0, 0, 'public', 'gpu', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0)",
@@ -3063,7 +3063,7 @@ async fn test_get_offering_conversion_stats_only_counts_own_provider() {
     let provider_a = vec![0xA4u8; 32];
     let provider_b = vec![0xA5u8; 32];
     let requester = vec![0xA6u8; 32];
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     for (pubkey, offering_id) in [(&provider_a, "off-pa"), (&provider_b, "off-pb")] {
         sqlx::query(

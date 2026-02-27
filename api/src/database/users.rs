@@ -256,7 +256,7 @@ impl Database {
         contact_value: &str,
         verified: bool,
     ) -> Result<()> {
-        let created_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at = crate::now_ns()?;
 
         sqlx::query!(
             "INSERT INTO account_contacts (account_id, contact_type, contact_value, verified, created_at)
@@ -309,7 +309,7 @@ impl Database {
         username: &str,
         profile_url: Option<&str>,
     ) -> Result<()> {
-        let created_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at = crate::now_ns()?;
 
         sqlx::query!(
             "INSERT INTO account_socials (account_id, platform, username, profile_url, created_at)
@@ -366,7 +366,7 @@ impl Database {
         key_fingerprint: Option<&str>,
         label: Option<&str>,
     ) -> Result<()> {
-        let created_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at = crate::now_ns()?;
 
         sqlx::query!(
             "INSERT INTO account_external_keys (account_id, key_type, key_data, key_fingerprint, label, created_at)

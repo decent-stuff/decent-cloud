@@ -1183,7 +1183,7 @@ async fn test_cancel_contract_stripe_payment_without_client() {
 
     // Insert Stripe contract with succeeded payment
     // Use future timestamps so refund is calculated (contract hasn't expired)
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let start_ns = now_ns - 1_000_000_000; // Started 1 second ago
     let end_ns = now_ns + 10_000_000_000; // Ends in 10 seconds
     insert_stripe_contract_with_timestamps(
@@ -1310,7 +1310,7 @@ async fn test_cancel_contract_icpay_refund_calculation() {
     .await;
 
     // Set up ICPay payment details
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64); // Started 10 days ago
     let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30 day contract
 
@@ -1403,7 +1403,7 @@ async fn test_cancel_contract_icpay_with_released_amount() {
     )
     .await;
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
     let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
 
@@ -1702,7 +1702,7 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     )
     .await;
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     // Use recent start time and future end time for clearer refund calculation
     let start_ns = now_ns - (3600 * 1_000_000_000i64); // Started 1 hour ago
     let end_ns = now_ns + (23 * 3600 * 1_000_000_000i64); // 24 hour contract, 23 hours left
@@ -1921,7 +1921,7 @@ async fn test_get_contract_returns_end_timestamp_for_active() {
     let requester_pk = vec![1u8; 32];
     let contract_id = vec![80u8; 32];
 
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let future = now + 3_600_000_000_000; // 1 hour in future
 
     insert_stripe_contract_with_timestamps(
@@ -1963,7 +1963,7 @@ async fn test_get_contract_returns_end_timestamp_for_expired() {
     let requester_pk = vec![1u8; 32];
     let contract_id = vec![81u8; 32];
 
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let past = now - 3_600_000_000_000; // 1 hour ago
 
     insert_stripe_contract_with_timestamps(
@@ -2199,7 +2199,7 @@ async fn test_provisioning_lock_expiration() {
     assert!(result1, "Agent 1 should acquire the lock");
 
     // Simulate time passing - manually set expires_ns to past
-    let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
+    let past_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)") - 1_000_000_000;
     sqlx::query(
         "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = $1 WHERE contract_id = $2",
     )
@@ -2273,7 +2273,7 @@ async fn test_cleanup_expired_provisioning_locks() {
         .unwrap();
 
     // Set contract_id_1's lock to expired (in the past)
-    let past_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 1_000_000_000;
+    let past_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)") - 1_000_000_000;
     sqlx::query(
         "UPDATE contract_sign_requests SET provisioning_lock_expires_ns = $1 WHERE contract_id = $2",
     )
@@ -2330,7 +2330,7 @@ async fn test_record_health_check_success() {
     )
     .await;
 
-    let checked_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let checked_at = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let check_id = db
         .record_health_check(
             &contract_id,
@@ -2363,7 +2363,7 @@ async fn test_record_health_check_all_status_values() {
     )
     .await;
 
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     // Test all valid status values
     for status in ["healthy", "unhealthy", "unknown"] {
@@ -2393,7 +2393,7 @@ async fn test_record_health_check_invalid_status() {
     )
     .await;
 
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let result = db
         .record_health_check(&contract_id, now, "invalid_status", None, None)
         .await;
@@ -2547,7 +2547,7 @@ async fn test_record_health_check_with_details_json() {
     .await;
 
     let details = r#"{"ssh_status":"ok","http_status":200,"memory_mb":1024}"#;
-    let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     db.record_health_check(&contract_id, now, "healthy", Some(25), Some(details))
         .await
@@ -2600,7 +2600,7 @@ async fn test_get_provider_health_summary_with_checks() {
     .await;
 
     // Insert health checks (recent enough to be in the 30 day window)
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let one_hour_ns = 60 * 60 * 1_000_000_000_i64;
 
     // 8 healthy, 2 unhealthy = 80% uptime
@@ -2670,7 +2670,7 @@ async fn test_get_provider_health_summary_multiple_contracts() {
     )
     .await;
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     // Contract 1: 3 healthy
     for i in 0..3 {
@@ -2738,7 +2738,7 @@ async fn test_get_provider_health_summary_respects_time_window() {
     )
     .await;
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     let one_day_ns = 24 * 60 * 60 * 1_000_000_000_i64;
 
     // Recent check (within 7 days)
@@ -2819,7 +2819,7 @@ async fn test_get_provider_health_summary_all_status_types() {
     )
     .await;
 
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     // Add one of each status
     db.record_health_check(&contract_id, now_ns, "healthy", None, None)

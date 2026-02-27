@@ -532,7 +532,7 @@ impl Database {
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
         let mut query = String::from(
@@ -910,7 +910,7 @@ impl Database {
         offset: i64,
     ) -> Result<Vec<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
 
@@ -1123,7 +1123,7 @@ impl Database {
             ));
         }
 
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         // Insert main offering record
         let offering_id = sqlx::query_scalar!(
@@ -2019,7 +2019,7 @@ impl Database {
 impl Database {
     /// Save an offering to a user's watchlist (upsert — silently succeeds if already saved).
     pub async fn save_offering(&self, user_pubkey: &[u8], offering_id: i64) -> Result<()> {
-        let saved_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let saved_at = crate::now_ns()?;
         sqlx::query!(
             "INSERT INTO saved_offerings (user_pubkey, offering_id, saved_at) VALUES ($1, $2, $3) ON CONFLICT (user_pubkey, offering_id) DO NOTHING",
             user_pubkey,

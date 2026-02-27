@@ -399,7 +399,7 @@ impl Database {
 
     /// Mark a contract as terminated by dc-agent
     pub async fn mark_contract_terminated(&self, contract_id: &[u8]) -> Result<()> {
-        let terminated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let terminated_at_ns = crate::now_ns()?;
 
         let result = sqlx::query!(
             "UPDATE contract_sign_requests SET terminated_at_ns = $1 WHERE contract_id = $2 AND status = 'cancelled'",
@@ -545,7 +545,7 @@ impl Database {
         dcc_common::PaymentMethod::from_str(payment_method_str)
             .map_err(|e| anyhow::anyhow!("Invalid payment method: {}", e))?;
 
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         // Calculate duration and timestamps
         let duration_hours = params.duration_hours.unwrap_or(720); // Default: 30 days
@@ -734,7 +734,7 @@ impl Database {
         let new_status_str = target_status.to_string();
 
         // Update status and history atomically
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
             "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3 WHERE contract_id = $4",
@@ -882,7 +882,7 @@ impl Database {
         };
 
         // Update status and refund info atomically
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
         let rejected_status = ContractStatus::Rejected.to_string();
         let mut tx = self.pool.begin().await?;
 
@@ -951,7 +951,7 @@ impl Database {
         contract_id: &[u8],
         instance_details: &str,
     ) -> Result<()> {
-        let provisioned_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let provisioned_at_ns = crate::now_ns()?;
 
         // Extract gateway fields and root_password from instance JSON
         #[derive(serde::Deserialize)]
@@ -1096,7 +1096,7 @@ impl Database {
 
     /// Delete expired credentials (should be called periodically)
     pub async fn cleanup_expired_credentials(&self) -> Result<i64> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let result = sqlx::query(
             r#"UPDATE contract_provisioning_details
@@ -1123,7 +1123,7 @@ impl Database {
     ///
     /// Safety: skips contracts with active cloud resources or unreported billing usage.
     pub async fn purge_terminal_contracts(&self, retention_days: i64) -> Result<u64> {
-        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        let cutoff_ns = crate::now_ns()?
             - (retention_days * 24 * 60 * 60 * 1_000_000_000);
 
         let terminal_statuses = [
@@ -1234,7 +1234,7 @@ impl Database {
 
     /// Get encrypted credentials for a contract (only returns if not expired)
     pub async fn get_encrypted_credentials(&self, contract_id: &[u8]) -> Result<Option<String>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let credentials: Option<String> = sqlx::query_scalar(
             r#"SELECT instance_credentials FROM contract_provisioning_details
@@ -1257,7 +1257,7 @@ impl Database {
         contract_id: &[u8],
         new_password: &str,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let requester_pubkey: Option<Vec<u8>> = sqlx::query_scalar(
             "SELECT requester_pubkey FROM contract_sign_requests WHERE contract_id = $1",
@@ -1312,7 +1312,7 @@ impl Database {
     /// Request a password reset for a contract.
     /// Sets password_reset_requested_at_ns to current time.
     pub async fn request_password_reset(&self, contract_id: &[u8]) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let result = sqlx::query(
             r#"UPDATE contract_provisioning_details
@@ -1453,7 +1453,7 @@ impl Database {
         let monthly_price_e9s = (offering.monthly_price * 1_000_000_000.0) as i128;
         let extension_payment_e9s = (monthly_price_e9s * extension_hours as i128 / 720) as i64;
 
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         // Update contract end timestamp and duration
         sqlx::query!(
@@ -1827,7 +1827,7 @@ impl Database {
         }
 
         // Calculate prorated refund based on payment method
-        let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let current_timestamp_ns = crate::now_ns()?;
         let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
             == "succeeded"
         {
@@ -1896,7 +1896,7 @@ impl Database {
         };
 
         // Update status, refund info, and history atomically
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
         let cancelled_status = ContractStatus::Cancelled.to_string();
         let mut tx = self.pool.begin().await?;
 
@@ -2004,7 +2004,7 @@ impl Database {
         amount_e9s: i64,
         provider_pubkey: &[u8],
     ) -> Result<PaymentRelease> {
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
         let status = "pending";
 
         let id: i64 = sqlx::query_scalar(
@@ -2125,7 +2125,7 @@ impl Database {
     /// Schedule a pending Stripe receipt for delayed processing
     /// First attempt will be after 1 minute
     pub async fn schedule_pending_stripe_receipt(&self, contract_id: &[u8]) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let first_attempt_ns = now_ns + 60_000_000_000; // 1 minute
 
         sqlx::query!(
@@ -2145,7 +2145,7 @@ impl Database {
         &self,
         limit: i64,
     ) -> Result<Vec<PendingStripeReceipt>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let rows = sqlx::query!(
             r#"SELECT contract_id, created_at_ns, next_attempt_at_ns, attempts
@@ -2170,7 +2170,7 @@ impl Database {
 
     /// Update pending receipt for next retry (1 minute intervals, max 5 attempts)
     pub async fn update_pending_stripe_receipt_retry(&self, contract_id: &[u8]) -> Result<bool> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let next_attempt_ns = now_ns + 60_000_000_000; // 1 minute
 
         // Increment attempts and update next_attempt_at_ns
@@ -2271,7 +2271,7 @@ impl Database {
         }
 
         // Auto-accept the contract
-        let updated_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let updated_at_ns = crate::now_ns()?;
         let new_status = ContractStatus::Accepted.to_string();
         let change_memo = "Auto-accepted (provider has auto_accept_rentals enabled)";
 
@@ -2405,7 +2405,7 @@ impl Database {
         gateway_subdomain: Option<&str>,
         gateway_ssh_port: Option<i32>,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let new_status = ContractStatus::Active.to_string();
 
         let mut tx = self.pool.begin().await?;
@@ -2479,7 +2479,7 @@ impl Database {
         agent_pubkey: &[u8],
         lock_duration_ns: i64,
     ) -> Result<bool> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let expires_ns = now_ns + lock_duration_ns;
 
         // Atomically try to acquire lock:
@@ -2575,7 +2575,7 @@ impl Database {
     /// Should be called by a background job periodically.
     /// Returns the number of locks cleared.
     pub async fn clear_expired_provisioning_locks(&self) -> Result<u64> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let result = sqlx::query!(
             r#"UPDATE contract_sign_requests
@@ -2609,7 +2609,7 @@ impl Database {
     ) -> Result<Vec<ContractWithSpecs>> {
         use crate::database::agent_pools::country_to_region;
 
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let pool_id = pool_id.ok_or_else(|| anyhow::anyhow!("pool_id is required"))?;
         let pool_location = pool_location.unwrap_or("default");
@@ -2824,7 +2824,7 @@ impl Database {
         };
 
         // Update the usage record
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         sqlx::query!(
             "UPDATE contract_usage SET units_used = $1, overage_units = $2, updated_at = $3 WHERE id = $4",
             total_units,
@@ -2844,7 +2844,7 @@ impl Database {
         usage_id: i64,
         stripe_usage_record_id: &str,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         sqlx::query!(
             "UPDATE contract_usage SET reported_to_stripe = TRUE, stripe_usage_record_id = $1, updated_at = $2 WHERE id = $3",
             stripe_usage_record_id,
@@ -2974,7 +2974,7 @@ impl Database {
         days: Option<i64>,
     ) -> Result<ProviderHealthSummary> {
         let days = days.unwrap_or(30);
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let period_start_ns = now_ns - (days * 24 * 60 * 60 * 1_000_000_000);
 
         // Aggregate health checks for all contracts belonging to this provider
@@ -3062,7 +3062,7 @@ impl Database {
     pub async fn get_contracts_for_renewal(&self) -> Result<Vec<Contract>> {
         // 48 hours in nanoseconds
         let window_ns: i64 = 48 * 3600 * 1_000_000_000;
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let deadline_ns = now_ns + window_ns;
 
         let contracts = sqlx::query_as!(
@@ -3140,7 +3140,7 @@ impl Database {
         actor: &str,
         details: Option<&str>,
     ) -> Result<i64> {
-        let created_at = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at = crate::now_ns()?;
         let id: i64 = sqlx::query_scalar(
             r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
                VALUES ($1, $2, $3, $4, $5, $6, $7)

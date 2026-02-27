@@ -113,20 +113,25 @@ impl AdminApi {
         {
             Ok(_) => {
                 // Insert audit record with is_admin_action = true
-                if let Err(e) = db
-                    .insert_signature_audit(
-                        Some(&account.id),
-                        "admin_disable_key",
-                        &serde_json::to_string(&req.0).unwrap_or_default(),
-                        &[0u8; 64], // No signature for admin action
-                        &_admin.pubkey,
-                        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                        &uuid::Uuid::new_v4(),
-                        true, // is_admin_action
-                    )
-                    .await
-                {
-                    tracing::warn!("Failed to insert admin audit record: {:#}", e);
+                match crate::now_ns() {
+                    Err(e) => tracing::warn!("Failed to get timestamp for audit record: {:#}", e),
+                    Ok(now_ns) => {
+                        if let Err(e) = db
+                            .insert_signature_audit(
+                                Some(&account.id),
+                                "admin_disable_key",
+                                &serde_json::to_string(&req.0).unwrap_or_default(),
+                                &[0u8; 64], // No signature for admin action
+                                &_admin.pubkey,
+                                now_ns,
+                                &uuid::Uuid::new_v4(),
+                                true, // is_admin_action
+                            )
+                            .await
+                        {
+                            tracing::warn!("Failed to insert admin audit record: {:#}", e);
+                        }
+                    }
                 }
 
                 // Fetch updated key
@@ -224,20 +229,25 @@ impl AdminApi {
         match db.add_account_key(&account.id, &public_key).await {
             Ok(key) => {
                 // Insert audit record with is_admin_action = true
-                if let Err(e) = db
-                    .insert_signature_audit(
-                        Some(&account.id),
-                        "admin_add_recovery_key",
-                        &serde_json::to_string(&req.0).unwrap_or_default(),
-                        &[0u8; 64], // No signature for admin action
-                        &_admin.pubkey,
-                        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0),
-                        &uuid::Uuid::new_v4(),
-                        true, // is_admin_action
-                    )
-                    .await
-                {
-                    tracing::warn!("Failed to insert admin audit record: {:#}", e);
+                match crate::now_ns() {
+                    Err(e) => tracing::warn!("Failed to get timestamp for audit record: {:#}", e),
+                    Ok(now_ns) => {
+                        if let Err(e) = db
+                            .insert_signature_audit(
+                                Some(&account.id),
+                                "admin_add_recovery_key",
+                                &serde_json::to_string(&req.0).unwrap_or_default(),
+                                &[0u8; 64], // No signature for admin action
+                                &_admin.pubkey,
+                                now_ns,
+                                &uuid::Uuid::new_v4(),
+                                true, // is_admin_action
+                            )
+                            .await
+                        {
+                            tracing::warn!("Failed to insert admin audit record: {:#}", e);
+                        }
+                    }
                 }
 
                 Json(ApiResponse {

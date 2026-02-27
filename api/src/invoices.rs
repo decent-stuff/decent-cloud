@@ -201,7 +201,7 @@ pub async fn create_invoice(db: &Database, contract_id: &[u8]) -> Result<Invoice
 
     // Get next invoice number
     let invoice_number = get_next_invoice_number(db).await?;
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = crate::now_ns()?;
 
     // Seller details from environment (required for compliant invoices)
     let seller_name =
@@ -557,7 +557,7 @@ async fn get_typst_invoice_pdf(db: &Database, contract_id: &[u8]) -> Result<Vec<
     invoice_storage::save_invoice_pdf(contract_id, InvoiceType::Typst, &pdf_bytes).await?;
 
     // Update metadata in DB (just the timestamp, PDF is on disk)
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = crate::now_ns()?;
     sqlx::query("UPDATE invoices SET pdf_generated_at_ns = $1 WHERE id = $2")
         .bind(now_ns)
         .bind(invoice.id)

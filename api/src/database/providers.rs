@@ -248,7 +248,7 @@ pub struct ProviderSlaRow {
 impl Database {
     /// Get list of active providers (checked in recently)
     pub async fn get_active_providers(&self, days: i64) -> Result<Vec<ProviderProfile>> {
-        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        let cutoff_ns = crate::now_ns()?
             - days.max(1) * 24 * 3600 * 1_000_000_000;
 
         let profiles = sqlx::query_as!(
@@ -397,7 +397,7 @@ impl Database {
         data: &ProviderOnboarding,
         provider_name: &str,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         // Ensure account exists for this pubkey
         let account_id = self.ensure_account_for_pubkey(pubkey).await?;
@@ -446,9 +446,9 @@ impl Database {
 
     /// Get list of active validators (checked in recently, with or without profiles)
     pub async fn get_active_validators(&self, days: i64) -> Result<Vec<Validator>> {
-        let cutoff_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        let cutoff_ns = crate::now_ns()?
             - days.max(1) * 24 * 3600 * 1_000_000_000;
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let cutoff_24h = now_ns - 24 * 3600 * 1_000_000_000;
         let cutoff_7d = now_ns - 7 * 24 * 3600 * 1_000_000_000;
         let cutoff_30d = now_ns - 30 * 24 * 3600 * 1_000_000_000;
@@ -531,7 +531,7 @@ impl Database {
         website_url: &str,
         data_source: &str,
     ) -> Result<()> {
-        let created_at_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let created_at_ns = crate::now_ns()?;
 
         sqlx::query!(
             r#"INSERT INTO external_providers (pubkey, name, domain, website_url, data_source, created_at_ns)

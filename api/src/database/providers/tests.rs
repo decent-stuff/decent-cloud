@@ -150,7 +150,7 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
     let pubkey = vec![43u8; 32];
 
     // Create initial profile directly in DB
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
     )
@@ -198,7 +198,7 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
 }
 
 async fn insert_provider_profile(db: &super::Database, pubkey: &[u8]) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
     )
@@ -308,7 +308,7 @@ async fn test_delete_provider_contact_wrong_pubkey_is_noop() {
 
 /// Insert a provider profile with a recent created_at (within the last 90 days).
 async fn insert_new_provider_with_offering(db: &super::Database, pubkey: &[u8], name: &str) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, created_at, has_critical_flags) VALUES ($1, $2, $3, $4, $5, NOW(), FALSE)",
     )
@@ -357,7 +357,7 @@ async fn test_get_new_providers_returns_recent_with_offerings() {
 async fn test_get_new_providers_excludes_old_providers() {
     let db = setup_test_db().await;
     let pubkey = vec![62u8; 32];
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     // Insert provider with created_at > 90 days ago — should be excluded
     sqlx::query(
@@ -393,7 +393,7 @@ async fn test_get_new_providers_excludes_old_providers() {
 async fn test_get_new_providers_excludes_providers_without_public_offerings() {
     let db = setup_test_db().await;
     let pubkey = vec![63u8; 32];
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
 
     // Insert provider with no offerings
     sqlx::query(
@@ -443,7 +443,7 @@ fn export_auto_accept_rule_typescript_type() {
 
 /// Insert a minimal provider profile sufficient for FK constraints.
 async fn insert_provider(db: &super::Database, pubkey: &[u8]) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, 'v1', '1.0', $3)",
     )

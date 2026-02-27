@@ -44,7 +44,7 @@ pub struct ApiToken {
 
 impl ApiToken {
     pub fn is_active(&self) -> bool {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
         self.revoked_at.is_none()
             && self.expires_at.is_none_or(|exp| exp > now)
     }
@@ -70,7 +70,7 @@ impl Database {
         let token_hex = raw.as_hex();
         let token_hash = raw.sha256_hash();
 
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
         let expires_at = expires_in_days
             .map(|days| now + days * 24 * 3600 * 1_000_000_000i64);
 
@@ -114,7 +114,7 @@ impl Database {
 
     /// Revoke a token by setting revoked_at. Only the owning user can revoke their token.
     pub async fn revoke_api_token(&self, token_id: uuid::Uuid, user_pubkey: &[u8]) -> Result<()> {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
 
         let result = sqlx::query(
             "UPDATE api_tokens SET revoked_at = $1
@@ -136,7 +136,7 @@ impl Database {
     /// Look up user pubkey by token hash. Updates last_used_at.
     /// Returns None if token is not found, expired, or revoked.
     pub async fn lookup_api_token_pubkey(&self, token_hash: &[u8]) -> Result<Option<Vec<u8>>> {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
 
         let result: Option<(uuid::Uuid, Vec<u8>)> = sqlx::query_as(
             "SELECT id, user_pubkey FROM api_tokens

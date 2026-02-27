@@ -178,7 +178,7 @@ impl Database {
             ));
         }
 
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         sqlx::query!(
             r#"INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns)
@@ -227,7 +227,7 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<AgentPoolWithStats>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let five_mins_ns = 5 * 60 * 1_000_000_000i64;
         let cutoff_ns = now_ns - five_mins_ns;
 
@@ -303,7 +303,7 @@ impl Database {
     ///
     /// Returns None if no online agents have reported resources.
     pub async fn get_pool_capabilities(&self, pool_id: &str) -> Result<Option<PoolCapabilities>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let five_mins_ns = 5 * 60 * 1_000_000_000i64;
         let cutoff_ns = now_ns - five_mins_ns;
 
@@ -535,7 +535,7 @@ impl Database {
         let uuid = uuid::Uuid::new_v4().to_string().replace('-', "");
         let token = format!("apt_{}_{}", pool.location, &uuid[..16]);
 
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let expires_at_ns = now_ns + (expires_in_hours as i64 * 3600 * 1_000_000_000);
 
         sqlx::query!(
@@ -568,7 +568,7 @@ impl Database {
         token: &str,
         agent_pubkey: &[u8],
     ) -> Result<(AgentPool, Option<String>)> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         // Atomically mark token as used and get pool info
         let row = sqlx::query_as::<_, SetupTokenRow>(
@@ -613,7 +613,7 @@ impl Database {
 
     /// List pending (unused, unexpired) setup tokens for a pool.
     pub async fn list_pending_setup_tokens(&self, pool_id: &str) -> Result<Vec<SetupToken>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let rows = sqlx::query_as::<_, SetupTokenRow>(
             r#"SELECT token, pool_id, label, created_at_ns, expires_at_ns, used_at_ns, used_by_agent
@@ -651,7 +651,7 @@ impl Database {
 
     /// Cleanup expired and unused setup tokens.
     pub async fn cleanup_expired_setup_tokens(&self) -> Result<u64> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let result = sqlx::query!(
             "DELETE FROM agent_setup_tokens WHERE expires_at_ns < $1 AND used_at_ns IS NULL",
@@ -680,7 +680,7 @@ impl Database {
     pub async fn list_agents_in_pool(&self, pool_id: &str) -> Result<Vec<AgentDelegation>> {
         use super::agent_delegations::DelegationWithStatusRow;
 
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         // 5 minutes in nanoseconds for online check
         let online_threshold_ns = now_ns - (5 * 60 * 1_000_000_000i64);
 
@@ -975,7 +975,7 @@ mod tests {
         // Create two agents with different resources
         let agent1_pubkey = vec![6u8; 32];
         let agent2_pubkey = vec![7u8; 32];
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         // Register agent delegations
         for (agent_pk, label) in [(&agent1_pubkey, "Agent 1"), (&agent2_pubkey, "Agent 2")] {

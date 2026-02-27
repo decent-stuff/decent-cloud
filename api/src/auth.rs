@@ -114,7 +114,10 @@ pub fn verify_request_signature(
         .map_err(|e| AuthError::InvalidFormat(format!("Invalid timestamp: {}", e)))?;
 
     // Verify timestamp freshness (within 5 minutes)
-    let now = now_ns.unwrap_or_else(|| chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+    let now = match now_ns {
+        Some(ns) => ns,
+        None => crate::now_ns().map_err(|e| AuthError::InternalError(e.to_string()))?,
+    };
     let max_age_ns = 5 * 60 * 1_000_000_000; // 5 minutes
     let age = now - timestamp;
 

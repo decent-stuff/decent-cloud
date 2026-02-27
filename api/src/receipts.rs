@@ -46,7 +46,7 @@ pub async fn send_payment_receipt(
     let receipt_number = get_next_receipt_number(db).await?;
 
     // Update contract with receipt number and sent timestamp
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let now_ns = crate::now_ns()?;
     update_contract_receipt_info(db, contract_id, receipt_number, now_ns).await?;
 
     // Format receipt email

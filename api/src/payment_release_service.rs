@@ -48,7 +48,7 @@ impl PaymentReleaseService {
             contracts.len()
         );
 
-        let current_timestamp_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let current_timestamp_ns = crate::now_ns()?;
 
         for contract in contracts {
             let contract_id_bytes = hex::decode(&contract.contract_id)

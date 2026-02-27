@@ -191,7 +191,7 @@ impl Database {
             signature,
             pool_id,
         } = params;
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let permissions_json =
             serde_json::to_string(&permissions.iter().map(|p| p.as_str()).collect::<Vec<_>>())?;
 
@@ -229,7 +229,7 @@ impl Database {
         &self,
         agent_pubkey: &[u8],
     ) -> Result<Option<(Vec<u8>, Vec<AgentPermission>, Vec<u8>, Option<String>)>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let row = sqlx::query_as!(
             DelegationRow,
@@ -265,7 +265,7 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<AgentDelegation>> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         // 5 minutes in nanoseconds for online check
         let online_threshold_ns = now_ns - (5 * 60 * 1_000_000_000i64);
 
@@ -326,7 +326,7 @@ impl Database {
         provider_pubkey: &[u8],
         agent_pubkey: &[u8],
     ) -> Result<bool> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         let result = sqlx::query!(
             r#"UPDATE provider_agent_delegations
@@ -375,7 +375,7 @@ impl Database {
         active_contracts: i64,
         resources: Option<&serde_json::Value>,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let caps_json = capabilities
             .map(|c| serde_json::to_string(c).context("Failed to serialize capabilities"))
             .transpose()?;
@@ -442,7 +442,7 @@ impl Database {
                 });
 
                 // Check if agent is still online (heartbeat within last 5 minutes)
-                let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+                let now_ns = crate::now_ns()?;
                 let five_mins_ns = 5 * 60 * 1_000_000_000i64;
                 let online = r.online
                     && r.last_heartbeat_ns
@@ -467,7 +467,7 @@ impl Database {
     /// Mark agents as offline if no heartbeat in last 5 minutes.
     /// Called periodically by CleanupService background job.
     pub async fn mark_stale_agents_offline(&self) -> Result<u64> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let five_mins_ns = 5 * 60 * 1_000_000_000i64;
         let cutoff_ns = now_ns - five_mins_ns;
 

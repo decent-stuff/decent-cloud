@@ -2956,7 +2956,16 @@ impl ProvidersApi {
         {
             Ok(_) => {
                 // Note: Chatwoot resources are created lazily when sync_provider_helpcenter is called
-                let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+                let timestamp = match crate::now_ns() {
+                    Ok(ns) => ns,
+                    Err(e) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(e.to_string()),
+                        })
+                    }
+                };
                 Json(ApiResponse {
                     success: true,
                     data: Some(OnboardingUpdateResponse {
@@ -3143,7 +3152,16 @@ impl ProvidersApi {
         }
 
         // Get current timestamp for expiry checks
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = match crate::now_ns() {
+            Ok(ns) => ns,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
 
         let mut keep = Vec::new();
         let mut terminate = Vec::new();
@@ -3967,8 +3985,16 @@ impl ProvidersApi {
 
         // Lock duration: 5 minutes
         let lock_duration_ns = 5 * 60 * 1_000_000_000i64;
-        let expires_at_ns =
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) + lock_duration_ns;
+        let expires_at_ns = match crate::now_ns() {
+            Ok(ns) => ns + lock_duration_ns,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
 
         match db
             .acquire_provisioning_lock(&contract_bytes, &auth.agent_pubkey, lock_duration_ns)

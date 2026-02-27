@@ -56,7 +56,7 @@ impl Database {
 
         // Active in the last year
         let cutoff_ns =
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 365 * 24 * 3600 * 1_000_000_000;
+            crate::now_ns()? - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM provider_check_ins WHERE block_timestamp_ns > $1 AND (pubkey) != $2"#,
             cutoff_ns,
@@ -267,7 +267,7 @@ impl Database {
 
     /// Get trust metrics for a provider
     pub async fn get_provider_trust_metrics(&self, pubkey: &[u8]) -> Result<ProviderTrustMetrics> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
         let ns_per_hour: i64 = 3600 * 1_000_000_000;
         let ns_per_day: i64 = 24 * ns_per_hour;
         let cutoff_90d_ns = now_ns - 90 * ns_per_day;

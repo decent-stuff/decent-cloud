@@ -622,7 +622,7 @@ impl Database {
     /// For each: marks contract as 'expired' and its cloud_resource as 'deleting'.
     /// Returns the number of contracts expired.
     pub async fn expire_and_cleanup_cloud_contracts(&self) -> Result<u64> {
-        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now_ns = crate::now_ns()?;
 
         // Find active contracts with cloud resources that are past expiration
         let expired_contracts: Vec<(Vec<u8>,)> = sqlx::query_as(

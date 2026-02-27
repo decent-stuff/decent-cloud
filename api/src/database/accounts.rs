@@ -460,7 +460,7 @@ impl Database {
         key_id: &[u8],
         disabled_by_key_id: &[u8],
     ) -> Result<()> {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
 
         // Get the key to check account_id
         let key: Option<(Vec<u8>,)> =
@@ -498,7 +498,7 @@ impl Database {
         nonce: &uuid::Uuid,
         max_age_minutes: i64,
     ) -> Result<bool> {
-        let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        let cutoff_time = crate::now_ns()?
             - (max_age_minutes * 60 * 1_000_000_000);
         let nonce_bytes = nonce.as_bytes().to_vec();
 
@@ -552,7 +552,7 @@ impl Database {
     /// Clean up old signature audit records (older than retention_days)
     /// Should be run periodically (e.g., daily) to maintain database hygiene
     pub async fn cleanup_signature_audit(&self, retention_days: i64) -> Result<u64> {
-        let cutoff_time = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        let cutoff_time = crate::now_ns()?
             - (retention_days * 24 * 60 * 60 * 1_000_000_000);
 
         let result = sqlx::query("DELETE FROM signature_audit WHERE created_at < $1")
@@ -646,7 +646,7 @@ impl Database {
         bio: Option<&str>,
         avatar_url: Option<&str>,
     ) -> Result<Account> {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
 
         sqlx::query(
             "UPDATE accounts
@@ -757,7 +757,7 @@ impl Database {
     /// Update last login timestamp for account by public key
     /// Returns true if an account was updated, false if no account found for this pubkey
     pub async fn update_last_login_by_public_key(&self, public_key: &[u8]) -> Result<bool> {
-        let now = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+        let now = crate::now_ns()?;
         let result = sqlx::query(
             "UPDATE accounts SET last_login_at = $1
              WHERE id IN (SELECT account_id FROM account_public_keys WHERE public_key = $2 AND is_active = TRUE)",

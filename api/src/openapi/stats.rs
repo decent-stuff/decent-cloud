@@ -62,8 +62,16 @@ impl StatsApi {
         };
 
         // Count providers who checked in within last 24 hours
-        let cutoff_24h =
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) - 24 * 3600 * 1_000_000_000;
+        let cutoff_24h = match crate::now_ns() {
+            Ok(ns) => ns - 24 * 3600 * 1_000_000_000,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
         let validator_count: (i64,) = match sqlx::query_as(
             "SELECT COUNT(DISTINCT pubkey) FROM provider_check_ins WHERE block_timestamp_ns > $1",
         )
