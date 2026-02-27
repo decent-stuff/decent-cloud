@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'ts-vps-1', 'Standard VPS', 'Basic compute', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a07a82ed3239facac0912dc6ddeb8fad61a3c17e2b0d9f850d914634e34e3f6"
+}

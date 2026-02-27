@@ -975,7 +975,7 @@ mod tests {
         // Create two agents with different resources
         let agent1_pubkey = vec![6u8; 32];
         let agent2_pubkey = vec![7u8; 32];
-        let now_ns = crate::now_ns()?;
+        let now_ns = crate::now_ns().expect("timestamp overflow");
 
         // Register agent delegations
         for (agent_pk, label) in [(&agent1_pubkey, "Agent 1"), (&agent2_pubkey, "Agent 2")] {

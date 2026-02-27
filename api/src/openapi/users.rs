@@ -523,7 +523,7 @@ impl UsersApi {
                     tokens
                         .into_iter()
                         .map(|t| {
-                            let is_active = t.is_active();
+                            let is_active = t.is_active().unwrap_or(false);
                             ApiTokenSummary {
                                 id: t.id.to_string(),
                                 name: t.name,

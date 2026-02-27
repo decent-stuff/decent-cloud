@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'ts-gpu-1', 'GPU Compute Node', 'Fast GPU for ML', 'USD', 50.0, 0, 'public', 'gpu', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c341e73593f499bdf445e99855bb9e1d26eedf183f0454f2b7b47830d75b725f"
+}

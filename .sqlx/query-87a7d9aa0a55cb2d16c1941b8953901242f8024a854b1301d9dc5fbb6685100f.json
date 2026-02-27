@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'pub-test-off', 'Published Test Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, FALSE, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "87a7d9aa0a55cb2d16c1941b8953901242f8024a854b1301d9dc5fbb6685100f"
+}

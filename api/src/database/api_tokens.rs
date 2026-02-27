@@ -43,10 +43,10 @@ pub struct ApiToken {
 }
 
 impl ApiToken {
-    pub fn is_active(&self) -> bool {
+    pub fn is_active(&self) -> anyhow::Result<bool> {
         let now = crate::now_ns()?;
-        self.revoked_at.is_none()
-            && self.expires_at.is_none_or(|exp| exp > now)
+        Ok(self.revoked_at.is_none()
+            && self.expires_at.is_none_or(|exp| exp > now))
     }
 }
 
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(token.user_pubkey, pubkey);
         assert!(token.revoked_at.is_none());
         assert!(token.expires_at.is_none());
-        assert!(token.is_active());
+        assert!(token.is_active().unwrap());
 
         let list = db
             .list_api_tokens(&pubkey)
@@ -228,7 +228,7 @@ mod tests {
             .expect("Failed to list API tokens");
         assert_eq!(list.len(), 1);
         assert!(list[0].revoked_at.is_some());
-        assert!(!list[0].is_active());
+        assert!(!list[0].is_active().unwrap());
 
         // Revoking again must fail
         let err = db

@@ -37,6 +37,16 @@ mod sync_service;
 mod validation;
 mod vies;
 
+/// Returns the current UTC time as nanoseconds since Unix epoch.
+///
+/// Fails loudly if the timestamp overflows (would only occur past year 2262).
+#[inline]
+fn now_ns() -> anyhow::Result<i64> {
+    chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .ok_or_else(|| anyhow::anyhow!("timestamp overflow (year > 2262)"))
+}
+
 use candid::Principal;
 use clap::{Parser, Subcommand};
 use cleanup_service::CleanupService;
