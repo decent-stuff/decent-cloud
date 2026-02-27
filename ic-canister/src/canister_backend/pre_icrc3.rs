@@ -115,26 +115,3 @@ fn _get_committed_transactions(start: u64, max_length: u64) -> Vec<Transaction> 
     });
     txs_result
 }
-
-fn _get_uncommitted_transactions(max_length: u64) -> Vec<Transaction> {
-    let mut txs = vec![];
-    LEDGER_MAP.with(|ledger| {
-        for entry in ledger
-            .borrow()
-            .next_block_iter(Some(LABEL_DC_TOKEN_TRANSFER))
-        {
-            let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                .unwrap_or_else(|e| {
-                    ic_cdk::api::trap(format!(
-                        "Failed to deserialize transfer {:?} ==> {:?}",
-                        entry, e
-                    ));
-                });
-            txs.push(transfer.into());
-            if txs.len() as u64 >= max_length {
-                break;
-            }
-        }
-    });
-    txs
-}
