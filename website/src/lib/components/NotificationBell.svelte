@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -163,8 +164,10 @@
 	onDestroy(() => {
 		unsubIdentity?.();
 		if (pollTimer !== null) clearInterval(pollTimer);
-		window.removeEventListener('keydown', handleKeydown);
-		document.removeEventListener('click', handleClickOutside, true);
+		if (browser) {
+			window.removeEventListener('keydown', handleKeydown);
+			document.removeEventListener('click', handleClickOutside, true);
+		}
 	});
 </script>
 

@@ -116,3 +116,4 @@ dc-agent.toml
 *.db
 /.claude/orchestrator/
 /api/.sqlx/
+.dev-pids/

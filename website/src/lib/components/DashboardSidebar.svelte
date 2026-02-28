@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth';
 	import { navigateToLogin } from '$lib/utils/navigation';
 	import { onMount, onDestroy } from 'svelte';
@@ -199,7 +200,7 @@
 
 	onDestroy(() => {
 		unsubscribeIdentity?.();
-		window.removeEventListener('provider-data-updated', handleProviderDataUpdate);
+		if (browser) window.removeEventListener('provider-data-updated', handleProviderDataUpdate);
 	});
 
 	async function handleLogout() {

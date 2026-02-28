@@ -39,7 +39,7 @@
 DB tables (`contract_health_checks`), API endpoints, and automated health check scheduling in dc-agent are implemented. Provider SLA Monitor page at `/dashboard/provider/sla` shows per-contract uptime with health check history. Tenant health check view available on contract detail page.
 
 - SLA compliance tracking and provider reputation scoring *(Blocked: needs product decisions on SLA metrics, scoring formula, how reputation affects discovery. Single-session once decisions are made.)*
-- **User feedback system** — Post-contract structured survey: "Did service match description?" Y/N, "Would you rent from this provider again?" Y/N. Binary signals harder to game than star ratings. *(Needs post-contract feedback workflow and notification trigger.)*
+- **User feedback system** — DONE: `contract_feedback` table, `POST /contracts/{id}/feedback` (requester-only, terminal state, once per contract), `GET /contracts/{id}/feedback`, binary yes/no UI on rental detail page, aggregated in `offering-satisfaction-stats`.
 - **External benchmarking integration** — Cross-reference provider claims with https://serververify.com/ and https://www.vpsbenchmarks.com/ for independent verification. Price comparison vs market average. *(Multi-session: scraping/API integration + trust score formula.)*
 
 ---
@@ -64,34 +64,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ## Architectural Issues Requiring Review
 
-### Commented-Out ICRC3 Code (Dead Code Violation)
+### Hardcoded Token Value ($1 USD) in IC canister — HIGH PRIORITY
 
-**Location:** `ic-canister/src/canister_endpoints/pre_icrc3.rs:15-18`
-```rust
-// #[ic_cdk::query]
-// fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
-//     pre_icrc3::_get_blocks(req)
-// }
-```
-**Fix:** Either complete the ICRC3 `get_blocks` implementation or remove all dead code. Zero tolerance for commented-out code.
-
-### Timestamp Handling Silent Fallback
-
-**Issue:** Multiple `timestamp_nanos_opt().unwrap_or(0)` calls silently use Unix epoch (1970-01-01) if timestamp overflows.
-**Location:** `api/src/database/agent_delegations.rs` lines 194, 232, 268, 329, 378, 445, 470
-**Fix:** Return an error or use a saturating conversion with an explicit comment — but never silent fallback to 0.
-
-### Hardcoded Secrets in Version Control
-
-**Issue:** HMAC secrets and other credentials hardcoded in env files committed to the repo.
-**Locations:** `cf/.env.prod`, `cf/.env.dev`
-**Fix:** Load secrets from a secret manager (e.g., Vault, AWS Secrets Manager, or at minimum environment-injected at deploy time). Env files in VCS should contain only non-secret configuration.
-
-### Hardcoded Token Value ($1 USD) in IC canister
-
-**Issue:** The IC canister's `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). The api-server now fetches real ICP/USD price from CoinGecko for UI display (cached 5 min, `GET /api/v1/prices/icp`), but the on-chain canister price remains hardcoded. The canister uses ICP HTTP outcalls to fetch external data.
+**Issue:** The IC canister's `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). The api-server now fetches real ICP/USD price from CoinGecko for UI display (cached 5 min, `GET /api/v1/prices/icp`), but the on-chain canister price remains hardcoded.
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
-**Fix:** Use IC HTTP outcalls to fetch from ICPSwap or KongSwap. *(Blocked on choosing exchange API and implementing HTTP outcalls in the canister. Single-session once decided.)*
+**Fix:** Use IC HTTP outcalls to fetch from **KongSwap** (backend canister `2ipq2-uqaaa-aaaar-qailq-cai` on ICP mainnet). KongSwap exposes a price query for ICP/USD. Use `ic_cdk::api::management_canister::http_request` for HTTP outcalls or canister-to-canister query. *(Single-session once implemented — ICP HTTP outcall pattern is well-documented.)*
 
 ---
 

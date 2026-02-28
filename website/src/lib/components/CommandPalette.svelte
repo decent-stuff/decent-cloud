@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import { searchOfferings, getUserContracts, type Offering, type Contract } from '$lib/services/api';
@@ -224,7 +225,7 @@
 	});
 
 	onDestroy(() => {
-		window.removeEventListener('keydown', handleGlobalKeydown);
+		if (browser) window.removeEventListener('keydown', handleGlobalKeydown);
 		unsubAuth?.();
 		unsubIdentity?.();
 		if (debounceTimer !== null) clearTimeout(debounceTimer);
