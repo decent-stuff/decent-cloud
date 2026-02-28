@@ -1,25 +1,18 @@
 #!/usr/bin/env node
 /**
- * Browser helper — wraps Playwright to interact with Chrome via CDP or locally.
+ * Browser helper — uses Playwright's local headless Chromium.
  *
- * Two modes:
- *   Remote (default): connects to Chrome at http://192.168.0.13:9223 via CDP
- *   Local:            launches Playwright's bundled headless Chromium
- *                     set BROWSER_LOCAL=1 (use with scripts/dev-server.sh)
- *
- * Every invocation opens a NEW tab/page, performs the operation, and closes it.
+ * Every invocation opens a NEW page, performs the operation, and closes it.
  * Works from any context: main session, subagents, CI.
  *
  * Usage:
- *   node scripts/browser.js snap  <url>             # aria/accessibility tree (default)
+ *   node scripts/browser.js snap  <url>             # aria/accessibility tree
  *   node scripts/browser.js shot  <url> [out.png]   # screenshot → /tmp/browser-shot.png
  *   node scripts/browser.js eval  <url> <js-expr>   # evaluate JS, print JSON result
  *   node scripts/browser.js errs  <url>             # console errors/warnings only
  *   node scripts/browser.js html  <url>             # raw page HTML (truncated to 50k)
  *
  * Environment:
- *   BROWSER_LOCAL    Set to 1 to use local headless Chromium instead of remote CDP
- *   BROWSER_CDP_URL  Override remote CDP endpoint (default: http://192.168.0.13:9223)
  *   BROWSER_TIMEOUT  Navigation timeout ms (default: 20000)
  *
  * Note: uses page._snapshotForAI() (Playwright 1.44+ internal) for snap.
@@ -30,8 +23,6 @@
 
 const { chromium } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 
-const LOCAL   = process.env.BROWSER_LOCAL === '1';
-const CDP     = process.env.BROWSER_CDP_URL || 'http://192.168.0.13:9223';
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
 
 const [,, cmd, url, ...rest] = process.argv;
@@ -42,13 +33,8 @@ if (!cmd || !url) {
 }
 
 async function main() {
-  const browser = LOCAL
-    ? await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] })
-    : await chromium.connectOverCDP(CDP);
-
-  const page = LOCAL
-    ? await browser.newPage()
-    : await browser.contexts()[0].newPage();
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const page = await browser.newPage();
 
   const consoleLogs = [];
   page.on('console', msg => {

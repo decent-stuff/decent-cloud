@@ -12,8 +12,6 @@
  *   create-provider <seed phrase…>     Create minimal offering, snap provider offerings page
  *
  * Environment:
- *   BROWSER_LOCAL=1    Use local headless Chromium (default: connect to CDP)
- *   BROWSER_CDP_URL    Override CDP endpoint (default: http://192.168.0.13:9223)
  *   DC_API_URL         API base URL (default: https://dev-api.decent-cloud.org)
  *   DC_WEB_URL         Frontend URL for browser nav (default: http://127.0.0.1:59010)
  *   BROWSER_TIMEOUT    Navigation timeout ms (default: 20000)
@@ -34,8 +32,6 @@ const https   = require('https');
 const http    = require('http');
 const { randomUUID } = require('crypto');
 
-const LOCAL   = process.env.BROWSER_LOCAL === '1';
-const CDP     = process.env.BROWSER_CDP_URL || 'http://192.168.0.13:9223';
 const API_URL = process.env.DC_API_URL || 'https://dev-api.decent-cloud.org';
 const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
@@ -103,17 +99,12 @@ function apiRequest(method, path, headers, body) {
 // ── Browser helpers ──────────────────────────────────────────────────────────
 
 async function openBrowser() {
-  if (LOCAL) {
-    const br = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    return { browser: br, page: await br.newPage(), owned: true };
-  }
-  const br = await chromium.connectOverCDP(CDP);
-  return { browser: br, page: await br.contexts()[0].newPage(), owned: false };
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  return { browser, page: await browser.newPage() };
 }
 
-async function closeBrowser({ browser, owned }) {
-  if (owned) await browser.close();
-  else        await browser.disconnect();
+async function closeBrowser({ browser }) {
+  await browser.close();
 }
 
 async function injectSeedAndNavigate(page, mnemonic, targetUrl) {
@@ -180,14 +171,14 @@ async function cmdCreateUser(args) {
 
   if (!result.success) throw new Error(`Registration failed: ${result.error}`);
 
-  const { browser, page, owned } = await openBrowser();
+  const { browser, page } = await openBrowser();
   try {
     await injectSeedAndNavigate(page, mnemonic, `${WEB_URL}/dashboard`);
     const snap = await snapPage(page);
     process.stderr.write(`[SNAP]\n${snap}\n`);
   } finally {
     await page.close();
-    await closeBrowser({ browser, owned });
+    await closeBrowser({ browser });
   }
 
   const out = { username, email, seed: mnemonic, pubkey: pubkeyHex };
@@ -206,14 +197,14 @@ async function cmdLoginUser(args) {
   const acct = await apiRequest('GET', `/api/v1/accounts?publicKey=${pubkeyHex}`, {});
   if (!acct.success || !acct.data) throw new Error(`No account for this seed phrase (pubkey: ${pubkeyHex})`);
 
-  const { browser, page, owned } = await openBrowser();
+  const { browser, page } = await openBrowser();
   try {
     await injectSeedAndNavigate(page, mnemonic, `${WEB_URL}/dashboard`);
     const snap = await snapPage(page);
     process.stderr.write(`[SNAP]\n${snap}\n`);
   } finally {
     await page.close();
-    await closeBrowser({ browser, owned });
+    await closeBrowser({ browser });
   }
 
   const out = { username: acct.data.username, pubkey: pubkeyHex };
@@ -258,14 +249,14 @@ async function cmdCreateProvider(args) {
   if (!result.success) throw new Error(`Offering creation failed: ${result.error}`);
 
   const offeringId = result.data;
-  const { browser, page, owned } = await openBrowser();
+  const { browser, page } = await openBrowser();
   try {
     await injectSeedAndNavigate(page, mnemonic, `${WEB_URL}/dashboard/offerings`);
     const snap = await snapPage(page);
     process.stderr.write(`[SNAP]\n${snap}\n`);
   } finally {
     await page.close();
-    await closeBrowser({ browser, owned });
+    await closeBrowser({ browser });
   }
 
   const out = { pubkey: pubkeyHex, offeringId, offeringName: offering.offer_name };
@@ -290,7 +281,6 @@ if (!cmd || !COMMANDS[cmd]) {
     '  login-user  <seed phrase words…>   Inject existing seed phrase, log in browser\n' +
     '  create-provider <seed phrase…>     Create minimal offering as provider\n\n' +
     'Environment:\n' +
-    '  BROWSER_LOCAL=1  Use local headless Chromium\n' +
     '  DC_API_URL       API base URL (default: https://dev-api.decent-cloud.org)\n' +
     '  DC_WEB_URL       Frontend URL (default: http://127.0.0.1:59010)\n'
   );
