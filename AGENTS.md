@@ -153,41 +153,39 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
 ---
 
-# Browser Session Protocol (Non-Negotiable)
+# Browser Testing (Non-Negotiable for UI Work)
 
-A real Chrome browser is connected via CDP at `ws://192.168.0.13:9223`. The `@playwright/mcp` MCP server is configured in `.claude/settings.json` and provides tools: `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, and more.
-
-**Important:** MCP servers load at session start. If `browser_*` tools are not visible, the session predates the MCP config — restart Claude Code.
-
-**Important:** Browser MCP tools are NOT available inside subagents — only in the main session.
-
-**Every browser interaction MUST follow this exact lifecycle — no exceptions:**
-
-```bash
-# 1. Open a fresh tab BEFORE any browser tool use
-TAB_ID=$(bash scripts/browser-tab.sh open https://dev.decent-cloud.org)
-
-# 2. Use browser MCP tools (they operate on the most recently activated tab)
-#    browser_navigate  → navigate to a URL
-#    browser_snapshot  → get DOM/accessibility tree (cheap, use by default)
-#    browser_click     → click an element
-#    browser_type      → fill an input
-#    browser_screenshot → visual screenshot (expensive, use sparingly)
-
-# 3. Close the tab when done — MANDATORY, even on failure
-bash scripts/browser-tab.sh close "$TAB_ID"
-```
-
-**Rules:**
-- ALWAYS open a new tab first. Never reuse existing tabs — they may have stale state.
-- ALWAYS close the tab when finished. Never leave tabs open.
-- Use `browser_snapshot` for functional verification (DOM tree, element presence, text content).
-- Use `browser_screenshot` only for visual layout checks — it costs ~10× more tokens.
-- On any error mid-session, close the tab before propagating the error.
-
-**Helper script:** `scripts/browser-tab.sh open [url]` / `scripts/browser-tab.sh close <TAB_ID>` / `scripts/browser-tab.sh list`
+A real Chrome browser is connected via CDP at `http://192.168.0.13:9223`. The container already has Playwright installed. Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No MCP, no session restart, no tab management needed: every call opens a fresh tab and closes it automatically.
 
 **Dev frontend:** `https://dev.decent-cloud.org` — **Dev API:** `https://dev-api.decent-cloud.org`
+
+## Commands
+
+```bash
+# Visible text/structure snapshot — use for most verification (fast, cheap)
+node scripts/browser.js snap <url>
+
+# Screenshot — use for visual layout checks (saves to file, then Read it)
+node scripts/browser.js shot <url> [/tmp/out.png]
+
+# Evaluate a JS expression in page context
+node scripts/browser.js eval <url> "document.title"
+
+# Console errors/warnings only — use to check for JS errors after a change
+node scripts/browser.js errs <url>
+
+# Raw HTML — use when you need to inspect full DOM structure
+node scripts/browser.js html <url>
+```
+
+## Rules
+
+- ALWAYS use `errs` after shipping any UI change to catch JS errors before the user does.
+- Use `snap` for "does this page render correctly / does element X exist" checks.
+- Use `shot` only for visual layout verification — read the saved PNG with the `Read` tool.
+- Use `eval` to extract specific data (e.g., check a store value, read an API response).
+- `BROWSER_CDP_URL` env var overrides the default endpoint if Chrome moves.
+- `scripts/browser-tab.sh` remains available for low-level tab management if needed.
 
 ---
 

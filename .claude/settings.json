@@ -5,7 +5,7 @@
       "args": [
         "@playwright/mcp@latest",
         "--cdp-endpoint",
-        "ws://192.168.0.13:9223",
+        "http://192.168.0.13:9223",
         "--vision"
       ]
     }
@@ -18,15 +18,6 @@
           {
             "type": "command",
             "command": ".claude/hooks/limit-tool-calls.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "browser_",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo '[BROWSER] Lifecycle check: did you open a tab with `bash scripts/browser-tab.sh open`? Will you close it with `bash scripts/browser-tab.sh close <TAB_ID>` when done?'"
           }
         ]
       }
