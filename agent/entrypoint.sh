@@ -3,7 +3,7 @@
 set -e
 
 # Fix target directory ownership (volume may be created as root)
-chown ubuntu:ubuntu /code/target 2>/dev/null || mkdir -p /code/target && chown ubuntu:ubuntu /code/target
+chown ubuntu:ubuntu /code/decent-cloud/target 2>/dev/null || mkdir -p /code/decent-cloud/target && chown ubuntu:ubuntu /code/decent-cloud/target
 
 # Fix docker socket permissions for ubuntu user
 if [ -S /var/run/docker.sock ]; then
