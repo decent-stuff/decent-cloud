@@ -185,7 +185,6 @@ node scripts/browser.js html <url>
 - Use `shot` only for visual layout verification — read the saved PNG with the `Read` tool.
 - Use `eval` to extract specific data (e.g., check a store value, read an API response).
 - `BROWSER_CDP_URL` env var overrides the default endpoint if Chrome moves.
-- `scripts/browser-tab.sh` remains available for low-level tab management if needed.
 
 ---
 
