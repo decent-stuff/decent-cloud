@@ -155,7 +155,11 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
 # Browser Session Protocol (Non-Negotiable)
 
-A Chrome browser with CDP is available via `@playwright/mcp` (configured in `.claude/settings.json`). This gives access to `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, and related tools.
+A real Chrome browser is connected via CDP at `ws://192.168.0.13:9223`. The `@playwright/mcp` MCP server is configured in `.claude/settings.json` and provides tools: `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, and more.
+
+**Important:** MCP servers load at session start. If `browser_*` tools are not visible, the session predates the MCP config — restart Claude Code.
+
+**Important:** Browser MCP tools are NOT available inside subagents — only in the main session.
 
 **Every browser interaction MUST follow this exact lifecycle — no exceptions:**
 
@@ -163,21 +167,27 @@ A Chrome browser with CDP is available via `@playwright/mcp` (configured in `.cl
 # 1. Open a fresh tab BEFORE any browser tool use
 TAB_ID=$(bash scripts/browser-tab.sh open https://dev.decent-cloud.org)
 
-# 2. Use browser MCP tools (they operate on the active tab)
-#    browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, ...
+# 2. Use browser MCP tools (they operate on the most recently activated tab)
+#    browser_navigate  → navigate to a URL
+#    browser_snapshot  → get DOM/accessibility tree (cheap, use by default)
+#    browser_click     → click an element
+#    browser_type      → fill an input
+#    browser_screenshot → visual screenshot (expensive, use sparingly)
 
 # 3. Close the tab when done — MANDATORY, even on failure
 bash scripts/browser-tab.sh close "$TAB_ID"
 ```
 
 **Rules:**
-- ALWAYS open a new tab first. Never reuse existing tabs — they may have stale auth state or leftover UI.
+- ALWAYS open a new tab first. Never reuse existing tabs — they may have stale state.
 - ALWAYS close the tab when finished. Never leave tabs open.
-- Use `browser_snapshot` (DOM/accessibility tree) for most verification — it's fast and cheap.
-- Use `browser_screenshot` only for visual layout checks, not as a default.
+- Use `browser_snapshot` for functional verification (DOM tree, element presence, text content).
+- Use `browser_screenshot` only for visual layout checks — it costs ~10× more tokens.
 - On any error mid-session, close the tab before propagating the error.
 
 **Helper script:** `scripts/browser-tab.sh open [url]` / `scripts/browser-tab.sh close <TAB_ID>` / `scripts/browser-tab.sh list`
+
+**Dev frontend:** `https://dev.decent-cloud.org` — **Dev API:** `https://dev-api.decent-cloud.org`
 
 ---
 
