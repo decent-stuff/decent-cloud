@@ -151,6 +151,36 @@ Add more env vars from `cf/.env.dev` as needed (CF_*, STRIPE_*, CHATWOOT_*, etc.
 
 BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
+---
+
+# Browser Session Protocol (Non-Negotiable)
+
+A Chrome browser with CDP is available via `@playwright/mcp` (configured in `.claude/settings.json`). This gives access to `browser_navigate`, `browser_snapshot`, `browser_screenshot`, `browser_click`, `browser_type`, and related tools.
+
+**Every browser interaction MUST follow this exact lifecycle — no exceptions:**
+
+```bash
+# 1. Open a fresh tab BEFORE any browser tool use
+TAB_ID=$(bash scripts/browser-tab.sh open https://dev.decent-cloud.org)
+
+# 2. Use browser MCP tools (they operate on the active tab)
+#    browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, ...
+
+# 3. Close the tab when done — MANDATORY, even on failure
+bash scripts/browser-tab.sh close "$TAB_ID"
+```
+
+**Rules:**
+- ALWAYS open a new tab first. Never reuse existing tabs — they may have stale auth state or leftover UI.
+- ALWAYS close the tab when finished. Never leave tabs open.
+- Use `browser_snapshot` (DOM/accessibility tree) for most verification — it's fast and cheap.
+- Use `browser_screenshot` only for visual layout checks, not as a default.
+- On any error mid-session, close the tab before propagating the error.
+
+**Helper script:** `scripts/browser-tab.sh open [url]` / `scripts/browser-tab.sh close <TAB_ID>` / `scripts/browser-tab.sh list`
+
+---
+
 # Deploy-Time Validation (Non-Negotiable)
 
 **ALL feature configuration MUST be validated at startup or deploy time, NEVER at request time.**
