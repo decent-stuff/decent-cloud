@@ -767,7 +767,7 @@
 							{#if !offering.provider_online}
 								<span
 									class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30"
-									title="Provider agent is offline - provisioning will not work until agent comes online"
+									title="Provider is not actively monitoring — requests are still accepted when agent comes back online"
 								>
 									<span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span>
 									Offline

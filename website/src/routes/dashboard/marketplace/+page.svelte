@@ -555,8 +555,8 @@
 
 	function handleRentalSuccess(contractId: string) {
 		selectedOffering = null;
-		successMessage = `Rental request created! Contract ID: ${contractId}`;
-		setTimeout(() => (successMessage = null), 5000);
+		// Navigate to contract detail page with welcome state
+		goto(`/dashboard/rentals/${contractId}?welcome=true`);
 	}
 
 	function getTypeIcon(productType: string): IconName {
@@ -1337,7 +1337,7 @@
 											{#if !offering.provider_online}
 												<span
 													class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
-													title="Provider agent is offline - provisioning may be delayed"
+													title="Provider is not actively monitoring — requests are still accepted when agent comes back online"
 												>
 													<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
 													Offline
@@ -1723,7 +1723,7 @@
 										{#if !offering.provider_online}
 											<span
 												class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
-												title="Provider agent is offline - provisioning may be delayed"
+												title="Provider is not actively monitoring — requests are still accepted when agent comes back online"
 											>
 												<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
 												Offline

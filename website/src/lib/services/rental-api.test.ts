@@ -214,6 +214,40 @@ describe('createRentalRequest', () => {
 		expect(body.duration_hours).toBe(168);
 	});
 
+	it('includes operating_system when provided', async () => {
+		const params: RentalRequestParams = {
+			offering_db_id: 555,
+			ssh_pubkey: 'ssh-ed25519 AAAA...',
+			operating_system: 'Ubuntu 22.04'
+		};
+
+		const mockHeaders = {
+			'X-Public-Key': 'test-pubkey',
+			'X-Signature': 'test-signature',
+			'X-Timestamp': '1234567890000000000',
+			'X-Nonce': 'test-nonce-uuid',
+			'Content-Type': 'application/json'
+		};
+
+		vi.mocked(fetch).mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				success: true,
+				data: {
+					contract_id: 'contract123',
+					message: 'Success'
+				}
+			})
+		} as Response);
+
+		await createRentalRequest(params, mockHeaders);
+
+		const fetchCall = vi.mocked(fetch).mock.calls[0];
+		const body = JSON.parse(fetchCall[1]?.body as string);
+
+		expect(body.operating_system).toBe('Ubuntu 22.04');
+	});
+
 	it('uses correct API endpoint', async () => {
 		const params: RentalRequestParams = {
 			offering_db_id: 222

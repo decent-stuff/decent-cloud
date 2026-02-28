@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
+	import { goto } from "$app/navigation";
 	import { dashboardStore } from "$lib/stores/dashboard";
 	import { authStore } from "$lib/stores/auth";
 	import type { DashboardData } from "$lib/services/dashboard-data";
@@ -201,8 +202,8 @@
 
 	function handleRentalSuccess(contractId: string) {
 		selectedOfferingForRental = null;
-		// Redirect to rentals page to see the new contract
-		window.location.href = `/dashboard/rentals`;
+		// Navigate to contract detail page with welcome state
+		goto(`/dashboard/rentals/${contractId}?welcome=true`);
 	}
 
 	onMount(() => {

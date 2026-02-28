@@ -4068,3 +4068,66 @@ async fn test_text_search_matches_offer_name_and_excludes_non_matching() {
         "VPS offering must not match text search for 'GPU'"
     );
 }
+
+#[tokio::test]
+async fn test_get_offering_returns_owner_username() {
+    let db = setup_test_db().await;
+    let pubkey = vec![0xC1u8; 32];
+
+    // Create an account with the same pubkey
+    db.create_account("testprovider", &pubkey, "provider@example.com")
+        .await
+        .expect("Failed to create account");
+
+    // Ensure provider has a pool for marketplace visibility
+    ensure_provider_with_pool(&db, &pubkey, "US").await;
+
+    // Create an offering
+    let offering_id = sqlx::query_scalar!(
+        r#"INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'owner-test-1', 'Owner Test Offering', 'Test', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0) RETURNING id as "id!: i64""#,
+        &pubkey[..]
+    )
+    .fetch_one(&db.pool)
+    .await
+    .expect("Failed to create offering");
+
+    // Fetch the offering and verify owner_username is populated
+    let offering = db
+        .get_offering(offering_id)
+        .await
+        .expect("Failed to get offering")
+        .expect("Offering should exist");
+
+    assert_eq!(
+        offering.owner_username,
+        Some("testprovider".to_string()),
+        "get_offering should return owner_username from account_public_keys join"
+    );
+
+    // Also verify search_offerings returns the same username
+    let search_results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+            text_search: None,
+        })
+        .await
+        .expect("search_offerings should succeed");
+
+    let found = search_results
+        .iter()
+        .find(|o| o.id == Some(offering_id))
+        .expect("Offering should be in search results");
+
+    assert_eq!(
+        found.owner_username,
+        Some("testprovider".to_string()),
+        "search_offerings should return owner_username from account_public_keys join"
+    );
+}

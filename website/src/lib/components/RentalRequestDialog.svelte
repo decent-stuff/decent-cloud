@@ -48,6 +48,17 @@
 	let sshKeyError = $state<string | null>(null);
 	let saveKeyToProfile = $state(false);
 
+	// OS selection from offering
+	let selectedOperatingSystem = $state("");
+
+	// Parse operating systems from offering (comma-separated string)
+	let availableOperatingSystems = $derived(
+		offering?.operating_systems
+			? offering.operating_systems.split(',').map((os) => os.trim()).filter(Boolean)
+			: []
+	);
+	let hasOperatingSystems = $derived(availableOperatingSystems.length > 0);
+
 	// Validate SSH public key format
 	function validateSshKey(key: string): string | null {
 		if (!key.trim()) {
@@ -67,7 +78,20 @@
 		sshKey.trim().length > 0 &&
 		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
 	);
-	let paymentMethod = $state<"icpay" | "stripe">("icpay");
+
+	// Check if Stripe is supported for this offering's currency (used for default)
+	let isStripeAvailable = $derived(
+		offering ? isStripeSupportedCurrency(offering.currency) : false,
+	);
+
+	// Default to Stripe for fiat currencies (USD, EUR, etc.) when available,
+	// otherwise default to ICPay for crypto-only offerings
+	let paymentMethod = $state<"icpay" | "stripe">(
+		offering && isStripeSupportedCurrency(offering.currency) ? "stripe" : "icpay"
+	);
+
+	// Payment is required when a payment method is selected (icpay or stripe)
+	let paymentRequired = $derived(paymentMethod === "icpay" || paymentMethod === "stripe");
 
 	// Subscription offering helpers
 	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
@@ -83,11 +107,6 @@
 	let walletConnected = $state(false);
 	let pendingContractId = $state<string | null>(null);
 	let icpayEventUnsubscribe: (() => void) | null = null;
-
-	// Check if Stripe is supported for this offering's currency
-	let isStripeAvailable = $derived(
-		offering ? isStripeSupportedCurrency(offering.currency) : false,
-	);
 
 	onMount(async () => {
 		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
@@ -244,6 +263,7 @@
 				duration_hours: durationHours,
 				payment_method: paymentMethod,
 				buyer_address: buyerAddress || undefined,
+				operating_system: selectedOperatingSystem || undefined,
 			};
 
 			const signed = await signRequest(
@@ -478,6 +498,31 @@
 						</select>
 						<p class="text-xs text-neutral-500 mt-1">
 							Ends: {new Date(Date.now() + durationHours * 60 * 60 * 1000).toLocaleString()}
+						</p>
+					</div>
+				{/if}
+
+				<!-- Operating System Selection -->
+				{#if hasOperatingSystems}
+					<div>
+						<label
+							for="operating-system"
+							class="block text-sm font-medium text-white mb-2"
+						>
+							Operating System
+						</label>
+						<select
+							id="operating-system"
+							bind:value={selectedOperatingSystem}
+							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
+						>
+							<option value="">Select an OS...</option>
+							{#each availableOperatingSystems as os}
+								<option value={os}>{os}</option>
+							{/each}
+						</select>
+						<p class="text-xs text-neutral-500 mt-1">
+							Choose the operating system for your server
 						</p>
 					</div>
 				{/if}
@@ -843,7 +888,7 @@
 							Submitting...
 						</span>
 					{:else}
-						Submit Request
+						{paymentRequired ? "Pay now" : "Submit Request"}
 					{/if}
 				</button>
 			</div>

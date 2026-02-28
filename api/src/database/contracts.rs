@@ -179,6 +179,11 @@ pub struct Contract {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub password_reset_requested_at_ns: Option<i64>,
+    /// Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
+    #[ts(type = "string | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    pub operating_system: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -227,6 +232,10 @@ pub struct RentalRequestParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub buyer_address: Option<String>,
+    /// Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    pub operating_system: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
@@ -637,8 +646,8 @@ impl Database {
                 payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
                 duration_hours, original_duration_hours, request_memo,
                 created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address,
-                requester_account_id, provider_account_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)"#,
+                requester_account_id, provider_account_id, operating_system
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"#,
             contract_id,
             requester_pubkey,
             ssh_pubkey,
@@ -660,7 +669,8 @@ impl Database {
             offering.currency,
             params.buyer_address,
             requester_account_id,
-            provider_account_id
+            provider_account_id,
+            params.operating_system
         )
         .execute(&self.pool)
         .await?;

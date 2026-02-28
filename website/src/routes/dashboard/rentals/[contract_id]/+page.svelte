@@ -121,6 +121,24 @@
 	let portExampleTab = $state<'nginx' | 'caddy'>('nginx');
 	let copiedPortExample = $state(false);
 
+	// Welcome banner state (shown when navigating from successful rental)
+	const WELCOME_BANNER_KEY = `welcome_banner_dismissed_${contractId}`;
+	let showWelcomeBanner = $derived($page.url.searchParams.get('welcome') === 'true');
+	let welcomeBannerDismissed = $state(
+		typeof sessionStorage !== 'undefined' && sessionStorage.getItem(WELCOME_BANNER_KEY) === '1'
+	);
+
+	function dismissWelcomeBanner() {
+		welcomeBannerDismissed = true;
+		if (typeof sessionStorage !== 'undefined') {
+			sessionStorage.setItem(WELCOME_BANNER_KEY, '1');
+		}
+		// Clean up URL by removing the welcome param
+		const url = new URL(window.location.href);
+		url.searchParams.delete('welcome');
+		goto(url.toString(), { replaceState: true, noScroll: true });
+	}
+
 	function copySSHCommand(command: string) {
 		navigator.clipboard.writeText(command).then(() => {
 			copiedSsh = true;
@@ -786,6 +804,42 @@
 		{ label: 'My Rentals', href: '/dashboard/rentals' },
 		{ label: `Contract #${truncateHash(contractId)}` },
 	]} />
+
+	<!-- Welcome banner (shown after successful rental) -->
+	{#if showWelcomeBanner && !welcomeBannerDismissed && contract}
+		<div 
+			data-testid="welcome-banner"
+			class="bg-gradient-to-r from-primary-500/20 to-emerald-500/20 border border-primary-500/30 p-4 flex items-start gap-3"
+		>
+			<span class="text-2xl shrink-0">🎉</span>
+			<div class="flex-1 min-w-0">
+				<p class="text-white font-semibold">Rental request submitted!</p>
+				<p class="text-neutral-400 text-sm mt-1">
+					Your request has been sent to the provider. Here's what to expect next:
+				</p>
+				<ul class="text-neutral-400 text-sm mt-2 space-y-1">
+					<li>1. The provider will review your request (typically within 1-24 hours)</li>
+					<li>2. Once accepted, your VM will be provisioned automatically (5-15 minutes)</li>
+					<li>3. You'll receive the connection details once ready</li>
+				</ul>
+				<div class="flex items-center gap-3 mt-3">
+					<a
+						href="/dashboard/rentals"
+						class="px-3 py-1.5 text-xs font-medium bg-primary-500/20 text-primary-300 border border-primary-500/30 hover:bg-primary-500/30 transition-colors"
+					>
+						View All Rentals
+					</a>
+					<button
+						onclick={dismissWelcomeBanner}
+						class="text-neutral-500 hover:text-neutral-300 transition-colors text-sm"
+						aria-label="Dismiss"
+					>
+						Dismiss
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Mobile back button -->
 	<button

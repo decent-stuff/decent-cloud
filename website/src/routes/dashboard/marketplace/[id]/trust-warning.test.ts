@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { truncatePubkey } from '$lib/utils/identity';
 
 // Mirror the trust warning display logic from the offering detail page
 type TrustMetricsSubset = {
@@ -72,5 +73,60 @@ describe('trust warning: sessionStorage dismissal key format', () => {
 		const key1 = `trust_warning_dismissed_1`;
 		const key2 = `trust_warning_dismissed_2`;
 		expect(key1).not.toBe(key2);
+	});
+});
+
+// Mirror the provider display logic from the offering detail page
+type OfferingSubset = {
+	owner_username?: string;
+	pubkey: string;
+};
+
+function getProviderDisplayName(offering: OfferingSubset): string {
+	return offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey);
+}
+
+function getProviderHref(offering: OfferingSubset): string {
+	return `/dashboard/providers/${offering.owner_username || offering.pubkey}`;
+}
+
+describe('provider display: username vs pubkey', () => {
+	it('shows @username when owner_username is available', () => {
+		const offering: OfferingSubset = {
+			owner_username: 'testprovider',
+			pubkey: '3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3'
+		};
+		expect(getProviderDisplayName(offering)).toBe('@testprovider');
+	});
+
+	it('shows truncated pubkey when owner_username is undefined', () => {
+		const offering: OfferingSubset = {
+			pubkey: '3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3'
+		};
+		expect(getProviderDisplayName(offering)).toBe('3e9f60...3869f3');
+	});
+
+	it('shows truncated pubkey when owner_username is empty string', () => {
+		const offering: OfferingSubset = {
+			owner_username: '',
+			pubkey: '3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3'
+		};
+		// Empty string is falsy, so it should fall back to pubkey
+		expect(getProviderDisplayName(offering)).toBe('3e9f60...3869f3');
+	});
+
+	it('generates correct href with username when available', () => {
+		const offering: OfferingSubset = {
+			owner_username: 'testprovider',
+			pubkey: '3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3'
+		};
+		expect(getProviderHref(offering)).toBe('/dashboard/providers/testprovider');
+	});
+
+	it('generates correct href with pubkey when username is not available', () => {
+		const offering: OfferingSubset = {
+			pubkey: '3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3'
+		};
+		expect(getProviderHref(offering)).toBe('/dashboard/providers/3e9f603a58a993f87ecdf024bc5f7647aa9007222774336bfa509fa31a3869f3');
 	});
 });

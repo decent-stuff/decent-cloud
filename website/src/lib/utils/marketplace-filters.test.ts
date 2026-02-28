@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatUsdPrice, filterInStock, isOfferingPaused } from './marketplace-filters';
+import { formatUsdPrice, filterInStock, isOfferingPaused, filterDemoOfferings, filterOfflineOfferings } from './marketplace-filters';;
 
 // ---------- formatUsdPrice ----------
 describe('formatUsdPrice', () => {
@@ -242,5 +242,64 @@ describe('marketplace first-time hint: visit counter', () => {
 		const stored = null;
 		const parsed = parseInt(stored ?? '0', 10);
 		expect(parsed).toBe(0);
+	});
+});
+
+// ---------- filterDemoOfferings ----------
+describe('filterDemoOfferings', () => {
+	const demoOffering = { is_example: true };
+	const realOffering = { is_example: false };
+
+	it('excludes demo offerings when includeDemo is false (default behavior)', () => {
+		const result = filterDemoOfferings([demoOffering, realOffering], false);
+		expect(result).toEqual([realOffering]);
+	});
+
+	it('includes all offerings when includeDemo is true', () => {
+		const result = filterDemoOfferings([demoOffering, realOffering], true);
+		expect(result).toEqual([demoOffering, realOffering]);
+	});
+
+	it('returns empty array when all offerings are demo and includeDemo is false', () => {
+		const result = filterDemoOfferings([demoOffering, { is_example: true }], false);
+		expect(result).toEqual([]);
+	});
+
+	it('returns empty array for empty input', () => {
+		expect(filterDemoOfferings([], false)).toEqual([]);
+		expect(filterDemoOfferings([], true)).toEqual([]);
+	});
+});
+
+// ---------- filterOfflineOfferings ----------
+describe('filterOfflineOfferings', () => {
+	const onlineOffering = { provider_online: true };
+	const offlineOffering = { provider_online: false };
+	const unknownOffering = { provider_online: undefined };
+
+	it('excludes offline offerings when includeOffline is false (default behavior)', () => {
+		const result = filterOfflineOfferings([onlineOffering, offlineOffering, unknownOffering], false);
+		expect(result).toEqual([onlineOffering, unknownOffering]);
+	});
+
+	it('includes all offerings when includeOffline is true', () => {
+		const result = filterOfflineOfferings([onlineOffering, offlineOffering, unknownOffering], true);
+		expect(result).toEqual([onlineOffering, offlineOffering, unknownOffering]);
+	});
+
+	it('returns empty array when all offerings are offline and includeOffline is false', () => {
+		const result = filterOfflineOfferings([offlineOffering, { provider_online: false }], false);
+		expect(result).toEqual([]);
+	});
+
+	it('includes offerings with undefined provider_online when includeOffline is false', () => {
+		// Unknown status is not the same as offline - include by default
+		const result = filterOfflineOfferings([unknownOffering], false);
+		expect(result).toEqual([unknownOffering]);
+	});
+
+	it('returns empty array for empty input', () => {
+		expect(filterOfflineOfferings([], false)).toEqual([]);
+		expect(filterOfflineOfferings([], true)).toEqual([]);
 	});
 });

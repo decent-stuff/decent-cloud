@@ -83,6 +83,41 @@ test.describe('Anonymous Browsing', () => {
 		}
 	});
 
+	test('should hide demo offerings by default on marketplace', async ({ page }) => {
+		await page.goto('/dashboard/marketplace');
+
+		// Wait for offerings to load
+		await page.waitForSelector('h1:has-text("Marketplace")', { timeout: 10000 });
+
+		// The "Show demo offerings" checkbox should be unchecked by default
+		const demoLabel = page.locator('label:has-text("Show demo offerings")');
+		const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
+		await expect(demoCheckbox).not.toBeChecked();
+
+		// Get the offering count text
+		const countLocator = page.locator('text=/\\d+ offerings? found/');
+		await expect(countLocator).toBeVisible({ timeout: 10000 });
+		const countText = await countLocator.textContent();
+		const initialCount = parseInt(countText?.match(/(\d+)/)?.[1] || '0');
+
+		// Should show only real offerings (not demo offerings from "Example Provider")
+		// The dev environment has 2 real offerings and 10 demo offerings
+		expect(initialCount).toBeLessThanOrEqual(5); // Real offerings should be a small number
+
+		// Check the "Show demo offerings" checkbox
+		await demoCheckbox.check();
+
+		// Wait for URL to update (filter syncs to URL)
+		await page.waitForURL(/demo=1/, { timeout: 5000 });
+
+		// Now should show more offerings (including demo ones)
+		const newCountText = await countLocator.textContent();
+		const newCount = parseInt(newCountText?.match(/(\d+)/)?.[1] || '0');
+
+		// Should now show more offerings than before (demos included)
+		expect(newCount).toBeGreaterThan(initialCount);
+	});
+
 	test('should allow dismissing auth modal', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 

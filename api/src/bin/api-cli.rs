@@ -2009,7 +2009,7 @@ async fn verify_ssh_reachable(gateway_host: &str, port: i32) -> Result<()> {
             }
         }
     }
-    unreachable!()
+    anyhow::bail!("SSH wait loop exited unexpectedly - this is a bug")
 }
 
 async fn create_contract_for_testing(

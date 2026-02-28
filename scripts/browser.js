@@ -12,8 +12,12 @@
  *   node scripts/browser.js errs  <url>             # console errors/warnings only
  *   node scripts/browser.js html  <url>             # raw page HTML (truncated to 50k)
  *
+ * Options:
+ *   --seed <phrase>    Inject seed phrase into localStorage before navigating
+ *
  * Environment:
  *   BROWSER_TIMEOUT  Navigation timeout ms (default: 20000)
+ *   DC_WEB_URL       Frontend URL (default: http://127.0.0.1:59010)
  *
  * Note: uses page._snapshotForAI() (Playwright 1.44+ internal) for snap.
  * Returns a YAML-like accessibility tree — far more useful than raw DOM.
@@ -24,11 +28,24 @@
 const { chromium } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
+const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
 
 const [,, cmd, url, ...rest] = process.argv;
 
+// Parse optional --seed argument
+// Usage: browser.js <cmd> <url> [args...] --seed <phrase>
+// The --seed flag and seed phrase MUST be the last arguments
+let seedPhrase = null;
+let filteredRest = rest;
+const seedIndex = rest.indexOf('--seed');
+if (seedIndex !== -1) {
+  seedPhrase = rest.slice(seedIndex + 1).join(' ');
+  filteredRest = rest.slice(0, seedIndex);
+}
+
 if (!cmd || !url) {
   console.error('Usage: browser.js <snap|shot|eval|errs|html> <url> [args...]');
+  console.error('Options: --seed <phrase>  Inject seed phrase for authenticated testing');
   process.exit(1);
 }
 
@@ -46,7 +63,27 @@ async function main() {
   page.on('pageerror', err => consoleLogs.push(`[PAGEERROR] ${err.message}`));
 
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    // If seed phrase provided, inject it into localStorage before navigating
+    if (seedPhrase) {
+      const origin = new URL(WEB_URL).origin;
+      // Step 1: Navigate to origin to get same-origin localStorage context
+      await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+
+      // Step 2: Inject seed phrase into localStorage['seed_phrases']
+      await page.evaluate((phrase) => {
+        const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
+        if (!stored.includes(phrase)) {
+          stored.push(phrase);
+          localStorage.setItem('seed_phrases', JSON.stringify(stored));
+        }
+      }, seedPhrase);
+
+      // Step 3: Navigate to the target URL (auth will re-initialize from localStorage)
+      const targetUrl = url.startsWith('http') ? url : `${origin}${url}`;
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    } else {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    }
     // Wait for JS-rendered content (SvelteKit hydrates after domcontentloaded)
     await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(e => {
       process.stderr.write(`[WARN] networkidle timeout: ${e.message}\n`);
@@ -67,14 +104,14 @@ async function main() {
       }
 
       case 'shot': {
-        const outPath = rest[0] || '/tmp/browser-shot.png';
+        const outPath = filteredRest[0] || '/tmp/browser-shot.png';
         await page.screenshot({ path: outPath, fullPage: false });
         console.log(outPath);
         break;
       }
 
       case 'eval': {
-        const result = await page.evaluate(rest.join(' '));
+        const result = await page.evaluate(filteredRest.join(' '));
         console.log(JSON.stringify(result, null, 2));
         break;
       }

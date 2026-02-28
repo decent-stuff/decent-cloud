@@ -202,7 +202,7 @@ test.describe('Payment Flows', () => {
 		await page.fill('textarea[placeholder*="special requirements"]', 'E2E test rental - ICPay payment');
 
 		// Try to submit without wallet connection - should show error
-		await page.click('button:has-text("Submit Request")');
+		await page.click('button:has-text("Pay now")');
 
 		// Should show wallet connection error
 		await expect(page.locator('text=Please connect your wallet first')).toBeVisible({ timeout: 5000 });
@@ -305,8 +305,8 @@ test.describe('Payment Flows', () => {
 		await expect(page.locator('input[placeholder*="email:you@example.com"]')).toBeVisible();
 		await expect(page.locator('textarea[placeholder*="special requirements"]')).toBeVisible();
 
-		// Verify submit button is present
-		await expect(page.locator('button:has-text("Submit Request")')).toBeVisible();
+		// Verify submit button shows "Pay now" when payment is required
+		await expect(page.locator('button:has-text("Pay now")')).toBeVisible();
 
 		// Test passed - Stripe UI loads correctly
 	});

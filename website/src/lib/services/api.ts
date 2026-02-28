@@ -1166,6 +1166,8 @@ export interface RentalRequestParams {
 	payment_method?: string;
 	/** Buyer address for B2B invoices (street, city, postal code, country) */
 	buyer_address?: string;
+	/** Selected operating system for the rented VM (e.g., "Ubuntu 22.04") */
+	operating_system?: string;
 }
 
 export interface RentalRequestResponse {

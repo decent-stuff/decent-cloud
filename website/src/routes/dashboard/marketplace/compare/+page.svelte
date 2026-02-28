@@ -67,8 +67,8 @@
 
 	function handleRentalSuccess(contractId: string) {
 		selectedOffering = null;
-		successMessage = `Rental request created! Contract ID: ${contractId}`;
-		setTimeout(() => (successMessage = null), 5000);
+		// Navigate to contract detail page with welcome state
+		goto(`/dashboard/rentals/${contractId}?welcome=true`);
 	}
 
 	// Formatting helpers (same logic as marketplace page)

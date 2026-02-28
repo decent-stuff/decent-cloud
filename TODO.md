@@ -74,6 +74,42 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ## UX Improvements
 
+### VM Rental UX Audit (2026-02-28) — Critical Path Issues
+
+The following issues were identified by walking the full "rent a Proxmox VM" user journey as a new visitor with no prior knowledge of the platform. Issues are ordered by user impact.
+
+**Critical (conversion killers):**
+
+- **[Rental] Payment method default is ICPay (crypto) for USD offerings** — First-time users see "Crypto (ICPay)" pre-selected and must "Connect Wallet" before they can proceed. This immediately gates out anyone without a crypto wallet. Fix: default to Credit Card (Stripe) for USD/EUR offerings; show ICPay as the secondary option.
+
+- **[Rental] SSH key is required before payment** — Most non-technical users don't have an SSH key and don't know what one is. Requiring it upfront before they even see the price summary creates a high-friction barrier. The collapsible "How to generate" guide is good but buried. Fix: move the SSH key section below the payment section (it's post-payment anyway), or allow "generate for me" to create a keypair and download the private key automatically.
+
+- **[Rental] "Submit Request" button label is ambiguous** — The CTA says "Submit Request" but this initiates a payment. Users expect to see "Pay now" or "Confirm & Pay". Ambiguity causes drop-off at the last step.
+
+- **[Post-rental] Success message auto-dismisses in 5 seconds** — After a successful rental, the only feedback is a transient banner saying `Contract ID: <hash>`. Users have no idea what happens next. There is no "What to expect" modal or redirect to the contract page. Fix: on success, navigate directly to `/dashboard/rentals/{contractId}` with a welcome state.
+
+**Significant (friction, confusion):**
+
+- **[Marketplace] Provider shown as raw hex pubkey in the offering detail header** — The offering detail page shows `3e9f60...3869f3` as the provider identity. The marketplace table correctly shows `@p7ma2` but the detail page reverts to the truncated hex. Fix: always show `owner_username` when available (it is already stored on the offering).
+
+- **[Auth] Seed-phrase-only sign-up is unfamiliar** — The auth flow opens with a mnemonic input. There is Google OAuth support (GoogleSignInButton component is present), but it's not prominently positioned. New users landing on the sign-in modal see no email/password or familiar social login first. Fix: show Google sign-in as the primary option; put seed phrase as secondary ("Sign in with seed phrase").
+
+- **[Marketplace] Demo offerings hidden by default** — DONE: "Show demo offerings" checkbox now defaults to unchecked (commit 16eb48d). Demo offerings from "Example Provider" are hidden unless explicitly enabled.
+
+- **[Marketplace] 429 rate-limit errors in browser console** — Two failed API calls with HTTP 429 on every marketplace page load. These don't surface to users but indicate an unhandled rate-limit scenario in the frontend that should be investigated.
+
+- **[Offering detail] No "time to provision" estimate** — The offering page shows billing/contract terms but gives no indication of how long provisioning typically takes. Users have no baseline expectation. Fix: add `avg_provision_time` from trust metrics to the sidebar if available.
+
+- **[Rental dialog] Price summary is at the bottom** — The total cost is only visible after scrolling past SSH key, contact method, and billing address sections. Users should see the price before filling in details. Fix: move the price summary card to the top of the dialog, below the resource details.
+
+**Minor:**
+
+- **[Breadcrumb] "Dashboard" link in breadcrumb opens wrong view** — The breadcrumb `Dashboard > Marketplace > Basic VPS` links "Dashboard" to `/dashboard` which is the public stats page (not the user's personal dashboard). This is inconsistent when authenticated.
+
+- **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar offerings mix `ICP/mo` (seeded demo data) with `USD/mo` (real offerings) without currency normalization. This is confusing when comparing.
+
+- **[Testing tooling] `browser.js` and `dc-auth.js` do not share browser state** — DONE: `browser.js` now accepts `--seed <phrase>` argument that injects the seed into localStorage before navigating, enabling authenticated testing from any subagent.
+
 ### Backlog
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
@@ -108,3 +144,46 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
   - **Remaining:** "What changed since last save" diff view. *(Multi-session: needs per-field change tracking.)*
 
 - **[Tenant] Saved offerings price-change alerts** — Tenants can save offerings but receive no notification when a saved offering changes price or goes out of stock. *(Multi-session: needs price-history tracking table, notification integration.)*
+
+## Code Quality Audit (2026-02-28)
+
+The following issues were found during a comprehensive codebase audit for zombie code, inconsistencies, and half-baked implementations.
+
+### Code Cleanup Needed
+
+- **[dc-agent] Remove deprecated `traefik_dynamic_dir` field** — `dc-agent/src/config.rs:46-49` contains a DEPRECATED field. Currently used for migration error messages (tells users to rename to `caddy_sites_dir`). Can be removed after migration period. *(Low priority: remove field, update any remaining references, verify tests pass.)*
+
+- **[api-cli] Replace `unreachable!()` with proper error handling** — DONE: Replaced with `anyhow::bail!("SSH wait loop exited unexpectedly - this is a bug")`.
+
+- **[dc-agent] Replace `unreachable!()` with proper match handling** — DONE: Replaced with `anyhow::bail!("Invalid command state - this is a bug")`.
+
+### TODOs in Source Code (Track but Not Blocking)
+
+- `api/src/cleanup_service.rs:190` — TODO about Stripe subscription billing integration (tracked in Notification System section)
+- `ic-canister/src/canister_backend/generic.rs:362` — TODO about ledger iteration optimization (performance, not blocking)
+- `ic-canister/src/canister_endpoints/generic_anonymous.rs:84` — TODO for CF sync implementation (feature, not blocking)
+- `cli/src/keygen.rs:40` — TODO: Add more languages (nice-to-have)
+- `ledger-map/src/ledger_map.rs:19` — TODO: Make configurable (optimization)
+
+### Prepared/Unused Code (Low Priority)
+
+- `api/src/database/reseller.rs` — Contains `#[allow(dead_code)]` structs "Prepared for reseller API feature"
+- `api/src/icpay_client.rs` — Contains `#[allow(dead_code)]` structs "Prepared for payment verification feature"
+- These are intentionally kept for future features; no action needed now.
+
+### Large Files (Refactoring Candidates)
+
+These files have grown large and could benefit from refactoring when touched:
+- `api/src/openapi/providers.rs` — 5670 lines
+- `api/src/bin/api-cli.rs` — 3341 lines
+- `api/src/database/contracts.rs` — 3361 lines
+
+*(No immediate action required; split when adding significant new functionality.)*
+
+### Audit Results (No Issues Found)
+
+- **No zombie files** — No `.bak`, `.orig`, or `*~` files
+- **No `todo!()` or `unimplemented!()` macros** — Good
+- **No `dbg!()` debug statements** — Good
+- **No hardcoded credentials** — All secrets from env vars
+- **No commented-out code blocks** — Clean codebase

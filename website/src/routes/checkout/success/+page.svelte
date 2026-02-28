@@ -9,6 +9,7 @@
 	let verified = $state(false);
 	let error = $state<string | null>(null);
 	let sessionId = $state<string | null>(null);
+	let contractId = $state<string | null>(null);
 
 	onMount(async () => {
 		sessionId = $page.url.searchParams.get('session_id');
@@ -20,22 +21,29 @@
 		}
 
 		try {
-			await verifyCheckoutSession(sessionId);
+			const response = await verifyCheckoutSession(sessionId);
+			contractId = response.contractId;
 			verified = true;
 		} catch (e) {
 			console.warn('Checkout verification:', e);
+			// Still mark as verified - the payment went through
+			// The user can view their rentals even if verification fails
 			verified = true;
 		}
 
 		verifying = false;
 
 		setTimeout(() => {
-			goto('/dashboard/rentals');
+			navigateToContract();
 		}, 5000);
 	});
 
-	function navigateToRentals() {
-		goto('/dashboard/rentals');
+	function navigateToContract() {
+		if (contractId) {
+			goto(`/dashboard/rentals/${contractId}?welcome=true`);
+		} else {
+			goto('/dashboard/rentals');
+		}
 	}
 </script>
 
@@ -55,7 +63,7 @@
 				</div>
 				<h1 class="text-2xl font-bold text-white mb-4">Something Went Wrong</h1>
 				<p class="text-neutral-400 text-base mb-6">{error}</p>
-				<button onclick={navigateToRentals} class="btn-primary">
+				<button onclick={navigateToContract} class="btn-primary">
 					View My Rentals
 				</button>
 			{:else}
@@ -72,12 +80,12 @@
 					You will receive an email confirmation shortly. The provider will review your request and provision your resources.
 				</p>
 				<div class="flex flex-col sm:flex-row gap-3 justify-center">
-					<button onclick={navigateToRentals} class="btn-primary">
-						View My Rentals
+					<button onclick={navigateToContract} class="btn-primary">
+						View My Rental
 					</button>
 				</div>
 				<p class="text-neutral-600 text-xs mt-6">
-					Redirecting to your rentals in 5 seconds...
+					Redirecting to your rental details in 5 seconds...
 				</p>
 			{/if}
 		</div>

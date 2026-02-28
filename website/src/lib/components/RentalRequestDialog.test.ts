@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isStripeSupportedCurrency } from '$lib/utils/stripe-currencies';
 
 // Test the price calculation logic used by RentalRequestDialog
 // This tests the core functionality without needing to render the component
@@ -65,5 +66,73 @@ describe('RentalRequestDialog price calculation', () => {
 
 		expect(expectedPrice).toBe(50);
 		expect(expectedPrice.toFixed(2)).toBe('50.00');
+	});
+});
+
+describe('RentalRequestDialog payment method default', () => {
+	// This test verifies the expected default payment method behavior
+	// For fiat currencies (USD, EUR, etc.) that Stripe supports, default should be "stripe"
+	// For crypto-only currencies, default should be "icpay"
+
+	it('should default to stripe for USD currency (fiat - Stripe supported)', () => {
+		const currency = 'USD';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		// Default payment method should be stripe when Stripe is available
+		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+
+		expect(isStripeAvailable).toBe(true);
+		expect(defaultPaymentMethod).toBe('stripe');
+	});
+
+	it('should default to stripe for EUR currency (fiat - Stripe supported)', () => {
+		const currency = 'EUR';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		// Default payment method should be stripe when Stripe is available
+		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+
+		expect(isStripeAvailable).toBe(true);
+		expect(defaultPaymentMethod).toBe('stripe');
+	});
+
+	it('should default to stripe for other fiat currencies (GBP, CAD, etc.)', () => {
+		const fiatCurrencies = ['GBP', 'CAD', 'AUD', 'JPY', 'CHF'];
+		
+		for (const currency of fiatCurrencies) {
+			const isStripeAvailable = isStripeSupportedCurrency(currency);
+			const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+			
+			expect(isStripeAvailable).toBe(true);
+			expect(defaultPaymentMethod).toBe('stripe');
+		}
+	});
+
+	it('should default to icpay for ICP (crypto-only currency)', () => {
+		const currency = 'ICP';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		// Default payment method should be icpay when Stripe is NOT available
+		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+
+		expect(isStripeAvailable).toBe(false);
+		expect(defaultPaymentMethod).toBe('icpay');
+	});
+
+	it('should default to icpay for BTC (cryptocurrency)', () => {
+		const currency = 'BTC';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		// Default payment method should be icpay when Stripe is NOT available
+		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+
+		expect(isStripeAvailable).toBe(false);
+		expect(defaultPaymentMethod).toBe('icpay');
+	});
+
+	it('should default to icpay for ETH (cryptocurrency)', () => {
+		const currency = 'ETH';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		// Default payment method should be icpay when Stripe is NOT available
+		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
+
+		expect(isStripeAvailable).toBe(false);
+		expect(defaultPaymentMethod).toBe('icpay');
 	});
 });

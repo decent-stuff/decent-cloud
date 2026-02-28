@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import {
 		getOffering,
 		searchOfferings,
@@ -122,8 +123,8 @@
 
 	function handleRentalSuccess(contractId: string) {
 		selectedOffering = null;
-		successMessage = `Rental request created! Contract ID: ${contractId}`;
-		setTimeout(() => (successMessage = null), 5000);
+		// Navigate to contract detail page with welcome state
+		goto(`/dashboard/rentals/${contractId}?welcome=true`);
 	}
 
 	function copyOfferingLink() {
@@ -310,7 +311,7 @@
 				<div class="flex items-center gap-3 flex-wrap">
 					<h1 class="text-2xl font-bold text-white tracking-tight">{offering.offer_name}</h1>
 					{#if !offering.provider_online}
-						<span class="flex items-center gap-1 px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">
+						<span class="flex items-center gap-1 px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded" title="Provider is not actively monitoring — requests are still accepted when agent comes back online">
 							<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>Offline
 						</span>
 					{/if}

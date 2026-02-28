@@ -221,7 +221,7 @@ async fn main() -> Result<()> {
                     )
                     .await
                 }
-                _ => unreachable!(),
+                _ => anyhow::bail!("Invalid command state - this is a bug"),
             }
         }
         Commands::Setup { provisioner } => run_setup(*provisioner).await,
