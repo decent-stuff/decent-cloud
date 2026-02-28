@@ -34,6 +34,10 @@
 	function loadChatwootScript() {
 		if (typeof window === 'undefined') return;
 
+		if (document.querySelector(`script[src="${baseUrl}/packs/js/sdk.js"]`)) {
+			return;
+		}
+
 		const script = document.createElement('script');
 		script.src = `${baseUrl}/packs/js/sdk.js`;
 		script.defer = true;

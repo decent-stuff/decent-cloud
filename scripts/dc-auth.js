@@ -308,9 +308,16 @@ async function cmdSeedUxData(args) {
     if (!regResult.success) throw new Error(`Registration failed: ${regResult.error}`);
   }
 
+  // 0. Create provider profile (required before pool creation due to FK constraint)
+  const onboardPath = `/api/v1/providers/${pubkeyHex}/onboarding`;
+  const onboardBody = JSON.stringify({});
+  const onboardHdrs = buildHeaders(sk, 'PUT', onboardPath, onboardBody);
+  const onboardResult = await apiRequest('PUT', onboardPath, onboardHdrs, onboardBody);
+  if (!onboardResult.success) throw new Error(`Provider onboarding failed: ${onboardResult.error}`);
+
   // 1. Create agent pool
   const poolPath = `/api/v1/providers/${pubkeyHex}/pools`;
-  const poolBody = JSON.stringify({ name: 'UX Test Pool', location: 'US', provisionerType: 'proxmox' });
+  const poolBody = JSON.stringify({ name: 'UX Test Pool', location: 'na', provisionerType: 'proxmox' });
   const poolHdrs = buildHeaders(sk, 'POST', poolPath, poolBody);
   const poolResult = await apiRequest('POST', poolPath, poolHdrs, poolBody);
   if (!poolResult.success) throw new Error(`Pool creation failed: ${poolResult.error}`);

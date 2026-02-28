@@ -86,7 +86,7 @@ CREATE TABLE cloud_accounts (
     is_valid            BOOLEAN DEFAULT true,
     last_validated_at   TIMESTAMPTZ,
     created_at          TIMESTAMPTZ DEFAULT NOW(),
-    
+
     CONSTRAINT unique_account_backend_name UNIQUE (account_id, backend_type, name)
 );
 
@@ -104,17 +104,17 @@ CREATE TABLE cloud_resources (
     ssh_port            INTEGER DEFAULT 22,
     ssh_username        TEXT DEFAULT 'root',
     created_at          TIMESTAMPTZ DEFAULT NOW(),
-    
+
     -- Gateway routing (same pattern as dc-agent contracts)
     gateway_slug        TEXT UNIQUE,              -- e.g., "k7m2p4"
     gateway_ssh_port    INTEGER,                  -- e.g., 20001
     gateway_port_range_start INTEGER,              -- e.g., 20002
     gateway_port_range_end   INTEGER,              -- e.g., 20011
-    
+
     -- Link to marketplace offering (if listed)
     offering_id         BIGINT REFERENCES provider_offerings(id),
     listing_mode        TEXT DEFAULT 'personal',  -- 'personal', 'marketplace'
-    
+
     CONSTRAINT unique_external_id UNIQUE (cloud_account_id, external_id)
 );
 
@@ -249,14 +249,14 @@ impl ProvisioningService {
             tokio::time::sleep(Duration::from_secs(10)).await;
         }
     }
-    
+
     async fn provision_one(&self, resource: CloudResource) {
         let account = self.get_cloud_account(resource.cloud_account_id).await;
         let backend = self.backends[&account.backend_type].create(&account.credentials);
-        
+
         // Provision via backend
         let server = backend.create_server(CreateServerRequest { ... }).await?;
-        
+
         // Update resource
         self.update_resource(resource.id, server).await;
         self.release_lock(&resource).await;

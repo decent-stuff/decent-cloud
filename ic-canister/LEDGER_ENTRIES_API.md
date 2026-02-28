@@ -107,7 +107,7 @@ const result = await actor.ledger_entries(
 
 3. **Memory Efficiency**: Pagination is recommended for large datasets to avoid memory issues
 
-4. **Consistency**: 
+4. **Consistency**:
    - When `include_next_block=false`: Returns consistent snapshot of committed data
    - When `include_next_block=true`: Includes latest uncommitted data (may change before commit)
 

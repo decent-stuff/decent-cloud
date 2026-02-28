@@ -180,6 +180,19 @@ impl Database {
 
         let now_ns = crate::now_ns()?;
 
+        // Ensure provider_registrations row exists — required by FK constraint.
+        // provider_registrations is normally populated via ICP canister sync, but REST-API
+        // providers (dev/test or non-ICP providers) must be auto-registered here.
+        sqlx::query!(
+            r#"INSERT INTO provider_registrations (pubkey, signature, created_at_ns)
+               VALUES ($1, $1, $2)
+               ON CONFLICT (pubkey) DO NOTHING"#,
+            provider_pubkey,
+            now_ns
+        )
+        .execute(&self.pool)
+        .await?;
+
         sqlx::query!(
             r#"INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns)
                VALUES ($1, $2, $3, $4, $5, $6)"#,

@@ -86,6 +86,7 @@ impl AutoRenewalService {
             duration_hours: contract.original_duration_hours.or(contract.duration_hours),
             payment_method: Some(contract.payment_method.clone()),
             buyer_address: contract.buyer_address.clone(),
+            operating_system: contract.operating_system.clone(),
         };
 
         let new_contract_id = self
