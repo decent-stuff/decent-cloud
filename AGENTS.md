@@ -186,6 +186,29 @@ node scripts/browser.js html <url>
 - Use `eval` to extract specific data (e.g., check a store value, read an API response).
 - `BROWSER_CDP_URL` env var overrides the default endpoint if Chrome moves.
 
+## Authenticated Testing with dc-auth.js
+
+Use `scripts/dc-auth.js` to set up browser sessions as real users. Each command creates the account server-side, injects the seed phrase into browser localStorage, and outputs a snap of the resulting page.
+
+```bash
+# Create a new account + log in browser (generates a random seed phrase)
+BROWSER_LOCAL=1 node scripts/dc-auth.js create-user [username] [email]
+# → outputs: { username, email, seed, pubkey }
+
+# Log in as an existing user (inject seed, navigate to dashboard)
+BROWSER_LOCAL=1 node scripts/dc-auth.js login-user <seed phrase words…>
+# → outputs: { username, pubkey }
+
+# Create a draft offering (become provider) + open provider offerings page
+BROWSER_LOCAL=1 node scripts/dc-auth.js create-provider <seed phrase words…>
+# → outputs: { pubkey, offeringId, offeringName }
+```
+
+After each command, subsequent `browser.js` calls will see the authenticated state because the seed phrase is in the browser's `localStorage['seed_phrases']`.
+
+Local dev server (port 59010): `DC_WEB_URL=http://127.0.0.1:59010` + `BROWSER_LOCAL=1`.
+Remote dev environment: omit `BROWSER_LOCAL` and `DC_WEB_URL` (defaults to remote).
+
 ---
 
 # Deploy-Time Validation (Non-Negotiable)

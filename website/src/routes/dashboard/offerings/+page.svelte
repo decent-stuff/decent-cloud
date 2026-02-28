@@ -442,12 +442,16 @@
 	}
 
 	onMount(() => {
+		loadProductTypes();
+		// Subscribe to identity and (re-)load when it becomes available.
+		// This handles both direct navigation and deep-linking / refresh scenarios
+		// where auth settles asynchronously after the page's onMount fires.
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			currentIdentity = identity;
+			if (identity?.publicKeyBytes) {
+				loadOfferings();
+			}
 		});
-
-		loadProductTypes();
-		loadOfferings();
 		return unsubscribe;
 	});
 
