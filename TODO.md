@@ -94,7 +94,7 @@ The following issues were identified by walking the full "rent a Proxmox VM" use
 
 - **[Marketplace] Demo offerings hidden by default** — DONE: "Show demo offerings" checkbox now defaults to unchecked (commit 16eb48d). Demo offerings from "Example Provider" are hidden unless explicitly enabled.
 
-- **[Marketplace] 429 rate-limit errors in browser console** — Two failed API calls with HTTP 429 on every marketplace page load. These don't surface to users but indicate an unhandled rate-limit scenario in the frontend that should be investigated.
+- **[Marketplace] 429 rate-limit errors in browser console** — **RESOLVED:** Root cause is Chatwoot's rack-attack rate limiting (5 requests/hour/IP on `/widget` endpoint). The Chatwoot SDK logs 429 errors twice internally (initial + retry). Fix: increase `RACK_ATTACK_LIMIT` in Chatwoot environment or disable rate limiting for dev. See `third_party/chatwoot/config/initializers/rack_attack.rb:17`. No frontend code changes needed.
 
 - **[Offering detail] No "time to provision" estimate** — The offering page shows billing/contract terms but gives no indication of how long provisioning typically takes. Users have no baseline expectation. Fix: add `avg_provision_time` from trust metrics to the sidebar if available.
 
@@ -107,6 +107,14 @@ The following issues were identified by walking the full "rent a Proxmox VM" use
 - **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar offerings mix `ICP/mo` (seeded demo data) with `USD/mo` (real offerings) without currency normalization. This is confusing when comparing.
 
 - **[Testing tooling] `browser.js` and `dc-auth.js` do not share browser state** — DONE: `browser.js` now accepts `--seed <phrase>` argument that injects the seed into localStorage before navigating, enabling authenticated testing from any subagent.
+
+- **[Testing tooling] No test contracts for UX evaluation** — `seed-ux-data` creates online offerings but no contracts. The "My Rentals" page and contract detail page (`/dashboard/rentals/{id}`) are unreachable during UX audits. Fix: add `seed-contracts` command to `dc-auth.js` that creates 1–3 test contracts in different states (`requested`, `provisioned`, `cancelled`) using `skip_payment: true` against seeded offerings. Output JSON with `{ seed, contractIds: [...] }`.
+
+- **[Testing tooling] No mobile viewport testing** — `browser.js` always uses desktop viewport. Add `--viewport mobile` flag (375×812) so UX auditors can check responsive layout without changing the API surface. The flag should work with all existing commands (`snap`, `shot`, `eval`, `errs`, `html`).
+
+- **[Testing tooling] No systematic page tour** — UX audits require visiting ~15 pages in one pass. Each page currently needs a separate `browser.js` invocation. Add a `tour` command to `browser.js` that accepts a seed and visits a predefined list of key routes (marketplace, offering detail, rentals, contract detail, provider dashboard, provider offerings, etc.), capturing accessibility snaps and saving a JSON report to `/tmp/dc-ux-tour.json`.
+
+- **[Testing tooling] No edge-case test data** — UX evaluators cannot see the "Offline" badge (no agent), empty marketplace (0 offerings), or error states without specific setup. Add `seed-edge-cases` command that creates a provider with offerings but no agent heartbeat, so the marketplace shows one "Offline" provider alongside the online one.
 
 ### Backlog
 

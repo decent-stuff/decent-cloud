@@ -30,6 +30,8 @@ const { ed25519ph } = require(`${NM}/@noble/curves/ed25519`);
 const { chromium }  = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 const https   = require('https');
 const http    = require('http');
+const fs      = require('fs');
+const { spawn }    = require('child_process');
 const { randomUUID } = require('crypto');
 
 const API_URL = process.env.DC_API_URL || 'https://dev-api.decent-cloud.org';
@@ -400,7 +402,17 @@ async function cmdSeedUxData(args) {
     offeringIds.push(offerResult.data);
   }
 
-  // 6. Open browser to marketplace (authenticated)
+  // 6. Spawn background keepalive daemon to hold agent online past the 5-min window
+  const pidFile = `/tmp/dc-keepalive-${pubkeyHex.slice(0, 8)}.pid`;
+  const keepalive = spawn(process.execPath, [__filename, '_keepalive', ...agentMnemonic.split(' '), pubkeyHex], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  keepalive.unref();
+  fs.writeFileSync(pidFile, String(keepalive.pid));
+  process.stderr.write(`[KEEPALIVE] Heartbeat daemon started (PID ${keepalive.pid}). Stop: kill $(cat ${pidFile})\n`);
+
+  // 7. Open browser to marketplace (authenticated)
   const { browser, page } = await openBrowser();
   try {
     await injectSeedAndNavigate(page, mnemonic, `${WEB_URL}/dashboard/marketplace`);
@@ -415,6 +427,26 @@ async function cmdSeedUxData(args) {
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 
+// Internal: heartbeat keepalive daemon — spawned by seed-ux-data, runs until killed.
+// Args: <agent-seed-12-words...> <provider-pubkey-hex>
+async function cmdKeepalive(args) {
+  if (args.length < 13) throw new Error('_keepalive requires 12 seed words + provider pubkey');
+  const providerPubkeyHex = args[args.length - 1];
+  const agentMnemonic = args.slice(0, -1).join(' ');
+  const agentSk = secretKeyFromMnemonic(agentMnemonic);
+
+  // Send heartbeats every 3 minutes (well within the 5-minute online window)
+  while (true) {
+    try {
+      const hbPath = `/api/v1/providers/${providerPubkeyHex}/heartbeat`;
+      const hbBody = JSON.stringify({ activeContracts: 0, provisionerType: 'proxmox', capabilities: ['vm'] });
+      const hbHdrs = buildAgentHeaders(agentSk, 'POST', hbPath, hbBody);
+      await apiRequest('POST', hbPath, hbHdrs, hbBody);
+    } catch { /* best-effort: transient failures don't crash the daemon */ }
+    await new Promise(r => setTimeout(r, 3 * 60 * 1000));
+  }
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 const [cmd, ...args] = process.argv.slice(2);
@@ -424,6 +456,7 @@ const COMMANDS = {
   'login-user':      cmdLoginUser,
   'create-provider': cmdCreateProvider,
   'seed-ux-data':    cmdSeedUxData,
+  '_keepalive':      cmdKeepalive, // internal: spawned by seed-ux-data
 };
 
 if (!cmd || !COMMANDS[cmd]) {
