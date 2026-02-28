@@ -800,7 +800,9 @@
 
 <div class="space-y-8">
 	<Breadcrumb items={[
-		{ label: 'Dashboard', href: '/dashboard' },
+		isAuthenticated
+			? { label: 'Dashboard', href: '/dashboard' }
+			: { label: 'Home', href: '/' },
 		{ label: 'My Rentals', href: '/dashboard/rentals' },
 		{ label: `Contract #${truncateHash(contractId)}` },
 	]} />

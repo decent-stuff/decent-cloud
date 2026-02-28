@@ -80,17 +80,15 @@ The following issues were identified by walking the full "rent a Proxmox VM" use
 
 **Critical (conversion killers):**
 
-- **[Rental] Payment method default is ICPay (crypto) for USD offerings** — First-time users see "Crypto (ICPay)" pre-selected and must "Connect Wallet" before they can proceed. This immediately gates out anyone without a crypto wallet. Fix: default to Credit Card (Stripe) for USD/EUR offerings; show ICPay as the secondary option.
+- **[Rental] Payment method default is ICPay (crypto) for USD offerings** — DONE: Stripe (Credit Card) is now the default for USD/EUR offerings; ICPay shown as secondary option (commit e7b426a).
 
 - **[Rental] SSH key is required before payment** — Most non-technical users don't have an SSH key and don't know what one is. Requiring it upfront before they even see the price summary creates a high-friction barrier. The collapsible "How to generate" guide is good but buried. Fix: move the SSH key section below the payment section (it's post-payment anyway), or allow "generate for me" to create a keypair and download the private key automatically.
 
-- **[Rental] "Submit Request" button label is ambiguous** — The CTA says "Submit Request" but this initiates a payment. Users expect to see "Pay now" or "Confirm & Pay". Ambiguity causes drop-off at the last step.
-
-- **[Post-rental] Success message auto-dismisses in 5 seconds** — After a successful rental, the only feedback is a transient banner saying `Contract ID: <hash>`. Users have no idea what happens next. There is no "What to expect" modal or redirect to the contract page. Fix: on success, navigate directly to `/dashboard/rentals/{contractId}` with a welcome state.
+- **[Post-rental] Success message auto-dismisses in 5 seconds** — DONE: Checkout success page now redirects to `/dashboard/rentals/{contractId}?welcome=true` with a welcome banner explaining next steps (commit e7b426a).
 
 **Significant (friction, confusion):**
 
-- **[Marketplace] Provider shown as raw hex pubkey in the offering detail header** — The offering detail page shows `3e9f60...3869f3` as the provider identity. The marketplace table correctly shows `@p7ma2` but the detail page reverts to the truncated hex. Fix: always show `owner_username` when available (it is already stored on the offering).
+- **[Marketplace] Provider shown as raw hex pubkey in the offering detail header** — DONE: Offering detail page now shows `@username` when available (commit e7b426a).
 
 - **[Auth] Seed-phrase-only sign-up is unfamiliar** — The auth flow opens with a mnemonic input. There is Google OAuth support (GoogleSignInButton component is present), but it's not prominently positioned. New users landing on the sign-in modal see no email/password or familiar social login first. Fix: show Google sign-in as the primary option; put seed phrase as secondary ("Sign in with seed phrase").
 
@@ -187,3 +185,79 @@ These files have grown large and could benefit from refactoring when touched:
 - **No `dbg!()` debug statements** — Good
 - **No hardcoded credentials** — All secrets from env vars
 - **No commented-out code blocks** — Clean codebase
+
+---
+
+## Additional Code Quality Issues (2026-02-28 Audit Extension)
+
+### Frontend Debug Statements (Low Priority)
+
+Multiple `console.log`/`console.debug` statements found in frontend code. These should be removed or converted to proper logging before production:
+
+- `website/src/routes/login/+page.svelte:25` — `console.log('Auth success:', account)`
+- `website/src/lib/stores/auth.ts:237` — `console.log('[registerNewAccount] ...')`
+- `website/src/lib/components/AuthDialog.svelte:15` — `console.log('Auth success:', account)`
+- `website/src/lib/components/RentalRequestDialog.svelte:184,199` — ICPay payment logging
+- `website/src/lib/components/provider/AgentTable.svelte:17` — `console.log("Revoke agent:"...)`
+- `website/src/routes/dashboard/provider/requests/+page.svelte:171,183` — Request handling logs
+- `website/src/lib/components/OfferingsEditor.svelte:285-291` — Signature debug logging (7 lines)
+
+**Recommendation:** Remove debug statements or replace with a proper logging library. The `console.debug` statements for "No usage data" / "No credentials" are acceptable for debugging edge cases.
+
+### Database Files Without Dedicated Test Files
+
+The following database modules have no corresponding test file (though some tests may be in `tests.rs` files):
+
+- `api/src/database/acme_dns.rs`
+- `api/src/database/agent_delegations.rs`
+- `api/src/database/agent_pools.rs`
+- `api/src/database/api_tokens.rs`
+- `api/src/database/bandwidth.rs`
+- `api/src/database/chatwoot.rs`
+- `api/src/database/cloud_accounts.rs`
+- `api/src/database/cloud_resources.rs`
+- `api/src/database/core.rs`
+- `api/src/database/handlers.rs`
+- `api/src/database/notification_config.rs`
+- `api/src/database/reputation.rs`
+- `api/src/database/reseller.rs`
+- `api/src/database/rewards.rs`
+- `api/src/database/spending_alerts.rs`
+- `api/src/database/subscriptions.rs`
+- `api/src/database/telegram_tracking.rs`
+- `api/src/database/types.rs`
+- `api/src/database/user_notifications.rs`
+- `api/src/database/visibility_allowlist.rs`
+
+**Recommendation:** Add tests for critical paths when modifying these files. Many are simple CRUD operations that are exercised via integration tests.
+
+### Dead Code Annotations Summary
+
+79 instances of `#[allow(dead_code)]` found across the codebase. Most are intentional:
+- API response structs that need all fields for deserialization
+- Test utility functions
+- "Prepared for future" features
+
+**No action required** — these are documented and intentional.
+
+### Untracked FIXME
+
+- `ic-canister/src/canister_backend/generic.rs:76` — `// FIXME: Get the Token value from ICPSwap and KongSwap`
+
+This is already tracked under "Architectural Issues Requiring Review" (hardcoded token value).
+
+### Codebase Health Summary
+
+| Metric | Status |
+|--------|--------|
+| Zombie files (`.bak`, `.orig`) | ✅ None found |
+| `todo!()` / `unimplemented!()` | ✅ None found |
+| `dbg!()` debug statements | ✅ None found |
+| Hardcoded credentials | ✅ None found |
+| Commented-out code | ✅ Clean |
+| `panic!()` in production code | ⚠️ Only in tests/build.rs |
+| `unwrap()` in non-test | ⚠️ Only in build.rs, tests, and test helpers |
+| Legacy/deprecated code | ⚠️ Tracked for removal |
+| Frontend console.log | ⚠️ Debug statements present |
+
+**Overall Assessment:** Codebase is clean and well-maintained. The issues found are minor and mostly cosmetic (debug statements) or deferred intentionally (dead_code for future features).

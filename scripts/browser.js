@@ -65,7 +65,7 @@ async function main() {
   try {
     // If seed phrase provided, inject it into localStorage before navigating
     if (seedPhrase) {
-      const origin = new URL(WEB_URL).origin;
+      const origin = new URL(url.startsWith('http') ? url : `${WEB_URL}${url}`).origin;
       // Step 1: Navigate to origin to get same-origin localStorage context
       await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
 
@@ -78,9 +78,23 @@ async function main() {
         }
       }, seedPhrase);
 
-      // Step 3: Navigate to the target URL (auth will re-initialize from localStorage)
+      // Step 3: Navigate to dashboard and wait for auth to settle.
+      // Pages call loadData() in onMount; if identity is null at that point they skip it.
+      // Waiting for /api/v1/accounts response ensures the auth store is populated
+      // before we navigate to the target page.
+      const authDone = page.waitForResponse(
+        r => r.url().includes('/api/v1/accounts'),
+        { timeout: TIMEOUT }
+      );
+      await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+      await authDone;
+      await page.waitForTimeout(200); // let Svelte reactive state propagate
+
+      // Step 4: Navigate to the actual target URL
       const targetUrl = url.startsWith('http') ? url : `${origin}${url}`;
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+      if (targetUrl !== `${origin}/dashboard`) {
+        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+      }
     } else {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
     }

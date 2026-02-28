@@ -238,7 +238,9 @@
 
 <div class="space-y-6 max-w-5xl">
 	<Breadcrumb items={[
-		{ label: 'Dashboard', href: '/dashboard' },
+		isAuthenticated
+			? { label: 'Dashboard', href: '/dashboard' }
+			: { label: 'Home', href: '/' },
 		{ label: 'Marketplace', href: '/dashboard/marketplace' },
 		{ label: offering?.offer_name ?? '…' },
 	]} />

@@ -171,7 +171,9 @@
 
 <div class="space-y-6">
 	<Breadcrumb items={[
-		{ label: 'Dashboard', href: '/dashboard' },
+		isAuthenticated
+			? { label: 'Dashboard', href: '/dashboard' }
+			: { label: 'Home', href: '/' },
 		{ label: 'Marketplace', href: '/dashboard/marketplace' },
 		{ label: 'Compare' },
 	]} />

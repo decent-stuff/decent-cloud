@@ -190,6 +190,8 @@ node scripts/browser.js html <url>
 
 Use `scripts/dc-auth.js` to set up browser sessions as real users. Each command creates the account server-side, injects the seed phrase into browser localStorage, and outputs a snap of the resulting page.
 
+**Note:** `browser.js` and `dc-auth.js` use independent browser instances — there is no shared state between them. Use `--seed` or `seed-ux-data` to authenticate individual `browser.js` calls.
+
 ```bash
 # Create a new account + log in browser (generates a random seed phrase)
 node scripts/dc-auth.js create-user [username] [email]
@@ -202,9 +204,25 @@ node scripts/dc-auth.js login-user <seed phrase words…>
 # Create a draft offering (become provider) + open provider offerings page
 node scripts/dc-auth.js create-provider <seed phrase words…>
 # → outputs: { pubkey, offeringId, offeringName }
+
+# Bootstrap a fully online UX test provider with 3 rentable KVM offerings
+node scripts/dc-auth.js seed-ux-data
+# → creates provider account, agent pool, registers online agent, creates 3 public KVM offerings
+# → outputs: { seed, agentSeed, pubkey, poolId, offeringIds: [id1, id2, id3] }
+# With existing seed: node scripts/dc-auth.js seed-ux-data <seed phrase words…>
 ```
 
-After each command, subsequent `browser.js` calls will see the authenticated state because the seed phrase is in the browser's `localStorage['seed_phrases']`.
+### Authenticating individual browser.js calls
+
+Pass `--seed` to authenticate a single `browser.js` invocation without a persistent session:
+
+```bash
+SEED="word1 word2 ... word12"
+node scripts/browser.js snap https://dev.decent-cloud.org/dashboard/rentals --seed "$SEED"
+# → shows "My Rentals" page (authenticated), not "Login Required"
+```
+
+The `--seed` flag: injects the seed into `localStorage`, navigates to `/dashboard` and waits for the `/api/v1/accounts` API response (so auth store is fully settled), then navigates to the target URL.
 
 Local dev server (port 59010): set `DC_WEB_URL=http://127.0.0.1:59010`.
 Remote dev environment: omit `DC_WEB_URL` (defaults to remote).
