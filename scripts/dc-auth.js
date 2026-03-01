@@ -442,7 +442,6 @@ async function cmdKeepalive(args) {
   const agentMnemonic = args.slice(0, -1).join(' ');
   const agentSk = secretKeyFromMnemonic(agentMnemonic);
 
-  // Send heartbeats every 3 minutes (well within the 5-minute online window)
   while (true) {
     try {
       const hbPath = `/api/v1/providers/${providerPubkeyHex}/heartbeat`;
@@ -454,26 +453,178 @@ async function cmdKeepalive(args) {
   }
 }
 
+async function cmdSeedContracts(args) {
+  let mnemonic, sk, pubkeyHex;
+
+  if (args.length > 0) {
+    mnemonic  = args.join(' ');
+    sk        = secretKeyFromMnemonic(mnemonic);
+    pubkeyHex = bytesToHex(ed25519ph.getPublicKey(sk));
+    const acct = await apiRequest('GET', `/api/v1/accounts?publicKey=${pubkeyHex}`, {});
+    if (!acct.success || !acct.data) throw new Error(`No account for this seed phrase (pubkey: ${pubkeyHex})`);
+  } else {
+    const suffix   = Date.now().toString(36).slice(-6);
+    const username = `uxrenter${suffix}`;
+    const email    = `${username}@dev.test`;
+    mnemonic  = bip39.generateMnemonic();
+    sk        = secretKeyFromMnemonic(mnemonic);
+    pubkeyHex = bytesToHex(ed25519ph.getPublicKey(sk));
+
+    const regPath = '/api/v1/accounts';
+    const regBody = JSON.stringify({ username, email, publicKey: pubkeyHex });
+    const regHdrs = buildHeaders(sk, 'POST', regPath, regBody);
+    const regResult = await apiRequest('POST', regPath, regHdrs, regBody);
+    if (!regResult.success) throw new Error(`Registration failed: ${regResult.error}`);
+  }
+
+  const offeringsResult = await apiRequest('GET', '/api/v1/offerings?limit=10&in_stock_only=true', {});
+  if (!offeringsResult.success || !offeringsResult.data?.length) {
+    throw new Error('No in-stock offerings found');
+  }
+
+  const availableOfferings = offeringsResult.data.filter(o => !o.is_draft && o.stock_status === 'in_stock' && !o.is_example);
+  if (availableOfferings.length === 0) throw new Error('No public in-stock offerings available');
+
+  const contractIds = [];
+  const sshPubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@example.com';
+
+  const contractConfigs = [
+    { offeringIndex: 0, description: 'requested state' },
+    { offeringIndex: 1 % availableOfferings.length, description: 'second contract' },
+    { offeringIndex: 2 % availableOfferings.length, description: 'third contract' },
+  ];
+
+  for (const config of contractConfigs) {
+    const offering = availableOfferings[config.offeringIndex];
+    if (!offering) continue;
+
+    const minHours = offering.min_contract_hours || 720;
+    const createPath = '/api/v1/contracts';
+    const createBody = JSON.stringify({
+      offering_db_id: offering.id,
+      ssh_pubkey: sshPubkey,
+      duration_hours: minHours,
+      payment_method: 'icpay',
+    });
+    const createHdrs = buildHeaders(sk, 'POST', createPath, createBody);
+
+    try {
+      const result = await apiRequest('POST', createPath, createHdrs, createBody);
+      const contractId = result.data?.contractId || result.data?.contract_id;
+      if (result.success && contractId) {
+        contractIds.push(contractId);
+        process.stderr.write(`[CONTRACT] Created ${contractId} from offering ${offering.id} (${offering.offer_name})\n`);
+      } else if (!result.success) {
+        process.stderr.write(`[WARN] Contract creation failed: ${result.error || 'unknown error'}\n`);
+      }
+    } catch (e) {
+      process.stderr.write(`[WARN] Failed to create contract from offering ${offering.id}: ${e.message}\n`);
+    }
+
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  const out = { seed: mnemonic, pubkey: pubkeyHex, contractIds };
+  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+}
+
+async function cmdSeedEdgeCases(args) {
+  let mnemonic, sk, pubkeyHex;
+
+  if (args.length > 0) {
+    mnemonic  = args.join(' ');
+    sk        = secretKeyFromMnemonic(mnemonic);
+    pubkeyHex = bytesToHex(ed25519ph.getPublicKey(sk));
+    const acct = await apiRequest('GET', `/api/v1/accounts?publicKey=${pubkeyHex}`, {});
+    if (!acct.success || !acct.data) throw new Error(`No account for this seed phrase (pubkey: ${pubkeyHex})`);
+  } else {
+    const suffix   = Date.now().toString(36).slice(-6);
+    const username = `offlineprovider${suffix}`;
+    const email    = `${username}@dev.test`;
+    mnemonic  = bip39.generateMnemonic();
+    sk        = secretKeyFromMnemonic(mnemonic);
+    pubkeyHex = bytesToHex(ed25519ph.getPublicKey(sk));
+
+    const regPath = '/api/v1/accounts';
+    const regBody = JSON.stringify({ username, email, publicKey: pubkeyHex });
+    const regHdrs = buildHeaders(sk, 'POST', regPath, regBody);
+    const regResult = await apiRequest('POST', regPath, regHdrs, regBody);
+    if (!regResult.success) throw new Error(`Registration failed: ${regResult.error}`);
+  }
+
+  const onboardPath = `/api/v1/providers/${pubkeyHex}/onboarding`;
+  const onboardBody = JSON.stringify({});
+  const onboardHdrs = buildHeaders(sk, 'PUT', onboardPath, onboardBody);
+  const onboardResult = await apiRequest('PUT', onboardPath, onboardHdrs, onboardBody);
+  if (!onboardResult.success) throw new Error(`Provider onboarding failed: ${onboardResult.error}`);
+
+  const suffix = Date.now().toString(36).slice(-6);
+  const offering = {
+    pubkey:               pubkeyHex,
+    offering_id:          `offline-kvm-${suffix}`,
+    offer_name:           `Offline KVM ${suffix}`,
+    description:          'This provider has no agent heartbeat - appears as Offline',
+    currency:             'USD',
+    monthly_price:        7.0,
+    setup_fee:            0.0,
+    visibility:           'public',
+    product_type:         'vps',
+    virtualization_type:  'KVM',
+    billing_interval:     'monthly',
+    billing_unit:         'month',
+    is_subscription:      false,
+    stock_status:         'in_stock',
+    is_draft:             false,
+    is_example:           false,
+    datacenter_country:   'DE',
+    datacenter_city:      'Berlin',
+    operating_systems:    'Ubuntu 22.04,Debian 12',
+    min_contract_hours:   720,
+    max_contract_hours:   8760,
+    unmetered_bandwidth:  false,
+    processor_amount:     1,
+    processor_cores:      2,
+    memory_amount:        '4 GB',
+    ssd_amount:           1,
+    total_ssd_capacity:   '50 GB',
+  };
+
+  const offeringsPath = `/api/v1/providers/${pubkeyHex}/offerings`;
+  const offerBody = JSON.stringify(offering);
+  const offerHdrs = buildHeaders(sk, 'POST', offeringsPath, offerBody);
+  const offerResult = await apiRequest('POST', offeringsPath, offerHdrs, offerBody);
+  if (!offerResult.success) throw new Error(`Offering creation failed: ${offerResult.error}`);
+
+  process.stderr.write(`[EDGE-CASE] Created offline provider with offering ${offerResult.data} (no heartbeat sent)\n`);
+
+  const out = { seed: mnemonic, pubkey: pubkeyHex, offeringId: offerResult.data };
+  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 const [cmd, ...args] = process.argv.slice(2);
 
 const COMMANDS = {
-  'create-user':     cmdCreateUser,
-  'login-user':      cmdLoginUser,
-  'create-provider': cmdCreateProvider,
-  'seed-ux-data':    cmdSeedUxData,
-  '_keepalive':      cmdKeepalive, // internal: spawned by seed-ux-data
+  'create-user':      cmdCreateUser,
+  'login-user':       cmdLoginUser,
+  'create-provider':  cmdCreateProvider,
+  'seed-ux-data':     cmdSeedUxData,
+  'seed-contracts':   cmdSeedContracts,
+  'seed-edge-cases':  cmdSeedEdgeCases,
+  '_keepalive':       cmdKeepalive,
 };
 
 if (!cmd || !COMMANDS[cmd]) {
   process.stderr.write(
     'Usage: dc-auth.js <command> [args]\n\n' +
     'Commands:\n' +
-    '  create-user [username] [email]     Register new account, log in browser\n' +
-    '  login-user  <seed phrase words…>   Inject existing seed phrase, log in browser\n' +
-    '  create-provider <seed phrase…>     Create minimal offering as provider\n' +
-    '  seed-ux-data [seed phrase words…]  Bootstrap online UX test provider with 3 KVM offerings\n\n' +
+    '  create-user [username] [email]        Register new account, log in browser\n' +
+    '  login-user  <seed phrase words…>      Inject existing seed phrase, log in browser\n' +
+    '  create-provider <seed phrase…>        Create minimal offering as provider\n' +
+    '  seed-ux-data [seed phrase words…]     Bootstrap online UX test provider with 3 KVM offerings\n' +
+    '  seed-contracts [seed phrase words…]   Create 1-3 test contracts against public offerings\n' +
+    '  seed-edge-cases [seed phrase words…]  Create offline provider with offerings (no heartbeat)\n\n' +
     'Environment:\n' +
     '  DC_API_URL       API base URL (default: https://dev-api.decent-cloud.org)\n' +
     '  DC_WEB_URL       Frontend URL (default: http://127.0.0.1:59010)\n'
