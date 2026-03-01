@@ -269,6 +269,7 @@ impl Database {
 
     /// Count active contracts (status = 'active' or 'provisioned') for an account
     /// This counts contracts where the requester is any pubkey associated with the account
+    #[allow(dead_code)]
     pub async fn count_active_contracts_for_account(&self, account_id: &[u8]) -> Result<i64> {
         let row = sqlx::query!(
             r#"SELECT COUNT(*) as "count!: i64" FROM contract_sign_requests
@@ -285,6 +286,7 @@ impl Database {
     }
 
     /// Check if account has a specific feature (based on subscription)
+    #[allow(dead_code)]
     pub async fn account_has_feature(&self, account_id: &[u8], feature: &str) -> Result<bool> {
         let subscription = self.get_account_subscription(account_id).await?;
 

@@ -805,7 +805,7 @@ impl Database {
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
         let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offering =
-            sqlx::query_as::<_, Offering>(r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
+            sqlx::query_as::<_, Offering>(r#"SELECT provider_offerings.id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                 setup_fee, visibility, product_type, virtualization_type, billing_interval,
                 billing_unit, pricing_model, price_per_unit, included_units, overage_price_per_unit, stripe_metered_price_id,
                 is_subscription, subscription_interval_days,

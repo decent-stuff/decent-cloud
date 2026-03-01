@@ -128,7 +128,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Remaining:**
 
-- **[Subscription] Rental limit blocks paying customers** — Free tier allows only 1 active rental. This limit makes no sense when users are paying the provider per-rental. Additionally: since account creation requires no KYC (just a seed phrase), this is a Sybil attack vector. **Requires product decision**: what should the free tier allow? If the limit is intended, implement account identity verification (email confirmation at minimum). *(Architectural decision required — do NOT implement without user sign-off.)*
+- **[Subscription] Rental limit blocks paying customers** — DONE: Removed the 1-active-rental limit. Free plan now has `unlimited_rentals` (migration 034). Email verification required to create any rental — Sybil resistance without penalizing paying users. `one_rental` subscription feature retired.
 
 - **[Console] Persistent 404 errors (non-Chatwoot)** — Every page load generates 5–10 `Failed to load resource: 404` errors. Diagnose and fix. *(Requires investigation: intercept network requests to identify failing URLs.)*
 
