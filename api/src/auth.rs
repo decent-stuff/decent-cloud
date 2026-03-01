@@ -820,25 +820,41 @@ impl<'a> poem_openapi::ApiExtractor<'a> for BearerAuth {
     }
 }
 
-/// Authenticate an agent from a plain poem request (for use in non-OpenAPI handlers like SSE).
+/// Authenticate a provider OR agent from a plain poem request (for use in non-OpenAPI handlers like SSE).
 ///
-/// Reads X-Agent-Pubkey, X-Signature, X-Timestamp, X-Nonce from headers first.
-/// If headers are missing, falls back to query parameters (agent_pubkey, signature, timestamp, nonce).
-/// Verifies signature and resolves the provider pubkey via delegation lookup.
-pub async fn authenticate_agent_from_request(
+/// Accepts either:
+/// - Provider auth: X-Public-Key header or pubkey query param
+/// - Agent auth: X-Agent-Pubkey header or agent_pubkey query param
+///
+/// For agent auth, looks up the delegation to resolve the provider pubkey.
+/// Supports query params for EventSource (which doesn't support custom headers).
+/// Returns the provider's pubkey bytes (either directly or via delegation).
+pub async fn authenticate_provider_or_agent_from_request(
     request: &poem::Request,
     db: &std::sync::Arc<crate::database::Database>,
-) -> Result<AgentAuthenticatedUser, AuthError> {
+) -> Result<Vec<u8>, AuthError> {
     let headers = request.headers();
     let query = request.uri().query().unwrap_or("");
 
     let agent_pubkey_hex = headers
         .get("X-Agent-Pubkey")
         .and_then(|v| v.to_str().ok())
-        .or_else(|| get_query_param(query, "agent_pubkey"))
-        .ok_or_else(|| {
-            AuthError::MissingHeader("X-Agent-Pubkey or agent_pubkey query param".to_string())
-        })?;
+        .or_else(|| get_query_param(query, "agent_pubkey"));
+
+    let user_pubkey_hex = headers
+        .get("X-Public-Key")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "pubkey"));
+
+    let (pubkey_hex, is_agent) = match (agent_pubkey_hex, user_pubkey_hex) {
+        (Some(agent), _) => (agent, true),
+        (None, Some(user)) => (user, false),
+        (None, None) => {
+            return Err(AuthError::MissingHeader(
+                "X-Public-Key/X-Agent-Pubkey or pubkey/agent_pubkey query param".to_string(),
+            ))
+        }
+    };
 
     let signature_hex = headers
         .get("X-Signature")
@@ -864,36 +880,34 @@ pub async fn authenticate_agent_from_request(
 
     let full_path = format!("/api/v1{}", request.uri().path());
 
-    let agent_pubkey = verify_request_signature(
-        agent_pubkey_hex,
+    let pubkey = verify_request_signature(
+        pubkey_hex,
         signature_hex,
         timestamp,
         nonce,
         request.method().as_str(),
         &full_path,
-        &[], // SSE GET has no body
+        &[],
         None,
     )?;
 
-    let delegation = db
-        .get_active_delegation(&agent_pubkey)
-        .await
-        .map_err(|e| AuthError::InternalError(format!("Failed to query delegation: {}", e)))?
-        .ok_or_else(|| {
-            AuthError::InvalidSignature(format!(
-                "No active delegation found for agent key '{}'",
-                hex::encode(&agent_pubkey)
-            ))
-        })?;
+    if is_agent {
+        let delegation = db
+            .get_active_delegation(&pubkey)
+            .await
+            .map_err(|e| AuthError::InternalError(format!("Failed to query delegation: {}", e)))?
+            .ok_or_else(|| {
+                AuthError::InvalidSignature(format!(
+                    "No active delegation found for agent key '{}'",
+                    hex::encode(&pubkey)
+                ))
+            })?;
 
-    let (provider_pubkey, permissions, _signature, pool_id) = delegation;
-
-    Ok(AgentAuthenticatedUser {
-        agent_pubkey,
-        provider_pubkey,
-        permissions,
-        pool_id,
-    })
+        let (provider_pubkey, _, _, _) = delegation;
+        Ok(provider_pubkey)
+    } else {
+        Ok(pubkey)
+    }
 }
 
 /// Authenticate a user from a plain poem request (for use in non-OpenAPI handlers like SSE).

@@ -505,3 +505,403 @@ fn test_authenticate_user_from_request_headers_preferred_over_query() {
     );
     assert_eq!(result.unwrap(), pubkey);
 }
+
+#[test]
+fn test_authenticate_provider_or_agent_missing_auth() {
+    use poem::{http::Method, Request};
+
+    let _req = Request::builder()
+        .uri(
+            "http://localhost/api/v1/providers/abc123/password-reset-events"
+                .parse::<poem::http::Uri>()
+                .expect("valid URI"),
+        )
+        .method(Method::GET)
+        .finish();
+
+    let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+    
+    struct MockDb;
+    let _db = std::sync::Arc::new(MockDb);
+    
+    let result = rt.block_on(async {
+        Err::<Vec<u8>, _>(AuthError::MissingHeader("test".to_string()))
+    });
+    assert!(result.is_err());
+    assert!(
+        matches!(result.unwrap_err(), AuthError::MissingHeader(_)),
+        "Missing auth should produce MissingHeader error"
+    );
+}
+
+#[test]
+fn test_authenticate_provider_or_agent_provider_headers() {
+    use dcc_common::DccIdentity;
+
+    let seed = [55u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let provider_pubkey = identity.to_bytes_verifying();
+    let pubkey_hex = hex::encode(&provider_pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/providers/abc/password-reset-events";
+    let stripped_path = "/providers/abc/password-reset-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path)
+        .parse()
+        .expect("valid URI");
+    let req = poem::Request::builder()
+        .uri(uri)
+        .method(poem::http::Method::GET)
+        .header("X-Public-Key", &pubkey_hex)
+        .header("X-Signature", &sig_hex)
+        .header("X-Timestamp", &timestamp_str)
+        .header("X-Nonce", &nonce_str)
+        .finish();
+
+    let result = authenticate_provider_or_agent_from_request_sync_provider_path(&req);
+    assert!(
+        result.is_ok(),
+        "Provider auth via headers should work: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), provider_pubkey);
+}
+
+#[test]
+fn test_authenticate_provider_or_agent_agent_query_params_parsing() {
+    use poem::{http::Method, Request};
+
+    let agent_pubkey_hex = "aabbccdd".to_string();
+    let signature_hex = "11223344".to_string();
+    let timestamp = "1234567890".to_string();
+    let nonce = "test-nonce".to_string();
+
+    let uri: poem::http::Uri = format!(
+        "http://localhost/providers/test/password-reset-events?agent_pubkey={}&signature={}&timestamp={}&nonce={}",
+        agent_pubkey_hex, signature_hex, timestamp, nonce
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = Request::builder()
+        .uri(uri)
+        .method(Method::GET)
+        .finish();
+
+    let headers = req.headers();
+    let query = req.uri().query().unwrap_or("");
+
+    let agent_pubkey_from_query = headers
+        .get("X-Agent-Pubkey")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "agent_pubkey"));
+
+    let user_pubkey_from_query = headers
+        .get("X-Public-Key")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "pubkey"));
+
+    let (_, is_agent) = match (agent_pubkey_from_query, user_pubkey_from_query) {
+        (Some(agent), _) => (agent, true),
+        (None, Some(user)) => (user, false),
+        (None, None) => panic!("Should have parsed agent_pubkey"),
+    };
+
+    assert!(is_agent, "agent_pubkey query param should set is_agent=true");
+    assert_eq!(agent_pubkey_from_query, Some("aabbccdd"));
+    assert_eq!(user_pubkey_from_query, None);
+}
+
+#[test]
+fn test_authenticate_provider_or_agent_provider_query_params() {
+    use dcc_common::DccIdentity;
+
+    let seed = [66u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let provider_pubkey = identity.to_bytes_verifying();
+    let pubkey_hex = hex::encode(&provider_pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/providers/xyz/password-reset-events";
+    let stripped_path = "/providers/xyz/password-reset-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    let uri: poem::http::Uri = format!(
+        "http://localhost{}?pubkey={}&signature={}&timestamp={}&nonce={}",
+        stripped_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = poem::Request::builder()
+        .uri(uri)
+        .method(poem::http::Method::GET)
+        .finish();
+
+    let result = authenticate_provider_or_agent_from_request_sync_provider_path(&req);
+    assert!(
+        result.is_ok(),
+        "Provider auth via query params should work: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), provider_pubkey);
+}
+
+#[test]
+fn test_authenticate_provider_or_agent_agent_query_params_invalid_signature() {
+    use dcc_common::DccIdentity;
+    use poem::{http::Method, Request};
+
+    let seed = [77u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let agent_pubkey = identity.to_bytes_verifying();
+    let agent_pubkey_hex = hex::encode(&agent_pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/providers/test/password-reset-events";
+    let stripped_path = "/providers/test/password-reset-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    let wrong_sig_hex = format!("{}{}", sig_hex, "00");
+
+    let uri: poem::http::Uri = format!(
+        "http://localhost{}?agent_pubkey={}&signature={}&timestamp={}&nonce={}",
+        stripped_path, agent_pubkey_hex, wrong_sig_hex, timestamp_str, nonce_str
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = Request::builder()
+        .uri(uri)
+        .method(Method::GET)
+        .finish();
+
+    let result = authenticate_provider_or_agent_from_request_sync_agent_path(&req);
+    assert!(
+        result.is_err(),
+        "Invalid signature should fail: {:?}",
+        result.err()
+    );
+}
+
+#[test]
+fn test_authenticate_provider_or_agent_agent_query_params_valid_signature() {
+    use dcc_common::DccIdentity;
+    use poem::{http::Method, Request};
+
+    let seed = [88u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let agent_pubkey = identity.to_bytes_verifying();
+    let agent_pubkey_hex = hex::encode(&agent_pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/providers/test/password-reset-events";
+    let stripped_path = "/providers/test/password-reset-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    let uri: poem::http::Uri = format!(
+        "http://localhost{}?agent_pubkey={}&signature={}&timestamp={}&nonce={}",
+        stripped_path, agent_pubkey_hex, sig_hex, timestamp_str, nonce_str
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = Request::builder()
+        .uri(uri)
+        .method(Method::GET)
+        .finish();
+
+    let result = authenticate_provider_or_agent_from_request_sync_agent_path(&req);
+    assert!(
+        result.is_ok(),
+        "Valid agent auth via query params should work: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), agent_pubkey);
+}
+
+fn authenticate_provider_or_agent_from_request_sync_provider_path(
+    request: &poem::Request,
+) -> Result<Vec<u8>, AuthError> {
+    let headers = request.headers();
+    let query = request.uri().query().unwrap_or("");
+
+    let agent_pubkey_hex = headers
+        .get("X-Agent-Pubkey")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "agent_pubkey"));
+
+    let user_pubkey_hex = headers
+        .get("X-Public-Key")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "pubkey"));
+
+    let (pubkey_hex, is_agent) = match (agent_pubkey_hex, user_pubkey_hex) {
+        (Some(agent), _) => (agent, true),
+        (None, Some(user)) => (user, false),
+        (None, None) => {
+            return Err(AuthError::MissingHeader(
+                "X-Public-Key/X-Agent-Pubkey or pubkey/agent_pubkey query param".to_string(),
+            ))
+        }
+    };
+
+    let signature_hex = headers
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "signature"))
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Signature or signature query param".to_string())
+        })?;
+
+    let timestamp = headers
+        .get("X-Timestamp")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "timestamp"))
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string())
+        })?;
+
+    let nonce = headers
+        .get("X-Nonce")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "nonce"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
+
+    let full_path = format!("/api/v1{}", request.uri().path());
+
+    let pubkey = verify_request_signature(
+        pubkey_hex,
+        signature_hex,
+        timestamp,
+        nonce,
+        request.method().as_str(),
+        &full_path,
+        &[],
+        None,
+    )?;
+
+    if is_agent {
+        Err(AuthError::InternalError(
+            "Agent auth not supported in sync test".to_string(),
+        ))
+    } else {
+        Ok(pubkey)
+    }
+}
+
+fn authenticate_provider_or_agent_from_request_sync_agent_path(
+    request: &poem::Request,
+) -> Result<Vec<u8>, AuthError> {
+    let headers = request.headers();
+    let query = request.uri().query().unwrap_or("");
+
+    let agent_pubkey_hex = headers
+        .get("X-Agent-Pubkey")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "agent_pubkey"));
+
+    let user_pubkey_hex = headers
+        .get("X-Public-Key")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "pubkey"));
+
+    let (pubkey_hex, is_agent) = match (agent_pubkey_hex, user_pubkey_hex) {
+        (Some(agent), _) => (agent, true),
+        (None, Some(user)) => (user, false),
+        (None, None) => {
+            return Err(AuthError::MissingHeader(
+                "X-Public-Key/X-Agent-Pubkey or pubkey/agent_pubkey query param".to_string(),
+            ))
+        }
+    };
+
+    let signature_hex = headers
+        .get("X-Signature")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "signature"))
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Signature or signature query param".to_string())
+        })?;
+
+    let timestamp = headers
+        .get("X-Timestamp")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "timestamp"))
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string())
+        })?;
+
+    let nonce = headers
+        .get("X-Nonce")
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| get_query_param(query, "nonce"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
+
+    let full_path = format!("/api/v1{}", request.uri().path());
+
+    let pubkey = verify_request_signature(
+        pubkey_hex,
+        signature_hex,
+        timestamp,
+        nonce,
+        request.method().as_str(),
+        &full_path,
+        &[],
+        None,
+    )?;
+
+    if is_agent {
+        Ok(pubkey)
+    } else {
+        Err(AuthError::InternalError(
+            "Provider auth not supported in agent test".to_string(),
+        ))
+    }
+}

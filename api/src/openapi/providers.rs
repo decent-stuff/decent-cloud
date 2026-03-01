@@ -19,7 +19,9 @@ use std::sync::Arc;
 
 /// SSE handler: streams pending password reset count changes every 5 seconds.
 ///
-/// Authenticates via agent auth headers (same as `get_pending_password_reset_contracts`).
+/// Authenticates via provider or agent auth headers/query params.
+/// Accepts either provider auth (X-Public-Key) or agent auth (X-Agent-Pubkey).
+/// Query params supported for EventSource: pubkey/agent_pubkey, signature, timestamp, nonce.
 /// Sends an immediate event on connect, then polls every 5 seconds and emits an event
 /// when the count or contract IDs change. Keep-alive comment sent every 30 seconds.
 ///
@@ -39,13 +41,13 @@ pub async fn password_reset_events(
     let pubkey_bytes = hex::decode(&pubkey)
         .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
 
-    let auth = crate::auth::authenticate_agent_from_request(req, &db)
+    let provider_pubkey = crate::auth::authenticate_provider_or_agent_from_request(req, &db)
         .await
         .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::UNAUTHORIZED))?;
 
-    if auth.provider_pubkey != pubkey_bytes {
+    if provider_pubkey != pubkey_bytes {
         return Err(poem::Error::from_string(
-            "Unauthorized: can only access your delegated provider's contracts",
+            "Unauthorized: can only access your own provider's contracts",
             StatusCode::FORBIDDEN,
         ));
     }
