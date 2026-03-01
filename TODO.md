@@ -105,6 +105,13 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Marketplace] Badge clutter** — Consolidated into single status chip with tooltip.
 - **[Sidebar] "Discover" section label** — Renamed to "Browse".
 
+**DONE (2026-03-01) — Usability & Discoverability Audit:**
+- **[Marketplace] Save button not discoverable** — Changed from icon-only to labeled button with "Save"/"Saved" text.
+- **[Marketplace] Compare feedback unclear** — Added hint "Add 1 more to compare" when only 1 item selected.
+- **[Sidebar] Anonymous users don't see what they're missing** — "My Activity" section now shows preview of features with "Sign In" prompt.
+- **[Sidebar] "Provider Setup" naming confusing** — Renamed to "Support Account" (accurately reflects the page content).
+- **[Saved] No compare action** — Added "Compare Saved" button when 2+ items saved.
+
 **High-Impact Remaining:**
 
 - **[Landing page] Too long, diluted value proposition** — 8 sections before footer. Fix: condense to Hero → Social Proof → Trust System → CTA. Move AI Features and detailed benefits to a separate /features page. *(Multi-session: requires content restructuring.)*
@@ -116,6 +123,26 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
 
 - **[Offering detail] Too many CTAs** — "Copy link", "Save", "Ask Provider", "Rent this offering" all compete. Fix: primary CTA "Rent" should be prominent; move secondary actions to a "..." menu. *(Single-session: consolidate secondary actions.)*
+
+### Usability Audit (2026-03-01) — Remaining Discoverability Issues
+
+**Medium Impact:**
+
+- **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
+
+- **[Provider] Section collapsed by default** — Provider section starts collapsed even though it contains "Support Account" which all providers need. Fix: auto-expand Provider section when user has offerings. *(Already implemented in sidebar logic.)*
+
+- **[Rentals] Empty state could be more actionable** — When no rentals, show a quick link to a specific offering type the user might want. *(Single-session: add dynamic CTA.)*
+
+- **[Account] Settings tabs are hidden** — Settings sub-pages (Security, Profile, Subscription, Billing, Notifications) are only accessible from the Account overview. Fix: add sub-navigation or breadcrumbs on sub-pages. *(Single-session: add back navigation.)*
+
+**Low Impact:**
+
+- **[Saved] No bulk remove** — Users must remove saved items one at a time. *(Single-session: add checkboxes and bulk remove.)*
+
+- **[Compare] URL not shareable** — Compare URL format (`?ids=1,2,3`) is not intuitive for sharing. Consider short URLs or a "Share comparison" feature. *(Multi-session.)*
+
+- **[Landing page] CTA "Become a Provider" visible to all** — Shown on landing page but most users are not ready to be providers. Consider showing only after user has rented. *(Product decision needed.)*
 
 ### VM Rental UX Audit (2026-03-01) — Full Journey Review
 
@@ -130,9 +157,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Subscription] Rental limit blocks paying customers** — DONE: Removed the 1-active-rental limit. Free plan now has `unlimited_rentals` (migration 034). Email verification required to create any rental — Sybil resistance without penalizing paying users. `one_rental` subscription feature retired.
 
-- **[Console] Persistent 404 errors (non-Chatwoot)** — Every page load generates 5–10 `Failed to load resource: 404` errors. Diagnose and fix. *(Requires investigation: intercept network requests to identify failing URLs.)*
+- **[Console] Persistent 404 errors (non-Chatwoot)** — DONE: Investigated and fixed. Root causes:
+  1. **Chatwoot SDK failing to load** — `dev-support.decent-cloud.org` not accessible from browser. Fixed by adding `script.onerror` handler in `ChatwootWidget.svelte` to gracefully handle the failure with a console warning instead of an error.
+  2. **JetBrains Mono font 404** — Browser cache contained old Google Fonts CSS referencing v18 font files (now removed by Google, current is v24). This is a transient cache issue that resolves as users' caches expire. The `display=swap` ensures fallback fonts are used. Added `crossorigin` attribute to font link for better CORS handling.
 
-- **[Password Resets SSE] Agent auth needs separate fix** — The password-resets page SSE is disabled because it uses agent authentication (`X-Agent-Pubkey`) which requires a different fix. Frontend signs with user identity but backend expects agent identity. *(Single-session: add agent auth query param support.)*
+- **[Password Resets SSE] Agent auth needs separate fix** — DONE: Added `agent_pubkey` query param support to `buildPasswordResetEventsUrl` function. Backend already supported agent auth via query params; frontend now supports it too with optional `isAgent` parameter.
 
 ### Backlog
 
@@ -172,7 +201,22 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[api-cli] Replace `unreachable!()` with proper error handling** — DONE.
 - **[dc-agent] Replace `unreachable!()` with proper match handling** — DONE.
-- **[api/database] Remove `unreachable!()` from ledger handlers** — DONE.
+- **[api/database] Remove `unreachable!()` from ledger handlers** — DONE (2026-03-01). Fixed `handlers.rs:119` to use proper error handling.
+- **[api/auth] Remove unused `authenticate_agent_from_request`** — DONE (2026-03-01). Superseded by `authenticate_provider_or_agent_from_request`.
+- **[api/crypto] Mark `ServerEncryptionKey::from_bytes` as test-only** — DONE (2026-03-01).
+
+### Clippy Warnings Analysis (2026-03-01)
+
+The remaining 16 clippy warnings are **false positives** due to Rust's separate compilation:
+
+| Warning | Reason |
+|---------|--------|
+| `list_admins`, `create_or_update_external_provider`, `count_offerings`, `import_seeded_offerings_csv`, `get_example_offerings`, `is_offering_saved` | Used in `api-cli` binary (different target) |
+| `pool`, `update_cloud_resource_status` | Used in tests |
+| `decrypt_credentials`, `decrypt_credentials_with_aad`, `ed25519_secret_to_x25519`, `from_json` | Prepared for E2EE credential feature |
+| `upsert_spending_alert`, `delete_spending_alert` | Prepared for spending alerts feature |
+| `CreateCloudAccountInput`, `CloudAccountWithCatalog`, `CreateCloudResourceInput` | Prepared for self-provisioning API |
+| `user_pubkey` field | Used in serialization |
 
 ### Code Cleanup Needed (Low Priority)
 
@@ -201,14 +245,16 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### Frontend Debug Statements (Low Priority)
 
-Multiple `console.log`/`console.debug` statements in frontend. Remove or convert to proper logging before production:
-- `website/src/routes/login/+page.svelte:25`
-- `website/src/lib/stores/auth.ts:237`
-- `website/src/lib/components/AuthDialog.svelte:15`
-- `website/src/lib/components/RentalRequestDialog.svelte:184,199`
-- `website/src/lib/components/provider/AgentTable.svelte:17`
-- `website/src/routes/dashboard/provider/requests/+page.svelte:171,183`
-- `website/src/lib/components/OfferingsEditor.svelte:285-291`
+**Production code:**
+- `website/src/routes/dashboard/rentals/[contract_id]/+page.svelte` — `console.debug` for expected error cases (no usage data, no credentials)
+- `website/src/routes/dashboard/provider/sla/+page.svelte` — `console.debug` for missing SLA config (expected)
+- `website/src/lib/stores/auth.ts` — `console.error` for authentication failures (appropriate)
+
+**Test fixtures (acceptable):**
+- `website/tests/e2e/fixtures/stripe-mock.ts` — Mock Stripe.js logging for E2E tests
+- `website/tests/e2e/fixtures/auth-helpers.ts` — Browser console logging for E2E tests
+
+**Recommendation:** Production `console.debug` statements are for expected error cases and are acceptable. Test fixture logging is intentional.
 
 ### Database Files Without Dedicated Test Files
 
