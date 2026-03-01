@@ -11,6 +11,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncateContractHash, formatRelativeTime } from '$lib/utils/contract-format';
+	import { buildPasswordResetEventsUrl, parsePasswordResetEvent } from '$lib/utils/contract-sse';
 
 	const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -31,15 +32,35 @@
 	let eventSource: EventSource | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 
-	function connectSSE() {
-		if (!isAuthenticated || !providerHex) return;
+	async function connectSSE() {
+		if (!isAuthenticated || !providerHex || !signingIdentityInfo) return;
 		closeSSE();
-		// TODO: SSE requires agent auth headers, but EventSource doesn't support custom headers.
-		// This needs backend changes to accept query params or a different auth mechanism.
-		// For now, SSE is disabled and data is refreshed via loadData() calls.
-		// const url = `${API_BASE_URL}/api/v1/providers/${providerHex}/password-reset-events`;
-		// eventSource = new EventSource(url);
-		sseConnected = false;
+		try {
+			const signed = await signRequest(
+				signingIdentityInfo.identity,
+				'GET',
+				`/api/v1/providers/${providerHex}/password-reset-events`
+			);
+			const url = buildPasswordResetEventsUrl(providerHex, API_BASE_URL, signed.headers);
+			eventSource = new EventSource(url);
+			eventSource.addEventListener('password-reset-count', (ev) => {
+				try {
+					const update = parsePasswordResetEvent(ev.data);
+					const newIds = new Set(update.contract_ids);
+					const existingIds = new Set(pendingResets.map(c => c.contract_id));
+					if (newIds.size !== existingIds.size || [...newIds].some(id => !existingIds.has(id))) {
+						refreshData();
+					}
+				} catch (e) {
+					console.error('[Password Resets] Failed to parse SSE event:', e);
+				}
+			});
+			eventSource.onopen = () => { sseConnected = true; };
+			eventSource.onerror = () => { sseConnected = false; };
+		} catch (e) {
+			console.error('[Password Resets] Failed to connect SSE:', e);
+			sseConnected = false;
+		}
 	}
 
 	function closeSSE() {
