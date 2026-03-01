@@ -20,6 +20,12 @@ services:
       - ${DOCKER_GID:-999}
     user: "0:0" # Start as root to fix volume permissions
     entrypoint: ["/tini", "--", "/home/ubuntu/entrypoint.sh"]
+    # Browser automation stability (Playwright/Chromium/Firefox in container)
+    shm_size: "2gb"
+    ipc: host
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
     environment:
       # Development environment variables
       - RUST_LOG=info

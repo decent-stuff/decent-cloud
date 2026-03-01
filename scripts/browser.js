@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Browser helper — uses Playwright's local headless Chromium.
+ * Browser helper — uses Playwright's local headless browser (Chromium by default).
  *
  * Every invocation opens a NEW page, performs the operation, and closes it.
  * Works from any context: main session, subagents, CI.
@@ -25,12 +25,13 @@
 
 'use strict';
 
-const { chromium } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
+const { chromium, firefox } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 const fs = require('fs');
 
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
 const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
+const BROWSER_ENGINE = (process.env.BROWSER_ENGINE || 'chromium').toLowerCase();
 
 const TOUR_ROUTES = [
   { path: '/', name: 'Landing', public: true },
@@ -96,12 +97,14 @@ if (cmd === 'tour' && !seedPhrase) {
 }
 
 async function main() {
+  const browserType = selectBrowserType(BROWSER_ENGINE);
+
   if (cmd === 'tour') {
-    await runTour();
+    await runTour(browserType);
     return;
   }
 
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const browser = await launchBrowser(browserType);
   const page = viewport
     ? await browser.newPage({ viewport })
     : await browser.newPage();
@@ -199,8 +202,8 @@ async function main() {
   }
 }
 
-async function runTour() {
-  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+async function runTour(browserType) {
+  const browser = await launchBrowser(browserType);
   const page = viewport
     ? await browser.newPage({ viewport })
     : await browser.newPage();
@@ -264,6 +267,29 @@ async function runTour() {
     await page.close();
     await browser.close();
   }
+}
+
+function selectBrowserType(name) {
+  switch (name) {
+    case 'chromium':
+      return chromium;
+    case 'firefox':
+      return firefox;
+    default:
+      console.error(`ERROR: unsupported BROWSER_ENGINE="${name}". Use "chromium" or "firefox".`);
+      process.exit(1);
+  }
+}
+
+async function launchBrowser(browserType) {
+  if (BROWSER_ENGINE === 'chromium') {
+    return browserType.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+  }
+
+  return browserType.launch({ headless: true });
 }
 
 main().catch(e => {

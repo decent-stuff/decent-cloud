@@ -45,7 +45,7 @@ RUN apt install -y python3-pip python3-venv
 RUN chown -R ubuntu:ubuntu $HOME /usr/local/cargo /usr/local/rustup
 
 # Install Playwright system dependencies (requires root)
-RUN npx playwright install-deps chromium && chown -R ubuntu:ubuntu /home/ubuntu
+RUN npx playwright install-deps chromium firefox && chown -R ubuntu:ubuntu /home/ubuntu
 
 # Switch to non-root user
 USER ubuntu
@@ -77,7 +77,7 @@ RUN mkdir -p ~/.npm-global \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
     && npm install -g @anthropic-ai/claude-code @openai/codex happy-coder playwright \
-    && npx playwright install chromium
+    && npx playwright install chromium firefox
 
 # Install OpenCode
 RUN curl -fsSL https://opencode.ai/install | bash
