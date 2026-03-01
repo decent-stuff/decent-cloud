@@ -180,9 +180,6 @@
 		processingPayment = false;
 		loading = false;
 
-		// Transaction completed successfully
-		console.log("ICPay payment completed:", detail);
-
 		// Record the transaction ID in the backend for audit trail
 		const transactionId = detail?.transactionId || detail?.id || detail?.txId;
 		if (transactionId) {
@@ -196,7 +193,6 @@
 						{ transaction_id: transactionId }
 					);
 					await updateIcpayTransactionId(pendingContractId, transactionId, signed.headers);
-					console.log("ICPay transaction ID recorded:", transactionId);
 				}
 			} catch (e) {
 				// Log but don't fail - payment succeeded, just audit trail update failed
@@ -475,6 +471,47 @@
 					</div>
 				</div>
 
+				<!-- Price Summary -->
+				<div
+					class="bg-primary-500/10  p-4 border border-primary-500/30"
+				>
+					<div class="flex justify-between items-center mb-3">
+						<div>
+							{#if isSubscriptionOffering}
+								<span class="text-neutral-400 text-sm">{subscriptionIntervalLabel()} Subscription</span>
+								<p class="text-xs text-neutral-500 mt-1">
+									Billed {subscriptionIntervalLabel().toLowerCase()}
+								</p>
+							{:else}
+								<span class="text-neutral-400 text-sm">One-Time Payment</span>
+								<p class="text-xs text-neutral-500 mt-1">
+									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
+								</p>
+							{/if}
+						</div>
+						<div class="text-right">
+							<span class="text-2xl font-bold text-white">
+								{#if isSubscriptionOffering}
+									{offering.monthly_price.toFixed(2)}
+								{:else}
+									{calculatePrice()}
+								{/if}
+								<span class="text-lg">{offering.currency}</span>
+							</span>
+							{#if isSubscriptionOffering}
+								<p class="text-xs text-neutral-500">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
+							{/if}
+						</div>
+					</div>
+					<div class="text-xs text-neutral-500 border-t border-neutral-800 pt-2 space-y-1">
+						{#if isSubscriptionOffering}
+							<p>Recurring subscription. Cancel anytime from your rentals dashboard.</p>
+						{:else}
+							<p>No recurring charges. You can cancel anytime for a prorated refund.</p>
+						{/if}
+					</div>
+				</div>
+
 				<!-- Duration (hidden for subscription offerings) -->
 				{#if !isSubscriptionOffering}
 					<div>
@@ -629,6 +666,68 @@
 					</div>
 				{/if}
 
+				<!-- Contact Method -->
+				<div>
+					<label
+						for="contact"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Contact Method <span class="text-neutral-500"
+							>(optional)</span
+						>
+					</label>
+					<input
+						id="contact"
+						type="text"
+						bind:value={contactMethod}
+						placeholder="email:you@example.com or matrix:@user:server"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					/>
+					<p class="text-xs text-neutral-500 mt-1">
+						How the provider should reach you (e.g.,
+						email:you@example.com)
+					</p>
+				</div>
+
+				<!-- Billing Address (for B2B invoices) -->
+				<div>
+					<label
+						for="buyer-address"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Billing Address <span class="text-neutral-500"
+							>(optional, for invoices)</span
+						>
+					</label>
+					<textarea
+						id="buyer-address"
+						bind:value={buyerAddress}
+						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
+						rows="3"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					></textarea>
+					<p class="text-xs text-neutral-500 mt-1">
+						Required for B2B invoices with VAT
+					</p>
+				</div>
+
+				<!-- Memo -->
+				<div>
+					<label
+						for="memo"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Notes <span class="text-neutral-500">(optional)</span>
+					</label>
+					<textarea
+						id="memo"
+						bind:value={memo}
+						placeholder="Any special requirements or notes for the provider..."
+						rows="3"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					></textarea>
+				</div>
+
 				<!-- SSH Key (Required) -->
 				<div>
 					<label
@@ -743,109 +842,6 @@
 							Save this key to my profile for future rentals
 						</label>
 					{/if}
-				</div>
-
-				<!-- Contact Method -->
-				<div>
-					<label
-						for="contact"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Contact Method <span class="text-neutral-500"
-							>(optional)</span
-						>
-					</label>
-					<input
-						id="contact"
-						type="text"
-						bind:value={contactMethod}
-						placeholder="email:you@example.com or matrix:@user:server"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					/>
-					<p class="text-xs text-neutral-500 mt-1">
-						How the provider should reach you (e.g.,
-						email:you@example.com)
-					</p>
-				</div>
-
-				<!-- Billing Address (for B2B invoices) -->
-				<div>
-					<label
-						for="buyer-address"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Billing Address <span class="text-neutral-500"
-							>(optional, for invoices)</span
-						>
-					</label>
-					<textarea
-						id="buyer-address"
-						bind:value={buyerAddress}
-						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-					<p class="text-xs text-neutral-500 mt-1">
-						Required for B2B invoices with VAT
-					</p>
-				</div>
-
-				<!-- Memo -->
-				<div>
-					<label
-						for="memo"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Notes <span class="text-neutral-500">(optional)</span>
-					</label>
-					<textarea
-						id="memo"
-						bind:value={memo}
-						placeholder="Any special requirements or notes for the provider..."
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-				</div>
-
-				<!-- Price Summary -->
-				<div
-					class="bg-primary-500/10  p-4 border border-primary-500/30"
-				>
-					<div class="flex justify-between items-center mb-3">
-						<div>
-							{#if isSubscriptionOffering}
-								<span class="text-neutral-400 text-sm">{subscriptionIntervalLabel()} Subscription</span>
-								<p class="text-xs text-neutral-500 mt-1">
-									Billed {subscriptionIntervalLabel().toLowerCase()}
-								</p>
-							{:else}
-								<span class="text-neutral-400 text-sm">One-Time Payment</span>
-								<p class="text-xs text-neutral-500 mt-1">
-									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
-								</p>
-							{/if}
-						</div>
-						<div class="text-right">
-							<span class="text-2xl font-bold text-white">
-								{#if isSubscriptionOffering}
-									{offering.monthly_price.toFixed(2)}
-								{:else}
-									{calculatePrice()}
-								{/if}
-								<span class="text-lg">{offering.currency}</span>
-							</span>
-							{#if isSubscriptionOffering}
-								<p class="text-xs text-neutral-500">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
-							{/if}
-						</div>
-					</div>
-					<div class="text-xs text-neutral-500 border-t border-neutral-800 pt-2 space-y-1">
-						{#if isSubscriptionOffering}
-							<p>Recurring subscription. Cancel anytime from your rentals dashboard.</p>
-						{:else}
-							<p>No recurring charges. You can cancel anytime for a prorated refund.</p>
-						{/if}
-					</div>
 				</div>
 
 				<!-- Error Message -->
