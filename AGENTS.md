@@ -176,7 +176,16 @@ node scripts/browser.js errs <url>
 
 # Raw HTML — use when you need to inspect full DOM structure
 node scripts/browser.js html <url>
+
+# Page tour — visit key routes, capture snapshots, save JSON report
+node scripts/browser.js tour --seed <phrase>
+# → saves /tmp/dc-ux-tour.json with snapshots of marketplace, rentals, provider pages
 ```
+
+## Options
+
+- `--seed <phrase>` — Inject seed phrase for authenticated testing
+- `--viewport mobile` — Use 375×812 (iPhone X) viewport for mobile testing
 
 ## Rules
 
@@ -210,6 +219,17 @@ node scripts/dc-auth.js seed-ux-data
 # → creates provider account, agent pool, registers online agent, creates 3 public KVM offerings
 # → outputs: { seed, agentSeed, pubkey, poolId, offeringIds: [id1, id2, id3] }
 # With existing seed: node scripts/dc-auth.js seed-ux-data <seed phrase words…>
+
+# Create 1-3 test contracts against public offerings
+node scripts/dc-auth.js seed-contracts
+# → creates user account, finds in-stock offerings, creates contracts with skip_payment
+# → outputs: { seed, pubkey, contractIds: [...] }
+# With existing seed: node scripts/dc-auth.js seed-contracts <seed phrase words…>
+
+# Create an offline provider with offerings (no agent heartbeat)
+node scripts/dc-auth.js seed-edge-cases
+# → creates provider with public offering but no heartbeat - shows as "Offline" in marketplace
+# → outputs: { seed, pubkey, offeringId }
 ```
 
 ### Authenticating individual browser.js calls
