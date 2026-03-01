@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isStripeSupportedCurrency } from '$lib/utils/stripe-currencies';
+import { generateSshKeyPair, validateSshPublicKey } from '$lib/utils/ssh-keygen';
 
 // Test the price calculation logic used by RentalRequestDialog
 // This tests the core functionality without needing to render the component
@@ -134,5 +135,56 @@ describe('RentalRequestDialog payment method default', () => {
 
 		expect(isStripeAvailable).toBe(false);
 		expect(defaultPaymentMethod).toBe('icpay');
+	});
+});
+
+describe('RentalRequestDialog SSH key generation', () => {
+	it('should generate a valid SSH keypair for the "Generate for me" feature', async () => {
+		const { publicKeySsh, privateKeyPem } = await generateSshKeyPair('test-user');
+		expect(publicKeySsh).toMatch(/^ssh-ed25519 [A-Za-z0-9+/]+=* test-user$/);
+		expect(privateKeyPem).toContain('-----BEGIN OPENSSH PRIVATE KEY-----');
+		expect(privateKeyPem).toContain('-----END OPENSSH PRIVATE KEY-----');
+	});
+
+	it('should auto-fill a valid public key when generated', async () => {
+		const { publicKeySsh } = await generateSshKeyPair();
+		const validation = validateSshPublicKey(publicKeySsh);
+		expect(validation.valid).toBe(true);
+	});
+
+	it('should generate different keys each time', async () => {
+		const key1 = await generateSshKeyPair();
+		const key2 = await generateSshKeyPair();
+		expect(key1.publicKeySsh).not.toBe(key2.publicKeySsh);
+		expect(key1.privateKeyPem).not.toBe(key2.privateKeyPem);
+	});
+});
+
+describe('RentalRequestDialog SSH key UX for non-technical users', () => {
+	it('should generate key without requiring user to know SSH commands', async () => {
+		const { publicKeySsh, privateKeyPem } = await generateSshKeyPair();
+		const validation = validateSshPublicKey(publicKeySsh);
+		expect(validation.valid).toBe(true);
+		expect(privateKeyPem).toContain('-----BEGIN OPENSSH PRIVATE KEY-----');
+	});
+
+	it('should produce downloadable private key format', async () => {
+		const { privateKeyPem } = await generateSshKeyPair();
+		expect(privateKeyPem).toMatch(/-----BEGIN OPENSSH PRIVATE KEY-----[\s\S]*-----END OPENSSH PRIVATE KEY-----/);
+		expect(privateKeyPem.length).toBeGreaterThan(100);
+	});
+
+	it('should include clear instructions in generated private key comment', async () => {
+		const { publicKeySsh } = await generateSshKeyPair('decent-cloud');
+		expect(publicKeySsh).toContain('decent-cloud');
+	});
+
+	it('should validate generated key passes SSH key format check', async () => {
+		const { publicKeySsh } = await generateSshKeyPair();
+		const trimmed = publicKeySsh.trim();
+		const parts = trimmed.split(/\s+/);
+		expect(parts.length).toBeGreaterThanOrEqual(2);
+		expect(parts[0]).toBe('ssh-ed25519');
+		expect(parts[1].length).toBeGreaterThan(20);
 	});
 });

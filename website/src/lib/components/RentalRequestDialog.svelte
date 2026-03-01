@@ -19,6 +19,7 @@
 		isIcpayConfigured,
 	} from "$lib/utils/icpay";
 	import type { AccountExternalKey } from "$lib/types/generated/AccountExternalKey";
+	import { generateSshKeyPair, downloadPrivateKey } from "$lib/utils/ssh-keygen";
 
 	interface Props {
 		offering: Offering | null;
@@ -37,6 +38,28 @@
 		navigator.clipboard.writeText(cmd);
 		copiedSshKeygen = key;
 		setTimeout(() => { copiedSshKeygen = null; }, 2000);
+	}
+
+	let generatedPrivateKey = $state<string | null>(null);
+	let generatingKey = $state(false);
+
+	async function handleGenerateSshKey() {
+		generatingKey = true;
+		try {
+			const { publicKeySsh, privateKeyPem } = await generateSshKeyPair('decent-cloud');
+			sshKey = publicKeySsh;
+			generatedPrivateKey = privateKeyPem;
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to generate SSH key";
+		} finally {
+			generatingKey = false;
+		}
+	}
+
+	function handleDownloadPrivateKey() {
+		if (generatedPrivateKey) {
+			downloadPrivateKey(generatedPrivateKey, 'id_ed25519_decent_cloud');
+		}
 	}
 	let contactMethod = $state("");
 	let buyerAddress = $state("");
@@ -666,76 +689,21 @@
 					</div>
 				{/if}
 
-				<!-- Contact Method -->
+				<!-- SSH Key (Required) - positioned after payment for better UX -->
 				<div>
-					<label
-						for="contact"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Contact Method <span class="text-neutral-500"
-							>(optional)</span
+					<div class="flex items-center justify-between mb-2">
+						<label for="ssh-key" class="block text-sm font-medium text-white">
+							SSH Public Key <span class="text-red-400">*</span>
+						</label>
+						<button
+							type="button"
+							onclick={handleGenerateSshKey}
+							disabled={generatingKey}
+							class="text-xs px-3 py-1.5 bg-green-500/20 border border-green-500/50 text-green-300 hover:bg-green-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
 						>
-					</label>
-					<input
-						id="contact"
-						type="text"
-						bind:value={contactMethod}
-						placeholder="email:you@example.com or matrix:@user:server"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					/>
-					<p class="text-xs text-neutral-500 mt-1">
-						How the provider should reach you (e.g.,
-						email:you@example.com)
-					</p>
-				</div>
-
-				<!-- Billing Address (for B2B invoices) -->
-				<div>
-					<label
-						for="buyer-address"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Billing Address <span class="text-neutral-500"
-							>(optional, for invoices)</span
-						>
-					</label>
-					<textarea
-						id="buyer-address"
-						bind:value={buyerAddress}
-						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-					<p class="text-xs text-neutral-500 mt-1">
-						Required for B2B invoices with VAT
-					</p>
-				</div>
-
-				<!-- Memo -->
-				<div>
-					<label
-						for="memo"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Notes <span class="text-neutral-500">(optional)</span>
-					</label>
-					<textarea
-						id="memo"
-						bind:value={memo}
-						placeholder="Any special requirements or notes for the provider..."
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-				</div>
-
-				<!-- SSH Key (Required) -->
-				<div>
-					<label
-						for="ssh-key"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						SSH Public Key <span class="text-red-400">*</span>
-					</label>
+							{generatingKey ? 'Generating...' : 'Generate for me'}
+						</button>
+					</div>
 					{#if savedSshKeys.length > 0}
 						<select
 							id="ssh-key-select"
@@ -758,7 +726,7 @@
 					<textarea
 						id="ssh-key"
 						bind:value={sshKey}
-						placeholder="ssh-ed25519 AAAA..."
+						placeholder="ssh-ed25519 AAAA... or click 'Generate for me' above"
 						rows="3"
 						required
 						class="w-full px-4 py-3 bg-surface-elevated border  text-white placeholder-white/50 focus:outline-none transition-colors font-mono text-sm {sshKeyValidation ? 'border-red-500/50' : sshKey.trim() ? 'border-green-500/50' : 'border-neutral-800'} {!sshKeyValidation && sshKey.trim() ? 'focus:border-green-400' : 'focus:border-primary-400'}"
@@ -773,11 +741,33 @@
 						</p>
 					{:else}
 						<p class="text-xs text-neutral-500 mt-1">
-							Required for server access after provisioning
+							Required for server access. Don't have one? Click "Generate for me" above.
 						</p>
 					{/if}
+					{#if generatedPrivateKey}
+						<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30">
+							<div class="flex items-start gap-2">
+								<span class="text-yellow-400 text-lg shrink-0">&#9888;</span>
+								<div class="flex-1">
+									<p class="text-yellow-300 text-sm font-medium">Save your private key!</p>
+									<p class="text-yellow-200/70 text-xs mt-1">
+										Your private key was generated and the public key is filled in above.
+										<strong>You must download and save the private key securely</strong> - it cannot be recovered.
+										You'll need it to SSH into your server.
+									</p>
+									<button
+										type="button"
+										onclick={handleDownloadPrivateKey}
+										class="mt-2 px-3 py-1.5 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 text-sm hover:bg-yellow-500/30 transition-colors"
+									>
+										Download Private Key (.pem)
+									</button>
+								</div>
+							</div>
+						</div>
+					{/if}
 					<details class="text-sm text-neutral-400 mt-1">
-						<summary class="cursor-pointer hover:text-neutral-200 select-none">How to generate an SSH key?</summary>
+						<summary class="cursor-pointer hover:text-neutral-200 select-none">How to generate an SSH key manually?</summary>
 						<div class="mt-2 p-3 bg-neutral-800 rounded text-xs">
 							<div class="flex gap-1 mb-3">
 								{#each ([['unix', 'macOS / Linux'], ['powershell', 'Windows (PowerShell)'], ['putty', 'Windows (PuTTY)']] as const) as [id, label]}
@@ -842,6 +832,68 @@
 							Save this key to my profile for future rentals
 						</label>
 					{/if}
+				</div>
+
+				<!-- Contact Method -->
+				<div>
+					<label
+						for="contact"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Contact Method <span class="text-neutral-500"
+							>(optional)</span
+						>
+					</label>
+					<input
+						id="contact"
+						type="text"
+						bind:value={contactMethod}
+						placeholder="email:you@example.com or matrix:@user:server"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					/>
+					<p class="text-xs text-neutral-500 mt-1">
+						How the provider should reach you (e.g.,
+						email:you@example.com)
+					</p>
+				</div>
+
+				<!-- Billing Address (for B2B invoices) -->
+				<div>
+					<label
+						for="buyer-address"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Billing Address <span class="text-neutral-500"
+							>(optional, for invoices)</span
+						>
+					</label>
+					<textarea
+						id="buyer-address"
+						bind:value={buyerAddress}
+						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
+						rows="3"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					></textarea>
+					<p class="text-xs text-neutral-500 mt-1">
+						Required for B2B invoices with VAT
+					</p>
+				</div>
+
+				<!-- Memo -->
+				<div>
+					<label
+						for="memo"
+						class="block text-sm font-medium text-white mb-2"
+					>
+						Notes <span class="text-neutral-500">(optional)</span>
+					</label>
+					<textarea
+						id="memo"
+						bind:value={memo}
+						placeholder="Any special requirements or notes for the provider..."
+						rows="3"
+						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+					></textarea>
 				</div>
 
 				<!-- Error Message -->
