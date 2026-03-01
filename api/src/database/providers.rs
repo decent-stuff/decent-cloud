@@ -248,8 +248,7 @@ pub struct ProviderSlaRow {
 impl Database {
     /// Get list of active providers (checked in recently)
     pub async fn get_active_providers(&self, days: i64) -> Result<Vec<ProviderProfile>> {
-        let cutoff_ns = crate::now_ns()?
-            - days.max(1) * 24 * 3600 * 1_000_000_000;
+        let cutoff_ns = crate::now_ns()? - days.max(1) * 24 * 3600 * 1_000_000_000;
 
         let profiles = sqlx::query_as!(
             ProviderProfile,
@@ -446,8 +445,7 @@ impl Database {
 
     /// Get list of active validators (checked in recently, with or without profiles)
     pub async fn get_active_validators(&self, days: i64) -> Result<Vec<Validator>> {
-        let cutoff_ns = crate::now_ns()?
-            - days.max(1) * 24 * 3600 * 1_000_000_000;
+        let cutoff_ns = crate::now_ns()? - days.max(1) * 24 * 3600 * 1_000_000_000;
         let now_ns = crate::now_ns()?;
         let cutoff_24h = now_ns - 24 * 3600 * 1_000_000_000;
         let cutoff_7d = now_ns - 7 * 24 * 3600 * 1_000_000_000;
@@ -730,9 +728,7 @@ impl Database {
         uptime_threshold_percent: i32,
         sla_alert_window_hours: i32,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .unwrap_or(0);
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         sqlx::query!(
             r#"INSERT INTO provider_sla_config
                    (provider_pubkey, response_time_seconds, created_at, updated_at,
@@ -764,9 +760,7 @@ impl Database {
     ) -> Result<Vec<SlaBreachInfo>> {
         let window_ns = (window_hours as i64) * 3600 * 1_000_000_000_i64;
         let one_hour_ns = 3600 * 1_000_000_000_i64;
-        let now_ns = chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .unwrap_or(0);
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         let window_start = now_ns - window_ns;
         let alert_cutoff = now_ns - one_hour_ns;
 
@@ -821,9 +815,7 @@ impl Database {
         uptime_percent: i32,
         threshold_percent: i32,
     ) -> Result<()> {
-        let now_ns = chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .unwrap_or(0);
+        let now_ns = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
         sqlx::query!(
             r#"INSERT INTO sla_breach_alerts
                    (contract_id, provider_pubkey, uptime_percent, threshold_percent, alert_sent_at)

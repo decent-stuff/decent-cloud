@@ -25,10 +25,7 @@ impl PricesApi {
     /// Returns the current ICP/USD price from CoinGecko, cached for 5 minutes.
     /// Returns `{}` when the price feed is unavailable (field omitted when None).
     #[oai(path = "/prices/icp", method = "get", tag = "ApiTags::System")]
-    async fn get_icp_price(
-        &self,
-        price_cache: Data<&Arc<PriceCache>>,
-    ) -> Json<IcpPriceResponse> {
+    async fn get_icp_price(&self, price_cache: Data<&Arc<PriceCache>>) -> Json<IcpPriceResponse> {
         let price_usd = price_cache.get_icp_usd().await;
         Json(IcpPriceResponse { price_usd })
     }

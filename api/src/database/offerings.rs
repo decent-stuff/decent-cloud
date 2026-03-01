@@ -932,7 +932,10 @@ impl Database {
         let where_clause = if dsl_where.is_empty() {
             "WHERE LOWER(o.visibility) = 'public' AND o.is_draft = FALSE".to_string()
         } else {
-            format!("WHERE LOWER(o.visibility) = 'public' AND o.is_draft = FALSE AND ({})", dsl_where)
+            format!(
+                "WHERE LOWER(o.visibility) = 'public' AND o.is_draft = FALSE AND ({})",
+                dsl_where
+            )
         };
 
         // Calculate LIMIT/OFFSET placeholder indices (after fixed bindings + DSL bindings)
@@ -2124,10 +2127,7 @@ impl Database {
     }
 
     /// Get analytics for an offering: view counts and unique viewer counts for 7d and 30d windows.
-    pub async fn get_offering_analytics(
-        &self,
-        offering_id: i64,
-    ) -> Result<OfferingAnalytics> {
+    pub async fn get_offering_analytics(&self, offering_id: i64) -> Result<OfferingAnalytics> {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let cutoff_7d = now_ms - 7 * 24 * 60 * 60 * 1000i64;
         let cutoff_30d = now_ms - 30 * 24 * 60 * 60 * 1000i64;

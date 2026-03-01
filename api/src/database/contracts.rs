@@ -1099,15 +1099,8 @@ impl Database {
 
         tx.commit().await?;
 
-        self.insert_contract_event(
-            contract_id,
-            "provisioned",
-            None,
-            None,
-            "system",
-            None,
-        )
-        .await?;
+        self.insert_contract_event(contract_id, "provisioned", None, None, "system", None)
+            .await?;
 
         Ok(())
     }
@@ -1141,8 +1134,7 @@ impl Database {
     ///
     /// Safety: skips contracts with active cloud resources or unreported billing usage.
     pub async fn purge_terminal_contracts(&self, retention_days: i64) -> Result<u64> {
-        let cutoff_ns = crate::now_ns()?
-            - (retention_days * 24 * 60 * 60 * 1_000_000_000);
+        let cutoff_ns = crate::now_ns()? - (retention_days * 24 * 60 * 60 * 1_000_000_000);
 
         let terminal_statuses = [
             ContractStatus::Rejected.to_string(),
@@ -1349,15 +1341,8 @@ impl Database {
             );
         }
 
-        self.insert_contract_event(
-            contract_id,
-            "password_reset",
-            None,
-            None,
-            "tenant",
-            None,
-        )
-        .await?;
+        self.insert_contract_event(contract_id, "password_reset", None, None, "tenant", None)
+            .await?;
 
         Ok(())
     }
@@ -1504,15 +1489,8 @@ impl Database {
             "provider"
         };
         let details = format!("Extended by {} hours", extension_hours);
-        self.insert_contract_event(
-            contract_id,
-            "extension",
-            None,
-            None,
-            actor,
-            Some(&details),
-        )
-        .await?;
+        self.insert_contract_event(contract_id, "extension", None, None, actor, Some(&details))
+            .await?;
 
         Ok(extension_payment_e9s)
     }
@@ -1782,14 +1760,17 @@ impl Database {
                     Ok(refund_id) => {
                         tracing::info!(
                             "ICPay refund created: {} for contract {} (amount: {} e9s)",
-                            refund_id, &contract.contract_id, net_refund_e9s
+                            refund_id,
+                            &contract.contract_id,
+                            net_refund_e9s
                         );
                         Ok((Some(net_refund_e9s), Some(refund_id)))
                     }
                     Err(e) => {
                         tracing::warn!(
                             "Failed to create ICPay refund for contract {}: {:#}",
-                            &contract.contract_id, e
+                            &contract.contract_id,
+                            e
                         );
                         Ok((Some(net_refund_e9s), None))
                     }
@@ -3119,10 +3100,9 @@ impl Database {
         requester_pubkey: &[u8],
         auto_renew: bool,
     ) -> Result<()> {
-        let contract = self
-            .get_contract(contract_id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id)))?;
+        let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
+            anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
+        })?;
 
         if contract.requester_pubkey != hex::encode(requester_pubkey) {
             return Err(anyhow::anyhow!(

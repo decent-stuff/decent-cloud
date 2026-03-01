@@ -65,8 +65,8 @@ mod tests {
     use super::*;
     use crate::database::test_helpers::setup_test_db;
     use dcc_common::{
-        cache_reputation::ReputationAge, cache_reputation::ReputationChange,
-        LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
+        cache_reputation::ReputationAge, cache_reputation::ReputationChange, LABEL_REPUTATION_AGE,
+        LABEL_REPUTATION_CHANGE,
     };
     use sqlx::Row;
 
@@ -91,7 +91,12 @@ mod tests {
         let change = ReputationChange::new_single(pubkey.to_vec(), delta);
         let value = borsh::to_vec(&change).unwrap();
 
-        let entries = vec![make_entry(LABEL_REPUTATION_CHANGE, pubkey, &value, timestamp)];
+        let entries = vec![make_entry(
+            LABEL_REPUTATION_CHANGE,
+            pubkey,
+            &value,
+            timestamp,
+        )];
         db.insert_entries(entries).await.unwrap();
 
         let row = sqlx::query(
@@ -117,7 +122,12 @@ mod tests {
         let change = ReputationChange::new_single(pubkey.to_vec(), delta);
         let value = borsh::to_vec(&change).unwrap();
 
-        let entries = vec![make_entry(LABEL_REPUTATION_CHANGE, pubkey, &value, timestamp)];
+        let entries = vec![make_entry(
+            LABEL_REPUTATION_CHANGE,
+            pubkey,
+            &value,
+            timestamp,
+        )];
         db.insert_entries(entries).await.unwrap();
 
         let row = sqlx::query("SELECT change_amount FROM reputation_changes")
@@ -198,12 +208,10 @@ mod tests {
         let entries = vec![make_entry(LABEL_REPUTATION_AGE, b"", &value, timestamp)];
         db.insert_entries(entries).await.unwrap();
 
-        let row = sqlx::query(
-            "SELECT block_timestamp_ns, aging_factor_ppm FROM reputation_aging",
-        )
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let row = sqlx::query("SELECT block_timestamp_ns, aging_factor_ppm FROM reputation_aging")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
 
         assert_eq!(row.get::<i64, _>("block_timestamp_ns"), timestamp as i64);
         assert_eq!(row.get::<i64, _>("aging_factor_ppm"), ppm as i64);

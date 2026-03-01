@@ -504,10 +504,7 @@ mod tests {
             portal_url: "https://billing.stripe.com/portal_abc".to_string(),
         };
         let json = serde_json::to_value(&resp).unwrap();
-        assert_eq!(
-            json["portal_url"],
-            "https://billing.stripe.com/portal_abc"
-        );
+        assert_eq!(json["portal_url"], "https://billing.stripe.com/portal_abc");
     }
 
     #[test]

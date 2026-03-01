@@ -132,7 +132,11 @@ impl OfferingsApi {
     /// Returns the top offerings by view count in the last 7 days.
     /// Only public, non-draft, in-stock offerings are included.
     /// Public — no auth required.
-    #[oai(path = "/offerings/trending", method = "get", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/trending",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
     async fn get_trending_offerings(
         &self,
         db: Data<&Arc<Database>>,
@@ -441,7 +445,11 @@ impl OfferingsApi {
     ///
     /// Sends an inquiry message to the provider via an in-app notification.
     /// Useful for asking questions before creating a rental contract.
-    #[oai(path = "/offerings/:id/contact", method = "post", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/:id/contact",
+        method = "post",
+        tag = "ApiTags::Offerings"
+    )]
     async fn contact_offering(
         &self,
         db: Data<&Arc<Database>>,
@@ -540,7 +548,11 @@ impl OfferingsApi {
     ///
     /// Public endpoint — no auth required. Deduplicates by hashed IP + day,
     /// so refreshing the page does not inflate the count.
-    #[oai(path = "/offerings/:id/view", method = "post", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/:id/view",
+        method = "post",
+        tag = "ApiTags::Offerings"
+    )]
     async fn record_offering_view(
         &self,
         db: Data<&Arc<Database>>,
@@ -573,7 +585,11 @@ impl OfferingsApi {
     ///
     /// Provider-only endpoint. Returns view counts and unique viewer counts
     /// for the last 7 and 30 days. Only the offering's provider may call this.
-    #[oai(path = "/offerings/:id/analytics", method = "get", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/:id/analytics",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
     async fn get_offering_analytics(
         &self,
         db: Data<&Arc<Database>>,
@@ -642,7 +658,11 @@ impl OfferingsApi {
     /// Provider-only endpoint. Sets `is_draft = false` for all specified offering IDs.
     /// Only offerings owned by the authenticated provider and currently in draft state are published.
     /// Already-published offerings are silently skipped (not an error).
-    #[oai(path = "/offerings/bulk-publish", method = "post", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/bulk-publish",
+        method = "post",
+        tag = "ApiTags::Offerings"
+    )]
     async fn bulk_publish_offerings(
         &self,
         db: Data<&Arc<Database>>,
@@ -690,7 +710,11 @@ impl OfferingsApi {
     ///
     /// Provider-only endpoint. Returns daily view counts for the last `days` days (1–90).
     /// Only the offering's provider may call this.
-    #[oai(path = "/offerings/:id/view-trends", method = "get", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/:id/view-trends",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
     async fn get_offering_view_trends(
         &self,
         db: Data<&Arc<Database>>,
@@ -869,7 +893,9 @@ mod tests {
 
     #[test]
     fn test_bulk_publish_request_serialization() {
-        let req = BulkPublishRequest { offering_ids: vec![1, 2, 3] };
+        let req = BulkPublishRequest {
+            offering_ids: vec![1, 2, 3],
+        };
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(json["offering_ids"], serde_json::json!([1, 2, 3]));
     }
@@ -896,11 +922,15 @@ mod tests {
     fn test_contact_offering_message_max_length() {
         // 2000 chars is valid, 2001 is not (enforcement is in handler but we verify the struct)
         let long_msg = "a".repeat(2000);
-        let req = ContactOfferingRequest { message: long_msg.clone() };
+        let req = ContactOfferingRequest {
+            message: long_msg.clone(),
+        };
         assert_eq!(req.message.len(), 2000);
 
         let too_long = "a".repeat(2001);
-        let req2 = ContactOfferingRequest { message: too_long.clone() };
+        let req2 = ContactOfferingRequest {
+            message: too_long.clone(),
+        };
         assert_eq!(req2.message.len(), 2001);
     }
 }

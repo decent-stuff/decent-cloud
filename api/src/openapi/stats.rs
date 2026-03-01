@@ -214,7 +214,10 @@ mod tests {
             metadata: BTreeMap::new(),
         };
         let json = serde_json::to_value(&overview).unwrap();
-        assert_eq!(json["latest_block_timestamp_ns"], 1_700_000_000_000_000_000u64);
+        assert_eq!(
+            json["latest_block_timestamp_ns"],
+            1_700_000_000_000_000_000u64
+        );
         assert_eq!(json["total_providers"], 10);
     }
 

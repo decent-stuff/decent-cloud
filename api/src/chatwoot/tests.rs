@@ -394,7 +394,10 @@ async fn test_create_user_api_error() {
         .await
         .unwrap_err();
 
-    assert!(err.to_string().contains("422"), "Expected 422 in error: {err}");
+    assert!(
+        err.to_string().contains("422"),
+        "Expected 422 in error: {err}"
+    );
     assert!(
         err.to_string().contains("Email has already been taken"),
         "Expected body in error: {err}"
@@ -548,10 +551,7 @@ async fn test_send_message_success() {
         .await;
 
     let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
-    client
-        .send_message(42, "Hello from test")
-        .await
-        .unwrap();
+    client.send_message(42, "Hello from test").await.unwrap();
 
     mock.assert_async().await;
 }
@@ -580,7 +580,10 @@ async fn test_fetch_conversation_messages_success() {
 
     // null and whitespace-only messages are filtered out
     assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0], ("customer".to_string(), "Hi there".to_string()));
+    assert_eq!(
+        messages[0],
+        ("customer".to_string(), "Hi there".to_string())
+    );
     assert_eq!(messages[1], ("bot".to_string(), "Hello!".to_string()));
     mock.assert_async().await;
 }
@@ -641,10 +644,7 @@ async fn test_list_portals_filters_archived() {
 async fn test_update_conversation_status_success() {
     let mut server = mockito::Server::new_async().await;
     let mock = server
-        .mock(
-            "POST",
-            "/api/v1/accounts/1/conversations/55/toggle_status",
-        )
+        .mock("POST", "/api/v1/accounts/1/conversations/55/toggle_status")
         .match_header("api_access_token", "tok")
         .with_status(200)
         .with_header("content-type", "application/json")
@@ -653,10 +653,7 @@ async fn test_update_conversation_status_success() {
         .await;
 
     let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
-    client
-        .update_conversation_status(55, "open")
-        .await
-        .unwrap();
+    client.update_conversation_status(55, "open").await.unwrap();
 
     mock.assert_async().await;
 }

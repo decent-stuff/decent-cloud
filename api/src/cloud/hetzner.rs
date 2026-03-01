@@ -225,10 +225,7 @@ pub fn resolve_provisioner_config(
         .context("Invalid provisioner_config JSON")?
         .unwrap_or(serde_json::json!({}));
 
-    let server_type = config["server_type"]
-        .as_str()
-        .unwrap_or("cx22")
-        .to_string();
+    let server_type = config["server_type"].as_str().unwrap_or("cx22").to_string();
     let location = config["location"]
         .as_str()
         .unwrap_or(&datacenter_city.to_lowercase())
@@ -1065,8 +1062,7 @@ mod tests {
 
     #[test]
     fn test_resolve_provisioner_config_fallbacks() {
-        let config =
-            resolve_provisioner_config(None, "Falkenstein", Some("ubuntu-22.04")).unwrap();
+        let config = resolve_provisioner_config(None, "Falkenstein", Some("ubuntu-22.04")).unwrap();
         assert_eq!(config.server_type, "cx22");
         assert_eq!(config.location, "falkenstein");
         assert_eq!(config.image, "ubuntu-22.04");

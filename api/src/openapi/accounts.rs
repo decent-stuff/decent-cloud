@@ -2182,11 +2182,7 @@ impl AccountsApi {
         }
         match db.admin_delete_account(&account.id).await {
             Ok(summary) => {
-                tracing::info!(
-                    "Account '{}' self-deleted: {:?}",
-                    account.username,
-                    summary
-                );
+                tracing::info!("Account '{}' self-deleted: {:?}", account.username, summary);
                 Json(ApiResponse {
                     success: true,
                     data: Some(crate::openapi::common::AdminAccountDeletionSummary {
@@ -2222,8 +2218,7 @@ mod tests {
 
     #[test]
     fn test_register_account_request_camel_case_deserialization() {
-        let json =
-            r#"{"username":"alice42","publicKey":"aabbcc","email":"alice@example.com"}"#;
+        let json = r#"{"username":"alice42","publicKey":"aabbcc","email":"alice@example.com"}"#;
         let req: RegisterAccountRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.username, "alice42");
         assert_eq!(req.public_key, "aabbcc");
@@ -2248,14 +2243,12 @@ mod tests {
 
     #[test]
     fn test_update_account_profile_request_all_fields() {
-        let json = r#"{"displayName":"Alice","bio":"A bio","avatarUrl":"https://example.com/a.png"}"#;
+        let json =
+            r#"{"displayName":"Alice","bio":"A bio","avatarUrl":"https://example.com/a.png"}"#;
         let req: UpdateAccountProfileRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.display_name.as_deref(), Some("Alice"));
         assert_eq!(req.bio.as_deref(), Some("A bio"));
-        assert_eq!(
-            req.avatar_url.as_deref(),
-            Some("https://example.com/a.png")
-        );
+        assert_eq!(req.avatar_url.as_deref(), Some("https://example.com/a.png"));
     }
 
     #[test]
@@ -2310,14 +2303,12 @@ mod tests {
 
     #[test]
     fn test_add_account_social_request_with_url() {
-        let json = r#"{"platform":"github","username":"alice","profileUrl":"https://github.com/alice"}"#;
+        let json =
+            r#"{"platform":"github","username":"alice","profileUrl":"https://github.com/alice"}"#;
         let req: AddAccountSocialRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.platform, "github");
         assert_eq!(req.username, "alice");
-        assert_eq!(
-            req.profile_url.as_deref(),
-            Some("https://github.com/alice")
-        );
+        assert_eq!(req.profile_url.as_deref(), Some("https://github.com/alice"));
     }
 
     #[test]
@@ -2473,10 +2464,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
-        assert!(json["error"]
-            .as_str()
-            .unwrap()
-            .contains("Unauthorized"));
+        assert!(json["error"].as_str().unwrap().contains("Unauthorized"));
     }
 
     // ---- BillingSettings ----

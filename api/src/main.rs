@@ -1,8 +1,6 @@
 mod acme_dns;
 mod auth;
 mod auto_renewal_service;
-mod publish_scheduled_service;
-mod sla_alert_service;
 mod chatwoot;
 mod cleanup_service;
 mod cloud;
@@ -20,16 +18,18 @@ mod ledger_client;
 mod ledger_path;
 mod metadata_cache;
 mod network_metrics;
-mod price_cache;
 mod notifications;
 mod oauth_simple;
 mod openapi;
 mod payment_release_service;
+mod price_cache;
+mod publish_scheduled_service;
 mod receipts;
 mod regions;
 mod rental_notifications;
 mod request_logging;
 mod search;
+mod sla_alert_service;
 mod stripe_client;
 mod support_bot;
 mod sync_docs;
@@ -47,6 +47,7 @@ fn now_ns() -> anyhow::Result<i64> {
         .ok_or_else(|| anyhow::anyhow!("timestamp overflow (year > 2262)"))
 }
 
+use auto_renewal_service::AutoRenewalService;
 use candid::Principal;
 use clap::{Parser, Subcommand};
 use cleanup_service::CleanupService;
@@ -57,11 +58,7 @@ use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
-use price_cache::PriceCache;
-use auto_renewal_service::AutoRenewalService;
 use payment_release_service::PaymentReleaseService;
-use publish_scheduled_service::PublishScheduledService;
-use sla_alert_service::SlaAlertService;
 use poem::web::{Data, Redirect};
 use poem::{
     get, handler,
@@ -70,6 +67,9 @@ use poem::{
     post, EndpointExt, Request, Route, Server,
 };
 use poem_openapi::OpenApiService;
+use price_cache::PriceCache;
+use publish_scheduled_service::PublishScheduledService;
+use sla_alert_service::SlaAlertService;
 use std::env;
 use std::sync::Arc;
 use sync_service::SyncService;

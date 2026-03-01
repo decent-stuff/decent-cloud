@@ -463,9 +463,7 @@ impl ApiClient {
                 "healthy".to_string(),
                 Some(format!(r#"{{"uptime_seconds":{uptime_seconds}}}"#)),
             ),
-            HealthStatus::Unhealthy { reason } => {
-                ("unhealthy".to_string(), Some(reason.clone()))
-            }
+            HealthStatus::Unhealthy { reason } => ("unhealthy".to_string(), Some(reason.clone())),
             HealthStatus::Unknown => ("unknown".to_string(), None),
         };
         let request = HealthCheckRequest {

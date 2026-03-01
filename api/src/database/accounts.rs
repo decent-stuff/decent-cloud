@@ -498,8 +498,7 @@ impl Database {
         nonce: &uuid::Uuid,
         max_age_minutes: i64,
     ) -> Result<bool> {
-        let cutoff_time = crate::now_ns()?
-            - (max_age_minutes * 60 * 1_000_000_000);
+        let cutoff_time = crate::now_ns()? - (max_age_minutes * 60 * 1_000_000_000);
         let nonce_bytes = nonce.as_bytes().to_vec();
 
         let result: Option<(i64,)> = sqlx::query_as(
@@ -552,8 +551,7 @@ impl Database {
     /// Clean up old signature audit records (older than retention_days)
     /// Should be run periodically (e.g., daily) to maintain database hygiene
     pub async fn cleanup_signature_audit(&self, retention_days: i64) -> Result<u64> {
-        let cutoff_time = crate::now_ns()?
-            - (retention_days * 24 * 60 * 60 * 1_000_000_000);
+        let cutoff_time = crate::now_ns()? - (retention_days * 24 * 60 * 60 * 1_000_000_000);
 
         let result = sqlx::query("DELETE FROM signature_audit WHERE created_at < $1")
             .bind(cutoff_time)

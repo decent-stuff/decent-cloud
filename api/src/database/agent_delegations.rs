@@ -552,7 +552,10 @@ mod tests {
         .fetch_one(&db.pool)
         .await
         .unwrap();
-        assert_eq!(agent1_contracts, 3, "agent1 active_contracts must be intact");
+        assert_eq!(
+            agent1_contracts, 3,
+            "agent1 active_contracts must be intact"
+        );
 
         // Agent 2's data must be correct
         let agent2_contracts: i64 = sqlx::query_scalar(
@@ -562,7 +565,10 @@ mod tests {
         .fetch_one(&db.pool)
         .await
         .unwrap();
-        assert_eq!(agent2_contracts, 7, "agent2 active_contracts must be intact");
+        assert_eq!(
+            agent2_contracts, 7,
+            "agent2 active_contracts must be intact"
+        );
     }
 
     #[test]

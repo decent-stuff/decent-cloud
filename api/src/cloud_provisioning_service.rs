@@ -79,8 +79,14 @@ impl CloudProvisioningService {
             let mut interval = tokio::time::interval(prov_interval);
             loop {
                 interval.tick().await;
-                if let Err(e) =
-                    provision_pending_resources(&db, &lock_holder, &key, cf_dns.as_deref(), email_svc.as_ref()).await
+                if let Err(e) = provision_pending_resources(
+                    &db,
+                    &lock_holder,
+                    &key,
+                    cf_dns.as_deref(),
+                    email_svc.as_ref(),
+                )
+                .await
                 {
                     tracing::error!("Cloud provisioning failed: {:#}", e);
                 }
@@ -142,7 +148,14 @@ async fn provision_pending_resources(
         }
 
         let resource_id = resource.id;
-        let result = provision_one(database, resource, encryption_key, cloudflare_dns, email_service).await;
+        let result = provision_one(
+            database,
+            resource,
+            encryption_key,
+            cloudflare_dns,
+            email_service,
+        )
+        .await;
 
         if let Err(e) = database.release_cloud_resource_lock(&resource_id).await {
             tracing::error!("Failed to release lock for resource {}: {}", resource_id, e);
@@ -201,9 +214,13 @@ async fn provision_one(
             .map(hex::encode)
             .unwrap_or_else(|| resource_id.to_string());
 
-        let script_result =
-            dcc_common::ssh_exec::execute_post_provision_script(&public_ip, 22, script, &context_id)
-                .await?;
+        let script_result = dcc_common::ssh_exec::execute_post_provision_script(
+            &public_ip,
+            22,
+            script,
+            &context_id,
+        )
+        .await?;
 
         // Always store the log
         if let Err(e) = database
@@ -234,7 +251,9 @@ async fn provision_one(
                     contract_id,
                     script_result.exit_code,
                     &script_result.log,
-                ).await {
+                )
+                .await
+                {
                     tracing::warn!("Failed to send recipe failure notification: {:#}", e);
                 }
             }

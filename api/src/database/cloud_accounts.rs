@@ -424,12 +424,7 @@ mod tests {
 
         // Mark invalid with error
         let updated = db
-            .update_cloud_account_validation(
-                &ca_uuid,
-                &account.id,
-                false,
-                Some("Token expired"),
-            )
+            .update_cloud_account_validation(&ca_uuid, &account.id, false, Some("Token expired"))
             .await
             .unwrap();
         assert!(updated);

@@ -55,8 +55,7 @@ impl Database {
         .await?;
 
         // Active in the last year
-        let cutoff_ns =
-            crate::now_ns()? - 365 * 24 * 3600 * 1_000_000_000;
+        let cutoff_ns = crate::now_ns()? - 365 * 24 * 3600 * 1_000_000_000;
         let active_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM provider_check_ins WHERE block_timestamp_ns > $1 AND (pubkey) != $2"#,
             cutoff_ns,
@@ -114,7 +113,10 @@ impl Database {
     }
 
     /// Get monthly revenue breakdown for a provider (last 12 months)
-    pub async fn get_provider_revenue_by_month(&self, pubkey: &[u8]) -> Result<Vec<RevenueByMonth>> {
+    pub async fn get_provider_revenue_by_month(
+        &self,
+        pubkey: &[u8],
+    ) -> Result<Vec<RevenueByMonth>> {
         #[derive(sqlx::FromRow)]
         struct Row {
             month: String,
@@ -1085,10 +1087,8 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<OfferingConversionStats>> {
-        let cutoff_7d_ms: i64 =
-            (chrono::Utc::now().timestamp_millis()) - 7 * 24 * 3600 * 1000;
-        let cutoff_30d_ms: i64 =
-            (chrono::Utc::now().timestamp_millis()) - 30 * 24 * 3600 * 1000;
+        let cutoff_7d_ms: i64 = (chrono::Utc::now().timestamp_millis()) - 7 * 24 * 3600 * 1000;
+        let cutoff_30d_ms: i64 = (chrono::Utc::now().timestamp_millis()) - 30 * 24 * 3600 * 1000;
         let cutoff_7d_ns: i64 = cutoff_7d_ms * 1_000_000;
         let cutoff_30d_ns: i64 = cutoff_30d_ms * 1_000_000;
 

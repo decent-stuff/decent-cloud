@@ -515,7 +515,10 @@ mod tests {
             .create_account("testuser", &pubkey, "test@example.com")
             .await
             .unwrap();
-        assert!(!account.email_verified, "new accounts must not be email-verified");
+        assert!(
+            !account.email_verified,
+            "new accounts must not be email-verified"
+        );
 
         // After email verification
         db.set_email_verified(&account.id, true).await.unwrap();
@@ -523,8 +526,13 @@ mod tests {
         assert!(verified.email_verified, "after verification, must be true");
 
         // Email change resets verification
-        db.update_account_email(&account.id, "new@example.com").await.unwrap();
+        db.update_account_email(&account.id, "new@example.com")
+            .await
+            .unwrap();
         let reset = db.get_account(&account.id).await.unwrap().unwrap();
-        assert!(!reset.email_verified, "email change must reset email_verified");
+        assert!(
+            !reset.email_verified,
+            "email change must reset email_verified"
+        );
     }
 }

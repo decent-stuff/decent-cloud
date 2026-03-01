@@ -150,7 +150,9 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
     let pubkey = vec![43u8; 32];
 
     // Create initial profile directly in DB
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
     )
@@ -198,7 +200,9 @@ async fn test_update_provider_onboarding_updates_existing_profile() {
 }
 
 async fn insert_provider_profile(db: &super::Database, pubkey: &[u8]) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, $4, $5)",
     )
@@ -241,10 +245,7 @@ async fn test_add_and_get_provider_contacts() {
     assert_eq!(telegram.contact_value, "@alice");
     assert!(telegram.id > 0);
 
-    let phone = contacts
-        .iter()
-        .find(|c| c.contact_type == "phone")
-        .unwrap();
+    let phone = contacts.iter().find(|c| c.contact_type == "phone").unwrap();
     assert_eq!(phone.contact_value, "+1234567890");
     assert!(phone.id > 0);
 }
@@ -308,7 +309,9 @@ async fn test_delete_provider_contact_wrong_pubkey_is_noop() {
 
 /// Insert a provider profile with a recent created_at (within the last 90 days).
 async fn insert_new_provider_with_offering(db: &super::Database, pubkey: &[u8], name: &str) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, created_at, has_critical_flags) VALUES ($1, $2, $3, $4, $5, NOW(), FALSE)",
     )
@@ -344,12 +347,25 @@ async fn test_get_new_providers_returns_recent_with_offerings() {
     let results = db.get_new_providers(10).await.unwrap();
     let names: Vec<&str> = results.iter().map(|p| p.name.as_str()).collect();
 
-    assert!(names.contains(&"New Provider A"), "Expected 'New Provider A' in results");
-    assert!(names.contains(&"New Provider B"), "Expected 'New Provider B' in results");
+    assert!(
+        names.contains(&"New Provider A"),
+        "Expected 'New Provider A' in results"
+    );
+    assert!(
+        names.contains(&"New Provider B"),
+        "Expected 'New Provider B' in results"
+    );
     // Each result must have at least 1 offering
     for p in &results {
-        assert!(p.offerings_count > 0, "Provider {} should have offerings", p.name);
-        assert!(p.joined_days_ago >= 0, "joined_days_ago must be non-negative");
+        assert!(
+            p.offerings_count > 0,
+            "Provider {} should have offerings",
+            p.name
+        );
+        assert!(
+            p.joined_days_ago >= 0,
+            "joined_days_ago must be non-negative"
+        );
     }
 }
 
@@ -357,7 +373,9 @@ async fn test_get_new_providers_returns_recent_with_offerings() {
 async fn test_get_new_providers_excludes_old_providers() {
     let db = setup_test_db().await;
     let pubkey = vec![62u8; 32];
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
 
     // Insert provider with created_at > 90 days ago — should be excluded
     sqlx::query(
@@ -393,7 +411,9 @@ async fn test_get_new_providers_excludes_old_providers() {
 async fn test_get_new_providers_excludes_providers_without_public_offerings() {
     let db = setup_test_db().await;
     let pubkey = vec![63u8; 32];
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
 
     // Insert provider with no offerings
     sqlx::query(
@@ -426,7 +446,10 @@ async fn test_get_new_providers_respects_limit() {
 
     let results = db.get_new_providers(2).await.unwrap();
     // The limit is applied; we inserted 3 but asked for 2, so at most 2 returned
-    assert!(results.len() <= 2, "Result count must not exceed requested limit");
+    assert!(
+        results.len() <= 2,
+        "Result count must not exceed requested limit"
+    );
 }
 
 #[test]
@@ -443,7 +466,9 @@ fn export_auto_accept_rule_typescript_type() {
 
 /// Insert a minimal provider profile sufficient for FK constraints.
 async fn insert_provider(db: &super::Database, pubkey: &[u8]) {
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
     sqlx::query(
         "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, $2, 'v1', '1.0', $3)",
     )
@@ -503,7 +528,10 @@ async fn test_create_auto_accept_rule_duplicate_offering_fails() {
     let result = db
         .create_auto_accept_rule(&pubkey, "offer-dup", None, None)
         .await;
-    assert!(result.is_err(), "Duplicate (pubkey, offering_id) must be rejected");
+    assert!(
+        result.is_err(),
+        "Duplicate (pubkey, offering_id) must be rejected"
+    );
 }
 
 #[tokio::test]
@@ -542,7 +570,10 @@ async fn test_update_auto_accept_rule_wrong_provider_fails() {
     let result = db
         .update_auto_accept_rule(&other, rule.id, None, None, false)
         .await;
-    assert!(result.is_err(), "Wrong provider must not update another's rule");
+    assert!(
+        result.is_err(),
+        "Wrong provider must not update another's rule"
+    );
 }
 
 #[tokio::test]
@@ -556,9 +587,7 @@ async fn test_delete_auto_accept_rule() {
         .await
         .unwrap();
 
-    db.delete_auto_accept_rule(&pubkey, rule.id)
-        .await
-        .unwrap();
+    db.delete_auto_accept_rule(&pubkey, rule.id).await.unwrap();
 
     let rules = db.list_auto_accept_rules(&pubkey).await.unwrap();
     assert!(rules.is_empty());
@@ -599,11 +628,20 @@ async fn test_check_auto_accept_rule_within_range() {
         .unwrap();
 
     // Within range
-    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(48)).await.unwrap());
+    assert!(db
+        .check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(48))
+        .await
+        .unwrap());
     // Exactly at min
-    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(24)).await.unwrap());
+    assert!(db
+        .check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(24))
+        .await
+        .unwrap());
     // Exactly at max
-    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(720)).await.unwrap());
+    assert!(db
+        .check_auto_accept_rule_matches(&pubkey, "offer-rng", Some(720))
+        .await
+        .unwrap());
 }
 
 #[tokio::test]
@@ -617,11 +655,20 @@ async fn test_check_auto_accept_rule_outside_range() {
         .unwrap();
 
     // Below min
-    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1)).await.unwrap());
+    assert!(!db
+        .check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1))
+        .await
+        .unwrap());
     // Above max
-    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1000)).await.unwrap());
+    assert!(!db
+        .check_auto_accept_rule_matches(&pubkey, "offer-out", Some(1000))
+        .await
+        .unwrap());
     // No duration provided (defaults to 0 which is below min)
-    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-out", None).await.unwrap());
+    assert!(!db
+        .check_auto_accept_rule_matches(&pubkey, "offer-out", None)
+        .await
+        .unwrap());
 }
 
 #[tokio::test]
@@ -640,8 +687,12 @@ async fn test_check_auto_accept_rule_disabled_never_matches() {
         .await
         .unwrap();
 
-    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-dis", Some(48)).await.unwrap(),
-        "Disabled rule must never match");
+    assert!(
+        !db.check_auto_accept_rule_matches(&pubkey, "offer-dis", Some(48))
+            .await
+            .unwrap(),
+        "Disabled rule must never match"
+    );
 }
 
 #[tokio::test]
@@ -656,12 +707,19 @@ async fn test_check_auto_accept_rule_delete_reverts_to_accept_all() {
         .unwrap();
 
     // Outside range → no match
-    assert!(!db.check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50)).await.unwrap());
+    assert!(!db
+        .check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50))
+        .await
+        .unwrap());
 
     // Delete the rule
     db.delete_auto_accept_rule(&pubkey, rule.id).await.unwrap();
 
     // After deletion, no rule → accept all
-    assert!(db.check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50)).await.unwrap(),
-        "After rule deletion, should revert to accept-all");
+    assert!(
+        db.check_auto_accept_rule_matches(&pubkey, "offer-rev", Some(50))
+            .await
+            .unwrap(),
+        "After rule deletion, should revert to accept-all"
+    );
 }

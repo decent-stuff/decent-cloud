@@ -777,10 +777,7 @@ pub async fn notify_tenant_password_reset_complete(
         if let Some(chat_id) = &config.telegram_chat_id {
             match send_telegram_tenant_password_reset_complete(chat_id, contract).await {
                 Ok(()) => {
-                    if let Err(e) = db
-                        .increment_notification_usage(tenant_id, "telegram")
-                        .await
-                    {
+                    if let Err(e) = db.increment_notification_usage(tenant_id, "telegram").await {
                         tracing::error!(
                             "Failed to increment telegram notification usage for {}: {:#}",
                             tenant_id,
@@ -959,7 +956,10 @@ pub async fn notify_offering_owner_recipe_failure(
                 .await
             {
                 Ok(()) => {
-                    if let Err(e) = db.increment_notification_usage(provider_id, "telegram").await {
+                    if let Err(e) = db
+                        .increment_notification_usage(provider_id, "telegram")
+                        .await
+                    {
                         tracing::error!(
                             "Failed to increment telegram usage for {}: {:#}",
                             provider_id,

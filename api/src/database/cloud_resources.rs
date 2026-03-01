@@ -836,11 +836,7 @@ impl Database {
                     "Resource is listed on marketplace but has no offering_id"
                 ))
             }
-            None => {
-                return Err(anyhow!(
-                    "Resource not found or not listed on marketplace"
-                ))
-            }
+            None => return Err(anyhow!("Resource not found or not listed on marketplace")),
         };
 
         sqlx::query(
@@ -1185,10 +1181,7 @@ mod tests {
             .unwrap();
 
         // No log initially
-        let log = db
-            .get_recipe_log_for_contract(&contract_id)
-            .await
-            .unwrap();
+        let log = db.get_recipe_log_for_contract(&contract_id).await.unwrap();
         assert!(log.is_none());
 
         // Store log
@@ -1196,10 +1189,7 @@ mod tests {
         db.store_recipe_log(&resource_id, test_log).await.unwrap();
 
         // Retrieve log
-        let log = db
-            .get_recipe_log_for_contract(&contract_id)
-            .await
-            .unwrap();
+        let log = db.get_recipe_log_for_contract(&contract_id).await.unwrap();
         assert_eq!(log.as_deref(), Some(test_log));
     }
 
@@ -1207,10 +1197,7 @@ mod tests {
     async fn test_get_recipe_log_nonexistent_contract() {
         let db = setup_test_db().await;
 
-        let log = db
-            .get_recipe_log_for_contract(&[0xFFu8; 32])
-            .await
-            .unwrap();
+        let log = db.get_recipe_log_for_contract(&[0xFFu8; 32]).await.unwrap();
         assert!(log.is_none());
     }
 
@@ -1666,18 +1653,34 @@ mod tests {
         let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
 
         let resource = db
-            .create_cloud_resource(&ca_uuid, "ext-list", "list-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-list",
+                "list-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
             .await
             .unwrap();
         let resource_id: uuid::Uuid = resource.id.parse().unwrap();
 
         // Must be running to list
-        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
 
         let offering_id = create_test_offering(&db, &pubkey).await;
-        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
 
-        let updated = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        let updated = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.resource.listing_mode, "marketplace");
         assert_eq!(updated.resource.offering_id, Some(offering_id));
     }
@@ -1704,14 +1707,28 @@ mod tests {
         let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
 
         let resource = db
-            .create_cloud_resource(&ca_uuid, "ext-nr", "nr-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-nr",
+                "nr-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
             .await
             .unwrap();
         let resource_id: uuid::Uuid = resource.id.parse().unwrap();
 
         // Resource is in 'provisioning' status — should fail
-        let err = db.list_on_marketplace(&resource_id, &account.id, 1).await.unwrap_err();
-        assert!(err.to_string().contains("not running"), "Expected not-running error, got: {err}");
+        let err = db
+            .list_on_marketplace(&resource_id, &account.id, 1)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not running"),
+            "Expected not-running error, got: {err}"
+        );
     }
 
     #[tokio::test]
@@ -1736,19 +1753,37 @@ mod tests {
         let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
 
         let resource = db
-            .create_cloud_resource(&ca_uuid, "ext-dup", "dup-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-dup",
+                "dup-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
             .await
             .unwrap();
         let resource_id: uuid::Uuid = resource.id.parse().unwrap();
 
-        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
         let offering_id = create_test_offering(&db, &pubkey).await;
-        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
 
         // Second listing should fail
         let offering_id2 = create_test_offering(&db, &pubkey).await;
-        let err = db.list_on_marketplace(&resource_id, &account.id, offering_id2).await.unwrap_err();
-        assert!(err.to_string().contains("already listed"), "Expected already-listed error, got: {err}");
+        let err = db
+            .list_on_marketplace(&resource_id, &account.id, offering_id2)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("already listed"),
+            "Expected already-listed error, got: {err}"
+        );
     }
 
     #[tokio::test]
@@ -1773,19 +1808,38 @@ mod tests {
         let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
 
         let resource = db
-            .create_cloud_resource(&ca_uuid, "ext-unlist", "unlist-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-unlist",
+                "unlist-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
             .await
             .unwrap();
         let resource_id: uuid::Uuid = resource.id.parse().unwrap();
 
-        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
         let offering_id = create_test_offering(&db, &pubkey).await;
-        db.list_on_marketplace(&resource_id, &account.id, offering_id).await.unwrap();
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
 
-        let old_id = db.unlist_from_marketplace(&resource_id, &account.id).await.unwrap();
+        let old_id = db
+            .unlist_from_marketplace(&resource_id, &account.id)
+            .await
+            .unwrap();
         assert_eq!(old_id, offering_id);
 
-        let updated = db.get_cloud_resource(&resource_id, &account.id).await.unwrap().unwrap();
+        let updated = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.resource.listing_mode, "personal");
         assert!(updated.resource.offering_id.is_none());
     }
@@ -1812,15 +1866,31 @@ mod tests {
         let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
 
         let resource = db
-            .create_cloud_resource(&ca_uuid, "ext-up", "up-vm", "cx22", "nbg1", "ubuntu-24.04", "ssh-ed25519 AAAA test")
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-up",
+                "up-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
             .await
             .unwrap();
         let resource_id: uuid::Uuid = resource.id.parse().unwrap();
 
-        db.update_cloud_resource_status(&resource_id, "running").await.unwrap();
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
 
         // Resource is personal — unlist should fail
-        let err = db.unlist_from_marketplace(&resource_id, &account.id).await.unwrap_err();
-        assert!(err.to_string().contains("not listed"), "Expected not-listed error, got: {err}");
+        let err = db
+            .unlist_from_marketplace(&resource_id, &account.id)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("not listed"),
+            "Expected not-listed error, got: {err}"
+        );
     }
 }

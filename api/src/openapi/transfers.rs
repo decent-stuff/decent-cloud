@@ -122,7 +122,10 @@ mod tests {
             ..sample_transfer()
         };
         let json = serde_json::to_value(&transfer).unwrap();
-        assert!(json.get("memo").is_none(), "None memo should be absent from JSON");
+        assert!(
+            json.get("memo").is_none(),
+            "None memo should be absent from JSON"
+        );
     }
 
     #[test]

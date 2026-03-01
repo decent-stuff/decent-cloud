@@ -1540,9 +1540,7 @@ async fn run_health_checks(
     if failed > 0 {
         *consecutive_failures += 1;
         if *consecutive_failures == 3 {
-            warn!(
-                "Suppressing repeated health check report failures (3+ consecutive)"
-            );
+            warn!("Suppressing repeated health check report failures (3+ consecutive)");
         }
     } else {
         if *consecutive_failures >= 3 {

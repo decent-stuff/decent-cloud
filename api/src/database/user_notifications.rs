@@ -181,12 +181,24 @@ mod tests {
         // No notifications yet
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 0);
 
-        db.insert_user_notification(&pubkey, "contract_provisioned", "VM Ready", "Your VM is provisioned.", None)
-            .await
-            .unwrap();
-        db.insert_user_notification(&pubkey, "auto_renewed", "Auto-renewed", "Contract was renewed.", None)
-            .await
-            .unwrap();
+        db.insert_user_notification(
+            &pubkey,
+            "contract_provisioned",
+            "VM Ready",
+            "Your VM is provisioned.",
+            None,
+        )
+        .await
+        .unwrap();
+        db.insert_user_notification(
+            &pubkey,
+            "auto_renewed",
+            "Auto-renewed",
+            "Contract was renewed.",
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 2);
     }
@@ -197,11 +209,23 @@ mod tests {
         let pubkey = vec![0x03u8; 32];
 
         let id1 = db
-            .insert_user_notification(&pubkey, "contract_status", "Cancelled", "Contract was cancelled.", None)
+            .insert_user_notification(
+                &pubkey,
+                "contract_status",
+                "Cancelled",
+                "Contract was cancelled.",
+                None,
+            )
             .await
             .unwrap();
         let id2 = db
-            .insert_user_notification(&pubkey, "contract_status", "Rejected", "Contract was rejected.", None)
+            .insert_user_notification(
+                &pubkey,
+                "contract_status",
+                "Rejected",
+                "Contract was rejected.",
+                None,
+            )
             .await
             .unwrap();
 
@@ -223,12 +247,24 @@ mod tests {
         let db = setup_test_db().await;
         let pubkey = vec![0x04u8; 32];
 
-        db.insert_user_notification(&pubkey, "rental_request", "New Request", "A tenant rented your VM.", None)
-            .await
-            .unwrap();
-        db.insert_user_notification(&pubkey, "password_reset_complete", "Password Reset", "Password was reset.", None)
-            .await
-            .unwrap();
+        db.insert_user_notification(
+            &pubkey,
+            "rental_request",
+            "New Request",
+            "A tenant rented your VM.",
+            None,
+        )
+        .await
+        .unwrap();
+        db.insert_user_notification(
+            &pubkey,
+            "password_reset_complete",
+            "Password Reset",
+            "Password was reset.",
+            None,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 2);
 
@@ -261,9 +297,15 @@ mod tests {
         let pubkey = vec![0x07u8; 32];
 
         for i in 0..5 {
-            db.insert_user_notification(&pubkey, "contract_status", &format!("N{}", i), "body", None)
-                .await
-                .unwrap();
+            db.insert_user_notification(
+                &pubkey,
+                "contract_status",
+                &format!("N{}", i),
+                "body",
+                None,
+            )
+            .await
+            .unwrap();
         }
 
         let limited = db.get_user_notifications(&pubkey, 3).await.unwrap();

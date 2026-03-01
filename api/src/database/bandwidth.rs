@@ -107,7 +107,10 @@ impl Database {
 
     /// Get the requester pubkey (hex) for a contract identified by hex contract_id.
     /// Returns None if the contract does not exist.
-    pub async fn get_contract_requester_hex(&self, contract_id_hex: &str) -> Result<Option<String>> {
+    pub async fn get_contract_requester_hex(
+        &self,
+        contract_id_hex: &str,
+    ) -> Result<Option<String>> {
         let contract_id_bytes = hex::decode(contract_id_hex)
             .map_err(|e| anyhow::anyhow!("Invalid contract_id hex: {}", e))?;
 

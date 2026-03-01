@@ -21,4 +21,4 @@ When fully done, use subagents to a) verify completeness and find implementation
 
 Then COMMIT all changes, ideally as separate commits.
 
-When all is done, quit opencode by invoking `/quit`
+When all is done, quit opencode by invoking `/exit`

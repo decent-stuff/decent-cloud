@@ -280,8 +280,8 @@ async fn send_email_sla_breach(
         breach.contract_id, breach.uptime_percent, breach.threshold_percent
     );
 
-    let from_addr = std::env::var("EMAIL_FROM_ADDR")
-        .unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
+    let from_addr =
+        std::env::var("EMAIL_FROM_ADDR").unwrap_or_else(|_| "noreply@decent-cloud.org".to_string());
 
     email_svc
         .send_email(

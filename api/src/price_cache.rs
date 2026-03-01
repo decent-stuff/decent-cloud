@@ -99,7 +99,10 @@ mod tests {
     fn icp_price_is_stale_after_ttl() {
         // Simulate a fetched_at that is older than TTL by subtracting more than TTL
         let fetched_at = Instant::now() - CACHE_TTL - Duration::from_secs(1);
-        let price = IcpPrice { usd: 5.0, fetched_at };
+        let price = IcpPrice {
+            usd: 5.0,
+            fetched_at,
+        };
         assert!(price.fetched_at.elapsed() >= CACHE_TTL);
     }
 

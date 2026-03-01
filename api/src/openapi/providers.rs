@@ -1,15 +1,15 @@
 use super::common::{
-    check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest, AllowlistAddRequest,
-    ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse, BulkUpdatePricesRequest,
-    BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
-    CsvImportResult, DuplicateOfferingRequest, EmptyResponse, GenerateOfferingsRequest, GenerateOfferingsResponse,
-    HelpcenterSyncResponse, LockResponse, NotificationConfigResponse, NotificationUsageResponse,
-    OfferingSuggestionsResponse, OnboardingUpdateResponse, ProvisioningStatusRequest,
-    ReconcileKeepInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
-    ReconcileUnknownInstance, RentalResponseRequest, ResponseMetricsResponse,
-    ResponseTimeDistributionResponse, TestNotificationRequest, TestNotificationResponse,
-    UpdateNotificationConfigRequest, UpdatePasswordRequest, UpdatePoolRequest,
-    UpdateSlaUptimeConfigRequest,
+    check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest,
+    AllowlistAddRequest, ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse,
+    BulkUpdatePricesRequest, BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest,
+    CsvImportError, CsvImportResult, DuplicateOfferingRequest, EmptyResponse,
+    GenerateOfferingsRequest, GenerateOfferingsResponse, HelpcenterSyncResponse, LockResponse,
+    NotificationConfigResponse, NotificationUsageResponse, OfferingSuggestionsResponse,
+    OnboardingUpdateResponse, ProvisioningStatusRequest, ReconcileKeepInstance, ReconcileRequest,
+    ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
+    ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
+    TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest,
+    UpdatePoolRequest, UpdateSlaUptimeConfigRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
@@ -36,9 +36,8 @@ pub async fn password_reset_events(
     use poem::http::StatusCode;
     use poem::web::sse::{Event, SSE};
 
-    let pubkey_bytes = hex::decode(&pubkey).map_err(|_| {
-        poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST)
-    })?;
+    let pubkey_bytes = hex::decode(&pubkey)
+        .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
 
     let auth = crate::auth::authenticate_agent_from_request(req, &db)
         .await
@@ -102,9 +101,8 @@ pub async fn contract_status_events(
     use poem::http::StatusCode;
     use poem::web::sse::{Event, SSE};
 
-    let pubkey_bytes = hex::decode(&pubkey).map_err(|_| {
-        poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST)
-    })?;
+    let pubkey_bytes = hex::decode(&pubkey)
+        .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
 
     let auth_pubkey = crate::auth::authenticate_user_from_request(req)
         .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::UNAUTHORIZED))?;
@@ -121,73 +119,79 @@ pub async fn contract_status_events(
 
     let db_clone: Arc<Database> = Arc::clone(&db);
     // Close after 5 minutes: 60 polls × 5 seconds
-    let stream = futures::stream::unfold(
-        (db_clone, pubkey_bytes, None::<Snapshot>, 0u32),
-        |(db, pk, prev_snapshot, poll_count): (Arc<Database>, Vec<u8>, Option<Snapshot>, u32)| async move {
-            if poll_count >= 60 {
-                return None;
-            }
-            let contracts = match db.get_user_contracts(&pk).await {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("SSE contract-status-events DB error: {:#}", e);
+    let stream =
+        futures::stream::unfold(
+            (db_clone, pubkey_bytes, None::<Snapshot>, 0u32),
+            |(db, pk, prev_snapshot, poll_count): (
+                Arc<Database>,
+                Vec<u8>,
+                Option<Snapshot>,
+                u32,
+            )| async move {
+                if poll_count >= 60 {
                     return None;
                 }
-            };
+                let contracts = match db.get_user_contracts(&pk).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!("SSE contract-status-events DB error: {:#}", e);
+                        return None;
+                    }
+                };
 
-            let current: Snapshot = contracts
-                .iter()
-                .map(|c| {
-                    (
-                        c.contract_id.clone(),
-                        (c.status.clone(), c.status_updated_at_ns),
-                    )
-                })
-                .collect();
+                let current: Snapshot = contracts
+                    .iter()
+                    .map(|c| {
+                        (
+                            c.contract_id.clone(),
+                            (c.status.clone(), c.status_updated_at_ns),
+                        )
+                    })
+                    .collect();
 
-            let events: Vec<Event> = match &prev_snapshot {
-                None => {
-                    // First poll: emit all contracts
-                    contracts
-                        .iter()
-                        .map(|c| {
-                            let data = serde_json::json!({
-                                "contract_id": c.contract_id,
-                                "status": c.status,
-                                "updated_at_ns": c.status_updated_at_ns,
-                            });
-                            Event::message(data.to_string()).event_type("contract-status")
-                        })
-                        .collect()
-                }
-                Some(prev) => {
-                    // Subsequent polls: emit only changed contracts
-                    contracts
-                        .iter()
-                        .filter(|c| {
-                            prev.get(&c.contract_id)
-                                .map(|(ps, pt)| {
-                                    ps != &c.status || pt != &c.status_updated_at_ns
-                                })
-                                .unwrap_or(true) // new contract
-                        })
-                        .map(|c| {
-                            let data = serde_json::json!({
-                                "contract_id": c.contract_id,
-                                "status": c.status,
-                                "updated_at_ns": c.status_updated_at_ns,
-                            });
-                            Event::message(data.to_string()).event_type("contract-status")
-                        })
-                        .collect()
-                }
-            };
+                let events: Vec<Event> = match &prev_snapshot {
+                    None => {
+                        // First poll: emit all contracts
+                        contracts
+                            .iter()
+                            .map(|c| {
+                                let data = serde_json::json!({
+                                    "contract_id": c.contract_id,
+                                    "status": c.status,
+                                    "updated_at_ns": c.status_updated_at_ns,
+                                });
+                                Event::message(data.to_string()).event_type("contract-status")
+                            })
+                            .collect()
+                    }
+                    Some(prev) => {
+                        // Subsequent polls: emit only changed contracts
+                        contracts
+                            .iter()
+                            .filter(|c| {
+                                prev.get(&c.contract_id)
+                                    .map(|(ps, pt)| {
+                                        ps != &c.status || pt != &c.status_updated_at_ns
+                                    })
+                                    .unwrap_or(true) // new contract
+                            })
+                            .map(|c| {
+                                let data = serde_json::json!({
+                                    "contract_id": c.contract_id,
+                                    "status": c.status,
+                                    "updated_at_ns": c.status_updated_at_ns,
+                                });
+                                Event::message(data.to_string()).event_type("contract-status")
+                            })
+                            .collect()
+                    }
+                };
 
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            Some((events, (db, pk, Some(current), poll_count + 1)))
-        },
-    )
-    .flat_map(|events: Vec<Event>| futures::stream::iter(events));
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                Some((events, (db, pk, Some(current), poll_count + 1)))
+            },
+        )
+        .flat_map(|events: Vec<Event>| futures::stream::iter(events));
 
     Ok(SSE::new(stream).keep_alive(std::time::Duration::from_secs(30)))
 }
@@ -1720,14 +1724,12 @@ impl ProvidersApi {
             });
         }
 
-        let updates: Vec<(i64, i64)> = req
-            .0
-            .updates
-            .iter()
-            .map(|u| (u.id, u.price_e9s))
-            .collect();
+        let updates: Vec<(i64, i64)> = req.0.updates.iter().map(|u| (u.id, u.price_e9s)).collect();
 
-        match db.bulk_update_offering_prices(&pubkey_bytes, &updates).await {
+        match db
+            .bulk_update_offering_prices(&pubkey_bytes, &updates)
+            .await
+        {
             Ok(count) => Json(ApiResponse {
                 success: true,
                 data: Some(count),
@@ -2498,13 +2500,12 @@ impl ProvidersApi {
                     );
                 }
                 // Notify tenant that their new credentials are ready
-                if let Err(e) =
-                    crate::rental_notifications::notify_tenant_password_reset_complete(
-                        &db,
-                        email_service.as_ref(),
-                        &contract,
-                    )
-                    .await
+                if let Err(e) = crate::rental_notifications::notify_tenant_password_reset_complete(
+                    &db,
+                    email_service.as_ref(),
+                    &contract,
+                )
+                .await
                 {
                     tracing::warn!(
                         contract_id = %hex::encode(&contract_id),
@@ -2825,9 +2826,7 @@ impl ProvidersApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some(
-                    "sla_alert_window_hours must be between 1 and 168".to_string(),
-                ),
+                error: Some("sla_alert_window_hours must be between 1 and 168".to_string()),
             });
         }
 
@@ -4956,8 +4955,9 @@ mod tests {
         BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
         CsvImportResult, DuplicateOfferingRequest, HelpcenterSyncResponse,
         NotificationConfigResponse, NotificationUsageResponse, OnboardingUpdateResponse,
-        ProvisioningStatusRequest, ReconcileRequest, RentalResponseRequest, ResponseMetricsResponse,
-        ResponseTimeDistributionResponse, TestNotificationResponse, UpdatePoolRequest,
+        ProvisioningStatusRequest, ReconcileRequest, RentalResponseRequest,
+        ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationResponse,
+        UpdatePoolRequest,
     };
     use dcc_common::api_types::{
         LockResponse, ReconcileKeepInstance, ReconcileResponse, ReconcileTerminateInstance,
@@ -4987,8 +4987,7 @@ mod tests {
     #[test]
     fn test_normalize_provisioning_details_provisioned_empty_string_fails() {
         // Whitespace-only trims to empty, treated as None — must fail for "provisioned"
-        let result =
-            super::normalize_provisioning_details("provisioned", Some("   ".to_string()));
+        let result = super::normalize_provisioning_details("provisioned", Some("   ".to_string()));
         assert!(result.is_err());
     }
 
@@ -5000,8 +4999,7 @@ mod tests {
 
     #[test]
     fn test_normalize_provisioning_details_other_status_empty_string_returns_none() {
-        let result =
-            super::normalize_provisioning_details("provisioning", Some("  ".to_string()));
+        let result = super::normalize_provisioning_details("provisioning", Some("  ".to_string()));
         assert_eq!(result, Ok(None));
     }
 
@@ -5287,18 +5285,14 @@ mod tests {
         let req: ReconcileRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.running_instances.len(), 1);
         assert_eq!(req.running_instances[0].external_id, "vm-5");
-        assert_eq!(
-            req.running_instances[0].contract_id.as_deref(),
-            Some("abc")
-        );
+        assert_eq!(req.running_instances[0].contract_id.as_deref(), Some("abc"));
     }
 
     // ── CreatePoolRequest / UpdatePoolRequest / CreateSetupTokenRequest ───────
 
     #[test]
     fn test_create_pool_request_deserialization() {
-        let raw =
-            r#"{"name":"eu-proxmox","location":"europe","provisionerType":"proxmox"}"#;
+        let raw = r#"{"name":"eu-proxmox","location":"europe","provisionerType":"proxmox"}"#;
         let req: CreatePoolRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.name, "eu-proxmox");
         assert_eq!(req.location, "europe");
@@ -5340,10 +5334,7 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["acquired"], true);
-        assert_eq!(
-            json["expiresAtNs"],
-            1_700_000_300_000_000_000_i64
-        );
+        assert_eq!(json["expiresAtNs"], 1_700_000_300_000_000_000_i64);
     }
 
     #[test]
@@ -5412,7 +5403,8 @@ mod tests {
 
     #[test]
     fn test_bulk_update_prices_request_deserialization() {
-        let raw = r#"{"updates":[{"id":1,"priceE9s":15000000000},{"id":2,"priceE9s":25000000000}]}"#;
+        let raw =
+            r#"{"updates":[{"id":1,"priceE9s":15000000000},{"id":2,"priceE9s":25000000000}]}"#;
         let req: BulkUpdatePricesRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.updates.len(), 2);
         assert_eq!(req.updates[0].id, 1);
@@ -5587,13 +5579,11 @@ mod tests {
     #[tokio::test]
     async fn test_sse_response_has_event_stream_content_type() {
         use futures::stream;
-        use poem::IntoResponse;
         use poem::web::sse::{Event, SSE};
+        use poem::IntoResponse;
 
-        let events: Vec<Event> = vec![
-            Event::message(r#"{"count":1,"contract_ids":["id1"]}"#)
-                .event_type("password-reset-count"),
-        ];
+        let events: Vec<Event> = vec![Event::message(r#"{"count":1,"contract_ids":["id1"]}"#)
+            .event_type("password-reset-count")];
         let sse = SSE::new(stream::iter(events));
         let resp = sse.into_response();
         assert_eq!(
@@ -5652,13 +5642,14 @@ mod tests {
     #[tokio::test]
     async fn test_contract_status_sse_response_content_type() {
         use futures::stream;
-        use poem::IntoResponse;
         use poem::web::sse::{Event, SSE};
+        use poem::IntoResponse;
 
-        let events: Vec<Event> = vec![
-            Event::message(r#"{"contract_id":"abc","status":"active","updated_at_ns":null}"#)
-                .event_type("contract-status"),
-        ];
+        let events: Vec<Event> =
+            vec![
+                Event::message(r#"{"contract_id":"abc","status":"active","updated_at_ns":null}"#)
+                    .event_type("contract-status"),
+            ];
         let sse = SSE::new(stream::iter(events));
         let resp = sse.into_response();
         assert_eq!(

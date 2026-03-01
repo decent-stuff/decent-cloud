@@ -148,11 +148,10 @@ mod tests {
 
         db.insert_entries(entries).await.unwrap();
 
-        let count: (i64,) =
-            sqlx::query_as("SELECT COUNT(*) FROM reward_distributions")
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM reward_distributions")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
         assert_eq!(count.0, 5, "All 5 reward distributions should be stored");
     }
 }

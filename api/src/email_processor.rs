@@ -1,7 +1,7 @@
-use anyhow::Context;
 use crate::database::email::{calculate_backoff_secs, EmailType};
 use crate::database::Database;
 use crate::email_service::{EmailService, EmailServiceExt};
+use anyhow::Context;
 use std::sync::Arc;
 use std::time::Duration;
 

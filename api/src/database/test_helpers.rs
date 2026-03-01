@@ -926,8 +926,7 @@ pub async fn setup_test_db() -> Database {
         .expect("Failed to connect to PostgreSQL admin database");
 
     // Clean up stale test databases from crashed/previous test runs (first test only)
-    static CLEANUP_DONE: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
+    static CLEANUP_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if !CLEANUP_DONE.swap(true, Ordering::SeqCst) {
         cleanup_stale_test_dbs(&admin_pool).await;
     }

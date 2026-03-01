@@ -62,14 +62,23 @@ mod tests {
         let v = sample_validator();
         let json = serde_json::to_value(&v).unwrap();
         // Verify camelCase from #[serde(rename_all = "camelCase")]
-        assert!(json.get("totalCheckIns").is_some(), "Expected camelCase field totalCheckIns");
-        assert!(json.get("checkIns24h").is_some(), "Expected camelCase field checkIns24h");
+        assert!(
+            json.get("totalCheckIns").is_some(),
+            "Expected camelCase field totalCheckIns"
+        );
+        assert!(
+            json.get("checkIns24h").is_some(),
+            "Expected camelCase field checkIns24h"
+        );
         assert!(json.get("checkIns7d").is_some());
         assert!(json.get("checkIns30d").is_some());
         assert!(json.get("lastCheckInNs").is_some());
         assert!(json.get("registeredAtNs").is_some());
         // Verify no snake_case leakage
-        assert!(json.get("total_check_ins").is_none(), "snake_case field should not exist");
+        assert!(
+            json.get("total_check_ins").is_none(),
+            "snake_case field should not exist"
+        );
     }
 
     #[test]

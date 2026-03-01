@@ -54,8 +54,7 @@ pub struct ApiTokenSummary {
 /// Decode pubkey hex and verify it matches the authenticated user.
 /// Returns an error string on failure.
 fn decode_and_verify_pubkey(pubkey_hex: &str, auth_pubkey: &[u8]) -> Result<Vec<u8>, String> {
-    let pubkey_bytes = hex::decode(pubkey_hex)
-        .map_err(|_| "Invalid pubkey format".to_string())?;
+    let pubkey_bytes = hex::decode(pubkey_hex).map_err(|_| "Invalid pubkey format".to_string())?;
     if auth_pubkey != pubkey_bytes.as_slice() {
         return Err("Unauthorized: can only access your own data".to_string());
     }
@@ -134,12 +133,24 @@ impl UsersApi {
         let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
             Ok(pk) => pk,
             Err(e) => {
-                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
             }
         };
         match db.save_offering(&pubkey_bytes, offering_id.0).await {
-            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: None,
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
         }
     }
 
@@ -162,12 +173,24 @@ impl UsersApi {
         let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
             Ok(pk) => pk,
             Err(e) => {
-                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
             }
         };
         match db.unsave_offering(&pubkey_bytes, offering_id.0).await {
-            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: None,
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
         }
     }
 
@@ -196,8 +219,16 @@ impl UsersApi {
             }
         };
         match db.get_saved_offerings(&pubkey_bytes).await {
-            Ok(offerings) => Json(ApiResponse { success: true, data: Some(offerings), error: None }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Ok(offerings) => Json(ApiResponse {
+                success: true,
+                data: Some(offerings),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
         }
     }
 
@@ -218,12 +249,24 @@ impl UsersApi {
         let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
             Ok(pk) => pk,
             Err(e) => {
-                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
             }
         };
         match db.get_saved_offering_ids(&pubkey_bytes).await {
-            Ok(ids) => Json(ApiResponse { success: true, data: Some(ids), error: None }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Ok(ids) => Json(ApiResponse {
+                success: true,
+                data: Some(ids),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
         }
     }
 
@@ -384,14 +427,20 @@ impl UsersApi {
         let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
             Ok(pk) => pk,
             Err(e) => {
-                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
             }
         };
 
         match db.get_unread_count(&pubkey_bytes).await {
             Ok(count) => Json(ApiResponse {
                 success: true,
-                data: Some(UnreadCountResponse { unread_count: count }),
+                data: Some(UnreadCountResponse {
+                    unread_count: count,
+                }),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -421,7 +470,11 @@ impl UsersApi {
         let pubkey_bytes = match decode_and_verify_pubkey(&pubkey.0, &auth.pubkey) {
             Ok(pk) => pk,
             Err(e) => {
-                return Json(ApiResponse { success: false, data: None, error: Some(e) })
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
             }
         };
 
@@ -432,7 +485,11 @@ impl UsersApi {
         };
 
         match result {
-            Ok(()) => Json(ApiResponse { success: true, data: None, error: None }),
+            Ok(()) => Json(ApiResponse {
+                success: true,
+                data: None,
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
@@ -641,7 +698,10 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], true);
-        assert!(json["data"].is_object(), "data should be a UserActivity object");
+        assert!(
+            json["data"].is_object(),
+            "data should be a UserActivity object"
+        );
         assert!(json["data"]["offerings_provided"].is_array());
     }
 
@@ -655,7 +715,10 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
         assert!(json.get("data").is_none());
-        assert_eq!(json["error"], "Unauthorized: can only access your own activity");
+        assert_eq!(
+            json["error"],
+            "Unauthorized: can only access your own activity"
+        );
     }
 
     #[test]
@@ -718,7 +781,10 @@ mod tests {
         assert_eq!(requester_result, Some(requester_hex.clone()));
 
         // Fetch bandwidth and confirm data is present
-        let history = db.get_bandwidth_history(&contract_id_hex, 100).await.unwrap();
+        let history = db
+            .get_bandwidth_history(&contract_id_hex, 100)
+            .await
+            .unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].bytes_in, 1000);
         assert_eq!(history[0].bytes_out, 2000);

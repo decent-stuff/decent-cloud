@@ -80,7 +80,9 @@ async fn ensure_provider_with_pool(db: &Database, pubkey: &[u8], country: &str) 
         .expect("Failed to register agent delegation in ensure_provider_with_pool");
 
     // Mark agent as online (recent heartbeat), keyed by agent_pubkey
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
     sqlx::query("INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4) ON CONFLICT (agent_pubkey) DO UPDATE SET online = TRUE, last_heartbeat_ns = excluded.last_heartbeat_ns, updated_at_ns = excluded.updated_at_ns")
         .bind(&agent_pubkey[..])
         .bind(pubkey)
@@ -3242,9 +3244,14 @@ async fn test_save_offering_and_retrieve() {
     insert_test_offering(&db, 1, &provider, "US", 5.0).await;
     let db_id = test_id_to_db_id(1);
 
-    db.save_offering(&user, db_id).await.expect("save_offering failed");
+    db.save_offering(&user, db_id)
+        .await
+        .expect("save_offering failed");
 
-    let saved = db.get_saved_offerings(&user).await.expect("get_saved_offerings failed");
+    let saved = db
+        .get_saved_offerings(&user)
+        .await
+        .expect("get_saved_offerings failed");
     assert_eq!(saved.len(), 1, "Expected 1 saved offering");
     assert_eq!(saved[0].id, Some(db_id), "Saved offering id mismatch");
 }
@@ -3257,10 +3264,17 @@ async fn test_save_offering_idempotent() {
     insert_test_offering(&db, 2, &provider, "DE", 10.0).await;
     let db_id = test_id_to_db_id(2);
 
-    db.save_offering(&user, db_id).await.expect("first save failed");
-    db.save_offering(&user, db_id).await.expect("second save (upsert) failed");
+    db.save_offering(&user, db_id)
+        .await
+        .expect("first save failed");
+    db.save_offering(&user, db_id)
+        .await
+        .expect("second save (upsert) failed");
 
-    let ids = db.get_saved_offering_ids(&user).await.expect("get_saved_offering_ids failed");
+    let ids = db
+        .get_saved_offering_ids(&user)
+        .await
+        .expect("get_saved_offering_ids failed");
     assert_eq!(ids.len(), 1, "Duplicate save should not create two rows");
 }
 
@@ -3273,9 +3287,14 @@ async fn test_unsave_offering() {
     let db_id = test_id_to_db_id(3);
 
     db.save_offering(&user, db_id).await.expect("save failed");
-    db.unsave_offering(&user, db_id).await.expect("unsave failed");
+    db.unsave_offering(&user, db_id)
+        .await
+        .expect("unsave failed");
 
-    let saved = db.get_saved_offerings(&user).await.expect("get_saved_offerings failed");
+    let saved = db
+        .get_saved_offerings(&user)
+        .await
+        .expect("get_saved_offerings failed");
     assert_eq!(saved.len(), 0, "Offering should be removed after unsave");
 }
 
@@ -3287,13 +3306,30 @@ async fn test_is_offering_saved() {
     insert_test_offering(&db, 4, &provider, "US", 20.0).await;
     let db_id = test_id_to_db_id(4);
 
-    assert!(!db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should not be saved initially");
+    assert!(
+        !db.is_offering_saved(&user, db_id)
+            .await
+            .expect("is_offering_saved failed"),
+        "Should not be saved initially"
+    );
 
     db.save_offering(&user, db_id).await.expect("save failed");
-    assert!(db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should be saved after save");
+    assert!(
+        db.is_offering_saved(&user, db_id)
+            .await
+            .expect("is_offering_saved failed"),
+        "Should be saved after save"
+    );
 
-    db.unsave_offering(&user, db_id).await.expect("unsave failed");
-    assert!(!db.is_offering_saved(&user, db_id).await.expect("is_offering_saved failed"), "Should not be saved after unsave");
+    db.unsave_offering(&user, db_id)
+        .await
+        .expect("unsave failed");
+    assert!(
+        !db.is_offering_saved(&user, db_id)
+            .await
+            .expect("is_offering_saved failed"),
+        "Should not be saved after unsave"
+    );
 }
 
 #[tokio::test]
@@ -3306,10 +3342,17 @@ async fn test_get_saved_offering_ids_multiple() {
     let db_id_5 = test_id_to_db_id(5);
     let db_id_6 = test_id_to_db_id(6);
 
-    db.save_offering(&user, db_id_5).await.expect("save 5 failed");
-    db.save_offering(&user, db_id_6).await.expect("save 6 failed");
+    db.save_offering(&user, db_id_5)
+        .await
+        .expect("save 5 failed");
+    db.save_offering(&user, db_id_6)
+        .await
+        .expect("save 6 failed");
 
-    let ids = db.get_saved_offering_ids(&user).await.expect("get_saved_offering_ids failed");
+    let ids = db
+        .get_saved_offering_ids(&user)
+        .await
+        .expect("get_saved_offering_ids failed");
     assert_eq!(ids.len(), 2, "Expected 2 saved offering ids");
     assert!(ids.contains(&db_id_5));
     assert!(ids.contains(&db_id_6));
@@ -3320,7 +3363,9 @@ async fn test_unsave_nonexistent_is_ok() {
     let db = setup_test_db().await;
     let user = vec![0x55u8; 32];
     // Unsaving something never saved should succeed (no-op)
-    db.unsave_offering(&user, 99999).await.expect("unsave of non-existent should not fail");
+    db.unsave_offering(&user, 99999)
+        .await
+        .expect("unsave of non-existent should not fail");
 }
 
 #[tokio::test]
@@ -3393,15 +3438,13 @@ async fn test_bulk_update_offering_prices_rejects_wrong_owner() {
 
     let updates = vec![(db_id_1, 999_000_000_000i64)];
 
-    let result = db
-        .bulk_update_offering_prices(&attacker, &updates)
-        .await;
+    let result = db.bulk_update_offering_prices(&attacker, &updates).await;
+    assert!(result.is_err(), "should reject update from non-owner");
     assert!(
-        result.is_err(),
-        "should reject update from non-owner"
-    );
-    assert!(
-        result.unwrap_err().to_string().contains("Not all offerings belong to this provider"),
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Not all offerings belong to this provider"),
         "error message should mention ownership"
     );
 }
@@ -3434,9 +3477,21 @@ async fn test_pricing_stats_returns_correct_median() {
         .await
         .expect("get pricing stats");
     // There may be other compute/US offerings from seed data, so check relative values
-    assert!(stats.count >= 3, "expected at least 3 offerings, got {}", stats.count);
-    assert!(stats.min_price <= 10.0, "min should be <= 10, got {}", stats.min_price);
-    assert!(stats.max_price >= 30.0, "max should be >= 30, got {}", stats.max_price);
+    assert!(
+        stats.count >= 3,
+        "expected at least 3 offerings, got {}",
+        stats.count
+    );
+    assert!(
+        stats.min_price <= 10.0,
+        "min should be <= 10, got {}",
+        stats.min_price
+    );
+    assert!(
+        stats.max_price >= 30.0,
+        "max should be >= 30, got {}",
+        stats.max_price
+    );
     assert!(stats.avg_price > 0.0, "avg should be positive");
     assert!(stats.median_price > 0.0, "median should be positive");
 }
@@ -3579,7 +3634,9 @@ async fn test_draft_offering_visible_in_provider_own_listings() {
         .await
         .expect("get provider offerings");
     assert!(
-        results.iter().any(|o| o.offering_id == "draft-provider-view"),
+        results
+            .iter()
+            .any(|o| o.offering_id == "draft-provider-view"),
         "Provider's own draft must be visible in their own offerings list"
     );
 }
@@ -3621,7 +3678,10 @@ async fn test_record_offering_view_deduplicates_same_day() {
         .expect("second record failed");
 
     assert!(first, "First view should be recorded");
-    assert!(!second, "Second view with same IP hash same day must be deduplicated");
+    assert!(
+        !second,
+        "Second view with same IP hash same day must be deduplicated"
+    );
 
     let analytics = db
         .get_offering_analytics(offering_id)
@@ -3651,7 +3711,10 @@ async fn test_record_offering_view_with_viewer_pubkey() {
         .await
         .expect("get_offering_analytics failed");
     assert_eq!(analytics.views_30d, 1, "View must appear in 30d window");
-    assert_eq!(analytics.unique_viewers_30d, 1, "One unique viewer expected");
+    assert_eq!(
+        analytics.unique_viewers_30d, 1,
+        "One unique viewer expected"
+    );
 }
 
 #[tokio::test]
@@ -3684,9 +3747,15 @@ async fn test_get_offering_analytics_multiple_viewers() {
     let ip2 = vec![0x22u8; 32];
     let ip3 = vec![0x33u8; 32];
 
-    db.record_offering_view(offering_id, None, &ip1).await.expect("view ip1 failed");
-    db.record_offering_view(offering_id, None, &ip2).await.expect("view ip2 failed");
-    db.record_offering_view(offering_id, None, &ip3).await.expect("view ip3 failed");
+    db.record_offering_view(offering_id, None, &ip1)
+        .await
+        .expect("view ip1 failed");
+    db.record_offering_view(offering_id, None, &ip2)
+        .await
+        .expect("view ip2 failed");
+    db.record_offering_view(offering_id, None, &ip3)
+        .await
+        .expect("view ip3 failed");
 
     let analytics = db
         .get_offering_analytics(offering_id)
@@ -3696,7 +3765,10 @@ async fn test_get_offering_analytics_multiple_viewers() {
     assert_eq!(analytics.views_7d, 3, "Three distinct views in 7d window");
     assert_eq!(analytics.unique_viewers_7d, 3, "Three unique viewers in 7d");
     assert_eq!(analytics.views_30d, 3, "Three distinct views in 30d window");
-    assert_eq!(analytics.unique_viewers_30d, 3, "Three unique viewers in 30d");
+    assert_eq!(
+        analytics.unique_viewers_30d, 3,
+        "Three unique viewers in 30d"
+    );
 }
 
 // ── offering view trends tests ────────────────────────────────────────────────
@@ -3726,20 +3798,34 @@ async fn test_get_offering_view_trends_with_data() {
     // Insert two views with distinct ip_hashes (today's bucket)
     let ip1 = vec![0xE1u8; 32];
     let ip2 = vec![0xE2u8; 32];
-    db.record_offering_view(offering_id, None, &ip1).await.expect("view ip1 failed");
-    db.record_offering_view(offering_id, None, &ip2).await.expect("view ip2 failed");
+    db.record_offering_view(offering_id, None, &ip1)
+        .await
+        .expect("view ip1 failed");
+    db.record_offering_view(offering_id, None, &ip2)
+        .await
+        .expect("view ip2 failed");
 
     let trends = db
         .get_offering_view_trends(offering_id, 30)
         .await
         .expect("get_offering_view_trends failed");
 
-    assert_eq!(trends.len(), 1, "Views from a single day must produce one trend row");
+    assert_eq!(
+        trends.len(),
+        1,
+        "Views from a single day must produce one trend row"
+    );
     assert_eq!(trends[0].views, 2, "Two views must be counted");
-    assert_eq!(trends[0].unique_viewers, 2, "Two distinct IPs must count as 2 unique viewers");
+    assert_eq!(
+        trends[0].unique_viewers, 2,
+        "Two distinct IPs must count as 2 unique viewers"
+    );
     // Day must be in YYYY-MM-DD format
     assert_eq!(trends[0].day.len(), 10, "Day must be 10 chars (YYYY-MM-DD)");
-    assert!(trends[0].day.chars().nth(4) == Some('-'), "Day must contain dash at index 4");
+    assert!(
+        trends[0].day.chars().nth(4) == Some('-'),
+        "Day must contain dash at index 4"
+    );
 }
 
 // ── trending offerings tests ───────────────────────────────────────────────────
@@ -3752,14 +3838,30 @@ async fn test_get_trending_offerings_with_views_appears() {
     let offering_id = test_id_to_db_id(11);
 
     // Record views from distinct IPs so they aren't deduplicated
-    db.record_offering_view(offering_id, None, &[0xC1u8; 32]).await.expect("view 1 failed");
-    db.record_offering_view(offering_id, None, &[0xC2u8; 32]).await.expect("view 2 failed");
-    db.record_offering_view(offering_id, None, &[0xC3u8; 32]).await.expect("view 3 failed");
+    db.record_offering_view(offering_id, None, &[0xC1u8; 32])
+        .await
+        .expect("view 1 failed");
+    db.record_offering_view(offering_id, None, &[0xC2u8; 32])
+        .await
+        .expect("view 2 failed");
+    db.record_offering_view(offering_id, None, &[0xC3u8; 32])
+        .await
+        .expect("view 3 failed");
 
-    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+    let trending = db
+        .get_trending_offerings(10)
+        .await
+        .expect("get_trending_offerings failed");
     let found = trending.iter().find(|t| t.offering_id == offering_id);
-    assert!(found.is_some(), "Offering with views must appear in trending");
-    assert_eq!(found.unwrap().views_7d, 3, "views_7d must equal number of distinct views recorded");
+    assert!(
+        found.is_some(),
+        "Offering with views must appear in trending"
+    );
+    assert_eq!(
+        found.unwrap().views_7d,
+        3,
+        "views_7d must equal number of distinct views recorded"
+    );
 }
 
 #[tokio::test]
@@ -3769,7 +3871,10 @@ async fn test_get_trending_offerings_no_views_excluded() {
     insert_test_offering(&db, 12, &provider, "US", 10.0).await;
     let offering_id = test_id_to_db_id(12);
 
-    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+    let trending = db
+        .get_trending_offerings(10)
+        .await
+        .expect("get_trending_offerings failed");
     let found = trending.iter().any(|t| t.offering_id == offering_id);
     assert!(!found, "Offering with no views must not appear in trending");
 }
@@ -3783,25 +3888,44 @@ async fn test_get_trending_offerings_ordered_by_view_count_descending() {
     let id_low = test_id_to_db_id(13); // 1 view
     let id_high = test_id_to_db_id(14); // 3 views
 
-    db.record_offering_view(id_low, None, &[0xD1u8; 32]).await.expect("view low failed");
-    db.record_offering_view(id_high, None, &[0xD2u8; 32]).await.expect("view high 1 failed");
-    db.record_offering_view(id_high, None, &[0xD3u8; 32]).await.expect("view high 2 failed");
-    db.record_offering_view(id_high, None, &[0xD4u8; 32]).await.expect("view high 3 failed");
+    db.record_offering_view(id_low, None, &[0xD1u8; 32])
+        .await
+        .expect("view low failed");
+    db.record_offering_view(id_high, None, &[0xD2u8; 32])
+        .await
+        .expect("view high 1 failed");
+    db.record_offering_view(id_high, None, &[0xD3u8; 32])
+        .await
+        .expect("view high 2 failed");
+    db.record_offering_view(id_high, None, &[0xD4u8; 32])
+        .await
+        .expect("view high 3 failed");
 
-    let trending = db.get_trending_offerings(10).await.expect("get_trending_offerings failed");
+    let trending = db
+        .get_trending_offerings(10)
+        .await
+        .expect("get_trending_offerings failed");
 
     // Both offerings must appear in the results
     let pos_high = trending.iter().position(|t| t.offering_id == id_high);
     let pos_low = trending.iter().position(|t| t.offering_id == id_low);
     assert!(pos_high.is_some(), "High-view offering must be in trending");
     assert!(pos_low.is_some(), "Low-view offering must be in trending");
-    assert!(pos_high.unwrap() < pos_low.unwrap(), "Higher view count must rank first");
+    assert!(
+        pos_high.unwrap() < pos_low.unwrap(),
+        "Higher view count must rank first"
+    );
 }
 
 // ==================== Scheduled Publish Tests ====================
 
 /// Build a minimal draft Offering for testing publish scheduling.
-fn make_draft_offering(id: i64, pubkey: &[u8], offering_id: &str, publish_at: Option<chrono::DateTime<chrono::Utc>>) -> Offering {
+fn make_draft_offering(
+    id: i64,
+    pubkey: &[u8],
+    offering_id: &str,
+    publish_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> Offering {
     Offering {
         id: None,
         pubkey: hex::encode(pubkey),
@@ -3885,20 +4009,43 @@ async fn test_publish_scheduled_offerings_publishes_past_due() {
     // Create a draft with publish_at in the past
     let past = chrono::Utc::now() - chrono::Duration::hours(1);
     let offering = make_draft_offering(9001, &pubkey, "sched-past-offer", Some(past));
-    let db_id = db.create_offering(&pubkey, offering).await.expect("create failed");
+    let db_id = db
+        .create_offering(&pubkey, offering)
+        .await
+        .expect("create failed");
 
     // Verify it starts as draft
-    let before = db.get_offering(db_id).await.expect("get failed").expect("not found");
+    let before = db
+        .get_offering(db_id)
+        .await
+        .expect("get failed")
+        .expect("not found");
     assert!(before.is_draft, "offering must start as draft");
 
     // Run the scheduler
-    let published = db.publish_scheduled_offerings().await.expect("publish_scheduled failed");
-    assert!(published >= 1, "at least one offering should have been published");
+    let published = db
+        .publish_scheduled_offerings()
+        .await
+        .expect("publish_scheduled failed");
+    assert!(
+        published >= 1,
+        "at least one offering should have been published"
+    );
 
     // Verify it is now published
-    let after = db.get_offering(db_id).await.expect("get failed").expect("not found");
-    assert!(!after.is_draft, "offering must be published after scheduler runs");
-    assert!(after.publish_at.is_none(), "publish_at must be cleared after publishing");
+    let after = db
+        .get_offering(db_id)
+        .await
+        .expect("get failed")
+        .expect("not found");
+    assert!(
+        !after.is_draft,
+        "offering must be published after scheduler runs"
+    );
+    assert!(
+        after.publish_at.is_none(),
+        "publish_at must be cleared after publishing"
+    );
 }
 
 #[tokio::test]
@@ -3910,17 +4057,33 @@ async fn test_publish_scheduled_offerings_keeps_future_drafts() {
     // Create a draft with publish_at in the future
     let future = chrono::Utc::now() + chrono::Duration::hours(24);
     let offering = make_draft_offering(9002, &pubkey, "sched-future-offer", Some(future));
-    let db_id = db.create_offering(&pubkey, offering).await.expect("create failed");
+    let db_id = db
+        .create_offering(&pubkey, offering)
+        .await
+        .expect("create failed");
 
     // Run the scheduler - should NOT publish this offering
-    let published = db.publish_scheduled_offerings().await.expect("publish_scheduled failed");
+    let published = db
+        .publish_scheduled_offerings()
+        .await
+        .expect("publish_scheduled failed");
     // We can't assert published == 0 because other tests may have created past-due offerings.
     // Instead verify this specific offering is still a draft.
     let _ = published;
 
-    let after = db.get_offering(db_id).await.expect("get failed").expect("not found");
-    assert!(after.is_draft, "future-scheduled offering must remain a draft");
-    assert!(after.publish_at.is_some(), "publish_at must not be cleared for future offering");
+    let after = db
+        .get_offering(db_id)
+        .await
+        .expect("get failed")
+        .expect("not found");
+    assert!(
+        after.is_draft,
+        "future-scheduled offering must remain a draft"
+    );
+    assert!(
+        after.publish_at.is_some(),
+        "publish_at must not be cleared for future offering"
+    );
 }
 
 // ==================== Bulk Publish Tests ====================
@@ -3933,8 +4096,14 @@ async fn test_bulk_publish_offerings_publishes_drafts() {
 
     let o1 = make_draft_offering(9010, &pubkey, "bulk-pub-1", None);
     let o2 = make_draft_offering(9011, &pubkey, "bulk-pub-2", None);
-    let id1 = db.create_offering(&pubkey, o1).await.expect("create failed");
-    let id2 = db.create_offering(&pubkey, o2).await.expect("create failed");
+    let id1 = db
+        .create_offering(&pubkey, o1)
+        .await
+        .expect("create failed");
+    let id2 = db
+        .create_offering(&pubkey, o2)
+        .await
+        .expect("create failed");
 
     let published = db
         .bulk_publish_offerings(&pubkey, &[id1, id2])
@@ -3966,7 +4135,10 @@ async fn test_bulk_publish_offerings_skips_already_published() {
         o.is_draft = false;
         o
     };
-    let draft_id = db.create_offering(&pubkey, draft).await.expect("create draft failed");
+    let draft_id = db
+        .create_offering(&pubkey, draft)
+        .await
+        .expect("create draft failed");
     let published_id = db
         .create_offering(&pubkey, already_published)
         .await
@@ -3978,9 +4150,16 @@ async fn test_bulk_publish_offerings_skips_already_published() {
         .expect("bulk_publish_offerings should succeed");
 
     // Only the draft should appear in the returned list
-    assert_eq!(result.len(), 1, "only the draft must be counted as published");
+    assert_eq!(
+        result.len(),
+        1,
+        "only the draft must be counted as published"
+    );
     assert!(result.contains(&draft_id));
-    assert!(!result.contains(&published_id), "already-published ID must not be re-published");
+    assert!(
+        !result.contains(&published_id),
+        "already-published ID must not be re-published"
+    );
 }
 
 #[tokio::test]
@@ -3991,7 +4170,10 @@ async fn test_bulk_publish_offerings_rejects_wrong_owner() {
     register_provider(&db, &owner).await;
 
     let draft = make_draft_offering(9030, &owner, "bulk-pub-owner-check", None);
-    let id = db.create_offering(&owner, draft).await.expect("create failed");
+    let id = db
+        .create_offering(&owner, draft)
+        .await
+        .expect("create failed");
 
     // Attacker tries to publish owner's draft — must return empty (no rows match)
     let result = db
@@ -4006,7 +4188,10 @@ async fn test_bulk_publish_offerings_rejects_wrong_owner() {
 
     // Offering must remain a draft
     let after = db.get_offering(id).await.unwrap().unwrap();
-    assert!(after.is_draft, "offering must still be a draft after failed attacker attempt");
+    assert!(
+        after.is_draft,
+        "offering must still be a draft after failed attacker attempt"
+    );
 }
 
 #[tokio::test]
@@ -4017,7 +4202,10 @@ async fn test_bulk_publish_offerings_empty_returns_error() {
     let result = db.bulk_publish_offerings(&pubkey, &[]).await;
     assert!(result.is_err(), "empty offering_ids must return an error");
     assert!(
-        result.unwrap_err().to_string().contains("must not be empty"),
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("must not be empty"),
         "error message must mention empty input"
     );
 }

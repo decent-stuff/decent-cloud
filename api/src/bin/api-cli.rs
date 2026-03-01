@@ -3000,7 +3000,8 @@ async fn handle_cloud_action(action: CloudAction, api_url: &str) -> Result<()> {
             let client = SignedClient::new(&id, api_url)?;
 
             let request = ListOnMarketplaceRequest {
-                offer_name: name.unwrap_or_else(|| format!("VM {}", &resource_id[..8.min(resource_id.len())])),
+                offer_name: name
+                    .unwrap_or_else(|| format!("VM {}", &resource_id[..8.min(resource_id.len())])),
                 monthly_price: price,
                 description,
             };

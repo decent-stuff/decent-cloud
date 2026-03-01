@@ -26,8 +26,8 @@ impl RawToken {
 
 /// Compute SHA-256 of a hex-encoded token string (for lookups).
 pub fn hash_token_hex(token_hex: &str) -> Result<Vec<u8>> {
-    let bytes = hex::decode(token_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid token hex encoding: {}", e))?;
+    let bytes =
+        hex::decode(token_hex).map_err(|e| anyhow::anyhow!("Invalid token hex encoding: {}", e))?;
     Ok(Sha256::digest(bytes).to_vec())
 }
 
@@ -45,8 +45,7 @@ pub struct ApiToken {
 impl ApiToken {
     pub fn is_active(&self) -> anyhow::Result<bool> {
         let now = crate::now_ns()?;
-        Ok(self.revoked_at.is_none()
-            && self.expires_at.is_none_or(|exp| exp > now))
+        Ok(self.revoked_at.is_none() && self.expires_at.is_none_or(|exp| exp > now))
     }
 }
 
@@ -71,8 +70,7 @@ impl Database {
         let token_hash = raw.sha256_hash();
 
         let now = crate::now_ns()?;
-        let expires_at = expires_in_days
-            .map(|days| now + days * 24 * 3600 * 1_000_000_000i64);
+        let expires_at = expires_in_days.map(|days| now + days * 24 * 3600 * 1_000_000_000i64);
 
         let id = uuid::Uuid::new_v4();
 

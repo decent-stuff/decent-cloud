@@ -795,13 +795,9 @@ impl<'a> poem_openapi::ApiExtractor<'a> for BearerAuth {
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| AuthError::MissingHeader("Authorization".to_string()))?;
 
-        let token_hex = auth_header
-            .strip_prefix("Bearer ")
-            .ok_or_else(|| {
-                AuthError::InvalidFormat(
-                    "Authorization header must be 'Bearer <token>'".to_string(),
-                )
-            })?;
+        let token_hex = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+            AuthError::InvalidFormat("Authorization header must be 'Bearer <token>'".to_string())
+        })?;
 
         let token_hash = hash_token_hex(token_hex)
             .map_err(|e| AuthError::InvalidFormat(format!("Invalid token: {}", e)))?;
@@ -840,19 +836,25 @@ pub async fn authenticate_agent_from_request(
         .get("X-Agent-Pubkey")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "agent_pubkey"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Agent-Pubkey or agent_pubkey query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Agent-Pubkey or agent_pubkey query param".to_string())
+        })?;
 
     let signature_hex = headers
         .get("X-Signature")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "signature"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Signature or signature query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Signature or signature query param".to_string())
+        })?;
 
     let timestamp = headers
         .get("X-Timestamp")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "timestamp"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string())
+        })?;
 
     let nonce = headers
         .get("X-Nonce")
@@ -908,19 +910,25 @@ pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>
         .get("X-Public-Key")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "pubkey"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Public-Key or pubkey query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Public-Key or pubkey query param".to_string())
+        })?;
 
     let signature_hex = headers
         .get("X-Signature")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "signature"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Signature or signature query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Signature or signature query param".to_string())
+        })?;
 
     let timestamp = headers
         .get("X-Timestamp")
         .and_then(|v| v.to_str().ok())
         .or_else(|| get_query_param(query, "timestamp"))
-        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string()))?;
+        .ok_or_else(|| {
+            AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string())
+        })?;
 
     let nonce = headers
         .get("X-Nonce")

@@ -458,7 +458,9 @@ async fn test_offerings_with_pools_included_in_search() {
 #[tokio::test]
 async fn test_get_active_validators() {
     let db = setup_test_db().await;
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
 
     // Create test validators with different activity patterns
     let validator1 = b"validator_1_active_now";
@@ -614,7 +616,9 @@ async fn test_get_active_validators() {
 #[tokio::test]
 async fn test_get_active_validators_with_profile() {
     let db = setup_test_db().await;
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
 
     let validator_key = b"validator_with_profile";
 
@@ -680,7 +684,9 @@ async fn test_get_active_validators_with_profile() {
 #[tokio::test]
 async fn test_get_active_validators_without_profile() {
     let db = setup_test_db().await;
-    let now_ns = chrono::Utc::now().timestamp_nanos_opt().expect("timestamp overflow (year > 2262)");
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
 
     let validator_key = b"validator_no_profile";
 

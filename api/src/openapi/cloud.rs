@@ -75,10 +75,7 @@ fn get_encryption_key() -> anyhow::Result<ServerEncryptionKey> {
 }
 
 /// Resolve the authenticated user's account_id (pubkey bytes).
-async fn resolve_account_id(
-    db: &Database,
-    user: &ApiAuthenticatedUser,
-) -> Result<Vec<u8>, String> {
+async fn resolve_account_id(db: &Database, user: &ApiAuthenticatedUser) -> Result<Vec<u8>, String> {
     match db.get_account_id_by_public_key(&user.pubkey).await {
         Ok(Some(id)) => Ok(id),
         Ok(None) => Err("Account not found".to_string()),
@@ -771,41 +768,90 @@ impl CloudApi {
     ) -> Json<ApiResponse<EmptyResponse>> {
         let account_id = match resolve_account_id(&db, &user).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
         };
 
         let uuid = match id.0.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid resource ID".to_string()),
+                })
+            }
         };
 
         let encryption_key = match get_encryption_key() {
             Ok(key) => key,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
         };
 
-        let ctx = match db.get_cloud_resource_action_context(&uuid, &account_id).await {
+        let ctx = match db
+            .get_cloud_resource_action_context(&uuid, &account_id)
+            .await
+        {
             Ok(Some(ctx)) => ctx,
-            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Cloud resource not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {e}")),
+                })
+            }
         };
 
         if ctx.status != "stopped" {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some(format!("Cannot start resource in '{}' status (must be 'stopped')", ctx.status)),
+                error: Some(format!(
+                    "Cannot start resource in '{}' status (must be 'stopped')",
+                    ctx.status
+                )),
             });
         }
 
-        let credentials = match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
-            Ok(c) => c,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
-        };
+        let credentials =
+            match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to decrypt credentials: {e}")),
+                    })
+                }
+            };
 
         let backend = match create_backend(&ctx.backend_type, &credentials).await {
             Ok(b) => b,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to create backend: {e}")),
+                })
+            }
         };
 
         if let Err(e) = backend.start_server(&ctx.external_id).await {
@@ -816,12 +862,23 @@ impl CloudApi {
             });
         }
 
-        if let Err(e) = db.transition_cloud_resource_status(&uuid, &account_id, "stopped", "running").await {
+        if let Err(e) = db
+            .transition_cloud_resource_status(&uuid, &account_id, "stopped", "running")
+            .await
+        {
             tracing::error!(resource_id = %uuid, "Server started but DB update failed: {e:#}");
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Server started but status update failed: {e}")) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Server started but status update failed: {e}")),
+            });
         }
 
-        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
+        Json(ApiResponse {
+            success: true,
+            data: Some(EmptyResponse {}),
+            error: None,
+        })
     }
 
     /// Stop cloud resource
@@ -840,30 +897,66 @@ impl CloudApi {
     ) -> Json<ApiResponse<EmptyResponse>> {
         let account_id = match resolve_account_id(&db, &user).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
         };
 
         let uuid = match id.0.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid resource ID".to_string()),
+                })
+            }
         };
 
         let encryption_key = match get_encryption_key() {
             Ok(key) => key,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
         };
 
-        let ctx = match db.get_cloud_resource_action_context(&uuid, &account_id).await {
+        let ctx = match db
+            .get_cloud_resource_action_context(&uuid, &account_id)
+            .await
+        {
             Ok(Some(ctx)) => ctx,
-            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Cloud resource not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {e}")),
+                })
+            }
         };
 
         if ctx.status != "running" {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some(format!("Cannot stop resource in '{}' status (must be 'running')", ctx.status)),
+                error: Some(format!(
+                    "Cannot stop resource in '{}' status (must be 'running')",
+                    ctx.status
+                )),
             });
         }
 
@@ -871,18 +964,33 @@ impl CloudApi {
             return Json(ApiResponse {
                 success: false,
                 data: None,
-                error: Some("Cannot stop a marketplace-listed resource. Unlist it first.".to_string()),
+                error: Some(
+                    "Cannot stop a marketplace-listed resource. Unlist it first.".to_string(),
+                ),
             });
         }
 
-        let credentials = match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
-            Ok(c) => c,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
-        };
+        let credentials =
+            match decrypt_server_credential(&ctx.credentials_encrypted, &encryption_key) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Failed to decrypt credentials: {e}")),
+                    })
+                }
+            };
 
         let backend = match create_backend(&ctx.backend_type, &credentials).await {
             Ok(b) => b,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to create backend: {e}")),
+                })
+            }
         };
 
         if let Err(e) = backend.stop_server(&ctx.external_id).await {
@@ -893,12 +1001,23 @@ impl CloudApi {
             });
         }
 
-        if let Err(e) = db.transition_cloud_resource_status(&uuid, &account_id, "running", "stopped").await {
+        if let Err(e) = db
+            .transition_cloud_resource_status(&uuid, &account_id, "running", "stopped")
+            .await
+        {
             tracing::error!(resource_id = %uuid, "Server stopped but DB update failed: {e:#}");
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Server stopped but status update failed: {e}")) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Server stopped but status update failed: {e}")),
+            });
         }
 
-        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
+        Json(ApiResponse {
+            success: true,
+            data: Some(EmptyResponse {}),
+            error: None,
+        })
     }
 
     /// Validate cloud account credentials
@@ -918,33 +1037,73 @@ impl CloudApi {
     ) -> Json<ApiResponse<CloudAccount>> {
         let account_id = match resolve_account_id(&db, &user).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
         };
 
         let uuid = match id.0.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid account ID".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid account ID".to_string()),
+                })
+            }
         };
 
         let encryption_key = match get_encryption_key() {
             Ok(key) => key,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
         };
 
         let (owner_id, backend_type, credentials_encrypted) =
             match db.get_cloud_account_credentials(&uuid).await {
                 Ok(Some(row)) => row,
-                Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found".to_string()) }),
-                Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+                Ok(None) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Cloud account not found".to_string()),
+                    })
+                }
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Database error: {e}")),
+                    })
+                }
             };
 
         if owner_id != account_id {
-            return Json(ApiResponse { success: false, data: None, error: Some("Unauthorized".to_string()) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized".to_string()),
+            });
         }
 
         let credentials = match decrypt_server_credential(&credentials_encrypted, &encryption_key) {
             Ok(c) => c,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to decrypt credentials: {e}")),
+                })
+            }
         };
 
         let (is_valid, validation_error) = match create_backend(&backend_type, &credentials).await {
@@ -956,16 +1115,37 @@ impl CloudApi {
         };
 
         if let Err(e) = db
-            .update_cloud_account_validation(&uuid, &account_id, is_valid, validation_error.as_deref())
+            .update_cloud_account_validation(
+                &uuid,
+                &account_id,
+                is_valid,
+                validation_error.as_deref(),
+            )
             .await
         {
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to update validation status: {e}")) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to update validation status: {e}")),
+            });
         }
 
         match db.get_cloud_account(&uuid, &account_id).await {
-            Ok(Some(account)) => Json(ApiResponse { success: true, data: Some(account), error: None }),
-            Ok(None) => Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found after update".to_string()) }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            Ok(Some(account)) => Json(ApiResponse {
+                success: true,
+                data: Some(account),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Cloud account not found after update".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Database error: {e}")),
+            }),
         }
     }
 
@@ -987,64 +1167,147 @@ impl CloudApi {
     ) -> Json<ApiResponse<Offering>> {
         let account_id = match resolve_account_id(&db, &user).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
         };
 
         let uuid = match id.0.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid resource ID".to_string()),
+                })
+            }
         };
 
         let encryption_key = match get_encryption_key() {
             Ok(key) => key,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
         };
 
         // Fetch resource to validate state and get server_type/location
         let resource = match db.get_cloud_resource(&uuid, &account_id).await {
             Ok(Some(r)) => r,
-            Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud resource not found".to_string()) }),
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Cloud resource not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Database error: {e}")),
+                })
+            }
         };
 
         if resource.resource.status != "running" {
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Resource must be running to list (current status: '{}')", resource.resource.status)) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!(
+                    "Resource must be running to list (current status: '{}')",
+                    resource.resource.status
+                )),
+            });
         }
         if resource.resource.listing_mode != "personal" {
-            return Json(ApiResponse { success: false, data: None, error: Some("Resource is already listed on the marketplace".to_string()) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Resource is already listed on the marketplace".to_string()),
+            });
         }
 
         // Get credentials and catalog to populate offering hardware specs
         let cloud_account_uuid = match resource.resource.cloud_account_id.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid cloud account ID in resource".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid cloud account ID in resource".to_string()),
+                })
+            }
         };
 
         let (_owner_id, backend_type, credentials_encrypted) =
             match db.get_cloud_account_credentials(&cloud_account_uuid).await {
                 Ok(Some(row)) => row,
-                Ok(None) => return Json(ApiResponse { success: false, data: None, error: Some("Cloud account not found".to_string()) }),
-                Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+                Ok(None) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some("Cloud account not found".to_string()),
+                    })
+                }
+                Err(e) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!("Database error: {e}")),
+                    })
+                }
             };
 
         let credentials = match decrypt_server_credential(&credentials_encrypted, &encryption_key) {
             Ok(c) => c,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to decrypt credentials: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to decrypt credentials: {e}")),
+                })
+            }
         };
 
         let backend = match create_backend(&backend_type, &credentials).await {
             Ok(b) => b,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create backend: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to create backend: {e}")),
+                })
+            }
         };
 
         let catalog = match backend.get_catalog().await {
             Ok(c) => c,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to get catalog: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get catalog: {e}")),
+                })
+            }
         };
 
         // Find server type and location in catalog
-        let server_type = catalog.server_types.iter().find(|st| st.id == resource.resource.server_type);
-        let location = catalog.locations.iter().find(|l| l.id == resource.resource.location);
+        let server_type = catalog
+            .server_types
+            .iter()
+            .find(|st| st.id == resource.resource.server_type);
+        let location = catalog
+            .locations
+            .iter()
+            .find(|l| l.id == resource.resource.location);
 
         let resource_id_str = resource.resource.id.clone();
         let offering_id_str = format!("self-{}", &resource_id_str[..8.min(resource_id_str.len())]);
@@ -1124,21 +1387,46 @@ impl CloudApi {
 
         let offering_db_id = match db.create_offering(&user.pubkey, offering).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to create offering: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to create offering: {e}")),
+                })
+            }
         };
 
-        if let Err(e) = db.list_on_marketplace(&uuid, &account_id, offering_db_id).await {
+        if let Err(e) = db
+            .list_on_marketplace(&uuid, &account_id, offering_db_id)
+            .await
+        {
             // Rollback: delete the offering we just created
             if let Err(rollback_err) = db.delete_offering(&user.pubkey, offering_db_id).await {
                 tracing::error!("Failed to rollback offering {} after marketplace listing failure: {rollback_err:#}", offering_db_id);
             }
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to list on marketplace: {e}")) });
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to list on marketplace: {e}")),
+            });
         }
 
         match db.get_offering(offering_db_id).await {
-            Ok(Some(offering)) => Json(ApiResponse { success: true, data: Some(offering), error: None }),
-            Ok(None) => Json(ApiResponse { success: false, data: None, error: Some("Offering created but not found".to_string()) }),
-            Err(e) => Json(ApiResponse { success: false, data: None, error: Some(format!("Database error: {e}")) }),
+            Ok(Some(offering)) => Json(ApiResponse {
+                success: true,
+                data: Some(offering),
+                error: None,
+            }),
+            Ok(None) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Offering created but not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Database error: {e}")),
+            }),
         }
     }
 
@@ -1158,25 +1446,54 @@ impl CloudApi {
     ) -> Json<ApiResponse<EmptyResponse>> {
         let account_id = match resolve_account_id(&db, &user).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(e) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
         };
 
         let uuid = match id.0.parse::<Uuid>() {
             Ok(u) => u,
-            Err(_) => return Json(ApiResponse { success: false, data: None, error: Some("Invalid resource ID".to_string()) }),
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid resource ID".to_string()),
+                })
+            }
         };
 
         let old_offering_id = match db.unlist_from_marketplace(&uuid, &account_id).await {
             Ok(id) => id,
-            Err(e) => return Json(ApiResponse { success: false, data: None, error: Some(format!("Failed to unlist: {e}")) }),
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to unlist: {e}")),
+                })
+            }
         };
 
         if let Err(e) = db.delete_offering(&user.pubkey, old_offering_id).await {
-            tracing::error!(offering_id = old_offering_id, "Resource unlisted but offering deletion failed: {e:#}");
-            return Json(ApiResponse { success: false, data: None, error: Some(format!("Unlisted but failed to delete offering: {e}")) });
+            tracing::error!(
+                offering_id = old_offering_id,
+                "Resource unlisted but offering deletion failed: {e:#}"
+            );
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Unlisted but failed to delete offering: {e}")),
+            });
         }
 
-        Json(ApiResponse { success: true, data: Some(EmptyResponse {}), error: None })
+        Json(ApiResponse {
+            success: true,
+            data: Some(EmptyResponse {}),
+            error: None,
+        })
     }
 }
 
@@ -1282,7 +1599,8 @@ mod tests {
 
     #[test]
     fn test_list_on_marketplace_request_with_description() {
-        let json = r#"{"offerName":"Small VPS","monthlyPrice":9.99,"description":"A small server"}"#;
+        let json =
+            r#"{"offerName":"Small VPS","monthlyPrice":9.99,"description":"A small server"}"#;
         let req: ListOnMarketplaceRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.offer_name, "Small VPS");
         assert_eq!(req.monthly_price, 9.99);

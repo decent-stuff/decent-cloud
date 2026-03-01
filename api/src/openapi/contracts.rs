@@ -974,7 +974,6 @@ impl ContractsApi {
         }
     }
 
-
     /// Get contract health summary
     ///
     /// Returns aggregated uptime metrics (total checks, uptime %, avg latency) for a contract.
@@ -1700,15 +1699,15 @@ impl ContractsApi {
 
 #[cfg(test)]
 mod tests {
+    use crate::database::contracts::RentalRequestParams;
     use crate::database::contracts::{Contract, ContractExtension, ContractUsage};
     use crate::database::stats::ContractFeedback;
+    use crate::openapi::common::ApiResponse;
     use crate::openapi::common::{
         CancelContractRequest, ExtendContractRequest, ExtendContractResponse, RecordUsageRequest,
         RentalRequestResponse, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
         VerifyCheckoutSessionResponse,
     };
-    use crate::database::contracts::RentalRequestParams;
-    use crate::openapi::common::ApiResponse;
 
     fn sample_contract() -> Contract {
         Contract {
@@ -1923,10 +1922,7 @@ mod tests {
             json["previous_end_timestamp_ns"],
             1_700_000_000_000_000_000_i64
         );
-        assert_eq!(
-            json["new_end_timestamp_ns"],
-            1_700_043_200_000_000_000_i64
-        );
+        assert_eq!(json["new_end_timestamp_ns"], 1_700_043_200_000_000_000_i64);
         assert_eq!(json["created_at_ns"], 1_699_990_000_000_000_000_i64);
     }
 
@@ -2195,5 +2191,4 @@ mod tests {
             "Unauthorized: you are not a party to this contract"
         );
     }
-
 }
