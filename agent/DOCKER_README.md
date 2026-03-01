@@ -1,12 +1,17 @@
 # AI Coding Agent Docker Setup
 
-This directory contains a complete Docker setup for running AI coding agents (Claude Code, Happy Coder, OpenCode) safely with the Decent Cloud project. The container provides isolation while giving the AI agent full access to the project.
+This directory contains a complete Docker setup for running AI coding agents (Claude Code, Codex, Happy Coder, OpenCode) safely with the Decent Cloud project. The container provides isolation while giving the AI agent full access to the project.
 
 ## Quick Start
 
 **Run Claude Code:**
 ```bash
 ./run-container.sh claude
+```
+
+**Run Codex:**
+```bash
+./run-container.sh codex
 ```
 
 **Run Happy Coder:**
@@ -21,7 +26,7 @@ This directory contains a complete Docker setup for running AI coding agents (Cl
 
 ## Files Overview
 
-- **`Dockerfile`** - Based on `.github/container/Dockerfile` with Claude Code, Happy Coder, and OpenCode additions
+- **`Dockerfile`** - Based on `.github/container/Dockerfile` with Claude Code, Codex, Happy Coder, and OpenCode additions
 - **`docker-compose.yml`** - Container orchestration with volumes and networking
 - **`run-container.sh`** - Wrapper script for easy usage
 - **`entrypoint.sh`** - Container entrypoint with permission fixes
@@ -32,6 +37,7 @@ This directory contains a complete Docker setup for running AI coding agents (Cl
 This setup leverages the existing CI Dockerfile (`.github/container/Dockerfile`) as a base, adding:
 - **Node.js 22** and npm for website development
 - **Claude Code** installed globally via npm
+- **Codex** installed globally via npm
 - **Happy Coder** installed globally via npm
 - **OpenCode** installed via official installer
 - **Non-root user** for security
@@ -43,6 +49,9 @@ This setup leverages the existing CI Dockerfile (`.github/container/Dockerfile`)
 ```bash
 # Start Claude Code with full project access
 ./run-container.sh claude
+
+# Start Codex
+./run-container.sh codex
 
 # Start Happy Coder
 ./run-container.sh happy
@@ -67,6 +76,7 @@ This setup leverages the existing CI Dockerfile (`.github/container/Dockerfile`)
 ```bash
 # Run specific commands in the container
 ./run-container.sh claude "cargo test"
+./run-container.sh codex "cargo test -p api"
 ./run-container.sh happy "cd website && npm run dev"
 ./run-container.sh bash "cargo make build"
 ```
@@ -78,6 +88,7 @@ This setup leverages the existing CI Dockerfile (`.github/container/Dockerfile`)
 - **Node.js 22** - With npm
 - **Python 3** - With pip, venv, and UV package manager
 - **Claude Code** - Installed globally via npm
+- **Codex** - Installed globally via npm
 - **Happy Coder** - Installed globally via npm
 - **OpenCode** - Installed via official installer
 - **Docker CLI & Compose** - For running containers from within the container
@@ -104,7 +115,7 @@ The setup uses several volumes for caching and persistence:
 - **`target-cache`** - Build artifacts (per-project)
 - **Project mount** - Your entire project directory at `/code`
 - **Docker socket** - Mounted at `/var/run/docker.sock` for Docker-in-Docker access
-- **Config mounts** - `~/.claude`, `~/.happy`, `~/.opencode` for AI tool configs
+- **Config mounts** - `~/.claude`, `~/.codex`, `~/.happy`, `~/.opencode` for AI tool configs
 
 ## Troubleshooting
 
@@ -152,6 +163,7 @@ docker-compose build --no-cache
 2. **Running tests:**
    ```bash
    ./run-container.sh claude "cargo test"
+   ./run-container.sh codex "cargo clippy --tests"
    ./run-container.sh happy "cd website && npm test"
    ```
 
@@ -177,11 +189,15 @@ The script supports running multiple agents in parallel using unique project nam
 # Terminal 1: Start Claude Code
 ./run-container.sh claude
 
-# Terminal 2: Start OpenCode (will use dc-agent-2)
+# Terminal 2: Start Codex (will use dc-agent-2)
+./run-container.sh codex
+
+# Terminal 3: Start OpenCode (will use dc-agent-3)
 ./run-container.sh opencode
 
 # Or explicitly name them:
 ./run-container.sh -n claude1 claude
+./run-container.sh -n codex1 codex
 ./run-container.sh -n opencode1 opencode
 ```
 

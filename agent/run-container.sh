@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# YAGNI wrapper script for running Claude Code, Happy Coder, or OpenCode in a safe container
+# YAGNI wrapper script for running Claude Code, Codex, Happy Coder, or OpenCode in a safe container
 # This script provides a simple interface to run AI coding tools with full project access
 # while keeping your host system safe through containerization
 
@@ -75,7 +75,7 @@ log_error() {
 # Show usage
 show_help() {
 	cat <<EOF
-Claude Code, Happy Coder, and OpenCode Docker Wrapper - Safe containerized environment
+Claude Code, Codex, Happy Coder, and OpenCode Docker Wrapper - Safe containerized environment
 
 USAGE:
     $0 [OPTIONS] TOOL [COMMAND]
@@ -89,12 +89,14 @@ OPTIONS:
 
 TOOLS:
     claude              Run Claude Code (with dangerously-skip-permissions)
+    codex               Run Codex
     happy               Run Happy Coder
     opencode            Run OpenCode
     bash OR shell       Run a plain bash shell
 
 EXAMPLES:
     $0 claude                        # Start Claude Code with dangerously-skip-permissions
+    $0 codex                         # Start Codex
     $0 happy                         # Start Happy Coder
     $0 opencode                      # Start OpenCode
     $0 bash                          # Start a bash shell
@@ -104,9 +106,9 @@ EXAMPLES:
 
 REQUIREMENTS:
     - Docker and Docker Compose must be installed
-    - Must specify a tool: claude, happy, or opencode
+    - Must specify a tool: claude, codex, happy, or opencode
 
-This wrapper provides a safe way to run Claude Code, Happy Coder, or OpenCode with full access to the project
+This wrapper provides a safe way to run Claude Code, Codex, Happy Coder, or OpenCode with full access to the project
 while keeping your host system isolated through containerization.
 EOF
 }
@@ -130,7 +132,7 @@ while [[ $# -gt 0 ]]; do
 		COMPOSE_FILE="$2"
 		shift 2
 		;;
-	claude | happy | opencode | shell | bash)
+	claude | codex | happy | opencode | shell | bash)
 		if [[ -z "$TOOL" ]]; then
 			TOOL="$1"
 			shift
@@ -147,7 +149,7 @@ while [[ $# -gt 0 ]]; do
 		;;
 	*)
 		if [[ -z "$TOOL" ]]; then
-			log_error "Must specify a tool: claude, happy, or opencode"
+			log_error "Must specify a tool: claude, codex, happy, or opencode"
 			show_help
 			exit 1
 		fi
@@ -185,7 +187,7 @@ check_requirements() {
 
 	# Check if tool is specified
 	if [[ -z "$TOOL" ]]; then
-		log_error "Must specify a tool: claude, happy, or opencode"
+		log_error "Must specify a tool: claude, codex, happy, or opencode"
 		show_help
 		exit 1
 	fi
@@ -241,6 +243,10 @@ run_tool() {
 		claude)
 			tool_command="claude --dangerously-skip-permissions"
 			log_info "Starting Claude Code..."
+			;;
+		codex)
+			tool_command="codex --dangerously-bypass-approvals-and-sandbox"
+			log_info "Starting Codex..."
 			;;
 		happy)
 			tool_command="happy --yolo"

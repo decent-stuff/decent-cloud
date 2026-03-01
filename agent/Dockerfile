@@ -1,5 +1,5 @@
 # Dockerfile for Decent Cloud + Containerized development environment
-# Based on .github/container/Dockerfile with additions for Claude Code, Happy Coder, and OpenCode
+# Based on .github/container/Dockerfile with additions for Claude Code, Codex, Happy Coder, and OpenCode
 
 FROM rust:1.91
 
@@ -70,13 +70,13 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.loca
 RUN $HOME/.local/bin/uv venv $HOME/.venv \
     && $HOME/.local/bin/uv pip install python-dotenv pytest black ruff
 
-# Configure npm to use user-specific global directory and install Claude Code and Happy Coder
+# Configure npm to use user-specific global directory and install Claude Code, Codex, and Happy Coder
 RUN mkdir -p ~/.npm-global \
     && npm config set prefix '~/.npm-global' \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc \
     && echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.profile \
     && export PATH=~/.npm-global/bin:$PATH \
-    && npm install -g  @anthropic-ai/claude-code happy-coder playwright \
+    && npm install -g @anthropic-ai/claude-code @openai/codex happy-coder playwright \
     && npx playwright install chromium
 
 # Install OpenCode
