@@ -11,6 +11,7 @@
 	} from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
 	import Icon from "$lib/components/Icons.svelte";
+	import Button from "$lib/components/Button.svelte";
 	import { resolveIdentifierToPubkey } from "$lib/utils/identity";
 
 	const identifier = $page.params.identifier ?? "";
@@ -97,10 +98,10 @@
 				<p class="text-neutral-400 text-sm mb-4">
 					The identifier <span class="font-mono text-neutral-300">{identifier}</span> is not registered in the system.
 				</p>
-				<a href="/dashboard/reputation" class="btn-secondary inline-flex items-center gap-2">
+				<Button variant="secondary" href="/dashboard/reputation" class="inline-flex items-center gap-2">
 					<Icon name="arrow-left" size={20} />
 					<span>Back to Reputation</span>
-				</a>
+				</Button>
 			</div>
 		</div>
 	{:else}
@@ -114,11 +115,7 @@
 					<p class="text-neutral-400 text-sm font-mono">{displayName}</p>
 				</div>
 				<div class="flex items-center gap-3">
-					<button
-						type="button"
-						onclick={copyUrl}
-						class="btn-secondary inline-flex items-center gap-2 text-sm"
-					>
+					<Button variant="secondary" type="button" onclick={copyUrl} class="inline-flex items-center gap-2 text-sm">
 						{#if copied}
 							<Icon name="check" size={16} />
 							<span>Copied!</span>
@@ -126,7 +123,7 @@
 							<Icon name="copy" size={16} />
 							<span>Copy Link</span>
 						{/if}
-					</button>
+					</Button>
 					<a
 						href="/dashboard/reputation/{identifier}"
 						class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
@@ -149,10 +146,10 @@
 				<p class="text-neutral-400 text-sm mb-6">
 					This account has not yet provided any services, so no trust metrics have been recorded.
 				</p>
-				<a href="/dashboard/reputation/{identifier}" class="btn-secondary inline-flex items-center gap-2">
+				<Button variant="secondary" href="/dashboard/reputation/{identifier}" class="inline-flex items-center gap-2">
 					<Icon name="arrow-left" size={20} />
 					<span>View Full Profile</span>
-				</a>
+				</Button>
 			</div>
 		{/if}
 	{/if}

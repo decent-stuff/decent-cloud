@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { navigateToLogin } from '$lib/utils/navigation';
 	import { authCardVisible } from '$lib/stores/auth-card';
+	import Button from '$lib/components/Button.svelte';
 
 	let { heading = 'Login Required', subtext = 'Please sign in to access this page.' } = $props();
 
@@ -19,11 +20,8 @@
 		<span class="text-6xl">🔑</span>
 		<h2 class="text-2xl font-bold text-white">{heading}</h2>
 		<p class="text-neutral-400">{subtext}</p>
-		<button
-			onclick={handleLogin}
-			class="btn-primary"
-		>
+		<Button variant="primary" onclick={handleLogin}>
 			Login / Create Account
-		</button>
+		</Button>
 	</div>
 </div>

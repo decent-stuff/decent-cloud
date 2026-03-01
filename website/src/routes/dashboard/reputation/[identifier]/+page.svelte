@@ -26,6 +26,7 @@
 		type ProviderHealthSummary,
 	} from "$lib/services/api";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
+	import Button from '$lib/components/Button.svelte';
 	import Icon from "$lib/components/Icons.svelte";
 	import type { UserProfile } from "$lib/types/generated/UserProfile";
 	import type { UserContact } from "$lib/types/generated/UserContact";
@@ -327,10 +328,10 @@
 					<li>The account has been registered with a username</li>
 				</ul>
 				<div class="mt-6">
-					<a href="/dashboard/marketplace" class="btn-secondary inline-flex items-center gap-2">
+					<Button variant="secondary" href="/dashboard/marketplace" class="inline-flex items-center gap-2">
 						<Icon name="arrow-left" size={20} />
 						<span>Back to Marketplace</span>
-					</a>
+					</Button>
 				</div>
 			</div>
 		</div>

@@ -18,6 +18,7 @@
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
 	import UnreadBadge from './UnreadBadge.svelte';
+	import Button from './Button.svelte';
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
@@ -460,14 +461,10 @@
 				<span class="text-sm">Logout</span>
 			</button>
 		{:else}
-			<button
-				type="button"
-				onclick={handleLogin}
-				class="w-full flex items-center justify-center gap-2 btn-primary text-sm"
-			>
+			<Button variant="primary" type="button" onclick={handleLogin} class="w-full flex items-center justify-center gap-2 text-sm">
 				<Icon name="login" size={20} />
 				<span>Sign In</span>
-			</button>
+			</Button>
 		{/if}
 	</div>
 </aside>

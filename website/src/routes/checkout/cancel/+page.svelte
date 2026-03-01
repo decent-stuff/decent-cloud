@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import Icon from '$lib/components/Icons.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let contractId = $state<string | null>(null);
 
@@ -35,13 +36,13 @@
 				Your rental request has been created but payment was not completed. You can try again or browse other offerings.
 			</p>
 			<div class="flex flex-col sm:flex-row gap-3 justify-center">
-				<button onclick={navigateToMarketplace} class="btn-primary">
+				<Button variant="primary" onclick={navigateToMarketplace}>
 					Browse Marketplace
-				</button>
+				</Button>
 				{#if contractId}
-					<button onclick={navigateToRentals} class="btn-secondary">
+					<Button variant="secondary" onclick={navigateToRentals}>
 						View My Rentals
-					</button>
+					</Button>
 				{/if}
 			</div>
 		</div>

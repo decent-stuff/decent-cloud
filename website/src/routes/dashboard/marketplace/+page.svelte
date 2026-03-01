@@ -14,6 +14,7 @@
 	import { truncatePubkey } from "$lib/utils/identity";
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
+	import Button from "$lib/components/Button.svelte";
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
@@ -1347,64 +1348,27 @@
 									</td>
 									<td class="py-3">
 										{#if hasReseller(offering)}
-											<button
-												onclick={(e) =>
-													handleRentClick(
-														e,
-														offering,
-													)}
-												class="btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
-												>Rent</button
-											>
+											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Rent</Button>
 										{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-											<a
-												href={offering.external_checkout_url}
-												target="_blank"
-												rel="noopener noreferrer"
-												onclick={(e) =>
-													e.stopPropagation()}
-												class="inline-flex items-center gap-1 btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
-												>Visit Provider <Icon name="external" size={20} class="text-white" /></a
-											>
+											<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="inline-flex items-center gap-1 bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
 										{:else if offering.is_example}
-											<span title="Demo only — not available for rent" class="btn-sm bg-neutral-700 text-neutral-500 cursor-not-allowed whitespace-nowrap inline-block">Demo only</span>
+											<Button variant="sm" disabled class="bg-neutral-700 text-neutral-500 cursor-not-allowed whitespace-nowrap inline-block">Demo only</Button>
 										{:else}
-											<button
-												onclick={(e) =>
-													handleRentClick(
-														e,
-														offering,
-													)}
-												class="btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
-												>Rent</button
-											>
+											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Rent</Button>
 										{/if}
 									</td>
 								<td class="py-3 text-right">
 									{#if offering.id !== undefined}
-										<button
-											onclick={(e) => toggleBookmark(e, offering.id!)}
-											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
-											class="inline-flex items-center gap-1 btn-sm border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
-										>
-											<Icon name="bookmark" size={14} />
-											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
-										</button>
+										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="inline-flex items-center gap-1 border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">
+												<Icon name="bookmark" size={14} />
+												<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
+											</Button>
 									{/if}
 								</td>
 									<td class="py-3 text-right">
 										{#if offering.id !== undefined}
 											{@const inCompare = compareIds.has(offering.id)}
-											<button
-												onclick={(e) => toggleCompare(e, offering.id!)}
-												title={inCompare
-													? "Remove from comparison"
-													: "Add to comparison"}
-												class="btn-sm border {inCompare
-													? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
-													: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
-											>{inCompare ? "✓ Compare" : "+ Compare"}</button
-											>
+											<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class="border {inCompare ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">{inCompare ? "✓ Compare" : "+ Compare"}</Button>
 										{/if}
 									</td>
 								</tr>
@@ -1679,14 +1643,10 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									{#if offering.id !== undefined}
-										<button
-											onclick={(e) => toggleBookmark(e, offering.id!)}
-											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
-											class="inline-flex items-center gap-1 btn-sm border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
-										>
-											<Icon name="bookmark" size={14} />
-											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
-										</button>
+										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="inline-flex items-center gap-1 border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">
+												<Icon name="bookmark" size={14} />
+												<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
+											</Button>
 									{/if}
 								</div>
 							</div>
@@ -1706,42 +1666,19 @@
 									</div>
 								</div>
 								{#if hasReseller(offering)}
-									<button
-										onclick={(e) =>
-											handleRentClick(e, offering)}
-										class="btn-sm bg-primary-600 hover:bg-primary-500"
-										>Rent</button
-									>
+									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500">Rent</Button>
 								{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-									<a
-										href={offering.external_checkout_url}
-										target="_blank"
-										rel="noopener noreferrer"
-										onclick={(e) => e.stopPropagation()}
-										class="inline-flex items-center gap-1 btn-sm bg-primary-600 hover:bg-primary-500"
-										>Visit Provider <Icon name="external" size={20} class="text-white" /></a
-									>
+									<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="inline-flex items-center gap-1 bg-primary-600 hover:bg-primary-500">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
 								{:else if offering.is_example}
-									<span title="Demo only — not available for rent" class="btn-sm bg-neutral-700 text-neutral-500 cursor-not-allowed inline-block">Demo only</span>
+									<Button variant="sm" disabled class="bg-neutral-700 text-neutral-500 cursor-not-allowed inline-block">Demo only</Button>
 								{:else}
-									<button
-										onclick={(e) =>
-											handleRentClick(e, offering)}
-										class="btn-sm bg-primary-600 hover:bg-primary-500"
-										>Rent</button
-									>
+									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500">Rent</Button>
 								{/if}
 							</div>
 							{#if offering.id !== undefined}
 								{@const inCompare = compareIds.has(offering.id)}
 								<div class="mt-2">
-									<button
-										onclick={(e) => toggleCompare(e, offering.id!)}
-										title={inCompare ? "Remove from comparison" : "Add to comparison"}
-										class="btn-sm border {inCompare
-											? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
-											: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
-									>{inCompare ? "✓ In compare" : "+ Compare"}</button>
+									<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class="border {inCompare ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">{inCompare ? "✓ In compare" : "+ Compare"}</Button>
 								</div>
 							{/if}
 							{#if expandedRow === offering.id}

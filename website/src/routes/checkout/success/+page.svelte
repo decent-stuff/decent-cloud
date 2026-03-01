@@ -4,6 +4,7 @@
 	import { page } from '$app/stores';
 	import { verifyCheckoutSession } from '$lib/services/api';
 	import Icon from '$lib/components/Icons.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let verifying = $state(true);
 	let verified = $state(false);
@@ -63,9 +64,9 @@
 				</div>
 				<h1 class="text-2xl font-bold text-white mb-4">Something Went Wrong</h1>
 				<p class="text-neutral-400 text-base mb-6">{error}</p>
-				<button onclick={navigateToContract} class="btn-primary">
+				<Button variant="primary" onclick={navigateToContract}>
 					View My Rentals
-				</button>
+				</Button>
 			{:else}
 				<div class="flex justify-center mb-6">
 					<div class="icon-box-accent w-14 h-14">
@@ -80,9 +81,9 @@
 					You will receive an email confirmation shortly. The provider will review your request and provision your resources.
 				</p>
 				<div class="flex flex-col sm:flex-row gap-3 justify-center">
-					<button onclick={navigateToContract} class="btn-primary">
+					<Button variant="primary" onclick={navigateToContract}>
 						View My Rental
-					</button>
+					</Button>
 				</div>
 				<p class="text-neutral-600 text-xs mt-6">
 					Redirecting to your rental details in 5 seconds...

@@ -6,6 +6,7 @@
 	import { identityFromSeed, bytesToHex } from '$lib/utils/identity';
 	import SeedPhraseStep from '$lib/components/SeedPhraseStep.svelte';
 	import Icon from '$lib/components/Icons.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	type State = 'request' | 'request-sent' | 'generate-seed' | 'processing' | 'success';
 
@@ -123,9 +124,9 @@
 						</div>
 					{/if}
 
-					<button type="submit" class="btn-primary w-full">
+					<Button variant="primary" type="submit" class="w-full">
 						Send Recovery Link
-					</button>
+					</Button>
 				</form>
 			{/if}
 
@@ -200,9 +201,9 @@
 					</p>
 
 					<div class="pt-4">
-						<button type="button" onclick={handleGoToLogin} class="btn-primary">
+						<Button variant="primary" type="button" onclick={handleGoToLogin}>
 							Go to Login
-						</button>
+						</Button>
 					</div>
 				</div>
 			{/if}

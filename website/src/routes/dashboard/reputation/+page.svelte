@@ -8,6 +8,7 @@
 		type AccountSearchResult
 	} from '$lib/services/api-reputation';
 	import Icon from '$lib/components/Icons.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let searchQuery = $state('');
 	let results = $state<AccountSearchResult[]>([]);
@@ -75,13 +76,10 @@
 	<!-- My Reputation Link -->
 	{#if myUsername}
 		<div class="flex gap-3">
-			<button
-				onclick={() => navigateToProfile(myUsername!)}
-				class="btn-primary inline-flex items-center gap-2"
-			>
+			<Button variant="primary" onclick={() => navigateToProfile(myUsername!)} class="inline-flex items-center gap-2">
 				<span>View My Reputation</span>
 				<Icon name="arrow-right" size={20} />
-			</button>
+			</Button>
 		</div>
 	{/if}
 

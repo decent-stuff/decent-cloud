@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { verifyEmail } from '$lib/services/account-api';
 	import Icon from '$lib/components/Icons.svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	type State = 'verifying' | 'success' | 'error';
 
@@ -85,9 +86,9 @@
 					</div>
 
 					<div class="pt-4 flex flex-col gap-3">
-						<button type="button" onclick={handleGoToDashboard} class="btn-primary">
+						<Button variant="primary" type="button" onclick={handleGoToDashboard}>
 							Go to Dashboard
-						</button>
+						</Button>
 						<button
 							type="button"
 							onclick={handleGoToLogin}
@@ -114,9 +115,9 @@
 					</p>
 
 					<div class="pt-4">
-						<button type="button" onclick={handleGoToLogin} class="btn-primary">
+						<Button variant="primary" type="button" onclick={handleGoToLogin}>
 							Go to Login
-						</button>
+						</Button>
 					</div>
 				</div>
 			{/if}

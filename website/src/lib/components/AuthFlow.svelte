@@ -8,6 +8,7 @@
 	import GoogleSignInButton from './GoogleSignInButton.svelte';
 	import Icon from './Icons.svelte';
 	import { onMount } from 'svelte';
+	import Button from '$lib/components/Button.svelte';
 
 	let { onSuccess } = $props<{
 		onSuccess: (account: AccountInfo) => void;
@@ -280,21 +281,18 @@
 			{/if}
 
 			<div class="flex gap-3">
-				<button
-					type="button"
-					onclick={goBack}
-					class="flex-1 btn-secondary"
-				>
+				<Button variant="secondary" type="button" onclick={goBack} class="flex-1">
 					Back
-				</button>
-				<button
+				</Button>
+				<Button
+					variant="primary"
 					type="button"
 					onclick={registerAndLogin}
-					class="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+					class="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!usernameValid || !emailValid}
 				>
 					Create Account
-				</button>
+				</Button>
 			</div>
 		</div>
 	{/if}
@@ -318,14 +316,15 @@
 				</div>
 			{/if}
 
-			<button
+			<Button
+				variant="primary"
 				type="button"
 				onclick={submitOAuthUsername}
-				class="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+				class="w-full disabled:opacity-50 disabled:cursor-not-allowed"
 				disabled={!usernameValid}
 			>
 				Create Account
-			</button>
+			</Button>
 		</div>
 	{/if}
 
@@ -368,13 +367,9 @@
 			{/if}
 
 			<div class="pt-2">
-				<button
-					type="button"
-					onclick={handleSuccess}
-					class="btn-primary"
-				>
+				<Button variant="primary" type="button" onclick={handleSuccess}>
 					Go to Dashboard
-				</button>
+				</Button>
 			</div>
 		</div>
 	{/if}

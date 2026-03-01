@@ -259,6 +259,29 @@ if [ $RESULT -ne 0 ]; then
 fi
 '''
 
+[tasks.website-unit-test]
+dependencies = ["website-check"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+cd website
+npm test
+'''
+
+[tasks.website-e2e]
+dependencies = ["postgres-start", "website-check"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+source scripts/detect-postgres.sh
+export DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
+
+cd website
+E2E_AUTO_SERVER=1 npx playwright test
+'''
+
 [tasks.all]
 dependencies = [
     "format",
@@ -270,6 +293,7 @@ dependencies = [
     "test",
     "website-check",
     "website-build",
+    "website-unit-test",
     "dfx-stop",
 ]
 
@@ -279,6 +303,7 @@ dependencies = [
     "clippy-api",
     "build-api",
     "test-api",
+    "website-unit-test",
 ]
 
 [tasks.cleanup]

@@ -2,6 +2,7 @@
 	import { onMount } from "svelte";
 	import { getActiveValidators, type Validator } from "$lib/services/api";
 	import Icon from "$lib/components/Icons.svelte";
+	import Button from "$lib/components/Button.svelte";
 
 	let validators = $state<Validator[]>([]);
 	let loading = $state(true);
@@ -189,15 +190,10 @@
 						Help secure the network and earn rewards by becoming a validator
 					</p>
 				</div>
-				<a
-					href="https://decent-stuff.github.io/decent-cloud/mining-and-validation.html"
-					target="_blank"
-					rel="noopener noreferrer"
-					class="btn-primary inline-flex items-center gap-2"
-				>
+				<Button variant="primary" href="https://decent-stuff.github.io/decent-cloud/mining-and-validation.html" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2">
 					<span>Learn More</span>
 					<Icon name="external" size={20} />
-				</a>
+				</Button>
 			</div>
 		</div>
 	{/if}
