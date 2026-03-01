@@ -179,7 +179,7 @@ node scripts/browser.js html <url>
 
 # Page tour — visit key routes, capture snapshots, save JSON report
 node scripts/browser.js tour --seed <phrase>
-# → saves /tmp/dc-ux-tour.json with snapshots of marketplace, rentals, provider pages
+# → saves /tmp/dc-ux-tour.json with snapshots of landing, marketplace, rentals, provider pages
 ```
 
 ## Options
@@ -222,8 +222,9 @@ node scripts/dc-auth.js seed-ux-data
 
 # Create 1-3 test contracts against public offerings
 node scripts/dc-auth.js seed-contracts
-# → creates user account, finds in-stock offerings, creates contracts with skip_payment
-# → outputs: { seed, pubkey, contractIds: [...] }
+# → creates user account, finds in-stock offerings, creates contracts with skip_payment: true
+# → creates contracts in different states: requested, cancelled (if possible)
+# → outputs: { seed, pubkey, contractIds: [...], contractStates: [{id, state}, ...] }
 # With existing seed: node scripts/dc-auth.js seed-contracts <seed phrase words…>
 
 # Create an offline provider with offerings (no agent heartbeat)

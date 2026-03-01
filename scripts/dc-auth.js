@@ -485,19 +485,9 @@ async function cmdSeedContracts(args) {
   const availableOfferings = offeringsResult.data.filter(o => !o.is_draft && o.stock_status === 'in_stock' && !o.is_example);
   if (availableOfferings.length === 0) throw new Error('No public in-stock offerings available');
 
-  const contractIds = [];
   const sshPubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@example.com';
 
-  const contractConfigs = [
-    { offeringIndex: 0, description: 'requested state' },
-    { offeringIndex: 1 % availableOfferings.length, description: 'second contract' },
-    { offeringIndex: 2 % availableOfferings.length, description: 'third contract' },
-  ];
-
-  for (const config of contractConfigs) {
-    const offering = availableOfferings[config.offeringIndex];
-    if (!offering) continue;
-
+  async function createContract(offering) {
     const minHours = offering.min_contract_hours || 720;
     const createPath = '/api/v1/contracts';
     const createBody = JSON.stringify({
@@ -507,24 +497,67 @@ async function cmdSeedContracts(args) {
       payment_method: 'icpay',
     });
     const createHdrs = buildHeaders(sk, 'POST', createPath, createBody);
+    const result = await apiRequest('POST', createPath, createHdrs, createBody);
+    const contractId = result.data?.contractId || result.data?.contract_id;
+    return { success: result.success, contractId, error: result.error };
+  }
 
-    try {
-      const result = await apiRequest('POST', createPath, createHdrs, createBody);
-      const contractId = result.data?.contractId || result.data?.contract_id;
-      if (result.success && contractId) {
-        contractIds.push(contractId);
-        process.stderr.write(`[CONTRACT] Created ${contractId} from offering ${offering.id} (${offering.offer_name})\n`);
-      } else if (!result.success) {
-        process.stderr.write(`[WARN] Contract creation failed: ${result.error || 'unknown error'}\n`);
-      }
-    } catch (e) {
-      process.stderr.write(`[WARN] Failed to create contract from offering ${offering.id}: ${e.message}\n`);
+  async function cancelContract(contractId) {
+    const cancelPath = `/api/v1/contracts/${contractId}/cancel`;
+    const cancelBody = JSON.stringify({ memo: 'UX test cancellation' });
+    const cancelHdrs = buildHeaders(sk, 'POST', cancelPath, cancelBody);
+    return apiRequest('POST', cancelPath, cancelHdrs, cancelBody);
+  }
+
+  const contractIds = [];
+  const contractStates = [];
+
+  // Contract 1: requested state (just created)
+  const offering1 = availableOfferings[0];
+  if (offering1) {
+    const result = await createContract(offering1);
+    if (result.success && result.contractId) {
+      contractIds.push(result.contractId);
+      contractStates.push({ id: result.contractId, state: 'requested' });
+      process.stderr.write(`[CONTRACT] Created ${result.contractId} (requested) from offering ${offering1.id}\n`);
+    } else {
+      process.stderr.write(`[WARN] Failed to create requested contract: ${result.error || 'unknown'}\n`);
     }
-
     await new Promise(r => setTimeout(r, 200));
   }
 
-  const out = { seed: mnemonic, pubkey: pubkeyHex, contractIds };
+  // Contract 2: cancelled state (create then cancel)
+  const offering2 = availableOfferings[1 % availableOfferings.length];
+  if (offering2) {
+    const result = await createContract(offering2);
+    if (result.success && result.contractId) {
+      contractIds.push(result.contractId);
+      const cancelResult = await cancelContract(result.contractId);
+      if (cancelResult.success) {
+        contractStates.push({ id: result.contractId, state: 'cancelled' });
+        process.stderr.write(`[CONTRACT] Created and cancelled ${result.contractId} from offering ${offering2.id}\n`);
+      } else {
+        contractStates.push({ id: result.contractId, state: 'requested' });
+        process.stderr.write(`[WARN] Created ${result.contractId} but cancellation failed: ${cancelResult.error || 'unknown'}\n`);
+      }
+    } else {
+      process.stderr.write(`[WARN] Failed to create cancelled contract: ${result.error || 'unknown'}\n`);
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  // Contract 3: another active/requested contract for variety
+  const offering3 = availableOfferings[2 % availableOfferings.length];
+  if (offering3 && availableOfferings.length >= 2) {
+    const result = await createContract(offering3);
+    if (result.success && result.contractId) {
+      contractIds.push(result.contractId);
+      contractStates.push({ id: result.contractId, state: 'requested' });
+      process.stderr.write(`[CONTRACT] Created ${result.contractId} (requested) from offering ${offering3.id}\n`);
+    }
+  }
+
+  const out = { seed: mnemonic, pubkey: pubkeyHex, contractIds, contractStates };
   process.stdout.write(JSON.stringify(out, null, 2) + '\n');
 }
 
