@@ -116,6 +116,37 @@ The following issues were identified by walking the full "rent a Proxmox VM" use
 
 - **[Testing tooling] No edge-case test data** — UX evaluators cannot see the "Offline" badge (no agent), empty marketplace (0 offerings), or error states without specific setup. Add `seed-edge-cases` command that creates a provider with offerings but no agent heartbeat, so the marketplace shows one "Offline" provider alongside the online one.
 
+### UI/UX Review (2026-03-01) — Radical Simplification
+
+Comprehensive user-perspective review identified opportunities to dramatically simplify the interface. Focus: less is more, reduce cognitive load, make primary actions obvious.
+
+**DONE (2026-03-01):**
+- **[Sidebar] Removed "My Cloud" section** — Confusing for most users; cloud accounts/resources are advanced features accessible via direct URL.
+- **[Sidebar] Removed "Transfers" and "Invoices" from My Activity** — Obscure features; accessible via direct URL if needed.
+- **[Sidebar] Simplified Provider section** — Instead of 10 locked items with padlocks, now shows only "Provider Setup" and "My Offerings" until onboarding is complete. Reduces visual noise significantly.
+
+**High-Impact Remaining:**
+
+- **[Marketplace] Filter overload** — 15+ filter options visible by default (Type, Price, Region, Country, City, CPU, Memory, SSD, Virtualization, Trust, Unmetered, Demo, Offline, Recipes). Fix: show only Type, Region, and Price by default; add "More filters" toggle for advanced options. *(Single-session: wrap advanced filters in collapsible section.)*
+
+- **[Marketplace] Badge clutter on offering rows** — Up to 8 different badge types compete for attention: Offline, Trust score, Reseller, Self-Hosted, External, Demo, Recipe, Subscription. Fix: consolidate into a single status chip with tooltip; hide "External" and "Self-Hosted" badges (implementation details, not user-facing concepts). *(Single-session: simplify TrustBadge + consolidate status badges.)*
+
+- **[Landing page] Too long, diluted value proposition** — 8 sections before footer (Hero, Features, Trust Guarantees, Benefits, AI Features, Dashboard, Info, Footer). Value prop is buried. Fix: condense to Hero → Social Proof → Trust System → CTA. Move AI Features and detailed benefits to a separate /features page. *(Multi-session: requires content restructuring.)*
+
+- **[Auth] Seed phrase is first thing new users see** — AuthFlow opens with seed phrase input; Google OAuth is hidden behind a click. Fix: show Google sign-in prominently; put seed phrase behind "Sign in with seed phrase" link. *(Single-session: swap order in AuthFlow.svelte.)*
+
+- **[Dashboard] Quick Actions shows 4 cards but only 2 are relevant** — For new users, "Rental Requests" and "My Offerings" are premature. Fix: show role-appropriate cards: new users → Marketplace, Profile, Validators; tenants → Rentals, Marketplace; providers → Requests, Offerings, Earnings. *(Single-session: conditionally render based on userRole.)*
+
+- **[First-time user] No guided onboarding** — New authenticated users land on a dashboard with many options. Fix: add a 3-step onboarding wizard on first login: 1) Complete profile (username, email), 2) Add SSH key, 3) Browse marketplace or become provider. *(Multi-session: wizard component + localStorage flag.)*
+
+**Medium Impact:**
+
+- **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
+
+- **[Offering detail] Too many CTAs** — "Copy link", "Save", "Ask Provider", "Rent this offering" all compete. Fix: primary CTA "Rent" should be prominent; move secondary actions to a "..." menu. *(Single-session: consolidate secondary actions.)*
+
+- **[Sidebar] "Discover" section label is vague** — Users don't know what "Discover" means. Fix: rename to "Browse" or remove the section header entirely (Marketplace, Reputation, Validators are self-explanatory). *(Trivial: text change.)*
+
 ### Backlog
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
