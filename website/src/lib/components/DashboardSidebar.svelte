@@ -233,14 +233,14 @@
 
 	<!-- Navigation -->
 	<nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-		<!-- Discover section -->
+		<!-- Browse section -->
 		<button
 			type="button"
 			class="section-toggle"
 			onclick={() => toggleSection('discover')}
 			aria-expanded={!sectionCollapsed.discover}
 		>
-			<span class="section-label">Discover</span>
+			<span class="section-label">Browse</span>
 			<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.discover ? '-rotate-90' : ''}" />
 		</button>
 		{#if !sectionCollapsed.discover}

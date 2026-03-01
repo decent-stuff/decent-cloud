@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildContractEventsUrl, parseContractEvent } from './contract-sse';
+import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 describe('buildContractEventsUrl', () => {
 	it('builds correct URL with pubkey and apiUrl', () => {
@@ -10,6 +11,34 @@ describe('buildContractEventsUrl', () => {
 	it('works with empty apiUrl (relative URL)', () => {
 		const url = buildContractEventsUrl('deadbeef', '');
 		expect(url).toBe('/api/v1/users/deadbeef/contract-events');
+	});
+
+	it('includes auth headers as query params when provided', () => {
+		const headers: SignedRequestHeaders = {
+			'X-Public-Key': 'pubkey123',
+			'X-Signature': 'sig456',
+			'X-Timestamp': '789',
+			'X-Nonce': 'nonce000',
+			'Content-Type': 'application/json'
+		};
+		const url = buildContractEventsUrl('abc123', 'https://api.example.com', headers);
+		expect(url).toContain('https://api.example.com/api/v1/users/abc123/contract-events?');
+		expect(url).toContain('pubkey=pubkey123');
+		expect(url).toContain('signature=sig456');
+		expect(url).toContain('timestamp=789');
+		expect(url).toContain('nonce=nonce000');
+	});
+
+	it('URL-encodes special characters in auth params', () => {
+		const headers: SignedRequestHeaders = {
+			'X-Public-Key': 'abc+def/ghi==',
+			'X-Signature': 'sig',
+			'X-Timestamp': '123',
+			'X-Nonce': 'nonce',
+			'Content-Type': 'application/json'
+		};
+		const url = buildContractEventsUrl('abc123', 'https://api.example.com', headers);
+		expect(url).toContain('pubkey=abc%2Bdef%2Fghi%3D%3D');
 	});
 });
 

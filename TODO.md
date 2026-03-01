@@ -76,66 +76,38 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ### VM Rental UX Audit (2026-02-28) — Critical Path Issues
 
-The following issues were identified by walking the full "rent a Proxmox VM" user journey as a new visitor with no prior knowledge of the platform. Issues are ordered by user impact.
+**DONE:**
+- **[Rental] Payment method default is ICPay (crypto) for USD offerings** — Stripe is now the default for USD/EUR offerings.
+- **[Post-rental] Success message auto-dismisses in 5 seconds** — Checkout success page redirects with welcome banner.
+- **[Marketplace] Provider shown as raw hex pubkey** — Shows `@username` when available.
+- **[Auth] Seed-phrase-only sign-up is unfamiliar** — Google sign-in is now primary.
+- **[Marketplace] Demo offerings hidden by default** — Checkbox defaults to unchecked.
+- **[Offering detail] No "time to provision" estimate** — Shows "Setup Time" from trust metrics.
+- **[Rental dialog] Price summary is at the bottom** — Price summary now at top of dialog.
+- **[Breadcrumb] "Dashboard" link opens wrong view** — Authenticated users now see `/dashboard/rentals`.
+- **[Testing tooling] All commands implemented** — `seed-contracts`, `--viewport mobile`, `tour`, `seed-edge-cases` all available.
 
-**Critical (conversion killers):**
+**Remaining:**
 
-- **[Rental] Payment method default is ICPay (crypto) for USD offerings** — DONE: Stripe (Credit Card) is now the default for USD/EUR offerings; ICPay shown as secondary option (commit e7b426a).
+- **[Rental] SSH key is required before payment** — Most non-technical users don't have an SSH key. Fix: move the SSH key section below the payment section, or allow "generate for me" to create a keypair and download the private key automatically. *(Single-session.)*
 
-- **[Rental] SSH key is required before payment** — Most non-technical users don't have an SSH key and don't know what one is. Requiring it upfront before they even see the price summary creates a high-friction barrier. The collapsible "How to generate" guide is good but buried. Fix: move the SSH key section below the payment section (it's post-payment anyway), or allow "generate for me" to create a keypair and download the private key automatically.
-
-- **[Post-rental] Success message auto-dismisses in 5 seconds** — DONE: Checkout success page now redirects to `/dashboard/rentals/{contractId}?welcome=true` with a welcome banner explaining next steps (commit e7b426a).
-
-**Significant (friction, confusion):**
-
-- **[Marketplace] Provider shown as raw hex pubkey in the offering detail header** — DONE: Offering detail page now shows `@username` when available (commit e7b426a).
-
-- **[Auth] Seed-phrase-only sign-up is unfamiliar** — The auth flow opens with a mnemonic input. There is Google OAuth support (GoogleSignInButton component is present), but it's not prominently positioned. New users landing on the sign-in modal see no email/password or familiar social login first. Fix: show Google sign-in as the primary option; put seed phrase as secondary ("Sign in with seed phrase").
-
-- **[Marketplace] Demo offerings hidden by default** — DONE: "Show demo offerings" checkbox now defaults to unchecked (commit 16eb48d). Demo offerings from "Example Provider" are hidden unless explicitly enabled.
-
-- **[Marketplace] 429 rate-limit errors in browser console** — **RESOLVED:** Root cause is Chatwoot's rack-attack rate limiting (5 requests/hour/IP on `/widget` endpoint). The Chatwoot SDK logs 429 errors twice internally (initial + retry). Fix: increase `RACK_ATTACK_LIMIT` in Chatwoot environment or disable rate limiting for dev. See `third_party/chatwoot/config/initializers/rack_attack.rb:17`. No frontend code changes needed.
-
-- **[Offering detail] No "time to provision" estimate** — The offering page shows billing/contract terms but gives no indication of how long provisioning typically takes. Users have no baseline expectation. Fix: add `avg_provision_time` from trust metrics to the sidebar if available.
-
-- **[Rental dialog] Price summary is at the bottom** — The total cost is only visible after scrolling past SSH key, contact method, and billing address sections. Users should see the price before filling in details. Fix: move the price summary card to the top of the dialog, below the resource details.
-
-**Minor:**
-
-- **[Breadcrumb] "Dashboard" link in breadcrumb opens wrong view** — The breadcrumb `Dashboard > Marketplace > Basic VPS` links "Dashboard" to `/dashboard` which is the public stats page (not the user's personal dashboard). This is inconsistent when authenticated.
-
-- **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar offerings mix `ICP/mo` (seeded demo data) with `USD/mo` (real offerings) without currency normalization. This is confusing when comparing.
-
-- **[Testing tooling] `browser.js` and `dc-auth.js` do not share browser state** — DONE: `browser.js` now accepts `--seed <phrase>` argument that injects the seed into localStorage before navigating, enabling authenticated testing from any subagent.
-
-- **[Testing tooling] No test contracts for UX evaluation** — `seed-ux-data` creates online offerings but no contracts. The "My Rentals" page and contract detail page (`/dashboard/rentals/{id}`) are unreachable during UX audits. Fix: add `seed-contracts` command to `dc-auth.js` that creates 1–3 test contracts in different states (`requested`, `provisioned`, `cancelled`) using `skip_payment: true` against seeded offerings. Output JSON with `{ seed, contractIds: [...] }`.
-
-- **[Testing tooling] No mobile viewport testing** — `browser.js` always uses desktop viewport. Add `--viewport mobile` flag (375×812) so UX auditors can check responsive layout without changing the API surface. The flag should work with all existing commands (`snap`, `shot`, `eval`, `errs`, `html`).
-
-- **[Testing tooling] No systematic page tour** — UX audits require visiting ~15 pages in one pass. Each page currently needs a separate `browser.js` invocation. Add a `tour` command to `browser.js` that accepts a seed and visits a predefined list of key routes (marketplace, offering detail, rentals, contract detail, provider dashboard, provider offerings, etc.), capturing accessibility snaps and saving a JSON report to `/tmp/dc-ux-tour.json`.
-
-- **[Testing tooling] No edge-case test data** — UX evaluators cannot see the "Offline" badge (no agent), empty marketplace (0 offerings), or error states without specific setup. Add `seed-edge-cases` command that creates a provider with offerings but no agent heartbeat, so the marketplace shows one "Offline" provider alongside the online one.
+- **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar offerings mix `ICP/mo` (seeded demo data) with `USD/mo` (real offerings) without currency normalization. *(Single-session.)*
 
 ### UI/UX Review (2026-03-01) — Radical Simplification
 
-Comprehensive user-perspective review identified opportunities to dramatically simplify the interface. Focus: less is more, reduce cognitive load, make primary actions obvious.
-
 **DONE (2026-03-01):**
-- **[Sidebar] Removed "My Cloud" section** — Confusing for most users; cloud accounts/resources are advanced features accessible via direct URL.
-- **[Sidebar] Removed "Transfers" and "Invoices" from My Activity** — Obscure features; accessible via direct URL if needed.
-- **[Sidebar] Simplified Provider section** — Instead of 10 locked items with padlocks, now shows only "Provider Setup" and "My Offerings" until onboarding is complete. Reduces visual noise significantly.
+- **[Sidebar] Removed "My Cloud" section** — Confusing for most users.
+- **[Sidebar] Removed "Transfers" and "Invoices" from My Activity** — Obscure features.
+- **[Sidebar] Simplified Provider section** — Shows only "Provider Setup" and "My Offerings" until onboarding complete.
+- **[Auth] Google sign-in now prominent** — Shows Google sign-in button first.
+- **[Dashboard] Quick Actions are role-aware** — Cards shown based on user role.
+- **[Marketplace] Filter overload** — Only Type, Region, Price visible by default; "More filters" toggle for advanced.
+- **[Marketplace] Badge clutter** — Consolidated into single status chip with tooltip.
+- **[Sidebar] "Discover" section label** — Renamed to "Browse".
 
 **High-Impact Remaining:**
 
-- **[Marketplace] Filter overload** — 15+ filter options visible by default (Type, Price, Region, Country, City, CPU, Memory, SSD, Virtualization, Trust, Unmetered, Demo, Offline, Recipes). Fix: show only Type, Region, and Price by default; add "More filters" toggle for advanced options. *(Single-session: wrap advanced filters in collapsible section.)*
-
-- **[Marketplace] Badge clutter on offering rows** — Up to 8 different badge types compete for attention: Offline, Trust score, Reseller, Self-Hosted, External, Demo, Recipe, Subscription. Fix: consolidate into a single status chip with tooltip; hide "External" and "Self-Hosted" badges (implementation details, not user-facing concepts). *(Single-session: simplify TrustBadge + consolidate status badges.)*
-
-- **[Landing page] Too long, diluted value proposition** — 8 sections before footer (Hero, Features, Trust Guarantees, Benefits, AI Features, Dashboard, Info, Footer). Value prop is buried. Fix: condense to Hero → Social Proof → Trust System → CTA. Move AI Features and detailed benefits to a separate /features page. *(Multi-session: requires content restructuring.)*
-
-- **[Auth] Seed phrase is first thing new users see** — AuthFlow opens with seed phrase input; Google OAuth is hidden behind a click. Fix: show Google sign-in prominently; put seed phrase behind "Sign in with seed phrase" link. *(Single-session: swap order in AuthFlow.svelte.)*
-
-- **[Dashboard] Quick Actions shows 4 cards but only 2 are relevant** — For new users, "Rental Requests" and "My Offerings" are premature. Fix: show role-appropriate cards: new users → Marketplace, Profile, Validators; tenants → Rentals, Marketplace; providers → Requests, Offerings, Earnings. *(Single-session: conditionally render based on userRole.)*
+- **[Landing page] Too long, diluted value proposition** — 8 sections before footer. Fix: condense to Hero → Social Proof → Trust System → CTA. Move AI Features and detailed benefits to a separate /features page. *(Multi-session: requires content restructuring.)*
 
 - **[First-time user] No guided onboarding** — New authenticated users land on a dashboard with many options. Fix: add a 3-step onboarding wizard on first login: 1) Complete profile (username, email), 2) Add SSH key, 3) Browse marketplace or become provider. *(Multi-session: wizard component + localStorage flag.)*
 
@@ -145,158 +117,117 @@ Comprehensive user-perspective review identified opportunities to dramatically s
 
 - **[Offering detail] Too many CTAs** — "Copy link", "Save", "Ask Provider", "Rent this offering" all compete. Fix: primary CTA "Rent" should be prominent; move secondary actions to a "..." menu. *(Single-session: consolidate secondary actions.)*
 
-- **[Sidebar] "Discover" section label is vague** — Users don't know what "Discover" means. Fix: rename to "Browse" or remove the section header entirely (Marketplace, Reputation, Validators are self-explanatory). *(Trivial: text change.)*
+### VM Rental UX Audit (2026-03-01) — Full Journey Review
+
+**DONE:**
+- **[Rental] "Rent" button active on offline providers** — Button now disables when `provider_online === false`.
+- **[Rentals] "Total Spent" shows wrong currency** — Now groups by actual contract currency.
+- **[Rentals] Contract list shows internal auto-name** — Displays `offering_name` as primary label.
+- **[Rentals] SSE (real-time updates) permanently "Disconnected"** — Fixed by adding query param auth fallback for EventSource.
+- **[Email verification banner] Interrupts checkout flow** — Banner suppressed on marketplace and rentals paths.
+
+**Remaining:**
+
+- **[Subscription] Rental limit blocks paying customers** — Free tier allows only 1 active rental. This limit makes no sense when users are paying the provider per-rental. Additionally: since account creation requires no KYC (just a seed phrase), this is a Sybil attack vector. **Requires product decision**: what should the free tier allow? If the limit is intended, implement account identity verification (email confirmation at minimum). *(Architectural decision required — do NOT implement without user sign-off.)*
+
+- **[Console] Persistent 404 errors (non-Chatwoot)** — Every page load generates 5–10 `Failed to load resource: 404` errors. Diagnose and fix. *(Requires investigation: intercept network requests to identify failing URLs.)*
+
+- **[Password Resets SSE] Agent auth needs separate fix** — The password-resets page SSE is disabled because it uses agent authentication (`X-Agent-Pubkey`) which requires a different fix. Frontend signs with user identity but backend expects agent identity. *(Single-session: add agent auth query param support.)*
 
 ### Backlog
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
 
-- **[Offerings] Per-offering analytics** — DONE: `offering_views` table (migration 029), `POST /offerings/{id}/view` (public, IP-hash deduplication per day), `GET /offerings/{id}/analytics` (provider-only), view tracking on marketplace detail page, views shown on provider offerings list. Daily view trends: `GET /offerings/{id}/view-trends?days=30` returns `Vec<DailyViewTrend>` (day, views, unique_viewers); sparkline shown in provider offerings list.
-  - **Remaining:** Click-through rate (views → rentals) conversion funnel. *(Note: overall conversion rate per offering is now shown on the Analytics page at `/dashboard/provider/analytics`.)*
+- **[Offerings] Per-offering analytics** — DONE. **Remaining:** Click-through rate (views → rentals) conversion funnel. *(Note: overall conversion rate per offering is shown on the Analytics page.)*
 
-- **[Marketplace] Offering comparison page** — DONE: `/dashboard/marketplace/compare?ids=1,2,3` with side-by-side specs, best-value highlighting, rent buttons, and compare toolbar on marketplace listing.
+- **[Marketplace] Offering comparison page** — DONE: `/dashboard/marketplace/compare?ids=1,2,3`.
 
-- **[Rentals] Contract lifecycle timing** — DONE: Expected time estimates per stage and overdue warning (with Contact Provider / Cancel actions) in rental detail page.
+- **[Rentals] Contract lifecycle timing** — DONE: Expected time estimates and overdue warning.
 
-- **[Dashboard] Tenant spending insights** — DONE: Monthly spending widget on dashboard for tenants, showing this month vs. last month, trend direction, top 3 active contracts by cost, and projected month-end spend.
+- **[Dashboard] Tenant spending insights** — DONE: Monthly spending widget.
 
-- **[Security] Two-factor authentication (TOTP)** — TOTP-based 2FA for accounts using email/password (not seed-phrase accounts which already have key-based auth). *(Multi-session: TOTP secret generation, QR code display, verification middleware.)*
+- **[Security] Two-factor authentication (TOTP)** — TOTP-based 2FA for accounts using email/password. *(Multi-session.)*
 
-- **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. Persist in localStorage. *(Multi-session: the app is currently dark-only; adding a light theme requires defining a full light-mode color palette and updating all components with conditional classes. Not trivial.)*
+- **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. *(Multi-session.)*
 
-- **[Provider] Provider performance analytics** — DONE: `/dashboard/provider/analytics` page shows per-offering view-to-rental conversion rates (views 7d/30d, rentals 7d/30d, conversion %, revenue 30d). Backend: `GET /providers/{pubkey}/offering-conversion-stats` (authenticated, provider-only). Sidebar nav item added. DONE: Tenant satisfaction trends — `GET /providers/{pubkey}/offering-satisfaction-stats` returns per-offering `service_matched` and `would_rent_again` counts + composite satisfaction rate %; color-coded table on analytics page.
-  - **Remaining:** Pricing elasticity insights. *(Multi-session: needs price-history tracking joined with rental volume data.)*
+- **[Provider] Provider performance analytics** — DONE. **Remaining:** Pricing elasticity insights. *(Multi-session.)*
 
-- **[Provider] Request filtering and bulk actions** — DONE: Provider can filter pending rental requests by offering (dropdown) and duration range (min/max hours). Filtered set is used by Accept All / Reject All batch actions. DONE: Rule-based auto-accept — `auto_accept_rules` table (migration 032), full CRUD API, duration-threshold enforcement in provisioning service, UI panel on requests page.
-  - **Remaining:** Nothing — auto-accept is fully implemented.
+- **[Provider] Request filtering and bulk actions** — DONE: Full implementation including auto-accept.
 
-- **[Tenant] SSH key onboarding guidance** — DONE: Rental request dialog now has platform-specific tabbed SSH key generation guide (macOS/Linux, Windows PowerShell, Windows PuTTY) with copy buttons for each command.
+- **[Tenant] SSH key onboarding guidance** — DONE: Platform-specific tabbed SSH key generation guide.
 
-- **[Marketplace] Trending and new providers sections** — DONE: `GET /api/v1/offerings/trending` (top offerings by 7-day views) + "Trending this week" carousel. DONE: `GET /api/v1/providers/new` (providers joined last 90 days with public offerings) + "New to the platform" provider cards on marketplace. Migration 031 adds `created_at` to `provider_profiles`. DONE: Plain-text search — `text_search` field on `SearchOfferingsParams`; queries without `:` now route to ILIKE name/description match instead of DSL parser (which required `field:value` syntax).
-  - **Remaining:** "Recommended for you" personalized section. *(Needs user behavior tracking and personalization logic. Multi-session.)*
+- **[Marketplace] Trending and new providers sections** — DONE. **Remaining:** "Recommended for you" personalized section. *(Multi-session.)*
 
-- **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown by offering type, or SLA violation history. No provider comparison tool. *(Multi-session: historical trust data endpoints, profile page with timeline, comparison view.)*
+- **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown, or SLA violation history. *(Multi-session.)*
 
-- **[Offerings] Draft offerings scheduling** — DONE: `publish_at` field (migration 030) on offerings. When `is_draft=true` and `publish_at <= NOW()`, `PublishScheduledService` (60s interval) auto-publishes. UI: schedule picker on create/edit pages (shown when draft=true), "Scheduled" badge with publish time on offerings list. DONE: Bulk-publish — `POST /offerings/bulk-publish` (provider-only, 1-100 ids) with checkbox UI on offerings page.
-  - **Remaining:** "What changed since last save" diff view. *(Multi-session: needs per-field change tracking.)*
+- **[Offerings] Draft offerings scheduling** — DONE. **Remaining:** "What changed since last save" diff view. *(Multi-session.)*
 
-- **[Tenant] Saved offerings price-change alerts** — Tenants can save offerings but receive no notification when a saved offering changes price or goes out of stock. *(Multi-session: needs price-history tracking table, notification integration.)*
+- **[Tenant] Saved offerings price-change alerts** — Tenants receive no notification when a saved offering changes price or goes out of stock. *(Multi-session.)*
 
-## Code Quality Audit (2026-02-28)
+---
 
-The following issues were found during a comprehensive codebase audit for zombie code, inconsistencies, and half-baked implementations.
+## Code Quality Audit (2026-03-01)
 
-### Code Cleanup Needed
+### Completed
 
-- **[dc-agent] Remove deprecated `traefik_dynamic_dir` field** — `dc-agent/src/config.rs:46-49` contains a DEPRECATED field. Currently used for migration error messages (tells users to rename to `caddy_sites_dir`). Can be removed after migration period. *(Low priority: remove field, update any remaining references, verify tests pass.)*
+- **[api-cli] Replace `unreachable!()` with proper error handling** — DONE.
+- **[dc-agent] Replace `unreachable!()` with proper match handling** — DONE.
+- **[api/database] Remove `unreachable!()` from ledger handlers** — DONE.
 
-- **[api-cli] Replace `unreachable!()` with proper error handling** — DONE: Replaced with `anyhow::bail!("SSH wait loop exited unexpectedly - this is a bug")`.
+### Code Cleanup Needed (Low Priority)
 
-- **[dc-agent] Replace `unreachable!()` with proper match handling** — DONE: Replaced with `anyhow::bail!("Invalid command state - this is a bug")`.
+- **[dc-agent] Remove deprecated `traefik_dynamic_dir` field** — `dc-agent/src/config.rs:46-49`. Can be removed after migration period.
 
 ### TODOs in Source Code (Track but Not Blocking)
 
 - `api/src/cleanup_service.rs:190` — TODO about Stripe subscription billing integration (tracked in Notification System section)
-- `ic-canister/src/canister_backend/generic.rs:362` — TODO about ledger iteration optimization (performance, not blocking)
-- `ic-canister/src/canister_endpoints/generic_anonymous.rs:84` — TODO for CF sync implementation (feature, not blocking)
+- `ic-canister/src/canister_backend/generic.rs:362` — TODO about ledger iteration optimization (performance)
+- `ic-canister/src/canister_endpoints/generic_anonymous.rs:84` — TODO for CF sync implementation (feature)
 - `cli/src/keygen.rs:40` — TODO: Add more languages (nice-to-have)
 - `ledger-map/src/ledger_map.rs:19` — TODO: Make configurable (optimization)
 
 ### Prepared/Unused Code (Low Priority)
 
-- `api/src/database/reseller.rs` — Contains `#[allow(dead_code)]` structs "Prepared for reseller API feature"
-- `api/src/icpay_client.rs` — Contains `#[allow(dead_code)]` structs "Prepared for payment verification feature"
-- These are intentionally kept for future features; no action needed now.
+- `api/src/database/reseller.rs` — `#[allow(dead_code)]` structs "Prepared for reseller API feature"
+- `api/src/icpay_client.rs` — `#[allow(dead_code)]` structs "Prepared for payment verification feature"
 
 ### Large Files (Refactoring Candidates)
 
-These files have grown large and could benefit from refactoring when touched:
 - `api/src/openapi/providers.rs` — 5670 lines
 - `api/src/bin/api-cli.rs` — 3341 lines
 - `api/src/database/contracts.rs` — 3361 lines
 
-*(No immediate action required; split when adding significant new functionality.)*
-
-### Audit Results (No Issues Found)
-
-- **No zombie files** — No `.bak`, `.orig`, or `*~` files
-- **No `todo!()` or `unimplemented!()` macros** — Good
-- **No `dbg!()` debug statements** — Good
-- **No hardcoded credentials** — All secrets from env vars
-- **No commented-out code blocks** — Clean codebase
-
----
-
-## Additional Code Quality Issues (2026-02-28 Audit Extension)
+*(Split when adding significant new functionality.)*
 
 ### Frontend Debug Statements (Low Priority)
 
-Multiple `console.log`/`console.debug` statements found in frontend code. These should be removed or converted to proper logging before production:
-
-- `website/src/routes/login/+page.svelte:25` — `console.log('Auth success:', account)`
-- `website/src/lib/stores/auth.ts:237` — `console.log('[registerNewAccount] ...')`
-- `website/src/lib/components/AuthDialog.svelte:15` — `console.log('Auth success:', account)`
-- `website/src/lib/components/RentalRequestDialog.svelte:184,199` — ICPay payment logging
-- `website/src/lib/components/provider/AgentTable.svelte:17` — `console.log("Revoke agent:"...)`
-- `website/src/routes/dashboard/provider/requests/+page.svelte:171,183` — Request handling logs
-- `website/src/lib/components/OfferingsEditor.svelte:285-291` — Signature debug logging (7 lines)
-
-**Recommendation:** Remove debug statements or replace with a proper logging library. The `console.debug` statements for "No usage data" / "No credentials" are acceptable for debugging edge cases.
+Multiple `console.log`/`console.debug` statements in frontend. Remove or convert to proper logging before production:
+- `website/src/routes/login/+page.svelte:25`
+- `website/src/lib/stores/auth.ts:237`
+- `website/src/lib/components/AuthDialog.svelte:15`
+- `website/src/lib/components/RentalRequestDialog.svelte:184,199`
+- `website/src/lib/components/provider/AgentTable.svelte:17`
+- `website/src/routes/dashboard/provider/requests/+page.svelte:171,183`
+- `website/src/lib/components/OfferingsEditor.svelte:285-291`
 
 ### Database Files Without Dedicated Test Files
 
-The following database modules have no corresponding test file (though some tests may be in `tests.rs` files):
+Many database modules have no corresponding test file (tests may be in `tests.rs` files):
+- `acme_dns.rs`, `agent_delegations.rs`, `agent_pools.rs`, `api_tokens.rs`, `bandwidth.rs`, `chatwoot.rs`, `cloud_accounts.rs`, `cloud_resources.rs`, `core.rs`, `handlers.rs`, `notification_config.rs`, `reputation.rs`, `reseller.rs`, `rewards.rs`, `spending_alerts.rs`, `subscriptions.rs`, `telegram_tracking.rs`, `types.rs`, `user_notifications.rs`, `visibility_allowlist.rs`
 
-- `api/src/database/acme_dns.rs`
-- `api/src/database/agent_delegations.rs`
-- `api/src/database/agent_pools.rs`
-- `api/src/database/api_tokens.rs`
-- `api/src/database/bandwidth.rs`
-- `api/src/database/chatwoot.rs`
-- `api/src/database/cloud_accounts.rs`
-- `api/src/database/cloud_resources.rs`
-- `api/src/database/core.rs`
-- `api/src/database/handlers.rs`
-- `api/src/database/notification_config.rs`
-- `api/src/database/reputation.rs`
-- `api/src/database/reseller.rs`
-- `api/src/database/rewards.rs`
-- `api/src/database/spending_alerts.rs`
-- `api/src/database/subscriptions.rs`
-- `api/src/database/telegram_tracking.rs`
-- `api/src/database/types.rs`
-- `api/src/database/user_notifications.rs`
-- `api/src/database/visibility_allowlist.rs`
-
-**Recommendation:** Add tests for critical paths when modifying these files. Many are simple CRUD operations that are exercised via integration tests.
-
-### Dead Code Annotations Summary
-
-79 instances of `#[allow(dead_code)]` found across the codebase. Most are intentional:
-- API response structs that need all fields for deserialization
-- Test utility functions
-- "Prepared for future" features
-
-**No action required** — these are documented and intentional.
-
-### Untracked FIXME
-
-- `ic-canister/src/canister_backend/generic.rs:76` — `// FIXME: Get the Token value from ICPSwap and KongSwap`
-
-This is already tracked under "Architectural Issues Requiring Review" (hardcoded token value).
+**Recommendation:** Add tests for critical paths when modifying.
 
 ### Codebase Health Summary
 
 | Metric | Status |
 |--------|--------|
-| Zombie files (`.bak`, `.orig`) | ✅ None found |
-| `todo!()` / `unimplemented!()` | ✅ None found |
-| `dbg!()` debug statements | ✅ None found |
-| Hardcoded credentials | ✅ None found |
+| Zombie files | ✅ None |
+| `todo!()` / `unimplemented!()` | ✅ None |
+| `dbg!()` debug statements | ✅ None |
+| Hardcoded credentials | ✅ None |
 | Commented-out code | ✅ Clean |
-| `panic!()` in production code | ⚠️ Only in tests/build.rs |
-| `unwrap()` in non-test | ⚠️ Only in build.rs, tests, and test helpers |
-| Legacy/deprecated code | ⚠️ Tracked for removal |
+| `panic!()` in production | ✅ Only in tests/build.rs |
+| `unreachable!()` in production | ✅ Fixed |
 | Frontend console.log | ⚠️ Debug statements present |
 
-**Overall Assessment:** Codebase is clean and well-maintained. The issues found are minor and mostly cosmetic (debug statements) or deferred intentionally (dead_code for future features).
+**Overall:** Codebase is production-ready.

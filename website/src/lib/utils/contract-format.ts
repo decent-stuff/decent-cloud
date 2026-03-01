@@ -160,3 +160,18 @@ export function formatDuration(duration_ns: number): string {
 	const days = hours / 24;
 	return `${days.toFixed(1)}d`;
 }
+
+export interface ContractForSpending {
+	payment_amount_e9s?: number;
+	currency?: string;
+}
+
+export function calculateSpendingByCurrency(contracts: ContractForSpending[]): Map<string, number> {
+	const byCurrency = new Map<string, number>();
+	for (const c of contracts) {
+		const currency = c.currency?.toUpperCase() || 'USD';
+		const amount = (c.payment_amount_e9s ?? 0) / 1e9;
+		byCurrency.set(currency, (byCurrency.get(currency) ?? 0) + amount);
+	}
+	return byCurrency;
+}

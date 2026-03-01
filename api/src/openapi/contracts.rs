@@ -557,7 +557,7 @@ impl ContractsApi {
             });
         }
 
-        // Check subscription rental limits
+        // Require email verification to rent (anti-Sybil: each real email can only be verified once)
         let account_id = match db.get_account_id_by_public_key(&auth.pubkey).await {
             Ok(id) => id,
             Err(e) => {
@@ -569,68 +569,29 @@ impl ContractsApi {
                 });
             }
         };
-        if let Some(account_id) = account_id {
-            let has_unlimited = match db
-                .account_has_feature(&account_id, "unlimited_rentals")
-                .await
-            {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::error!("Failed to check account features: {:#?}", e);
+        if let Some(ref account_id) = account_id {
+            match db.get_account(account_id).await {
+                Ok(Some(account)) if !account.email_verified => {
                     return Json(ApiResponse {
                         success: false,
                         data: None,
-                        error: Some("Internal error checking subscription".to_string()),
+                        error: Some(
+                            "Email verification required. Please verify your email address before creating rentals. Check your inbox for the verification link.".to_string(),
+                        ),
                     });
                 }
-            };
-            if !has_unlimited {
-                let has_one_rental = match db
-                    .account_has_feature(&account_id, "one_rental")
-                    .await
-                {
-                    Ok(v) => v,
-                    Err(e) => {
-                        tracing::error!("Failed to check account features: {:#?}", e);
-                        return Json(ApiResponse {
-                            success: false,
-                            data: None,
-                            error: Some("Internal error checking subscription".to_string()),
-                        });
-                    }
-                };
-                if has_one_rental {
-                    let active_count = match db
-                        .count_active_contracts_for_account(&account_id)
-                        .await
-                    {
-                        Ok(c) => c,
-                        Err(e) => {
-                            tracing::error!("Failed to count active contracts: {:#?}", e);
-                            return Json(ApiResponse {
-                                success: false,
-                                data: None,
-                                error: Some("Internal error checking rental limits".to_string()),
-                            });
-                        }
-                    };
-                    if active_count >= 1 {
-                        return Json(ApiResponse {
-                            success: false,
-                            data: None,
-                            error: Some("Rental limit reached. Your subscription allows 1 active rental. Upgrade to Pro for unlimited rentals.".to_string()),
-                        });
-                    }
-                } else {
+                Ok(_) => {} // verified or account not found
+                Err(e) => {
+                    tracing::error!("Failed to get account: {:#?}", e);
                     return Json(ApiResponse {
                         success: false,
                         data: None,
-                        error: Some("Your subscription does not include rental access. Please upgrade your plan.".to_string()),
+                        error: Some("Internal error checking account status".to_string()),
                     });
                 }
             }
         }
-        // If no account found (None), allow rental for users without accounts
+        // If no account found (None), allow rental for keypair-only users
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
@@ -1804,6 +1765,8 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            offering_name: None,
+            operating_system: None,
         }
     }
 

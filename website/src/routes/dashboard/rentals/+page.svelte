@@ -20,6 +20,7 @@
 		formatTimeRemaining,
 		getProvisioningElapsed,
 		isProvisioningStuck,
+		calculateSpendingByCurrency,
 	} from "$lib/utils/contract-format";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
@@ -50,7 +51,7 @@
 	const spendingStats = $derived({
 		total: contracts.length,
 		active: contracts.filter(c => ['active', 'provisioned'].includes(c.status)).length,
-		totalSpentIcp: contracts.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+		spentByCurrency: calculateSpendingByCurrency(contracts)
 	});
 
 	const pendingCount = $derived(
@@ -76,6 +77,7 @@
 		if (!q) return byTab;
 		return byTab.filter((c) =>
 			c.contract_id.toLowerCase().includes(q) ||
+			(c.offering_name ?? '').toLowerCase().includes(q) ||
 			(offeringNames.get(Number(c.offering_id)) ?? '').toLowerCase().includes(q)
 		);
 	});
@@ -152,9 +154,17 @@
 		offeringNames = updated;
 	}
 
-	function connectSSE(pubkeyHex: string) {
+	async function connectSSE(pubkeyHex: string) {
 		closeSSE();
-		const url = buildContractEventsUrl(pubkeyHex, API_BASE_URL);
+		const signingIdentityInfo = await authStore.getSigningIdentity();
+		if (!signingIdentityInfo) return;
+
+		const { headers } = await signRequest(
+			signingIdentityInfo.identity as any,
+			"GET",
+			`/api/v1/users/${pubkeyHex}/contract-events`
+		);
+		const url = buildContractEventsUrl(pubkeyHex, API_BASE_URL, headers);
 		eventSource = new EventSource(url);
 		eventSource.addEventListener('contract-status', (ev) => {
 			try {
@@ -570,10 +580,20 @@
 			</div>
 			<div class="bg-surface-elevated border border-neutral-800 p-4">
 				<p class="text-neutral-500 text-xs">Total Spent</p>
-				<p class="text-xl font-bold text-primary-400 mt-1">{spendingStats.totalSpentIcp.toFixed(2)} ICP</p>
-				{#if icpPriceUsd && spendingStats.totalSpentIcp > 0}
-					<p class="text-neutral-600 text-xs mt-0.5">&#x2248; ${(spendingStats.totalSpentIcp * icpPriceUsd).toFixed(2)}</p>
-				{/if}
+				<div class="mt-1 space-y-0.5">
+					{#if spendingStats.spentByCurrency.size === 0}
+						<p class="text-xl font-bold text-primary-400">0.00</p>
+					{:else}
+						{#each [...spendingStats.spentByCurrency.entries()] as [currency, amount]}
+							<p class="text-xl font-bold text-primary-400">
+								{amount.toFixed(2)} {currency}
+								{#if currency === 'ICP' && icpPriceUsd && amount > 0}
+									<span class="text-neutral-600 text-xs ml-1">&#x2248; ${(amount * icpPriceUsd).toFixed(2)}</span>
+								{/if}
+							</p>
+						{/each}
+					{/if}
+				</div>
 			</div>
 		</div>
 		{/if}
@@ -621,7 +641,7 @@
 						<div class="flex-1">
 							<div class="flex items-center gap-3 mb-2">
 								<h3 class="text-xl font-bold text-white">
-									{offeringNames.get(parseInt(contract.offering_id, 10)) ?? contract.offering_id}
+									{contract.offering_name ?? offeringNames.get(parseInt(contract.offering_id, 10)) ?? contract.offering_id}
 								</h3>
 								<span
 									class="inline-flex items-center gap-1 px-3 py-1  text-xs font-medium border {provisioningStuck ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : statusBadge.class}"

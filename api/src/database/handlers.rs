@@ -116,7 +116,7 @@ impl Database {
                                 anyhow::anyhow!("Failed to insert reward distributions: {}", e)
                             })?;
                     }
-                    _ => unreachable!(), // All labels in known_labels are handled above
+                    _ => unreachable!("label was drawn from known_labels slice"),
                 }
             }
         }

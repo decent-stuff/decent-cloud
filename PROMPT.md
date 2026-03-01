@@ -15,7 +15,10 @@ If there are not enough MEANINGFUL items in `TODO.md` that you can do now, creat
 - Review the entire codebase and find zombie code and docs, inconsistencies, and half-baked things. Is everything ready for prod? Fix any gaps that are found and if you cannot fix them immediately, add them to `TODO.md`.
 - consider the app from the *user point of view* - we have a LOT of functionality that is not visible or not user friendly / easily usable for users, or if there are some UI/UX changes that would RADICALLY improve intuitiveness and usability from the user point of view (simple, clean, obviously usable UI, etc. - less is more!). Fix these found gaps in another subagent if possible, otherwise add them to `TODO.md` and we'll handle them in the follow-up session(s).
 Regardless of how radical these changes are - let's do them! And use subagents extensively.
+Note that you or the subagents should NOT do UX review and improvements, we have a separate agent for this.
 
-When fully done, use subagents to a) verify completeness and find remaining gaps, and b) fix gaps immediately if small and easy, or add them to `TODO.md` if very large, c) remove all fully done items from `TODO.md` and reorganize `TODO.md` for size and readability.
+When fully done, use subagents to a) verify completeness and find implementation gaps, and b) fix these gaps immediately if small and easy, or add them to `TODO.md` if very large, c) remove all fully done items from `TODO.md` and reorganize `TODO.md` for size and readability.
 
 Then COMMIT all changes, ideally as separate commits.
+
+When all is done, quit opencode by invoking `/quit`

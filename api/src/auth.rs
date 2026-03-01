@@ -826,33 +826,39 @@ impl<'a> poem_openapi::ApiExtractor<'a> for BearerAuth {
 
 /// Authenticate an agent from a plain poem request (for use in non-OpenAPI handlers like SSE).
 ///
-/// Reads X-Agent-Pubkey, X-Signature, X-Timestamp, X-Nonce headers, verifies signature,
-/// and resolves the provider pubkey via delegation lookup.
+/// Reads X-Agent-Pubkey, X-Signature, X-Timestamp, X-Nonce from headers first.
+/// If headers are missing, falls back to query parameters (agent_pubkey, signature, timestamp, nonce).
+/// Verifies signature and resolves the provider pubkey via delegation lookup.
 pub async fn authenticate_agent_from_request(
     request: &poem::Request,
     db: &std::sync::Arc<crate::database::Database>,
 ) -> Result<AgentAuthenticatedUser, AuthError> {
     let headers = request.headers();
+    let query = request.uri().query().unwrap_or("");
 
     let agent_pubkey_hex = headers
         .get("X-Agent-Pubkey")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Agent-Pubkey".to_string()))?;
+        .or_else(|| get_query_param(query, "agent_pubkey"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Agent-Pubkey or agent_pubkey query param".to_string()))?;
 
     let signature_hex = headers
         .get("X-Signature")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+        .or_else(|| get_query_param(query, "signature"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Signature or signature query param".to_string()))?;
 
     let timestamp = headers
         .get("X-Timestamp")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+        .or_else(|| get_query_param(query, "timestamp"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string()))?;
 
     let nonce = headers
         .get("X-Nonce")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+        .or_else(|| get_query_param(query, "nonce"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
     let full_path = format!("/api/v1{}", request.uri().path());
 
@@ -890,30 +896,37 @@ pub async fn authenticate_agent_from_request(
 
 /// Authenticate a user from a plain poem request (for use in non-OpenAPI handlers like SSE).
 ///
-/// Reads X-Public-Key, X-Signature, X-Timestamp, X-Nonce headers and verifies signature.
+/// Reads X-Public-Key, X-Signature, X-Timestamp, X-Nonce from headers first.
+/// If headers are missing, falls back to query parameters (pubkey, signature, timestamp, nonce).
+/// This allows EventSource (which doesn't support custom headers) to authenticate via URL params.
 /// Returns the authenticated user's pubkey bytes.
 pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>, AuthError> {
     let headers = request.headers();
+    let query = request.uri().query().unwrap_or("");
 
     let pubkey_hex = headers
         .get("X-Public-Key")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Public-Key".to_string()))?;
+        .or_else(|| get_query_param(query, "pubkey"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Public-Key or pubkey query param".to_string()))?;
 
     let signature_hex = headers
         .get("X-Signature")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Signature".to_string()))?;
+        .or_else(|| get_query_param(query, "signature"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Signature or signature query param".to_string()))?;
 
     let timestamp = headers
         .get("X-Timestamp")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp".to_string()))?;
+        .or_else(|| get_query_param(query, "timestamp"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Timestamp or timestamp query param".to_string()))?;
 
     let nonce = headers
         .get("X-Nonce")
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthError::MissingHeader("X-Nonce".to_string()))?;
+        .or_else(|| get_query_param(query, "nonce"))
+        .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
     let full_path = format!("/api/v1{}", request.uri().path());
 
@@ -927,6 +940,16 @@ pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>
         &[], // SSE GET has no body
         None,
     )
+}
+
+fn get_query_param<'a>(query: &'a str, name: &str) -> Option<&'a str> {
+    let prefix = format!("{}=", name);
+    for pair in query.split('&') {
+        if let Some(value) = pair.strip_prefix(&prefix) {
+            return Some(value);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

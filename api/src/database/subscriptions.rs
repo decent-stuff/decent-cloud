@@ -396,8 +396,8 @@ mod tests {
         let features = plan.features_list();
 
         assert!(features.contains(&"marketplace_browse".to_string()));
-        assert!(features.contains(&"one_rental".to_string()));
-        assert!(!features.contains(&"unlimited_rentals".to_string()));
+        assert!(features.contains(&"unlimited_rentals".to_string()));
+        assert!(!features.contains(&"one_rental".to_string()));
     }
 
     #[tokio::test]
@@ -459,9 +459,9 @@ mod tests {
             .await
             .unwrap();
 
-        // Free tier has one_rental but not unlimited_rentals
+        // Free tier has unlimited_rentals (no per-account cap; email verification is the Sybil guard)
         assert!(db
-            .account_has_feature(&account.id, "one_rental")
+            .account_has_feature(&account.id, "unlimited_rentals")
             .await
             .unwrap());
         assert!(db
@@ -469,7 +469,7 @@ mod tests {
             .await
             .unwrap());
         assert!(!db
-            .account_has_feature(&account.id, "unlimited_rentals")
+            .account_has_feature(&account.id, "one_rental")
             .await
             .unwrap());
     }
@@ -502,6 +502,29 @@ mod tests {
         assert!(!db
             .account_has_feature(&account.id, "one_rental")
             .await
-            .unwrap()); // Pro doesn't have one_rental, it has unlimited
+            .unwrap()); // one_rental feature no longer exists
+    }
+
+    #[tokio::test]
+    async fn test_email_verification_required_for_rental() {
+        let db = setup_test_db().await;
+        let pubkey = [1u8; 32];
+
+        // New account: email_verified = false by default
+        let account = db
+            .create_account("testuser", &pubkey, "test@example.com")
+            .await
+            .unwrap();
+        assert!(!account.email_verified, "new accounts must not be email-verified");
+
+        // After email verification
+        db.set_email_verified(&account.id, true).await.unwrap();
+        let verified = db.get_account(&account.id).await.unwrap().unwrap();
+        assert!(verified.email_verified, "after verification, must be true");
+
+        // Email change resets verification
+        db.update_account_email(&account.id, "new@example.com").await.unwrap();
+        let reset = db.get_account(&account.id).await.unwrap().unwrap();
+        assert!(!reset.email_verified, "email change must reset email_verified");
     }
 }

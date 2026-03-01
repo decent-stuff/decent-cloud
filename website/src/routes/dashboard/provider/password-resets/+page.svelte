@@ -34,17 +34,12 @@
 	function connectSSE() {
 		if (!isAuthenticated || !providerHex) return;
 		closeSSE();
-		const url = `${API_BASE_URL}/api/v1/providers/${providerHex}/password-reset-events`;
-		eventSource = new EventSource(url);
-		eventSource.addEventListener('password-reset-count', () => {
-			loadData();
-		});
-		eventSource.onopen = () => {
-			sseConnected = true;
-		};
-		eventSource.onerror = () => {
-			sseConnected = false;
-		};
+		// TODO: SSE requires agent auth headers, but EventSource doesn't support custom headers.
+		// This needs backend changes to accept query params or a different auth mechanism.
+		// For now, SSE is disabled and data is refreshed via loadData() calls.
+		// const url = `${API_BASE_URL}/api/v1/providers/${providerHex}/password-reset-events`;
+		// eventSource = new EventSource(url);
+		sseConnected = false;
 	}
 
 	function closeSSE() {

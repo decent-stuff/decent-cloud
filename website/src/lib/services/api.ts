@@ -1103,6 +1103,7 @@ export interface Contract {
 	requester_contact: string;
 	provider_pubkey: string;
 	offering_id: string;
+	offering_name?: string;
 	region_name?: string;
 	instance_config?: string;
 	payment_amount_e9s: number;

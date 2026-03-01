@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime, formatTimeRemaining, getProvisioningElapsed, isProvisioningStuck } from './contract-format';
+import { formatContractDate, formatContractPrice, truncateContractHash, computePubkey, formatDuration, formatRelativeTime, formatTimeRemaining, getProvisioningElapsed, isProvisioningStuck, calculateSpendingByCurrency } from './contract-format';
 
 describe('contract formatting helpers', () => {
 	it('formats timestamps into readable strings', () => {
@@ -232,5 +232,59 @@ describe('contract formatting helpers', () => {
 			expect(result).not.toBeNull();
 			expect(result!.urgency).toBe('normal');
 		});
+	});
+});
+
+describe('calculateSpendingByCurrency', () => {
+	it('returns empty map for empty contracts', () => {
+		const result = calculateSpendingByCurrency([]);
+		expect(result.size).toBe(0);
+	});
+
+	it('groups spending by currency', () => {
+		const contracts = [
+			{ payment_amount_e9s: 5_000_000_000, currency: 'ICP' },
+			{ payment_amount_e9s: 3_000_000_000, currency: 'ICP' },
+			{ payment_amount_e9s: 10_000_000_000, currency: 'USD' },
+		];
+		const result = calculateSpendingByCurrency(contracts);
+		expect(result.get('ICP')).toBe(8);
+		expect(result.get('USD')).toBe(10);
+	});
+
+	it('normalizes currency to uppercase', () => {
+		const contracts = [
+			{ payment_amount_e9s: 5_000_000_000, currency: 'icp' },
+			{ payment_amount_e9s: 3_000_000_000, currency: 'ICP' },
+		];
+		const result = calculateSpendingByCurrency(contracts);
+		expect(result.get('ICP')).toBe(8);
+		expect(result.size).toBe(1);
+	});
+
+	it('defaults to USD for missing currency', () => {
+		const contracts = [
+			{ payment_amount_e9s: 5_000_000_000 },
+		];
+		const result = calculateSpendingByCurrency(contracts);
+		expect(result.get('USD')).toBe(5);
+	});
+
+	it('handles zero amounts', () => {
+		const contracts = [
+			{ payment_amount_e9s: 0, currency: 'ICP' },
+			{ payment_amount_e9s: 5_000_000_000, currency: 'ICP' },
+		];
+		const result = calculateSpendingByCurrency(contracts);
+		expect(result.get('ICP')).toBe(5);
+	});
+
+	it('handles missing payment amounts', () => {
+		const contracts = [
+			{ currency: 'ICP' },
+			{ payment_amount_e9s: 5_000_000_000, currency: 'ICP' },
+		];
+		const result = calculateSpendingByCurrency(contracts);
+		expect(result.get('ICP')).toBe(5);
 	});
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
 	import type { AccountInfo, IdentityInfo } from '$lib/stores/auth';
 	import DashboardSidebar from '$lib/components/DashboardSidebar.svelte';
@@ -48,7 +49,14 @@
 		isSidebarOpen = !isSidebarOpen;
 	}
 
-	const showEmailVerificationBanner = $derived(isAuthenticated && account && !account.emailVerified);
+	const isCheckoutOrMarketplacePage = $derived(
+		$page.url.pathname.startsWith('/dashboard/marketplace') ||
+		$page.url.pathname.startsWith('/dashboard/rentals')
+	);
+
+	const showEmailVerificationBanner = $derived(
+		isAuthenticated && account && !account.emailVerified && !isCheckoutOrMarketplacePage
+	);
 	const showSeedPhraseBackupBanner = $derived(
 		isAuthenticated && !showEmailVerificationBanner && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
 	);

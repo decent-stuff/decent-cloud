@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, description, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'owner-test-1', 'Owner Test Offering', 'Test', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Dallas', FALSE, 0) RETURNING id as \"id!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ed52cb50553ce76d6df07f8252d5b5ae3403de8d0e4f295be9dbdefb9871ce7a"
+}

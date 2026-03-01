@@ -348,6 +348,8 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/030_offering_publish_at.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/031_provider_created_at.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/032_auto_accept_rules.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/033_contract_operating_system.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/034_free_plan_unlimited_rentals.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -637,6 +639,14 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "032_auto_accept_rules.sql",
                     include_str!("../../migrations_pg/032_auto_accept_rules.sql"),
+                ),
+                (
+                    "033_contract_operating_system.sql",
+                    include_str!("../../migrations_pg/033_contract_operating_system.sql"),
+                ),
+                (
+                    "034_free_plan_unlimited_rentals.sql",
+                    include_str!("../../migrations_pg/034_free_plan_unlimited_rentals.sql"),
                 ),
             ];
 

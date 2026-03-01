@@ -247,7 +247,7 @@
 <div class="space-y-6 max-w-5xl">
 	<Breadcrumb items={[
 		isAuthenticated
-			? { label: 'Dashboard', href: '/dashboard' }
+			? { label: 'Dashboard', href: '/dashboard/rentals' }
 			: { label: 'Home', href: '/' },
 		{ label: 'Marketplace', href: '/dashboard/marketplace' },
 		{ label: offering?.offer_name ?? '…' },
@@ -394,10 +394,15 @@
 					</button>
 					<button
 						onclick={handleRentClick}
-						disabled={offering.is_example}
+						disabled={offering.is_example || offering.provider_online === false}
 						class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+						title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : ''}
 					>
-						Rent this offering
+						{#if offering.provider_online === false}
+							Provider Offline
+						{:else}
+							Rent this offering
+						{/if}
 					</button>
 				{/if}
 			</div>
@@ -579,10 +584,15 @@
 			{:else}
 				<button
 					onclick={handleRentClick}
-					disabled={offering.is_example}
+					disabled={offering.is_example || offering.provider_online === false}
 					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : ''}
 				>
-					Rent this offering
+					{#if offering.provider_online === false}
+						Provider Offline
+					{:else}
+						Rent this offering
+					{/if}
 				</button>
 			{/if}
 		</div>

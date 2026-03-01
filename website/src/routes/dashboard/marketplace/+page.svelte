@@ -6,7 +6,7 @@
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
-	import TrustBadge from "$lib/components/TrustBadge.svelte";
+	import OfferingStatusBadge from "$lib/components/OfferingStatusBadge.svelte";
 	import Icon, { type IconName } from "$lib/components/Icons.svelte";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
@@ -608,12 +608,6 @@
 		);
 	}
 
-	function getResellerBadgeText(offering: Offering): string {
-		if (!offering.reseller_name) return "";
-		const commission = offering.reseller_commission_percent || 0;
-		return `Via ${offering.reseller_name} (+${commission}%)`;
-	}
-
 	function formatSpecs(offering: Offering): string {
 		const type = offering.product_type.toLowerCase();
 		if (type.includes("gpu")) {
@@ -676,16 +670,6 @@
 		if (interval.includes("month")) return "Monthly";
 		if (interval.includes("year")) return "Yearly";
 		return offering.billing_interval || "—";
-	}
-
-	function getSubscriptionBadge(offering: Offering): string | null {
-		if (!offering.is_subscription) return null;
-		const days = offering.subscription_interval_days;
-		if (!days) return "Recurring";
-		if (days <= 31) return "Monthly";
-		if (days <= 93) return "Quarterly";
-		if (days <= 366) return "Yearly";
-		return `${days}d`;
 	}
 
 	let hasActiveFilters = $derived(
@@ -819,9 +803,7 @@
 				</div>
 
 				<div
-					class="space-y-4 mt-4 {showFilters
-						? ''
-						: 'hidden'} md:block"
+					class="space-y-4 mt-4 {showFilters ? '' : 'hidden'} md:block"
 				>
 					<!-- Type Filter -->
 					<div>
@@ -909,11 +891,8 @@
 					</button>
 
 					<!-- Advanced Filters (collapsible) -->
-					<div
-						class="space-y-4 overflow-hidden transition-all duration-200 {showAdvancedFilters
-							? 'max-h-[2000px] opacity-100'
-							: 'max-h-0 opacity-0'}"
-					>
+					{#if showAdvancedFilters}
+					<div class="space-y-4">
 						<!-- Country Filter -->
 						<div>
 							<div class="data-label mb-2">Country</div>
@@ -1074,9 +1053,10 @@
 								<span class="text-sm text-neutral-400 group-hover:text-white"
 									>Recipes only</span
 								>
-							</label>
+								</label>
+							</div>
 						</div>
-					</div>
+					{/if}
 				</div>
 			</div>
 		</aside>
@@ -1318,49 +1298,18 @@
 												class="font-medium text-white hover:text-primary-400 transition-colors"
 											>{offering.offer_name}</a
 											>
-											{#if !offering.provider_online}
-												<span
-													class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
-													title="Provider is not actively monitoring — requests are still accepted when agent comes back online"
-												>
-													<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
-													Offline
-												</span>
-											{/if}
-											{#if offering.trust_score !== undefined}
-												<TrustBadge
-													score={offering.trust_score}
-													hasFlags={offering.has_critical_flags ??
-														false}
-													compact={true}
-												/>
-											{/if}
-											{#if hasReseller(offering)}
-												<span
-													class="px-1.5 py-0.5 text-xs bg-primary-500/20 text-primary-400 rounded"
-													>{getResellerBadgeText(
-														offering,
-													)}</span
-												>
-											{:else if offering.is_example}
-												<span
-													class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded"
-													>Demo</span
-												>
-											{/if}
-											{#if getSubscriptionBadge(offering)}
-												<span
-													class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
-													title="Recurring subscription"
-													><Icon name="repeat" size={20} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
-												>
-											{/if}
-											{#if offering.post_provision_script}
-												<span
-													class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
-													>Recipe</span
-												>
-											{/if}
+											<OfferingStatusBadge
+												providerOnline={offering.provider_online}
+												trustScore={offering.trust_score}
+												hasCriticalFlags={offering.has_critical_flags}
+												isReseller={hasReseller(offering)}
+												resellerName={offering.reseller_name}
+												resellerCommission={offering.reseller_commission_percent}
+												isDemo={offering.is_example}
+												isSubscription={offering.is_subscription}
+												subscriptionIntervalDays={offering.subscription_interval_days}
+												hasRecipe={!!offering.post_provision_script}
+											/>
 										</div>
 										<a
 											href="/dashboard/providers/{offering.owner_username ||
@@ -1694,41 +1643,18 @@
 											class="font-medium text-white hover:text-primary-400 transition-colors"
 										>{offering.offer_name}</a
 										>
-										{#if !offering.provider_online}
-											<span
-												class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded"
-												title="Provider is not actively monitoring — requests are still accepted when agent comes back online"
-											>
-												<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
-												Offline
-											</span>
-										{/if}
-										{#if hasReseller(offering)}
-											<span
-												class="px-1.5 py-0.5 text-xs bg-primary-500/20 text-primary-400 rounded"
-												>{getResellerBadgeText(
-													offering,
-												)}</span
-											>
-										{:else if offering.is_example}
-											<span
-												class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded"
-												>Demo</span
-											>
-										{/if}
-										{#if getSubscriptionBadge(offering)}
-											<span
-												class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
-												title="Recurring subscription"
-												><Icon name="repeat" size={20} class="text-purple-400" /> {getSubscriptionBadge(offering)}</span
-											>
-										{/if}
-										{#if offering.post_provision_script}
-											<span
-												class="px-1.5 py-0.5 text-xs bg-blue-500/20 text-blue-400 rounded"
-												>Recipe</span
-											>
-										{/if}
+										<OfferingStatusBadge
+											providerOnline={offering.provider_online}
+											trustScore={offering.trust_score}
+											hasCriticalFlags={offering.has_critical_flags}
+											isReseller={hasReseller(offering)}
+											resellerName={offering.reseller_name}
+											resellerCommission={offering.reseller_commission_percent}
+											isDemo={offering.is_example}
+											isSubscription={offering.is_subscription}
+											subscriptionIntervalDays={offering.subscription_interval_days}
+											hasRecipe={!!offering.post_provision_script}
+										/>
 									</div>
 									<div class="flex items-center gap-1 text-xs text-neutral-400">
 										<Icon name={getTypeIcon(offering.product_type)} size={20} />
@@ -1749,14 +1675,6 @@
 									>
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
-									{#if offering.trust_score !== undefined}
-										<TrustBadge
-											score={offering.trust_score}
-											hasFlags={offering.has_critical_flags ??
-												false}
-											compact={true}
-										/>
-									{/if}
 									{#if offering.id !== undefined}
 										<button
 											onclick={(e) => toggleBookmark(e, offering.id!)}

@@ -236,6 +236,7 @@ async fn test_create_rental_request_with_icpay_payment_method() {
         duration_hours: None,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -267,6 +268,7 @@ async fn test_create_rental_request_with_stripe_payment_method() {
         duration_hours: None,
         payment_method: Some("stripe".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -298,6 +300,7 @@ async fn test_create_rental_request_invalid_payment_method() {
         duration_hours: None,
         payment_method: Some("paypal".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let result = db.create_rental_request(&user_pk, params).await;
@@ -362,6 +365,7 @@ async fn test_create_rental_request_success() {
         duration_hours: None,
         payment_method: Some("stripe".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -422,6 +426,7 @@ async fn test_create_rental_request_with_defaults() {
         duration_hours: None,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -446,6 +451,7 @@ async fn test_create_rental_request_offering_not_found() {
         duration_hours: None,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let result = db.create_rental_request(&user_pk, params).await;
@@ -480,6 +486,7 @@ async fn test_create_rental_request_calculates_price() {
         duration_hours: None,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -513,6 +520,7 @@ async fn test_create_rental_request_eur_stripe() {
         duration_hours: Some(720),
         payment_method: Some("stripe".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -988,6 +996,7 @@ async fn test_payment_status_icpay_payment_succeeds_immediately() {
         duration_hours: None,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -1022,6 +1031,7 @@ async fn test_payment_status_stripe_payment_starts_pending() {
         duration_hours: None,
         payment_method: Some("stripe".to_string()),
         buyer_address: None,
+        operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
@@ -3180,6 +3190,7 @@ fn rental_params(offering_db_id: i64, duration_hours: Option<i64>) -> RentalRequ
         duration_hours,
         payment_method: Some("icpay".to_string()),
         buyer_address: None,
+        operating_system: None,
     }
 }
 

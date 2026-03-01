@@ -33,11 +33,14 @@ const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
 const TOUR_ROUTES = [
+  { path: '/', name: 'Landing', public: true },
   { path: '/dashboard/marketplace', name: 'Marketplace' },
-  { path: '/dashboard/offerings', name: 'Provider Offerings' },
   { path: '/dashboard/rentals', name: 'My Rentals' },
-  { path: '/dashboard/provider', name: 'Provider Dashboard' },
-  { path: '/dashboard/provider/offerings', name: 'Provider Manage Offerings' },
+  { path: '/dashboard/offerings', name: 'Provider Offerings' },
+  { path: '/dashboard/provider/requests', name: 'Provider Requests' },
+  { path: '/dashboard/provider/analytics', name: 'Provider Analytics' },
+  { path: '/dashboard/provider/agents', name: 'Provider Agents' },
+  { path: '/dashboard/account', name: 'Account Settings' },
 ];
 
 const [,, cmd, ...remainingArgs] = process.argv;
@@ -203,38 +206,47 @@ async function runTour() {
     : await browser.newPage();
 
   const origin = new URL(WEB_URL).origin;
-  const report = { seed: seedPhrase, viewport, timestamp: new Date().toISOString(), pages: [] };
+  const report = { timestamp: new Date().toISOString(), seed: seedPhrase, viewport, pages: [] };
 
   try {
-    await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-    await page.evaluate((phrase) => {
-      const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
-      if (!stored.includes(phrase)) {
-        stored.push(phrase);
-        localStorage.setItem('seed_phrases', JSON.stringify(stored));
-      }
-    }, seedPhrase);
-
-    const authDone = page.waitForResponse(r => r.url().includes('/api/v1/accounts'), { timeout: TIMEOUT });
-    await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-    await authDone;
-    await page.waitForTimeout(200);
-
     for (const route of TOUR_ROUTES) {
-      const pageReport = { path: route.path, name: route.name, errors: [] };
-      process.stderr.write(`[TOUR] Visiting ${route.name}...\n`);
+      const pageReport = { path: route.path, name: route.name, url: `${origin}${route.path}` };
+      process.stderr.write(`[TOUR] Visiting ${route.name} (${route.path})...\n`);
 
       const pageConsole = [];
       const handler = msg => { if (['error', 'warning', 'warn'].includes(msg.type())) pageConsole.push(`[${msg.type().toUpperCase()}] ${msg.text()}`); };
       page.on('console', handler);
 
       try {
-        await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+        if (route.public && !seedPhrase) {
+          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+        } else if (route.public) {
+          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+        } else {
+          if (seedPhrase && !report._authenticated) {
+            await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+            await page.evaluate((phrase) => {
+              const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
+              if (!stored.includes(phrase)) {
+                stored.push(phrase);
+                localStorage.setItem('seed_phrases', JSON.stringify(stored));
+              }
+            }, seedPhrase);
+            const authDone = page.waitForResponse(r => r.url().includes('/api/v1/accounts'), { timeout: TIMEOUT });
+            await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+            await authDone;
+            await page.waitForTimeout(200);
+            report._authenticated = true;
+          }
+          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+        }
         await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(() => {});
         await page.waitForTimeout(300);
 
+        const title = await page.title();
         const snapshot = await page._snapshotForAI({ timeout: TIMEOUT });
-        pageReport.snapshot = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        pageReport.title = title;
+        pageReport.snap = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
         pageReport.errors = pageConsole;
       } catch (e) {
         pageReport.error = e.message;
@@ -244,9 +256,10 @@ async function runTour() {
       report.pages.push(pageReport);
     }
 
+    delete report._authenticated;
     const reportPath = '/tmp/dc-ux-tour.json';
     fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
-    console.log(JSON.stringify({ reportPath, pagesVisited: report.pages.length }, null, 2));
+    console.log(JSON.stringify({ reportPath, pagesVisited: report.pages.length, errors: report.pages.filter(p => p.error).length }, null, 2));
   } finally {
     await page.close();
     await browser.close();

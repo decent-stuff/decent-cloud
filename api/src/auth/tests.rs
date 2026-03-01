@@ -342,7 +342,11 @@ fn test_authenticate_user_from_request_missing_headers() {
 
     // Build a minimal GET request with no auth headers
     let req = Request::builder()
-        .uri("http://localhost/api/v1/users/abc123/contract-events".parse::<poem::http::Uri>().expect("valid URI"))
+        .uri(
+            "http://localhost/api/v1/users/abc123/contract-events"
+                .parse::<poem::http::Uri>()
+                .expect("valid URI"),
+        )
         .method(Method::GET)
         .finish();
 
@@ -383,7 +387,9 @@ fn test_authenticate_user_from_request_valid_signature() {
     let sig = identity.sign(&msg).expect("sign");
     let sig_hex = hex::encode(sig.to_bytes());
 
-    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path).parse().expect("valid URI");
+    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path)
+        .parse()
+        .expect("valid URI");
     let req = poem::Request::builder()
         .uri(uri)
         .method(poem::http::Method::GET)
@@ -394,6 +400,108 @@ fn test_authenticate_user_from_request_valid_signature() {
         .finish();
 
     let result = authenticate_user_from_request(&req);
-    assert!(result.is_ok(), "Valid signature should authenticate: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Valid signature should authenticate: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), pubkey);
+}
+
+#[test]
+fn test_authenticate_user_from_request_query_params() {
+    use dcc_common::DccIdentity;
+
+    let seed = [88u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let pubkey = identity.to_bytes_verifying();
+    let pubkey_hex = hex::encode(&pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/users/abc/contract-events";
+    let stripped_path = "/users/abc/contract-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    // Build URL with query params instead of headers (for EventSource)
+    let uri: poem::http::Uri = format!(
+        "http://localhost{}?pubkey={}&signature={}&timestamp={}&nonce={}",
+        stripped_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = poem::Request::builder()
+        .uri(uri)
+        .method(poem::http::Method::GET)
+        .finish();
+
+    let result = authenticate_user_from_request(&req);
+    assert!(
+        result.is_ok(),
+        "Query param auth should work: {:?}",
+        result.err()
+    );
+    assert_eq!(result.unwrap(), pubkey);
+}
+
+#[test]
+fn test_authenticate_user_from_request_headers_preferred_over_query() {
+    use dcc_common::DccIdentity;
+
+    let seed = [77u8; 32];
+    let identity = DccIdentity::new_from_seed(&seed).expect("identity from seed");
+    let pubkey = identity.to_bytes_verifying();
+    let pubkey_hex = hex::encode(&pubkey);
+
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let full_path = "/api/v1/users/test/contract-events";
+    let stripped_path = "/users/test/contract-events";
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut msg = timestamp_str.as_bytes().to_vec();
+    msg.extend_from_slice(nonce_str.as_bytes());
+    msg.extend_from_slice(b"GET");
+    msg.extend_from_slice(full_path.as_bytes());
+
+    let sig = identity.sign(&msg).expect("sign");
+    let sig_hex = hex::encode(sig.to_bytes());
+
+    // URL has invalid query params, but headers should be preferred
+    let uri: poem::http::Uri = format!(
+        "http://localhost{}?pubkey=invalid&signature=invalid&timestamp=invalid&nonce=invalid",
+        stripped_path
+    )
+    .parse()
+    .expect("valid URI");
+
+    let req = poem::Request::builder()
+        .uri(uri)
+        .method(poem::http::Method::GET)
+        .header("X-Public-Key", &pubkey_hex)
+        .header("X-Signature", &sig_hex)
+        .header("X-Timestamp", &timestamp_str)
+        .header("X-Nonce", &nonce_str)
+        .finish();
+
+    let result = authenticate_user_from_request(&req);
+    assert!(
+        result.is_ok(),
+        "Headers should be preferred over query params: {:?}",
+        result.err()
+    );
     assert_eq!(result.unwrap(), pubkey);
 }

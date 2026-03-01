@@ -1,0 +1,340 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n               pd.password_reset_requested_at_ns, c.operating_system\n               FROM contract_sign_requests c\n               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n               WHERE c.contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "requester_pubkey!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "requester_ssh_pubkey!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "requester_contact!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "provider_pubkey!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "offering_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "region_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "instance_config",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "payment_amount_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "start_timestamp_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "end_timestamp_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "original_duration_hours",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "request_memo!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "provisioning_instance_details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "provisioning_completed_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 18,
+        "name": "payment_method!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "stripe_payment_intent_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "stripe_customer_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "icpay_transaction_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "payment_status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 23,
+        "name": "currency!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 24,
+        "name": "refund_amount_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 25,
+        "name": "stripe_refund_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 26,
+        "name": "refund_created_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 27,
+        "name": "status_updated_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 28,
+        "name": "icpay_payment_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 29,
+        "name": "icpay_refund_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 30,
+        "name": "total_released_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 31,
+        "name": "last_release_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 32,
+        "name": "tax_amount_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 33,
+        "name": "tax_rate_percent",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 34,
+        "name": "tax_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 35,
+        "name": "tax_jurisdiction",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 36,
+        "name": "customer_tax_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 37,
+        "name": "reverse_charge",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 38,
+        "name": "buyer_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 39,
+        "name": "stripe_invoice_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 40,
+        "name": "receipt_number",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 41,
+        "name": "receipt_sent_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 42,
+        "name": "stripe_subscription_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 43,
+        "name": "subscription_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 44,
+        "name": "current_period_end_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 45,
+        "name": "cancel_at_period_end!: bool",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 46,
+        "name": "auto_renew!: bool",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 47,
+        "name": "gateway_slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 48,
+        "name": "gateway_subdomain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 49,
+        "name": "gateway_ssh_port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 50,
+        "name": "gateway_port_range_start",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 51,
+        "name": "gateway_port_range_end",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 52,
+        "name": "password_reset_requested_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 53,
+        "name": "operating_system",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "115baa855fae3982e14927a8b17e36f2f3d5d5afda8b4dbf59f858783d2a9a4b"
+}
