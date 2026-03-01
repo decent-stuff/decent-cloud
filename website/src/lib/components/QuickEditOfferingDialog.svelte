@@ -232,6 +232,7 @@
 				stripe_metered_price_id: offering.stripe_metered_price_id || undefined,
 				is_subscription: offering.is_subscription || false,
 				subscription_interval_days: offering.subscription_interval_days || undefined,
+				publish_at: offering.publish_at || undefined,
 				created_at_ns: undefined
 			};
 
