@@ -463,7 +463,7 @@
 			<button
 				type="button"
 				onclick={handleLogin}
-				class="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
+				class="w-full flex items-center justify-center gap-2 btn-primary text-sm"
 			>
 				<Icon name="login" size={20} />
 				<span>Sign In</span>

@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
-	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
-	import { navigateToLogin } from "$lib/utils/navigation";
 	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
+	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import UserProfileEditor from "$lib/components/UserProfileEditor.svelte";
 	import AccountEmailEditor from "$lib/components/AccountEmailEditor.svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
@@ -30,10 +29,6 @@
 		accountEmail = newEmail;
 	}
 
-	function handleLogin() {
-		navigateToLogin($page.url.pathname);
-	}
-
 	onDestroy(() => {
 		unsubscribe?.();
 		unsubscribeAuth?.();
@@ -51,22 +46,7 @@
 	<SettingsTabs />
 
 	{#if !isAuthenticated}
-		<!-- Anonymous user view - login prompt -->
-		<div class="card p-8 border border-neutral-800 text-center">
-			<div class="max-w-md mx-auto space-y-6">
-				<span class="text-6xl">👤</span>
-				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-neutral-400">
-					Create an account or login to view and edit your public profile information visible to other users.
-				</p>
-				<button
-					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
-				>
-					Login / Create Account
-				</button>
-			</div>
-		</div>
+		<AuthRequiredCard subtext="Create an account or login to view and edit your public profile information visible to other users." />
 	{:else if currentIdentity}
 		<div
 			class="card p-6 border border-neutral-800"

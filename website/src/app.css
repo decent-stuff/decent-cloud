@@ -138,6 +138,12 @@
 		@apply transition-all duration-150;
 	}
 
+	/* Small Button - for table row actions and compact controls */
+	.btn-sm {
+		@apply px-3 py-1.5 text-xs font-medium rounded;
+		@apply transition-all duration-150;
+	}
+
 	/* === Inputs === */
 	.input {
 		@apply px-4 py-2.5 bg-base border border-neutral-800 text-white;

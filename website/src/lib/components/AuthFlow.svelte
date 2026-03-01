@@ -283,14 +283,14 @@
 				<button
 					type="button"
 					onclick={goBack}
-					class="flex-1 px-4 py-3 bg-surface-elevated border border-neutral-700 hover:border-neutral-600 text-white transition-colors"
+					class="flex-1 btn-secondary"
 				>
 					Back
 				</button>
 				<button
 					type="button"
 					onclick={registerAndLogin}
-					class="flex-1 px-4 py-3 bg-primary-500 hover:bg-primary-400 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					class="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
 					disabled={!usernameValid || !emailValid}
 				>
 					Create Account
@@ -321,7 +321,7 @@
 			<button
 				type="button"
 				onclick={submitOAuthUsername}
-				class="w-full px-4 py-3 bg-primary-500 hover:bg-primary-400 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+				class="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
 				disabled={!usernameValid}
 			>
 				Create Account
@@ -371,7 +371,7 @@
 				<button
 					type="button"
 					onclick={handleSuccess}
-					class="px-8 py-3 bg-primary-500 hover:bg-primary-400 text-base font-medium transition-colors"
+					class="btn-primary"
 				>
 					Go to Dashboard
 				</button>

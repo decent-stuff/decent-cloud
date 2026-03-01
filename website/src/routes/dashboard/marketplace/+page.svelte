@@ -1353,7 +1353,7 @@
 														e,
 														offering,
 													)}
-												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
+												class="btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
 												>Rent</button
 											>
 										{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
@@ -1363,11 +1363,11 @@
 												rel="noopener noreferrer"
 												onclick={(e) =>
 													e.stopPropagation()}
-												class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
+												class="inline-flex items-center gap-1 btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
 												>Visit Provider <Icon name="external" size={20} class="text-white" /></a
 											>
 										{:else if offering.is_example}
-											<span title="Demo only — not available for rent" class="px-3 py-1.5 bg-neutral-700 text-neutral-500 rounded text-xs font-medium cursor-not-allowed whitespace-nowrap">Demo only</span>
+											<span title="Demo only — not available for rent" class="btn-sm bg-neutral-700 text-neutral-500 cursor-not-allowed whitespace-nowrap inline-block">Demo only</span>
 										{:else}
 											<button
 												onclick={(e) =>
@@ -1375,7 +1375,7 @@
 														e,
 														offering,
 													)}
-												class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium whitespace-nowrap"
+												class="btn-sm bg-primary-600 hover:bg-primary-500 whitespace-nowrap"
 												>Rent</button
 											>
 										{/if}
@@ -1385,7 +1385,7 @@
 										<button
 											onclick={(e) => toggleBookmark(e, offering.id!)}
 											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
-											class="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded transition-colors {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
+											class="inline-flex items-center gap-1 btn-sm border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 										>
 											<Icon name="bookmark" size={14} />
 											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
@@ -1400,7 +1400,7 @@
 												title={inCompare
 													? "Remove from comparison"
 													: "Add to comparison"}
-												class="px-2 py-1 text-xs border rounded transition-colors {inCompare
+												class="btn-sm border {inCompare
 													? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
 													: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 											>{inCompare ? "✓ Compare" : "+ Compare"}</button
@@ -1682,7 +1682,7 @@
 										<button
 											onclick={(e) => toggleBookmark(e, offering.id!)}
 											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
-											class="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded transition-colors {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
+											class="inline-flex items-center gap-1 btn-sm border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 										>
 											<Icon name="bookmark" size={14} />
 											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
@@ -1709,7 +1709,7 @@
 									<button
 										onclick={(e) =>
 											handleRentClick(e, offering)}
-										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
+										class="btn-sm bg-primary-600 hover:bg-primary-500"
 										>Rent</button
 									>
 								{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
@@ -1718,16 +1718,16 @@
 										target="_blank"
 										rel="noopener noreferrer"
 										onclick={(e) => e.stopPropagation()}
-										class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
+										class="inline-flex items-center gap-1 btn-sm bg-primary-600 hover:bg-primary-500"
 										>Visit Provider <Icon name="external" size={20} class="text-white" /></a
 									>
 								{:else if offering.is_example}
-									<span title="Demo only — not available for rent" class="px-3 py-1.5 bg-neutral-700 text-neutral-500 rounded text-xs font-medium cursor-not-allowed">Demo only</span>
+									<span title="Demo only — not available for rent" class="btn-sm bg-neutral-700 text-neutral-500 cursor-not-allowed inline-block">Demo only</span>
 								{:else}
 									<button
 										onclick={(e) =>
 											handleRentClick(e, offering)}
-										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 rounded text-xs font-medium"
+										class="btn-sm bg-primary-600 hover:bg-primary-500"
 										>Rent</button
 									>
 								{/if}
@@ -1738,7 +1738,7 @@
 									<button
 										onclick={(e) => toggleCompare(e, offering.id!)}
 										title={inCompare ? "Remove from comparison" : "Add to comparison"}
-										class="px-2 py-1 text-xs border rounded transition-colors {inCompare
+										class="btn-sm border {inCompare
 											? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10'
 											: 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 									>{inCompare ? "✓ In compare" : "+ Compare"}</button>

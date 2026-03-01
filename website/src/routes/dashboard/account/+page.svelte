@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
-	import { navigateToLogin } from "$lib/utils/navigation";
+	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import { deleteMyAccount } from "$lib/services/account-api";
 	import type { IdentityInfo } from "$lib/stores/auth";
@@ -32,10 +32,6 @@
 		unsubscribe?.();
 		unsubscribeAuth?.();
 	});
-
-	function handleLogin() {
-		navigateToLogin($page.url.pathname);
-	}
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
@@ -106,25 +102,7 @@
 	<SettingsTabs />
 
 	{#if !isAuthenticated}
-		<!-- Anonymous user view - login prompt -->
-		<div
-			class="card p-8 border border-neutral-800 text-center"
-		>
-			<div class="max-w-md mx-auto space-y-6">
-				<span class="text-6xl">🔐</span>
-				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-neutral-400">
-					Create an account or login to access your account settings,
-					manage security, and edit your public profile.
-				</p>
-				<button
-					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
-				>
-					Login / Create Account
-				</button>
-			</div>
-		</div>
+		<AuthRequiredCard subtext="Create an account or login to access your account settings, manage security, and edit your public profile." />
 	{:else if currentIdentity?.account}
 		<!-- Account Overview Card -->
 		<div

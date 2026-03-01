@@ -2,7 +2,7 @@
 	import { onMount, onDestroy, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
-	import { navigateToLogin } from "$lib/utils/navigation";
+	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import {
 		getUserContracts,
 		cancelRentalRequest,
@@ -384,10 +384,6 @@
 		}
 	}
 
-	function handleLogin() {
-		navigateToLogin($page.url.pathname);
-	}
-
 	/**
 	 * Open Chatwoot widget with contract context for messaging the provider.
 	 */
@@ -454,34 +450,7 @@
 	</div>
 
 	{#if !isAuthenticated}
-		<!-- Anonymous user view - login prompt -->
-		<div
-			class="card p-8 border border-neutral-800 text-center"
-		>
-			<div class="max-w-md mx-auto space-y-6">
-				<span class="text-6xl">🔑</span>
-				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-neutral-400">
-					Create an account or login to view and manage your rental
-					contracts. See the marketplace to browse available
-					resources.
-				</p>
-				<div class="flex flex-col gap-3">
-					<button
-						onclick={handleLogin}
-						class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
-					>
-						Login / Create Account
-					</button>
-					<a
-						href="/dashboard/marketplace"
-						class="px-8 py-3 bg-surface-elevated  font-semibold text-white hover:bg-surface-elevated transition-all"
-					>
-						Browse Marketplace
-					</a>
-				</div>
-			</div>
-		</div>
+		<AuthRequiredCard subtext="Create an account or login to view and manage your rental contracts. See the marketplace to browse available resources." />
 	{:else if error}
 		<div
 			class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
@@ -497,7 +466,7 @@
 				class="animate-spin  h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
-	{:else if contracts.length === 0}
+	{:else if isAuthenticated && contracts.length === 0}
 		<div class="text-center py-12">
 			<span class="text-5xl mb-4 block">📋</span>
 			<h3 class="text-2xl font-bold text-white mb-2">No Rentals Yet</h3>

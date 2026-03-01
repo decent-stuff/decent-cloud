@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
-	import { page } from "$app/stores";
 	import { authStore, type IdentityInfo } from "$lib/stores/auth";
-	import { navigateToLogin } from "$lib/utils/navigation";
+	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import {
 		hexEncode,
 		getProviderOnboarding,
@@ -356,10 +355,6 @@
 		).catch(() => null);
 	}
 
-	function handleLogin() {
-		navigateToLogin($page.url.pathname);
-	}
-
 	// Help Center handlers
 	function toggleArray<T>(arr: T[], item: T): T[] {
 		return arr.includes(item)
@@ -676,21 +671,7 @@
 		</div>{/if}
 
 	{#if !isAuthenticated}
-		<div
-			class="card p-8 border border-neutral-800 text-center"
-		>
-			<span class="text-6xl">⚙️</span>
-			<h2 class="text-2xl font-bold text-white mt-4">Login Required</h2>
-			<p class="text-neutral-400 mt-2">
-				Login to configure your provider profile.
-			</p>
-			<button
-				onclick={handleLogin}
-				class="mt-4 px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold text-white hover:brightness-110 transition-all"
-			>
-				Login / Create Account
-			</button>
-		</div>
+		<AuthRequiredCard subtext="Login to configure your provider profile." />
 	{:else if loading}
 		<div class="flex justify-center p-8">
 			<div

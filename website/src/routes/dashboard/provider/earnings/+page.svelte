@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
-	import { page } from "$app/stores";
-	import { navigateToLogin } from "$lib/utils/navigation";
+	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import {
 		getProviderStats,
 		getProviderFeedbackStats,
@@ -200,10 +199,6 @@
 		}
 	}
 
-	function handleLogin() {
-		navigateToLogin($page.url.pathname);
-	}
-
 	onDestroy(() => {
 		unsubscribeAuth?.();
 	});
@@ -218,21 +213,7 @@
 	</header>
 
 	{#if !isAuthenticated}
-		<div class="card p-8 border border-neutral-800 text-center">
-			<div class="max-w-md mx-auto space-y-6">
-				<span class="text-6xl">📊</span>
-				<h2 class="text-2xl font-bold text-white">Login Required</h2>
-				<p class="text-neutral-400">
-					Create an account or login to view your provider earnings, contract statistics, and customer feedback.
-				</p>
-				<button
-					onclick={handleLogin}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 hover:scale-105 transition-all"
-				>
-					Login / Create Account
-				</button>
-			</div>
-		</div>
+		<AuthRequiredCard subtext="Create an account or login to view your provider earnings, contract statistics, and customer feedback." />
 	{:else}
 		{#if error}
 			<div class="bg-red-500/20 border border-red-500/30 p-4 text-red-300">

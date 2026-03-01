@@ -8,7 +8,7 @@
 
 <button
 	onclick={handleGoogleLogin}
-	class="w-full flex items-center justify-center gap-3 px-6 py-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 text-left transition-all group"
+	class="w-full flex items-center justify-center gap-3 px-6 py-2.5 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 text-left transition-all group"
 	type="button"
 >
 	<svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
