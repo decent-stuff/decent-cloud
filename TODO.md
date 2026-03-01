@@ -277,3 +277,45 @@ Many database modules have no corresponding test file (tests may be in `tests.rs
 | Frontend console.log | ⚠️ Debug statements present |
 
 **Overall:** Codebase is production-ready.
+
+---
+
+## Production Readiness Review (2026-03-01)
+
+### Fixed During Review
+
+- **[api] Compilation error in offerings.rs** — `AGENT_ONLINE_THRESHOLD_SECS` constant was referenced but didn't exist. Fixed by using inline calculation matching other places in the codebase (5 minutes in nanoseconds).
+
+### Remaining (Low Priority)
+
+- **[api-server] Graceful shutdown** — Background tasks (cleanup, email processor, payment release, etc.) are aborted on server shutdown rather than gracefully terminated. For production, consider implementing signal handling (SIGTERM/SIGINT) with proper task cancellation via `CancellationToken` or channels. *(Low priority: current behavior is safe, just not graceful. Multi-session to implement properly.)*
+
+- **[api-server] General rate limiting** — Only email verification resend has rate limiting (60-second window). Public endpoints lack general rate limiting. Consider adding rate limiting middleware for unauthenticated endpoints. *(Multi-session: requires design decisions on limits per endpoint.)*
+
+- **[dev] SQLX query cache** — Development environment has stale query cache. Run `cargo sqlx prepare` to regenerate. *(Not a production issue.)*
+
+### Security Audit Summary
+
+| Check | Status |
+|-------|--------|
+| Hardcoded credentials | ✅ None (test values only in test code) |
+| SQL injection | ✅ Protected (parameterized queries via `sqlx::query!`) |
+| Webhook signature verification | ✅ Stripe, ICPay, Telegram all verified |
+| Credential encryption | ✅ AES-256-GCM with proper nonce handling |
+| CORS configuration | ✅ Properly configured for dev/prod |
+| Logging secrets | ✅ No secrets logged |
+| Panic in production | ✅ Only in tests/build.rs |
+| Auth checks | ✅ Proper signature verification with timestamp expiry |
+
+### Infrastructure Checks
+
+| Check | Status |
+|-------|--------|
+| Doctor command | ✅ Comprehensive (DB, Chatwoot, Stripe, Cloudflare, etc.) |
+| Health endpoint | ✅ `/api/v1/health` |
+| Env var documentation | ✅ `.env.example` files present |
+| Config validation at startup | ✅ Critical vars validated (e.g., `CREDENTIAL_ENCRYPTION_KEY`) |
+
+### Verdict
+
+**Production Ready** — No blocking issues found. The remaining items are enhancements for robustness at scale, not blockers for initial production deployment.
