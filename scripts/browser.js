@@ -26,32 +26,82 @@
 'use strict';
 
 const { chromium } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
+const fs = require('fs');
 
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
 const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
+const MOBILE_VIEWPORT = { width: 375, height: 812 };
 
-const [,, cmd, url, ...rest] = process.argv;
+const TOUR_ROUTES = [
+  { path: '/dashboard/marketplace', name: 'Marketplace' },
+  { path: '/dashboard/offerings', name: 'Provider Offerings' },
+  { path: '/dashboard/rentals', name: 'My Rentals' },
+  { path: '/dashboard/provider', name: 'Provider Dashboard' },
+  { path: '/dashboard/provider/offerings', name: 'Provider Manage Offerings' },
+];
 
-// Parse optional --seed argument
-// Usage: browser.js <cmd> <url> [args...] --seed <phrase>
-// The --seed flag and seed phrase MUST be the last arguments
+const [,, cmd, ...remainingArgs] = process.argv;
+
+let url = null;
 let seedPhrase = null;
-let filteredRest = rest;
-const seedIndex = rest.indexOf('--seed');
-if (seedIndex !== -1) {
-  seedPhrase = rest.slice(seedIndex + 1).join(' ');
-  filteredRest = rest.slice(0, seedIndex);
+let viewport = null;
+let filteredRest = [];
+
+if (cmd === 'tour') {
+  const seedIndex = remainingArgs.indexOf('--seed');
+  if (seedIndex !== -1) {
+    seedPhrase = remainingArgs.slice(seedIndex + 1).join(' ');
+  }
+  const viewportIndex = remainingArgs.indexOf('--viewport');
+  if (viewportIndex !== -1 && remainingArgs[viewportIndex + 1] === 'mobile') {
+    viewport = MOBILE_VIEWPORT;
+  }
+} else {
+  url = remainingArgs[0];
+  const rest = remainingArgs.slice(1);
+
+  const seedIndex = rest.indexOf('--seed');
+  if (seedIndex !== -1) {
+    seedPhrase = rest.slice(seedIndex + 1).join(' ');
+    filteredRest = rest.slice(0, seedIndex);
+  } else {
+    filteredRest = rest;
+  }
+
+  const viewportIndex = filteredRest.indexOf('--viewport');
+  if (viewportIndex !== -1) {
+    const viewportValue = filteredRest[viewportIndex + 1];
+    if (viewportValue === 'mobile') {
+      viewport = MOBILE_VIEWPORT;
+    }
+    filteredRest = filteredRest.filter((_, i) => i !== viewportIndex && i !== viewportIndex + 1);
+  }
 }
 
-if (!cmd || !url) {
-  console.error('Usage: browser.js <snap|shot|eval|errs|html> <url> [args...]');
-  console.error('Options: --seed <phrase>  Inject seed phrase for authenticated testing');
+if (!cmd || (cmd !== 'tour' && !url)) {
+  console.error('Usage: browser.js <snap|shot|eval|errs|html|tour> <url> [args...]');
+  console.error('       browser.js tour --seed <phrase> [--viewport mobile]');
+  console.error('Options:');
+  console.error('  --seed <phrase>    Inject seed phrase for authenticated testing');
+  console.error('  --viewport mobile  Use 375×812 (iPhone X) viewport');
+  process.exit(1);
+}
+
+if (cmd === 'tour' && !seedPhrase) {
+  console.error('Error: tour command requires --seed <phrase>');
   process.exit(1);
 }
 
 async function main() {
+  if (cmd === 'tour') {
+    await runTour();
+    return;
+  }
+
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  const page = await browser.newPage();
+  const page = viewport
+    ? await browser.newPage({ viewport })
+    : await browser.newPage();
 
   const consoleLogs = [];
   page.on('console', msg => {
@@ -63,13 +113,10 @@ async function main() {
   page.on('pageerror', err => consoleLogs.push(`[PAGEERROR] ${err.message}`));
 
   try {
-    // If seed phrase provided, inject it into localStorage before navigating
     if (seedPhrase) {
       const origin = new URL(url.startsWith('http') ? url : `${WEB_URL}${url}`).origin;
-      // Step 1: Navigate to origin to get same-origin localStorage context
       await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
 
-      // Step 2: Inject seed phrase into localStorage['seed_phrases']
       await page.evaluate((phrase) => {
         const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
         if (!stored.includes(phrase)) {
@@ -78,19 +125,14 @@ async function main() {
         }
       }, seedPhrase);
 
-      // Step 3: Navigate to dashboard and wait for auth to settle.
-      // Pages call loadData() in onMount; if identity is null at that point they skip it.
-      // Waiting for /api/v1/accounts response ensures the auth store is populated
-      // before we navigate to the target page.
       const authDone = page.waitForResponse(
         r => r.url().includes('/api/v1/accounts'),
         { timeout: TIMEOUT }
       );
       await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
       await authDone;
-      await page.waitForTimeout(200); // let Svelte reactive state propagate
+      await page.waitForTimeout(200);
 
-      // Step 4: Navigate to the actual target URL
       const targetUrl = url.startsWith('http') ? url : `${origin}${url}`;
       if (targetUrl !== `${origin}/dashboard`) {
         await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
@@ -98,7 +140,6 @@ async function main() {
     } else {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
     }
-    // Wait for JS-rendered content (SvelteKit hydrates after domcontentloaded)
     await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(e => {
       process.stderr.write(`[WARN] networkidle timeout: ${e.message}\n`);
     });
@@ -146,9 +187,66 @@ async function main() {
       }
 
       default:
-        console.error(`Unknown command: ${cmd}. Use: snap, shot, eval, errs, html`);
+        console.error(`Unknown command: ${cmd}. Use: snap, shot, eval, errs, html, tour`);
         process.exit(1);
     }
+  } finally {
+    await page.close();
+    await browser.close();
+  }
+}
+
+async function runTour() {
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const page = viewport
+    ? await browser.newPage({ viewport })
+    : await browser.newPage();
+
+  const origin = new URL(WEB_URL).origin;
+  const report = { seed: seedPhrase, viewport, timestamp: new Date().toISOString(), pages: [] };
+
+  try {
+    await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    await page.evaluate((phrase) => {
+      const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
+      if (!stored.includes(phrase)) {
+        stored.push(phrase);
+        localStorage.setItem('seed_phrases', JSON.stringify(stored));
+      }
+    }, seedPhrase);
+
+    const authDone = page.waitForResponse(r => r.url().includes('/api/v1/accounts'), { timeout: TIMEOUT });
+    await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+    await authDone;
+    await page.waitForTimeout(200);
+
+    for (const route of TOUR_ROUTES) {
+      const pageReport = { path: route.path, name: route.name, errors: [] };
+      process.stderr.write(`[TOUR] Visiting ${route.name}...\n`);
+
+      const pageConsole = [];
+      const handler = msg => { if (['error', 'warning', 'warn'].includes(msg.type())) pageConsole.push(`[${msg.type().toUpperCase()}] ${msg.text()}`); };
+      page.on('console', handler);
+
+      try {
+        await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+        await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(() => {});
+        await page.waitForTimeout(300);
+
+        const snapshot = await page._snapshotForAI({ timeout: TIMEOUT });
+        pageReport.snapshot = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        pageReport.errors = pageConsole;
+      } catch (e) {
+        pageReport.error = e.message;
+      }
+
+      page.off('console', handler);
+      report.pages.push(pageReport);
+    }
+
+    const reportPath = '/tmp/dc-ux-tour.json';
+    fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+    console.log(JSON.stringify({ reportPath, pagesVisited: report.pages.length }, null, 2));
   } finally {
     await page.close();
     await browser.close();
