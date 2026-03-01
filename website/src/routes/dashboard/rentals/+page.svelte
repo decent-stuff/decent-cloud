@@ -501,7 +501,7 @@
 		<div class="text-center py-12">
 			<span class="text-5xl mb-4 block">📋</span>
 			<h3 class="text-2xl font-bold text-white mb-2">No Rentals Yet</h3>
-			<p class="text-neutral-500 mb-8">Get started in three steps</p>
+			<p class="text-neutral-500 mb-6">Get started in three steps</p>
 			<div class="flex items-center justify-center gap-3 max-w-2xl mx-auto mb-8">
 				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
 					<div class="text-2xl mb-2">🔍</div>
@@ -521,12 +521,26 @@
 					<div class="text-xs text-neutral-500">Ready in 5–15 min</div>
 				</div>
 			</div>
-			<a
-				href="/dashboard/marketplace"
-				class="inline-block px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all"
-			>
-				Browse Marketplace →
-			</a>
+			<div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
+				<a
+					href="/dashboard/marketplace?preset=gpu"
+					class="w-full sm:w-auto px-6 py-3 bg-purple-500/20 border border-purple-500/40 text-purple-300 font-semibold hover:bg-purple-500/30 transition-all flex items-center justify-center gap-2"
+				>
+					<span class="text-lg">🎮</span> Browse GPU Servers
+				</a>
+				<a
+					href="/dashboard/marketplace?preset=budget"
+					class="w-full sm:w-auto px-6 py-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2"
+				>
+					<span class="text-lg">💰</span> Find Budget VMs
+				</a>
+				<a
+					href="/dashboard/marketplace"
+					class="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 transition-all flex items-center justify-center gap-2"
+				>
+					<span class="text-lg">🚀</span> Explore Marketplace
+				</a>
+			</div>
 		</div>
 	{:else}
 		<!-- Pending guidance banner -->
