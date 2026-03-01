@@ -38,11 +38,9 @@ static TEMPLATE_INITIALIZED: OnceLock<String> = OnceLock::new();
 struct EphemeralPostgres {
     /// Base connection URL (without database name)
     url: String,
-    /// Data directory (cleaned up on drop)
+    /// Data directory (path persists for stale cleanup by future test runs)
     data_dir: PathBuf,
-    /// PostgreSQL binary directory
-    pg_bin_dir: PathBuf,
-    /// PostgreSQL server process
+    /// pg_ctl child process (reaped on drop to avoid zombies)
     _process: Child,
 }
 
@@ -216,7 +214,6 @@ dynamic_shared_memory_type = mmap
         Ok(Self {
             url,
             data_dir,
-            pg_bin_dir,
             _process: process,
         })
     }
@@ -224,17 +221,12 @@ dynamic_shared_memory_type = mmap
 
 impl Drop for EphemeralPostgres {
     fn drop(&mut self) {
-        // Best-effort cleanup: stop PostgreSQL and remove data directory
-        // Errors are expected if process already died or directory was removed
-        let pg_data = self.data_dir.join("data");
-        Command::new(Self::pg_cmd(&self.pg_bin_dir, "pg_ctl"))
-            .args(["-D", pg_data.to_str().unwrap(), "stop", "-m", "immediate"])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .ok();
-
-        std::fs::remove_dir_all(&self.data_dir).ok();
+        // Reap the pg_ctl child process (it exits immediately after starting PostgreSQL).
+        // Do NOT stop PostgreSQL here: with nextest, each test runs in its own process and the
+        // first process to exit would kill the shared instance used by all parallel tests.
+        // PostgreSQL is stopped during stale detection in start_or_wait_for_shared_postgres
+        // when the TCP connection fails on a subsequent test run.
+        self._process.wait().ok();
     }
 }
 
@@ -746,15 +738,20 @@ fn start_or_wait_for_shared_postgres() -> String {
             let pg = EphemeralPostgres::start().expect("Failed to start ephemeral PostgreSQL");
             let url = pg.url.clone();
 
-            // Store in global static so Drop handler works
+            // Store in global static so the Child is reaped on process exit
             // This should succeed since we hold the lock
             match EPHEMERAL_PG.set(pg) {
                 Ok(_) => {}
                 Err(_) => panic!("Failed to store PostgreSQL instance in global static - already set by another thread"),
             }
 
-            // Write env file for other processes
-            let env_content = format!("export TEST_DATABASE_URL=\"{}\"\n", url);
+            // Write env file for other processes (include data dir for stale cleanup)
+            let pg_data_dir = EPHEMERAL_PG.get().unwrap().data_dir.join("data");
+            let env_content = format!(
+                "export TEST_DATABASE_URL=\"{}\"\nexport EPHEMERAL_PG_DATA_DIR=\"{}\"\n",
+                url,
+                pg_data_dir.display()
+            );
             let mut file = File::create(env_file).expect("Failed to create env file");
             file.write_all(env_content.as_bytes())
                 .expect("Failed to write env file");
@@ -796,8 +793,34 @@ fn start_or_wait_for_shared_postgres() -> String {
                             }
 
                             if pg_dead {
-                                // PostgreSQL is dead and lock is stale - clean up and retry
                                 eprintln!("Warning: Detected stale lock directory with dead PostgreSQL, cleaning up...");
+                                // Stop PostgreSQL and remove its data directory
+                                if let Ok(env_content) = std::fs::read_to_string(env_file) {
+                                    for line in env_content.lines() {
+                                        if let Some(data_dir) = line
+                                            .strip_prefix("export EPHEMERAL_PG_DATA_DIR=\"")
+                                            .and_then(|s| s.strip_suffix('"'))
+                                        {
+                                            let pg_bin_dir =
+                                                find_postgres_bin_dir().unwrap_or_default();
+                                            Command::new(EphemeralPostgres::pg_cmd(
+                                                &pg_bin_dir,
+                                                "pg_ctl",
+                                            ))
+                                            .args(["-D", data_dir, "stop", "-m", "immediate"])
+                                            .stdout(Stdio::null())
+                                            .stderr(Stdio::null())
+                                            .status()
+                                            .ok();
+                                            if let Some(base_dir) =
+                                                Path::new(data_dir).parent()
+                                            {
+                                                std::fs::remove_dir_all(base_dir).ok();
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
                                 std::fs::remove_dir_all(lock_dir).ok();
                                 std::fs::remove_file(env_file).ok();
                                 // Random backoff to avoid thundering herd (0-500ms)
@@ -805,7 +828,6 @@ fn start_or_wait_for_shared_postgres() -> String {
                                 std::thread::sleep(std::time::Duration::from_millis(
                                     backoff_ms as u64,
                                 ));
-                                // Retry acquisition by recursing
                                 return start_or_wait_for_shared_postgres();
                             }
                         }
