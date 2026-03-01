@@ -622,91 +622,36 @@
 		</div>
 	{/if}
 
-	<!-- Quick Actions -->
+	<!-- Quick Actions: role-appropriate cards -->
 	<div class="card p-5">
 		<h2 class="text-base font-semibold text-white mb-4">Quick Actions</h2>
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-			<a
-				href="/dashboard/marketplace"
-				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
-			>
-				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="cart" size={20} />
-				</div>
-				<div>
-					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-						Marketplace
-					</h3>
-					<p class="text-xs text-neutral-500">Browse services</p>
-				</div>
-			</a>
-
-			{#if !currentIdentity || myOfferingsLoading || myOfferings.length > 0}
+		{#if !currentIdentity || activityLoading || myOfferingsLoading}
+			<!-- Anonymous/loading: show generic starter cards -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 				<a
-					href="/dashboard/offerings"
+					href="/dashboard/marketplace"
 					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 				>
 					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="package" size={20} />
+						<Icon name="cart" size={20} />
 					</div>
 					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-							My Offerings
-						</h3>
-						<p class="text-xs text-neutral-500">Manage services</p>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Marketplace</h3>
+						<p class="text-xs text-neutral-500">Browse services</p>
 					</div>
 				</a>
-			{:else}
 				<a
-					href="/dashboard/provider/support"
+					href="/dashboard/account"
 					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 				>
 					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="server" size={20} />
+						<Icon name="user" size={20} />
 					</div>
 					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-							Provider Setup
-						</h3>
-						<p class="text-xs text-neutral-500">Share your resources</p>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Profile</h3>
+						<p class="text-xs text-neutral-500">Account settings</p>
 					</div>
 				</a>
-			{/if}
-
-			<a
-				href="/dashboard/rentals"
-				class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
-			>
-				<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-					<Icon name="file" size={20} />
-				</div>
-				<div>
-					<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-						My Rentals
-					</h3>
-					<p class="text-xs text-neutral-500">Active contracts</p>
-				</div>
-			</a>
-
-			{#if !currentIdentity || myOfferings.length > 0}
-				<a
-					href="/dashboard/provider/requests"
-					class="group flex items-center gap-3 p-4 bg-surface-elevated border {pendingRequestsCount > 0 ? 'border-amber-500/40 hover:border-amber-500/60' : 'border-neutral-800 hover:border-neutral-700'} hover:bg-surface-hover transition-all relative"
-				>
-					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="inbox" size={20} />
-					</div>
-					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-							Rental Requests
-						</h3>
-						<p class="text-xs text-neutral-500">Review &amp; respond</p>
-					</div>
-					{#if pendingRequestsCount > 0}
-						<span class="absolute top-2 right-2 min-w-5 h-5 px-1 flex items-center justify-center text-[10px] font-bold bg-amber-500 text-neutral-900 rounded-full">{pendingRequestsCount}</span>
-					{/if}
-				</a>
-			{:else}
 				<a
 					href="/dashboard/validators"
 					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
@@ -715,14 +660,123 @@
 						<Icon name="shield" size={20} />
 					</div>
 					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">
-							Validators
-						</h3>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Validators</h3>
 						<p class="text-xs text-neutral-500">Network nodes</p>
 					</div>
 				</a>
-			{/if}
-		</div>
+			</div>
+		{:else if userRole === 'new'}
+			<!-- New user: starter actions -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+				<a
+					href="/dashboard/marketplace"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="cart" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Marketplace</h3>
+						<p class="text-xs text-neutral-500">Browse services</p>
+					</div>
+				</a>
+				<a
+					href="/dashboard/account"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="user" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Profile</h3>
+						<p class="text-xs text-neutral-500">Account settings</p>
+					</div>
+				</a>
+				<a
+					href="/dashboard/validators"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="shield" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Validators</h3>
+						<p class="text-xs text-neutral-500">Network nodes</p>
+					</div>
+				</a>
+			</div>
+		{:else if userRole === 'tenant'}
+			<!-- Tenant: rental-focused actions -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+				<a
+					href="/dashboard/rentals"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="file" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">My Rentals</h3>
+						<p class="text-xs text-neutral-500">Active contracts</p>
+					</div>
+				</a>
+				<a
+					href="/dashboard/marketplace"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="cart" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Marketplace</h3>
+						<p class="text-xs text-neutral-500">Browse services</p>
+					</div>
+				</a>
+			</div>
+		{:else}
+			<!-- Provider: provider-focused actions -->
+			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+				<a
+					href="/dashboard/provider/requests"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border {pendingRequestsCount > 0 ? 'border-amber-500/40 hover:border-amber-500/60' : 'border-neutral-800 hover:border-neutral-700'} hover:bg-surface-hover transition-all relative"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="inbox" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Rental Requests</h3>
+						<p class="text-xs text-neutral-500">Review &amp; respond</p>
+					</div>
+					{#if pendingRequestsCount > 0}
+						<span class="absolute top-2 right-2 min-w-5 h-5 px-1 flex items-center justify-center text-[10px] font-bold bg-amber-500 text-neutral-900 rounded-full">{pendingRequestsCount}</span>
+					{/if}
+				</a>
+				<a
+					href="/dashboard/offerings"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="package" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">My Offerings</h3>
+						<p class="text-xs text-neutral-500">Manage services</p>
+					</div>
+				</a>
+				<a
+					href="/dashboard/provider/earnings"
+					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
+				>
+					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
+						<Icon name="check" size={20} />
+					</div>
+					<div>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Earnings</h3>
+						<p class="text-xs text-neutral-500">Revenue overview</p>
+					</div>
+				</a>
+			</div>
+		{/if}
 	</div>
 
 	<!-- My Resources Section -->
