@@ -26,8 +26,10 @@
 	let savedIds = $state(new Set<number>());
 	const PROVIDER_CTA_KEY = 'dc-provider-cta-dismissed';
 	const FIRST_TIME_HINT_KEY = 'dc-marketplace-hint-visits';
+	const ADVANCED_FILTERS_KEY = 'dc-marketplace-advanced-filters';
 	let providerCtaDismissed = $state(false);
 	let showFirstTimeHint = $state(false);
+	let showAdvancedFilters = $state(false);
 	let showAuthModal = $state(false);
 	let expandedRow = $state<number | null>(null);
 	let sortDir = $state<"asc" | "desc">("asc");
@@ -386,6 +388,7 @@
 	onMount(async () => {
 		recentlyViewedIds = getRecentlyViewed();
 		providerCtaDismissed = localStorage.getItem(PROVIDER_CTA_KEY) === '1';
+		showAdvancedFilters = localStorage.getItem(ADVANCED_FILTERS_KEY) === '1';
 		const hintVisits = parseInt(localStorage.getItem(FIRST_TIME_HINT_KEY) ?? '0', 10);
 		if (hintVisits < 3) {
 			showFirstTimeHint = true;
@@ -478,6 +481,11 @@
 		providerFilter = '';
 		fetchOfferings();
 		syncFiltersToUrl();
+	}
+
+	function toggleAdvancedFilters() {
+		showAdvancedFilters = !showAdvancedFilters;
+		localStorage.setItem(ADVANCED_FILTERS_KEY, showAdvancedFilters ? '1' : '0');
 	}
 
 	function handleRentClick(e: Event, offering: Offering) {
@@ -891,207 +899,183 @@
 						</select>
 					</div>
 
-					<!-- Country Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							Country
-						</div>
-						<select
-							bind:value={selectedCountry}
-							onchange={() => {
-								selectedCity = "";
-								handleFilterChange();
-							}}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						>
-							<option value="">All countries</option>
-							{#each countries() as country}
-								<option value={country}>{country}</option>
-							{/each}
-						</select>
-					</div>
+					<!-- More Filters Toggle -->
+					<button
+						onclick={toggleAdvancedFilters}
+						class="flex items-center gap-1.5 text-xs text-primary-400 hover:text-primary-300 transition-colors w-full"
+					>
+						<Icon name={showAdvancedFilters ? "chevron-up" : "chevron-down"} size={14} />
+						{showAdvancedFilters ? 'Fewer filters' : 'More filters'}
+					</button>
 
-					<!-- City Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							City
-						</div>
-						<select
-							bind:value={selectedCity}
-							onchange={() => syncFiltersToUrl()}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						>
-							<option value="">All cities</option>
-							{#each cities() as city}
-								<option value={city}>{city}</option>
-							{/each}
-						</select>
-					</div>
-
-					<!-- CPU Cores Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							Min CPU Cores
-						</div>
-						<input
-							type="number"
-							placeholder="e.g., 4"
-							bind:value={minCores}
-							min="1"
-							onchange={() => syncFiltersToUrl()}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						/>
-					</div>
-
-					<!-- Memory Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							Min Memory (GB)
-						</div>
-						<input
-							type="number"
-							placeholder="e.g., 8"
-							bind:value={minMemoryGb}
-							min="1"
-							onchange={() => syncFiltersToUrl()}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						/>
-					</div>
-
-					<!-- SSD Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							Min SSD (GB)
-						</div>
-						<input
-							type="number"
-							placeholder="e.g., 100"
-							bind:value={minSsdGb}
-							min="1"
-							onchange={() => syncFiltersToUrl()}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						/>
-					</div>
-
-					<!-- Virtualization Type Filter -->
-					{#if virtTypes.length > 0}
+					<!-- Advanced Filters (collapsible) -->
+					<div
+						class="space-y-4 overflow-hidden transition-all duration-200 {showAdvancedFilters
+							? 'max-h-[2000px] opacity-100'
+							: 'max-h-0 opacity-0'}"
+					>
+						<!-- Country Filter -->
 						<div>
-							<div
-								class="data-label mb-2"
-							>
-								Virtualization
-							</div>
+							<div class="data-label mb-2">Country</div>
 							<select
-								bind:value={selectedVirt}
-								onchange={() => syncFiltersToUrl()}
+								bind:value={selectedCountry}
+								onchange={() => {
+									selectedCity = "";
+									handleFilterChange();
+								}}
 								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							>
-								<option value="">All types</option>
-								{#each virtTypes as vt}
-									<option value={vt}>{vt.toUpperCase()}</option>
+								<option value="">All countries</option>
+								{#each countries() as country}
+									<option value={country}>{country}</option>
 								{/each}
 							</select>
 						</div>
-					{/if}
 
-					<!-- Min Trust Filter -->
-					<div>
-						<div
-							class="data-label mb-2"
-						>
-							Min Trust Score
+						<!-- City Filter -->
+						<div>
+							<div class="data-label mb-2">City</div>
+							<select
+								bind:value={selectedCity}
+								onchange={() => syncFiltersToUrl()}
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
+							>
+								<option value="">All cities</option>
+								{#each cities() as city}
+									<option value={city}>{city}</option>
+								{/each}
+							</select>
 						</div>
-						<input
-							type="number"
-							placeholder="0-100"
-							bind:value={minTrust}
-							min="0"
-							max="100"
-							onchange={() => syncFiltersToUrl()}
-							class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
-						/>
-					</div>
 
-					<!-- Unmetered Bandwidth Filter -->
-					<div>
-						<label
-							class="flex items-center gap-2 cursor-pointer group"
-						>
+						<!-- CPU Cores Filter -->
+						<div>
+							<div class="data-label mb-2">Min CPU Cores</div>
 							<input
-								type="checkbox"
-								bind:checked={unmeteredOnly}
+								type="number"
+								placeholder="e.g., 4"
+								bind:value={minCores}
+								min="1"
 								onchange={() => syncFiltersToUrl()}
-								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
-							<span
-								class="text-sm text-neutral-400 group-hover:text-white"
-								>Unmetered bandwidth only</span
-							>
-						</label>
-					</div>
+						</div>
 
-					<!-- Show Demo Offerings Filter -->
-					<div>
-						<label
-							class="flex items-center gap-2 cursor-pointer group"
-						>
+						<!-- Memory Filter -->
+						<div>
+							<div class="data-label mb-2">Min Memory (GB)</div>
 							<input
-								type="checkbox"
-								bind:checked={showDemoOfferings}
+								type="number"
+								placeholder="e.g., 8"
+								bind:value={minMemoryGb}
+								min="1"
 								onchange={() => syncFiltersToUrl()}
-								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
-							<span
-								class="text-sm text-neutral-400 group-hover:text-white"
-								>Show demo offerings</span
-							>
-						</label>
-					</div>
+						</div>
 
-					<!-- Show Offline Offerings Filter -->
-					<div>
-						<label
-							class="flex items-center gap-2 cursor-pointer group"
-						>
+						<!-- SSD Filter -->
+						<div>
+							<div class="data-label mb-2">Min SSD (GB)</div>
 							<input
-								type="checkbox"
-								bind:checked={showOfflineOfferings}
+								type="number"
+								placeholder="e.g., 100"
+								bind:value={minSsdGb}
+								min="1"
 								onchange={() => syncFiltersToUrl()}
-								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
-							<span
-								class="text-sm text-neutral-400 group-hover:text-white"
-								>Show offline offerings</span
-							>
-						</label>
-					</div>
+						</div>
 
-					<!-- Recipes Only Filter -->
-					<div>
-						<label
-							class="flex items-center gap-2 cursor-pointer group"
-						>
+						<!-- Virtualization Type Filter -->
+						{#if virtTypes.length > 0}
+							<div>
+								<div class="data-label mb-2">Virtualization</div>
+								<select
+									bind:value={selectedVirt}
+									onchange={() => syncFiltersToUrl()}
+									class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
+								>
+									<option value="">All types</option>
+									{#each virtTypes as vt}
+										<option value={vt}>{vt.toUpperCase()}</option>
+									{/each}
+								</select>
+							</div>
+						{/if}
+
+						<!-- Min Trust Filter -->
+						<div>
+							<div class="data-label mb-2">Min Trust Score</div>
 							<input
-								type="checkbox"
-								bind:checked={recipesOnly}
-								onchange={handleFilterChange}
-								class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								type="number"
+								placeholder="0-100"
+								bind:value={minTrust}
+								min="0"
+								max="100"
+								onchange={() => syncFiltersToUrl()}
+								class="w-full px-2 py-1.5 text-sm input focus:outline-none focus:border-primary-400"
 							/>
-							<span
-								class="text-sm text-neutral-400 group-hover:text-white"
-								>Recipes only</span
-							>
-						</label>
+						</div>
+
+						<!-- Unmetered Bandwidth Filter -->
+						<div>
+							<label class="flex items-center gap-2 cursor-pointer group">
+								<input
+									type="checkbox"
+									bind:checked={unmeteredOnly}
+									onchange={() => syncFiltersToUrl()}
+									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								/>
+								<span class="text-sm text-neutral-400 group-hover:text-white"
+									>Unmetered bandwidth only</span
+								>
+							</label>
+						</div>
+
+						<!-- Show Demo Offerings Filter -->
+						<div>
+							<label class="flex items-center gap-2 cursor-pointer group">
+								<input
+									type="checkbox"
+									bind:checked={showDemoOfferings}
+									onchange={() => syncFiltersToUrl()}
+									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								/>
+								<span class="text-sm text-neutral-400 group-hover:text-white"
+									>Show demo offerings</span
+								>
+							</label>
+						</div>
+
+						<!-- Show Offline Offerings Filter -->
+						<div>
+							<label class="flex items-center gap-2 cursor-pointer group">
+								<input
+									type="checkbox"
+									bind:checked={showOfflineOfferings}
+									onchange={() => syncFiltersToUrl()}
+									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								/>
+								<span class="text-sm text-neutral-400 group-hover:text-white"
+									>Show offline offerings</span
+								>
+							</label>
+						</div>
+
+						<!-- Recipes Only Filter -->
+						<div>
+							<label class="flex items-center gap-2 cursor-pointer group">
+								<input
+									type="checkbox"
+									bind:checked={recipesOnly}
+									onchange={handleFilterChange}
+									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
+								/>
+								<span class="text-sm text-neutral-400 group-hover:text-white"
+									>Recipes only</span
+								>
+							</label>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -1357,16 +1341,6 @@
 													>{getResellerBadgeText(
 														offering,
 													)}</span
-												>
-											{:else if offering.offering_source === "self_provisioned"}
-												<span
-													class="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded"
-													>Self-Hosted</span
-												>
-											{:else if offering.offering_source === "seeded"}
-												<span
-													class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
-													>External</span
 												>
 											{:else if offering.is_example}
 												<span
@@ -1735,16 +1709,6 @@
 												>{getResellerBadgeText(
 													offering,
 												)}</span
-											>
-										{:else if offering.offering_source === "self_provisioned"}
-											<span
-												class="px-1.5 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded"
-												>Self-Hosted</span
-											>
-										{:else if offering.offering_source === "seeded"}
-											<span
-												class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded"
-												>External</span
 											>
 										{:else if offering.is_example}
 											<span
