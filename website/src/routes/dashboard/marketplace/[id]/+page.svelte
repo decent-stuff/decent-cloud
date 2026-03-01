@@ -187,6 +187,14 @@
 		return parts.length > 0 ? parts.join(' · ') : '—';
 	}
 
+	function formatProvisionTime(hours: number | undefined): string {
+		if (hours === undefined || hours === null) return '—';
+		if (hours < 1 / 60) return '<1 min';
+		if (hours < 1) return `~${Math.round(hours * 60)} min`;
+		if (hours < 24) return `~${hours.toFixed(1)}h`;
+		return `~${Math.round(hours / 24)}d`;
+	}
+
 	const DURATION_PRESETS = [
 		{ label: '1h', hours: 1 },
 		{ label: '12h', hours: 12 },
@@ -639,6 +647,12 @@
 							<span class="text-neutral-500">Tenure</span>
 							<span class="text-white capitalize">{trustMetrics.provider_tenure}</span>
 						</div>
+						{#if trustMetrics.total_contracts > 0 && trustMetrics.time_to_delivery_hours !== undefined}
+							<div class="flex justify-between">
+								<span class="text-neutral-500">Setup Time</span>
+								<span class="text-white">{formatProvisionTime(trustMetrics.time_to_delivery_hours)}</span>
+							</div>
+						{/if}
 					</div>
 				{/if}
 

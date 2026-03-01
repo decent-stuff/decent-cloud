@@ -1,7 +1,49 @@
 import { describe, it, expect } from 'vitest';
 import { truncatePubkey } from '$lib/utils/identity';
 
-// Mirror the trust warning display logic from the offering detail page
+function formatProvisionTime(hours: number | undefined): string {
+	if (hours === undefined || hours === null) return '—';
+	if (hours < 1 / 60) return '<1 min';
+	if (hours < 1) return `~${Math.round(hours * 60)} min`;
+	if (hours < 24) return `~${hours.toFixed(1)}h`;
+	return `~${Math.round(hours / 24)}d`;
+}
+
+describe('formatProvisionTime', () => {
+	it('returns — for undefined', () => {
+		expect(formatProvisionTime(undefined)).toBe('—');
+	});
+
+	it('returns — for null (via undefined check)', () => {
+		expect(formatProvisionTime(null as unknown as undefined)).toBe('—');
+	});
+
+	it('returns <1 min for very short times', () => {
+		expect(formatProvisionTime(0.001)).toBe('<1 min');
+		expect(formatProvisionTime(0.0001)).toBe('<1 min');
+	});
+
+	it('returns minutes for times under 1 hour', () => {
+		expect(formatProvisionTime(0.5)).toBe('~30 min');
+		expect(formatProvisionTime(0.25)).toBe('~15 min');
+		expect(formatProvisionTime(0.02)).toBe('~1 min');
+		expect(formatProvisionTime(0.0334)).toBe('~2 min');
+	});
+
+	it('returns hours for times under 24 hours', () => {
+		expect(formatProvisionTime(1)).toBe('~1.0h');
+		expect(formatProvisionTime(2.5)).toBe('~2.5h');
+		expect(formatProvisionTime(12)).toBe('~12.0h');
+	});
+
+	it('returns days for times 24 hours or more', () => {
+		expect(formatProvisionTime(24)).toBe('~1d');
+		expect(formatProvisionTime(48)).toBe('~2d');
+		expect(formatProvisionTime(72)).toBe('~3d');
+		expect(formatProvisionTime(36)).toBe('~2d');
+	});
+});
+
 type TrustMetricsSubset = {
 	total_contracts: number;
 	trust_score: bigint | number;
