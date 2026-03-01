@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import {
 		getSavedOfferings,
@@ -26,12 +27,7 @@
 	let someSelected = $derived(selectedIds.size > 0);
 
 	onMount(async () => {
-		const isAuth = await new Promise<boolean>((resolve) => {
-			const unsub = authStore.isAuthenticated.subscribe((v) => {
-				unsub();
-				resolve(v);
-			});
-		});
+		const isAuth = get(authStore.isAuthenticated);
 
 		if (!isAuth) {
 			goto('/dashboard/login?redirect=/dashboard/saved');
