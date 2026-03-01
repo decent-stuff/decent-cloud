@@ -66,6 +66,10 @@
 			}
 		};
 
+		script.onerror = () => {
+			console.warn(`Chatwoot SDK failed to load from ${baseUrl}. Support chat will not be available.`);
+		};
+
 		document.head.appendChild(script);
 	}
 
