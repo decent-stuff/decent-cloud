@@ -32,11 +32,10 @@
 	let pendingPasswordResetsCount = $state(0);
 
 	// Section keys and their default collapsed state (false = expanded by default)
-	type SectionKey = 'discover' | 'activity' | 'cloud' | 'provider';
+	type SectionKey = 'discover' | 'activity' | 'provider';
 	const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
 		discover: false,
 		activity: false,
-		cloud: false,
 		provider: true
 	};
 
@@ -86,15 +85,7 @@
 	// My Activity section - user's rentals (customer perspective)
 	const activityItems: NavItem[] = [
 		{ href: '/dashboard/saved', icon: 'bookmark', label: 'Saved' },
-		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' },
-		{ href: '/dashboard/transfers', icon: 'activity', label: 'Transfers' },
-		{ href: '/dashboard/invoices', icon: 'download', label: 'Invoices' }
-	];
-
-	// Cloud section - self-provisioning
-	const cloudItems: NavItem[] = [
-		{ href: '/dashboard/cloud/accounts', icon: 'key', label: 'Cloud Accounts' },
-		{ href: '/dashboard/cloud/resources', icon: 'server', label: 'Cloud Resources' }
+		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' }
 	];
 
 	// Provider section - for users who provide services
@@ -293,30 +284,6 @@
 				{/each}
 			{/if}
 
-			<!-- My Cloud section -->
-			<button
-				type="button"
-				class="section-toggle mt-3"
-				onclick={() => toggleSection('cloud')}
-				aria-expanded={!sectionCollapsed.cloud}
-			>
-				<span class="section-label">My Cloud</span>
-				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.cloud ? '-rotate-90' : ''}" />
-			</button>
-			{#if !sectionCollapsed.cloud}
-				{#each cloudItems as item}
-					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-					<a
-						href={item.href}
-						onclick={closeSidebar}
-						class="nav-item {isActive ? 'nav-item-active' : ''}"
-					>
-						<Icon name={item.icon} size={20} />
-						<span class="text-sm">{item.label}</span>
-					</a>
-				{/each}
-			{/if}
-
 			<!-- Provider section -->
 			<button
 				type="button"
@@ -349,108 +316,91 @@
 					{/if}
 				</a>
 
-				<!-- Provider items: always visible, locked until onboarding is complete -->
-				{@const providerLocked = !onboardingCompleted}
-				{@const lockedClass = providerLocked ? 'opacity-40 pointer-events-none cursor-not-allowed' : ''}
-				{@const lockedTitle = providerLocked ? 'Complete Provider Setup to unlock' : undefined}
-
-				<!-- My Offerings -->
+				<!-- My Offerings - always visible -->
 				{@const offeringsActive =
 					currentPath === '/dashboard/offerings' ||
 					currentPath.startsWith('/dashboard/offerings')}
 				<a
 					href="/dashboard/offerings"
 					onclick={closeSidebar}
-					class="nav-item {offeringsActive ? 'nav-item-active' : ''} {lockedClass}"
-					title={lockedTitle}
+					class="nav-item {offeringsActive ? 'nav-item-active' : ''}"
 				>
 					<Icon name="package" size={20} />
 					<span class="text-sm">My Offerings</span>
-					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
 				</a>
 
-				<!-- Earnings -->
-				{@const earningsActive =
-					currentPath === '/dashboard/provider/earnings' ||
-					currentPath.startsWith('/dashboard/provider/earnings')}
-				<a
-					href="/dashboard/provider/earnings"
-					onclick={closeSidebar}
-					class="nav-item {earningsActive ? 'nav-item-active' : ''} {lockedClass}"
-					title={lockedTitle}
-				>
-					<Icon name="trending-up" size={20} />
-					<span class="text-sm">Earnings</span>
-					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-				</a>
-
-				<!-- Analytics -->
-				{@const analyticsActive =
-					currentPath === '/dashboard/provider/analytics' ||
-					currentPath.startsWith('/dashboard/provider/analytics')}
-				<a
-					href="/dashboard/provider/analytics"
-					onclick={closeSidebar}
-					class="nav-item {analyticsActive ? 'nav-item-active' : ''} {lockedClass}"
-					title={lockedTitle}
-				>
-					<Icon name="chart" size={20} />
-					<span class="text-sm">Analytics</span>
-					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-				</a>
-
-				<!-- SLA Monitor -->
-				{@const slaActive =
-					currentPath === '/dashboard/provider/sla' ||
-					currentPath.startsWith('/dashboard/provider/sla')}
-				<a
-					href="/dashboard/provider/sla"
-					onclick={closeSidebar}
-					class="nav-item {slaActive ? 'nav-item-active' : ''} {lockedClass}"
-					title={lockedTitle}
-				>
-					<Icon name="shield" size={20} />
-					<span class="text-sm">SLA Monitor</span>
-					{#if providerLocked}<Icon name="lock" size={14} class="ml-auto text-neutral-500" />{/if}
-				</a>
-
-				{#each providerOnboardedItems as item}
-					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				<!-- Provider items: only show when onboarding is complete -->
+				{#if onboardingCompleted}
+					<!-- Earnings -->
+					{@const earningsActive =
+						currentPath === '/dashboard/provider/earnings' ||
+						currentPath.startsWith('/dashboard/provider/earnings')}
 					<a
-						href={item.href}
+						href="/dashboard/provider/earnings"
 						onclick={closeSidebar}
-						class="nav-item {isActive ? 'nav-item-active' : ''} {lockedClass}"
-						title={lockedTitle}
+						class="nav-item {earningsActive ? 'nav-item-active' : ''}"
 					>
-						<Icon name={item.icon} size={20} />
-						<span class="text-sm">{item.label}</span>
-						{#if item.href === '/dashboard/provider/requests' && !providerLocked}
-							<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
-						{:else if item.href === '/dashboard/provider/password-resets' && !providerLocked}
-							<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
-						{:else if providerLocked}
-							<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
-						{/if}
+						<Icon name="trending-up" size={20} />
+						<span class="text-sm">Earnings</span>
 					</a>
-				{/each}
 
-				{#if CHATWOOT_BASE_URL}
+					<!-- Analytics -->
+					{@const analyticsActive =
+						currentPath === '/dashboard/provider/analytics' ||
+						currentPath.startsWith('/dashboard/provider/analytics')}
 					<a
-						href={supportDashboardUrl}
-						target="_blank"
-						rel="noopener noreferrer"
+						href="/dashboard/provider/analytics"
 						onclick={closeSidebar}
-						class="nav-item {lockedClass}"
-						title={providerLocked ? lockedTitle : 'Open Chatwoot support dashboard'}
+						class="nav-item {analyticsActive ? 'nav-item-active' : ''}"
 					>
-						<Icon name="headphones" size={20} />
-						<span class="text-sm">Support Dashboard</span>
-						{#if providerLocked}
-							<Icon name="lock" size={14} class="ml-auto text-neutral-500" />
-						{:else}
+						<Icon name="chart" size={20} />
+						<span class="text-sm">Analytics</span>
+					</a>
+
+					<!-- SLA Monitor -->
+					{@const slaActive =
+						currentPath === '/dashboard/provider/sla' ||
+						currentPath.startsWith('/dashboard/provider/sla')}
+					<a
+						href="/dashboard/provider/sla"
+						onclick={closeSidebar}
+						class="nav-item {slaActive ? 'nav-item-active' : ''}"
+					>
+						<Icon name="shield" size={20} />
+						<span class="text-sm">SLA Monitor</span>
+					</a>
+
+					{#each providerOnboardedItems as item}
+						{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+						<a
+							href={item.href}
+							onclick={closeSidebar}
+							class="nav-item {isActive ? 'nav-item-active' : ''}"
+						>
+							<Icon name={item.icon} size={20} />
+							<span class="text-sm">{item.label}</span>
+							{#if item.href === '/dashboard/provider/requests'}
+								<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
+							{:else if item.href === '/dashboard/provider/password-resets'}
+								<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
+							{/if}
+						</a>
+					{/each}
+
+					{#if CHATWOOT_BASE_URL}
+						<a
+							href={supportDashboardUrl}
+							target="_blank"
+							rel="noopener noreferrer"
+							onclick={closeSidebar}
+							class="nav-item"
+							title="Open support dashboard"
+						>
+							<Icon name="headphones" size={20} />
+							<span class="text-sm">Support Dashboard</span>
 							<Icon name="external" size={20} class="ml-auto text-neutral-600" />
-						{/if}
-					</a>
+						</a>
+					{/if}
 				{/if}
 			{/if}
 		{/if}
