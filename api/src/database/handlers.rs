@@ -116,7 +116,10 @@ impl Database {
                                 anyhow::anyhow!("Failed to insert reward distributions: {}", e)
                             })?;
                     }
-                    _ => unreachable!("label was drawn from known_labels slice"),
+                    _ => {
+                        tracing::error!("Unexpected label in known_labels: {}", label);
+                        anyhow::bail!("Unexpected label in known_labels: {}", label);
+                    }
                 }
             }
         }
