@@ -30,6 +30,7 @@
 	let emailValid = $state(false);
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
+	let showSeedPhrase = $state(false);
 
 	onMount(async () => {
 		if (typeof window === 'undefined') return;
@@ -189,25 +190,39 @@
 </script>
 
 <div class="space-y-6">
-	<!-- Step 1: Seed Phrase (Generate or Import) -->
 	{#if currentStep === 'seed'}
-		<div class="space-y-4">
-			<GoogleSignInButton />
-
-			<div class="relative">
-				<div class="absolute inset-0 flex items-center">
-					<div class="w-full border-t border-neutral-800"></div>
-				</div>
-				<div class="relative flex justify-center text-sm">
-					<span class="px-3 bg-surface text-neutral-500 text-xs uppercase tracking-wider">or</span>
-				</div>
+		<div class="space-y-6">
+			<div class="text-center">
+				<h2 class="text-2xl font-bold text-white mb-2">Sign In</h2>
+				<p class="text-neutral-500 text-sm">Use your Google account or seed phrase</p>
 			</div>
 
-			<SeedPhraseStep
-				initialMode="choose"
-				showModeChoice={true}
-				onComplete={handleSeedComplete}
-			/>
+			<GoogleSignInButton />
+
+			{#if !showSeedPhrase}
+				<button
+					type="button"
+					onclick={() => (showSeedPhrase = true)}
+					class="w-full text-center text-neutral-500 hover:text-white transition-colors text-sm py-2"
+				>
+					Sign in with seed phrase instead
+				</button>
+			{:else}
+				<div class="relative">
+					<div class="absolute inset-0 flex items-center">
+						<div class="w-full border-t border-neutral-800"></div>
+					</div>
+					<div class="relative flex justify-center text-sm">
+						<span class="px-3 bg-surface text-neutral-500 text-xs uppercase tracking-wider">or</span>
+					</div>
+				</div>
+
+				<SeedPhraseStep
+					initialMode="choose"
+					showModeChoice={true}
+					onComplete={handleSeedComplete}
+				/>
+			{/if}
 		</div>
 	{/if}
 
