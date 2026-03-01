@@ -68,7 +68,8 @@
 		| 'trash'
 		| 'arrow-left'
 		| 'bell'
-		| 'bookmark';
+		| 'bookmark'
+		| 'more-vertical';
 </script>
 
 <script lang="ts">
@@ -332,5 +333,9 @@
 		<path d="M13.73 21a2 2 0 0 1-3.46 0" />
 	{:else if name === 'bookmark'}
 		<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+	{:else if name === 'more-vertical'}
+		<circle cx="12" cy="12" r="1" />
+		<circle cx="12" cy="5" r="1" />
+		<circle cx="12" cy="19" r="1" />
 	{/if}
 </svg>

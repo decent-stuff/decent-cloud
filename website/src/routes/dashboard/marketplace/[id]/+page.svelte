@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import {
@@ -46,6 +46,8 @@
 	let savedIds = $state(new Set<number>());
 	let trustWarningDismissed = $state(false);
 	let similarOfferings = $state<Offering[]>([]);
+	let showOptionsMenu = $state(false);
+	let optionsMenuEl = $state<HTMLDivElement | null>(null);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -86,6 +88,29 @@
 				console.error('Failed to load saved offerings:', err);
 			}
 		}
+		window.addEventListener('keydown', handleOptionsKeydown);
+		document.addEventListener('click', handleOptionsClickOutside, true);
+	});
+
+	function closeOptionsMenu() {
+		showOptionsMenu = false;
+	}
+
+	function handleOptionsClickOutside(e: MouseEvent) {
+		if (showOptionsMenu && optionsMenuEl && !optionsMenuEl.contains(e.target as Node)) {
+			closeOptionsMenu();
+		}
+	}
+
+	function handleOptionsKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showOptionsMenu) {
+			closeOptionsMenu();
+		}
+	}
+
+	onDestroy(() => {
+		window.removeEventListener('keydown', handleOptionsKeydown);
+		document.removeEventListener('click', handleOptionsClickOutside, true);
 	});
 
 	async function toggleBookmark() {
@@ -159,6 +184,25 @@
 		let price = o.monthly_price;
 		if (o.reseller_commission_percent) price += price * (o.reseller_commission_percent / 100);
 		return `≈ $${(price * icpPriceUsd).toFixed(2)}/mo`;
+	}
+
+	function formatSimilarPrice(o: Offering): { primary: string; usdEquivalent: string | null } {
+		if (!o.monthly_price) {
+			return { primary: 'On request', usdEquivalent: null };
+		}
+		let price = o.monthly_price;
+		if (o.reseller_commission_percent) {
+			price += price * (o.reseller_commission_percent / 100);
+		}
+		const currency = o.currency?.toUpperCase();
+		if (currency === 'USD') {
+			return { primary: `$${price.toFixed(2)}`, usdEquivalent: null };
+		}
+		if (currency === 'ICP' && icpPriceUsd && icpPriceUsd > 0) {
+			const usdAmount = price * icpPriceUsd;
+			return { primary: `${price.toFixed(2)} ICP`, usdEquivalent: `≈ $${usdAmount.toFixed(2)}/mo` };
+		}
+		return { primary: `${price.toFixed(2)} ${o.currency}`, usdEquivalent: null };
 	}
 
 	function formatBilling(o: Offering): string {
@@ -355,26 +399,6 @@
 			</div>
 
 			<div class="flex items-center gap-3">
-				<button
-					onclick={copyOfferingLink}
-					class="px-3 py-1.5 text-sm bg-surface-elevated text-neutral-400 border border-neutral-800 hover:text-white transition-colors"
-				>
-					{#if copyLinkFeedback}
-						<span class="text-green-400">Copied!</span>
-					{:else}
-						<Icon name="link" size={14} class="inline mr-1" />Copy link
-					{/if}
-				</button>
-				{#if offering.id !== undefined}
-					<button
-						onclick={toggleBookmark}
-						title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
-						class="px-3 py-1.5 text-sm bg-surface-elevated border border-neutral-800 transition-colors flex items-center gap-1.5 {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300 border-primary-500/30' : 'text-neutral-400 hover:text-white'}"
-					>
-						<Icon name="bookmark" size={14} />
-						{savedIds.has(offering.id) ? 'Saved' : 'Save'}
-					</button>
-				{/if}
 				{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
 					<a
 						href={offering.external_checkout_url}
@@ -385,13 +409,47 @@
 						Visit Provider <Icon name="external" size={16} class="text-white" />
 					</a>
 				{:else}
-					<button
-						onclick={() => { if (!isAuthenticated) { showAuthModal = true; } else { showContactDialog = true; } }}
-						class="px-4 py-2.5 bg-surface-elevated border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors text-sm font-medium flex items-center gap-1.5"
-						title="Ask the provider a question before renting"
-					>
-						<Icon name="mail" size={15} />Ask Provider
-					</button>
+					<div class="relative" bind:this={optionsMenuEl}>
+						<button
+							onclick={() => showOptionsMenu = !showOptionsMenu}
+							class="p-2.5 text-neutral-400 hover:text-white hover:bg-surface-elevated transition-colors"
+							aria-label="More options"
+							aria-expanded={showOptionsMenu}
+						>
+							<Icon name="more-vertical" size={18} />
+						</button>
+						{#if showOptionsMenu}
+							<div class="absolute right-0 top-full mt-1 w-48 bg-surface-elevated border border-neutral-700 shadow-xl z-50">
+								<button
+									onclick={() => { copyOfferingLink(); closeOptionsMenu(); }}
+									class="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-surface-hover hover:text-white flex items-center gap-2.5 transition-colors"
+								>
+									<Icon name="link" size={14} />
+									{#if copyLinkFeedback}
+										<span class="text-green-400">Copied!</span>
+									{:else}
+										Copy link
+									{/if}
+								</button>
+								{#if offering.id !== undefined}
+									<button
+										onclick={() => { toggleBookmark(); closeOptionsMenu(); }}
+										class="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-surface-hover hover:text-white flex items-center gap-2.5 transition-colors {savedIds.has(offering.id) ? 'text-primary-400' : ''}"
+									>
+										<Icon name="bookmark" size={14} />
+										{savedIds.has(offering.id) ? 'Saved' : 'Save'}
+									</button>
+								{/if}
+								<button
+									onclick={() => { closeOptionsMenu(); if (!isAuthenticated) { showAuthModal = true; } else { showContactDialog = true; } }}
+									class="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-surface-hover hover:text-white flex items-center gap-2.5 transition-colors"
+								>
+									<Icon name="mail" size={14} />
+									Ask Provider
+								</button>
+							</div>
+						{/if}
+					</div>
 					<button
 						onclick={handleRentClick}
 						disabled={offering.is_example || offering.provider_online === false}
@@ -707,14 +765,18 @@
 			<h3 class="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-3">Similar Offerings</h3>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 				{#each similarOfferings as o}
+					{@const price = formatSimilarPrice(o)}
 					<a href="/dashboard/marketplace/{o.id}" class="card p-4 border border-neutral-800 hover:border-neutral-600 transition-colors block">
-						<div class="flex items-center justify-between">
-							<span class="text-white font-medium text-sm">{o.offer_name}</span>
-							{#if o.monthly_price}
-								<span class="text-primary-400 text-sm font-semibold">{o.monthly_price.toFixed(2)} {o.currency}/mo</span>
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-white font-medium text-sm truncate">{o.offer_name}</span>
+							<span class="text-primary-400 text-sm font-semibold whitespace-nowrap">{price.primary}/mo</span>
+						</div>
+						<div class="flex items-center justify-between mt-1">
+							<span class="text-neutral-500 text-xs">{o.product_type}{o.datacenter_country ? ` · ${o.datacenter_country}` : ''}</span>
+							{#if price.usdEquivalent}
+								<span class="text-neutral-500 text-xs">{price.usdEquivalent}</span>
 							{/if}
 						</div>
-						<div class="text-neutral-500 text-xs mt-1">{o.product_type}{o.datacenter_country ? ` · ${o.datacenter_country}` : ''}</div>
 					</a>
 				{/each}
 			</div>

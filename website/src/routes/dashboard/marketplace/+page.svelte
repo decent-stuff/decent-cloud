@@ -1071,6 +1071,7 @@
 				<p class="text-xs text-neutral-600">I'm looking for...</p>
 			{/if}
 			<div class="flex flex-wrap items-center gap-2">
+				<span class="text-neutral-600 text-xs shrink-0">Sort:</span>
 				<button
 					onclick={() => toggleQuickFilter("newest")}
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'newest' ? 'bg-primary-500/20 text-primary-300 border-primary-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
@@ -1083,7 +1084,8 @@
 				>
 					<Icon name="shield" size={14} /> Most Trusted
 				</button>
-				<span class="text-neutral-700 text-xs select-none">|</span>
+				<div class="w-px h-5 bg-neutral-700 mx-1"></div>
+				<span class="text-neutral-600 text-xs shrink-0">Category:</span>
 				<button
 					onclick={() => setPreset("gpu")}
 					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'gpu' ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
@@ -1382,10 +1384,11 @@
 									{#if offering.id !== undefined}
 										<button
 											onclick={(e) => toggleBookmark(e, offering.id!)}
-											title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
-											class="p-1 transition-colors {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300' : 'text-neutral-600 hover:text-neutral-400'}"
+											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
+											class="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded transition-colors {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 										>
-											<Icon name="bookmark" size={16} />
+											<Icon name="bookmark" size={14} />
+											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
 										</button>
 									{/if}
 								</td>
@@ -1678,10 +1681,11 @@
 									{#if offering.id !== undefined}
 										<button
 											onclick={(e) => toggleBookmark(e, offering.id!)}
-											title={savedIds.has(offering.id) ? "Remove from saved" : "Save offering"}
-											class="p-1 transition-colors {savedIds.has(offering.id) ? 'text-primary-400 hover:text-primary-300' : 'text-neutral-600 hover:text-neutral-400'}"
+											title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"}
+											class="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded transition-colors {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}"
 										>
-											<Icon name="bookmark" size={16} />
+											<Icon name="bookmark" size={14} />
+											<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
 										</button>
 									{/if}
 								</div>
@@ -1895,6 +1899,9 @@
 		<div class="max-w-screen-xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
 			<span class="text-sm text-neutral-300">
 				Comparing <span class="font-semibold text-white">{compareIds.size}/3</span> offerings
+				{#if compareIds.size === 1}
+					<span class="text-neutral-500 ml-2">Add 1 more to compare</span>
+				{/if}
 			</span>
 			<div class="flex items-center gap-2">
 				<button
