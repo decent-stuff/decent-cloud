@@ -380,8 +380,16 @@ async fn ensure_template_db(base_url: &str) -> String {
             .await
             .expect("Failed to check template existence");
 
-    // Always clean up old templates from previous migration versions
-    // This runs even if current template exists, to prevent stale templates from accumulating
+    // Fast path: template already exists — skip cleanup and creation entirely.
+    // With persistent Postgres (container lifecycle), this is the common case on every
+    // nextest run after the first, making per-test setup ~100ms instead of ~40s.
+    if matches!(template_status, Some(true)) {
+        admin_pool.close().await;
+        TEMPLATE_INITIALIZED.set(template_name.clone()).ok();
+        return template_name;
+    }
+
+    // Slow path: template needs creating — clean up stale versions from previous migration hash first
     let old_templates: Vec<String> = sqlx::query_scalar(
         "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE",
     )
@@ -483,7 +491,7 @@ async fn ensure_template_db(base_url: &str) -> String {
                         break;
                     } else if matches!(is_template, Some(false)) {
                         // Database exists but not yet marked as template - wait
-                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     } else {
                         // Database was dropped? Retry template creation
                         panic!("Template database disappeared during concurrent setup");
@@ -925,9 +933,16 @@ pub async fn setup_test_db() -> Database {
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
-    // Clean up stale test databases from crashed/previous test runs (first test only)
-    static CLEANUP_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if !CLEANUP_DONE.swap(true, Ordering::SeqCst) {
+    // Clean up stale test databases once per 30-second window across all parallel processes.
+    // CLEANUP_DONE AtomicBool is per-process (useless with nextest's per-test process isolation);
+    // the filesystem lock ensures only one of the ~N concurrent test processes runs cleanup,
+    // preventing N concurrent DROP DATABASE calls on the same stale databases.
+    let epoch_window = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        / 30;
+    if std::fs::create_dir(format!("/tmp/dc_test_cleanup_{}.lock.d", epoch_window)).is_ok() {
         cleanup_stale_test_dbs(&admin_pool).await;
     }
 
