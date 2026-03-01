@@ -12,7 +12,6 @@
 	}
 
 	function handleSuccess(account: AccountInfo) {
-		console.log('Auth success:', account);
 		open = false;
 	}
 </script>

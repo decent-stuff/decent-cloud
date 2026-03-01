@@ -168,10 +168,6 @@
 			providerHex = hexEncode(normalizedIdentity.publicKeyBytes);
 			getProviderOnboarding(providerHex).catch(() => null).then(o => { onboardingCompleted = !!o?.onboarding_completed_at; });
 			getProviderOfferings(providerHex).then(o => { providerOfferings = o; }).catch(() => null);
-			console.log(
-				"[Provider Requests] Authenticated as provider:",
-				providerHex,
-			);
 			const pendingSigned = await signRequest(
 				normalizedIdentity.identity,
 				"GET",
@@ -179,10 +175,6 @@
 			);
 			pendingRequests = await getPendingProviderRequests(
 				pendingSigned.headers,
-			);
-			console.log(
-				"[Provider Requests] Found pending requests:",
-				pendingRequests.length,
 			);
 			const contractsSigned = await signRequest(
 				normalizedIdentity.identity,

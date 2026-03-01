@@ -14,7 +14,7 @@
 	let { agents = [] }: Props = $props();
 
 	function handleRevoke(agent: Agent) {
-		console.log("Revoke agent:", agent.label);
+		// TODO: Implement agent revocation
 	}
 </script>
 

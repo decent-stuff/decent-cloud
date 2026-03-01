@@ -281,17 +281,6 @@
 				throw new Error('Failed to sign request: signed body is empty');
 			}
 
-			// DEBUG: Log what we're signing and sending
-			console.log('=== SIGNATURE DEBUG ===');
-			console.log('Original CSV length:', currentCsvContent.length);
-			console.log('Signed body length:', signed.body.length);
-			console.log('Bodies match:', currentCsvContent === signed.body);
-			console.log('Timestamp:', signed.headers['X-Timestamp']);
-			console.log('Path:', path);
-			console.log('First 200 chars of CSV:', currentCsvContent.substring(0, 200));
-			console.log('First 200 chars of signed:', signed.body.substring(0, 200));
-			console.log('=======================');
-
 			// CRITICAL: Use signed.body (the exact string that was signed) not currentCsvContent
 			const importResult = await importProviderOfferingsCSV(
 				pubkeyBytes,

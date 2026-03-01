@@ -234,12 +234,6 @@ function createAuthStore() {
 		// Set as active identity
 		activeIdentity.set(identityWithAccount);
 
-		console.log('[registerNewAccount] Account registered and set:', {
-			username: account.username,
-			hasAccount: !!identityWithAccount.account,
-			seedPhrasePersisted: true
-		});
-
 		return account;
 	}
 

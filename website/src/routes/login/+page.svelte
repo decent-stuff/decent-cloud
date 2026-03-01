@@ -22,7 +22,6 @@
 	});
 
 	function handleSuccess(account: AccountInfo) {
-		console.log('Auth success:', account);
 		goto(returnUrl);
 	}
 
