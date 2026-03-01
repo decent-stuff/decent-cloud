@@ -92,7 +92,7 @@
 	const providerSetupItem: NavItem = {
 		href: '/dashboard/provider/support',
 		icon: 'settings',
-		label: 'Provider Setup'
+		label: 'Support Account'
 	};
 
 	// Items locked until onboarding is complete
@@ -259,18 +259,18 @@
 			{/each}
 		{/if}
 
-		{#if isAuthenticated}
-			<!-- My Activity section -->
-			<button
-				type="button"
-				class="section-toggle mt-3"
-				onclick={() => toggleSection('activity')}
-				aria-expanded={!sectionCollapsed.activity}
-			>
-				<span class="section-label">My Activity</span>
-				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.activity ? '-rotate-90' : ''}" />
-			</button>
-			{#if !sectionCollapsed.activity}
+		<!-- My Activity section - show to all users -->
+		<button
+			type="button"
+			class="section-toggle mt-3"
+			onclick={() => toggleSection('activity')}
+			aria-expanded={!sectionCollapsed.activity}
+		>
+			<span class="section-label">My Activity</span>
+			<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.activity ? '-rotate-90' : ''}" />
+		</button>
+		{#if !sectionCollapsed.activity}
+			{#if isAuthenticated}
 				{#each activityItems as item}
 					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 					<a
@@ -282,8 +282,27 @@
 						<span class="text-sm">{item.label}</span>
 					</a>
 				{/each}
+			{:else}
+				<div class="px-3 py-2">
+					<p class="text-xs text-neutral-500 mb-2">Sign in to access:</p>
+					{#each activityItems as item}
+						<div class="flex items-center gap-2 py-1 text-neutral-600">
+							<Icon name={item.icon} size={18} />
+							<span class="text-xs">{item.label}</span>
+						</div>
+					{/each}
+					<button
+						type="button"
+						onclick={handleLogin}
+						class="mt-2 w-full text-center px-3 py-1.5 text-xs bg-primary-500/20 text-primary-400 hover:bg-primary-500/30 transition-colors rounded"
+					>
+						Sign In
+					</button>
+				</div>
 			{/if}
+		{/if}
 
+		{#if isAuthenticated}
 			<!-- Provider section -->
 			<button
 				type="button"
