@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import { signRequest } from "$lib/services/auth-api";
 	import {
 		listSubscriptionPlans,
@@ -161,6 +162,8 @@
 		<h1 class="text-2xl font-bold text-white tracking-tight">Subscription</h1>
 		<p class="text-neutral-500">Manage your subscription plan and billing</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if error}
 		<div class="p-4 bg-red-500/20 border border-red-500/50  text-red-200">

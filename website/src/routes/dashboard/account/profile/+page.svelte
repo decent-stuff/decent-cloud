@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import UserProfileEditor from "$lib/components/UserProfileEditor.svelte";
 	import AccountEmailEditor from "$lib/components/AccountEmailEditor.svelte";
 	import type { IdentityInfo } from "$lib/stores/auth";
@@ -46,6 +47,8 @@
 			Information visible to other users
 		</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->

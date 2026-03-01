@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import { Ed25519KeyIdentity } from "@dfinity/identity";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import {
@@ -144,6 +145,8 @@
 		<h1 class="text-2xl font-bold text-white tracking-tight">Notifications</h1>
 		<p class="text-neutral-500">Configure how you receive alerts and updates</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if !isAuthenticated}
 		<div class="card p-8 border border-neutral-800 text-center">

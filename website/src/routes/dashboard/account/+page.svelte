@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import { deleteMyAccount } from "$lib/services/account-api";
 	import type { IdentityInfo } from "$lib/stores/auth";
 
@@ -101,6 +102,8 @@
 			Manage your account, security, and public profile
 		</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->

@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import AccountOverview from "$lib/components/AccountOverview.svelte";
 	import ExternalKeysEditor from "$lib/components/ExternalKeysEditor.svelte";
 	import { UserApiClient } from "$lib/services/user-api";
@@ -152,6 +153,8 @@
 			Manage your account credentials and device access
 		</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if !isAuthenticated}
 		<!-- Anonymous user view - login prompt -->

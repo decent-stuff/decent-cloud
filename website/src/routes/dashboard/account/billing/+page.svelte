@@ -3,6 +3,7 @@
 	import { page } from "$app/stores";
 	import { authStore } from "$lib/stores/auth";
 	import { navigateToLogin } from "$lib/utils/navigation";
+	import SettingsTabs from "$lib/components/SettingsTabs.svelte";
 	import { signRequest } from "$lib/services/auth-api";
 	import {
 		getBillingSettings,
@@ -229,6 +230,8 @@
 		<h1 class="text-2xl font-bold text-white tracking-tight">Billing Settings</h1>
 		<p class="text-neutral-500">Manage your billing address and VAT information for invoices</p>
 	</div>
+
+	<SettingsTabs />
 
 	{#if !isAuthenticated}
 		<div class="card p-8 border border-neutral-800 text-center">
