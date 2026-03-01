@@ -181,6 +181,51 @@ docker-compose build --no-cache
    docker volume rm dc-agent-1_cargo-cache dc-agent-1_rustup-cache dc-agent-1_home-cache
    ```
 
+## Prove Browser Runs Inside Container
+
+If you want hard evidence that Playwright/Chromium is running inside the `agent` container (not on host), run:
+
+```bash
+# 1) Start Codex in the agent container
+./run-container.sh codex
+```
+
+Then inside Codex (same container shell context), run:
+
+```bash
+cd /code/decent-cloud
+
+# Show container identity
+echo "HOSTNAME=$(hostname)"
+cat /proc/1/cgroup | head -n 5
+
+# Launch browser tooling (starts/stops Chromium)
+node scripts/browser.js eval https://dev.decent-cloud.org "navigator.userAgent"
+
+# Capture Chromium PID while it is active
+(node scripts/browser.js snap https://dev.decent-cloud.org >/tmp/browser-snap.log 2>&1 &) ; \
+sleep 1; pgrep -af "chrome|chromium|playwright" | head -n 20
+```
+
+What to look for:
+- `hostname` is the container hostname, not your host machine name.
+- `/proc/1/cgroup` output is container-scoped.
+- `pgrep` shows Chromium/Playwright process started by the in-container `node` command.
+
+### Browser Engine Fallback
+
+The browser helper defaults to Chromium. You can switch to Firefox if Chromium is unstable in your environment:
+
+```bash
+cd /code/decent-cloud
+BROWSER_ENGINE=firefox node scripts/browser.js snap https://dev.decent-cloud.org/dashboard/saved
+BROWSER_ENGINE=firefox node scripts/browser.js errs https://dev.decent-cloud.org/dashboard/saved
+```
+
+Supported values:
+- `BROWSER_ENGINE=chromium` (default)
+- `BROWSER_ENGINE=firefox`
+
 ## Running Multiple Agents Concurrently
 
 The script supports running multiple agents in parallel using unique project names:
