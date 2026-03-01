@@ -245,7 +245,7 @@ run_tool() {
 			log_info "Starting Claude Code..."
 			;;
 		codex)
-			tool_command="codex --dangerously-bypass-approvals-and-sandbox"
+			tool_command="codex --dangerously-bypass-approvals-and-sandbox --no-alt-screen"
 			log_info "Starting Codex..."
 			;;
 		happy)
