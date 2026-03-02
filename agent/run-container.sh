@@ -93,6 +93,7 @@ TOOLS:
     happy               Run Happy Coder
     opencode            Run OpenCode
     bash OR shell       Run a plain bash shell
+    attach <number>     Attach to running container #<number> as ubuntu user
 
 EXAMPLES:
     $0 claude                        # Start Claude Code with dangerously-skip-permissions
@@ -100,6 +101,7 @@ EXAMPLES:
     $0 happy                         # Start Happy Coder
     $0 opencode                      # Start OpenCode
     $0 bash                          # Start a bash shell
+    $0 attach 1                      # Attach to running container #1 as ubuntu user
     $0 claude --no-build             # Run Claude Code without rebuilding
     $0 claude "cargo test"           # Run cargo test in the container with Claude Code
     $0 happy --detach                # Start Happy Coder in background
@@ -132,9 +134,30 @@ while [[ $# -gt 0 ]]; do
 		COMPOSE_FILE="$2"
 		shift 2
 		;;
+	-n | --name)
+		AGENT_NAME="$2"
+		shift 2
+		;;
 	claude | codex | happy | opencode | shell | bash)
 		if [[ -z "$TOOL" ]]; then
 			TOOL="$1"
+			shift
+		else
+			log_error "Multiple tools specified: $TOOL and $1"
+			show_help
+			exit 1
+		fi
+		;;
+	attach)
+		if [[ -z "$TOOL" ]]; then
+			TOOL="attach"
+			shift
+			if [[ -z "$1" ]]; then
+				log_error "attach requires an agent number"
+				show_help
+				exit 1
+			fi
+			AGENT_NAME="$1"
 			shift
 		else
 			log_error "Multiple tools specified: $TOOL and $1"
@@ -259,6 +282,20 @@ run_tool() {
 		bash | shell)
 			tool_command="bash"
 			log_info "Starting bash shell..."
+			;;
+		attach)
+			log_info "Attaching to running container as ubuntu user..."
+			local running_container=$(docker ps --format '{{.Names}}' -f name="${PROJECT_NAME}_agent" | grep -E "^${PROJECT_NAME}_agent" | head -1)
+			if [[ -z "$running_container" ]]; then
+				log_error "No running container found for project $PROJECT_NAME"
+				log_info "Start a container first with: $0 bash"
+				exit 1
+			fi
+			exec docker exec -it -u ubuntu -w /code/decent-cloud \
+				-e HOME=/home/ubuntu \
+				-e PATH=/usr/lib/postgresql/17/bin:/home/ubuntu/.cache/data/dfx/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:/home/ubuntu/.opencode/bin:/home/ubuntu/bin:/home/ubuntu/.npm-global/bin:/home/ubuntu/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+				-e VIRTUAL_ENV=/home/ubuntu/.venv \
+				"$running_container" bash
 			;;
 		esac
 
