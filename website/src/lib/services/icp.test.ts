@@ -1,151 +1,72 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const {
+	mockFetchRootKey,
+	mockMetadata,
+	mockCreateActor,
+	mockCreateSync
+} = vi.hoisted(() => ({
+	mockFetchRootKey: vi.fn(),
+	mockMetadata: vi.fn(),
+	mockCreateActor: vi.fn(),
+	mockCreateSync: vi.fn()
+}));
+
+vi.mock('@dfinity/agent', () => {
+	mockCreateSync.mockImplementation(() => ({
+		fetchRootKey: mockFetchRootKey
+	}));
+	mockCreateActor.mockImplementation(() => ({
+		metadata: mockMetadata
+	}));
+
+	return {
+		HttpAgent: {
+			createSync: mockCreateSync
+		},
+		Actor: {
+			createActor: mockCreateActor
+		}
+	};
+});
+
 import { fetchDctPrice } from './icp';
 
 describe('fetchDctPrice', () => {
 	beforeEach(() => {
-		vi.resetAllMocks();
+		vi.clearAllMocks();
+		mockFetchRootKey.mockResolvedValue(undefined);
 	});
 
-	it('should fetch and parse DCT price from KongSwap API', async () => {
-		const mockResponse = {
-			items: [
-				{
-					metrics: {
-						price: 1.23456789
-					}
-				}
-			]
-		};
-
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => mockResponse
-		});
+	it('reads DCT USD price from canister metadata e6 nat value', async () => {
+		mockMetadata.mockResolvedValue([
+			['ledger:token_value_in_usd_e6', { Nat: 20_385n }]
+		]);
 
 		const price = await fetchDctPrice();
 
-		expect(price).toBe(1.23456789);
-		expect(globalThis.fetch).toHaveBeenCalledWith(
-			'https://api.kongswap.io/api/tokens/by_canister',
-			expect.objectContaining({
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				},
-				body: expect.stringContaining('ggi4a-wyaaa-aaaai-actqq-cai')
-			})
-		);
+		expect(price).toBe(0.020385);
+		expect(mockCreateSync).toHaveBeenCalled();
+		expect(mockCreateActor).toHaveBeenCalled();
+		expect(mockMetadata).toHaveBeenCalledTimes(1);
 	});
 
-	it('should parse string price values correctly', async () => {
-		const mockResponse = {
-			items: [
-				{
-					metrics: {
-						price: '2.5'
-					}
-				}
-			]
-		};
-
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => mockResponse
-		});
-
-		const price = await fetchDctPrice();
-
-		expect(price).toBe(2.5);
-	});
-
-	it('should handle price with commas', async () => {
-		const mockResponse = {
-			items: [
-				{
-					metrics: {
-						price: '1,234.56'
-					}
-				}
-			]
-		};
-
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => mockResponse
-		});
-
-		const price = await fetchDctPrice();
-
-		expect(price).toBe(1234.56);
-	});
-
-	it('should return 0 when API returns HTTP error', async () => {
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: false,
-			status: 500
-		});
+	it('returns 0 when metadata is missing token value key', async () => {
+		mockMetadata.mockResolvedValue([['icrc1:name', { Text: 'Decent Cloud' }]]);
 
 		const price = await fetchDctPrice();
 
 		expect(price).toBe(0);
 	});
 
-	it('should return 0 when API returns empty items', async () => {
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => ({ items: [] })
-		});
+	it('returns 0 when token value is non-positive', async () => {
+		mockMetadata.mockResolvedValue([
+			['ledger:token_value_in_usd_e6', { Nat: 0n }]
+		]);
 
 		const price = await fetchDctPrice();
 
 		expect(price).toBe(0);
 	});
 
-	it('should return 0 when fetch throws network error', async () => {
-		globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
-
-		const price = await fetchDctPrice();
-
-		expect(price).toBe(0);
-	});
-
-	it('should return 0 when price is null', async () => {
-		const mockResponse = {
-			items: [
-				{
-					metrics: {
-						price: null
-					}
-				}
-			]
-		};
-
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => mockResponse
-		});
-
-		const price = await fetchDctPrice();
-
-		expect(price).toBe(0);
-	});
-
-	it('should return 0 when price is undefined', async () => {
-		const mockResponse = {
-			items: [
-				{
-					metrics: {}
-				}
-			]
-		};
-
-		globalThis.fetch = vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => mockResponse
-		});
-
-		const price = await fetchDctPrice();
-
-		expect(price).toBe(0);
-	});
 });

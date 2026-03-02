@@ -1,7 +1,5 @@
 use crate::canister_backend::generic::*;
-use crate::canister_backend::price_fetcher;
 use dcc_common::{NextBlockSyncRequest, NextBlockSyncResponse, TokenAmountE9s};
-use ic_cdk::management_canister::{HttpRequestResult, TransformArgs};
 #[allow(unused_imports)]
 use ic_cdk::println;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -135,9 +133,4 @@ fn next_block_sync(
 #[ic_cdk::query]
 fn get_timestamp_ns() -> u64 {
     dcc_common::get_timestamp_ns()
-}
-
-#[ic_cdk::query(hidden = true)]
-fn transform_kongswap_response(args: TransformArgs) -> HttpRequestResult {
-    price_fetcher::transform_kongswap_response(args)
 }

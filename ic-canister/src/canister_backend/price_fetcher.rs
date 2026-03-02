@@ -1,8 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_cdk::management_canister::{HttpRequestResult, TransformArgs};
 use ledger_map::info;
 
 const KONGSWAP_BACKEND_CANISTER_ID: &str = "2ipq2-uqaaa-aaaar-qailq-cai";
+#[cfg(test)]
 const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
 const CKUSDT_LEDGER_CANISTER_ID: &str = "cngnf-vqaaa-aaaar-qag4q-cai";
 
@@ -20,10 +20,6 @@ struct KongPoolReply {
     is_removed: bool,
 }
 
-pub async fn fetch_icp_price_usd() -> Result<f64, String> {
-    fetch_token_price_usd(ICP_LEDGER_CANISTER_ID).await
-}
-
 pub async fn fetch_dct_price_usd() -> Result<f64, String> {
     let token_canister_id = ic_cdk::api::canister_self().to_text();
     fetch_token_price_usd(&token_canister_id).await
@@ -39,14 +35,6 @@ async fn fetch_token_price_usd(token_canister_id: &str) -> Result<f64, String> {
             .await
             .map_err(|e| format!("KongSwap pools call failed: code={:?} message={}", e.0, e.1))?;
     extract_price_from_pools_result(result, token_canister_id)
-}
-
-pub fn transform_kongswap_response(args: TransformArgs) -> HttpRequestResult {
-    HttpRequestResult {
-        status: args.response.status,
-        headers: vec![],
-        body: args.response.body,
-    }
 }
 
 fn extract_price_from_pools_result(
@@ -201,11 +189,6 @@ mod tests {
     fn test_price_to_e6_rounds_half_up() {
         assert_eq!(price_to_e6(0.000_000_4), 0);
         assert_eq!(price_to_e6(0.000_000_5), 1);
-    }
-
-    #[test]
-    fn fetch_icp_price_function_exists() {
-        let _ = fetch_icp_price_usd;
     }
 
     #[test]

@@ -98,64 +98,35 @@ export async function updateCanister(
 	}
 }
 
-interface TokenMetrics {
-	price?: number;
-	volume_24h?: number;
-	total_supply?: number;
-	market_cap?: number;
-	tvl?: number;
-	updated_at?: string;
-	price_change_24h?: number | null;
-}
+type MetadataEntry = [string, { Nat?: bigint | number }];
 
-interface KongSwapTokenRaw {
-	metrics?: {
-		price?: number | string;
-		volume_24h?: number | string;
-		total_supply?: number | string;
-		market_cap?: number | string;
-		tvl?: number | string;
-		updated_at?: string;
-		price_change_24h?: number | string | null;
-	};
-}
+function parseTokenValueUsdE6(metadata: unknown): number {
+	if (!Array.isArray(metadata)) {
+		throw new Error('Invalid metadata payload shape');
+	}
 
-interface TokenResponse {
-	items: KongSwapTokenRaw[];
-}
+	const entry = (metadata as MetadataEntry[]).find(([key]) => key === 'ledger:token_value_in_usd_e6');
+	if (!entry) {
+		throw new Error('Missing ledger:token_value_in_usd_e6 in canister metadata');
+	}
 
-const parseMetricValue = (value: number | string | undefined | null): number => {
-	if (!value) return 0;
-	if (typeof value === 'number') return value;
-	if (typeof value === 'string') return parseFloat(value.replaceAll(',', '')) || 0;
-	return 0;
-};
+	const rawNat = entry[1]?.Nat;
+	if (typeof rawNat !== 'bigint' && typeof rawNat !== 'number') {
+		throw new Error('ledger:token_value_in_usd_e6 has non-nat value');
+	}
+
+	const e6 = Number(rawNat);
+	if (!Number.isFinite(e6) || e6 <= 0) {
+		throw new Error(`Invalid ledger:token_value_in_usd_e6 value: ${String(rawNat)}`);
+	}
+
+	return e6 / 1_000_000;
+}
 
 export async function fetchDctPrice(): Promise<number> {
 	try {
-		const response = await fetch('https://api.kongswap.io/api/tokens/by_canister', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({
-				canister_ids: [defaultConfig.canisterId],
-				page: 1,
-				limit: 1
-			})
-		});
-
-		if (!response.ok) {
-			throw new Error(`HTTP error! status: ${response.status}`);
-		}
-
-		const data = (await response.json()) as TokenResponse;
-
-		if (!data.items || !Array.isArray(data.items) || data.items.length === 0) {
-			throw new Error('No token data returned from KongSwap API');
-		}
-
-		return parseMetricValue(data.items[0]?.metrics?.price);
+		const metadata = await fetchMetadata();
+		return parseTokenValueUsdE6(metadata);
 	} catch (error) {
 		console.error('Error fetching DCT price:', error);
 		return 0;
