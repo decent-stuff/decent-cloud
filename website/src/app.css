@@ -144,6 +144,11 @@
 		@apply transition-all duration-150;
 	}
 
+	/* Medium control size token for auth and other primary interactive actions */
+	.btn-control-md {
+		@apply h-11 min-h-11 inline-flex items-center justify-center px-6 text-sm;
+	}
+
 	/* === Inputs === */
 	.input {
 		@apply px-4 py-2.5 bg-base border border-neutral-800 text-white;

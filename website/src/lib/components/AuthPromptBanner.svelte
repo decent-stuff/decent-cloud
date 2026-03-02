@@ -28,7 +28,11 @@
 		<p class="text-base text-sm">
 			Create an account to rent resources and manage your cloud infrastructure
 		</p>
-		<Button variant="tertiary" onclick={handleAuth} class="inline-flex items-center gap-2 shrink-0 border border-base/50">
+		<Button
+			variant="tertiary"
+			onclick={handleAuth}
+			class="btn-control-md inline-flex items-center gap-2 shrink-0 border border-base/50"
+		>
 			<Icon name="login" size={20} />
 			<span>Sign In</span>
 		</Button>

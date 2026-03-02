@@ -6,6 +6,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import AuthFlow from '$lib/components/AuthFlow.svelte';
 	import type { AccountInfo } from '$lib/stores/auth';
+	import { getAuthCtaClass } from '$lib/utils/auth-cta';
 
 	let returnUrl = $state<string>('/dashboard/marketplace');
 
@@ -60,7 +61,7 @@
 				<button
 					type="button"
 					onclick={handleCancel}
-					class="text-neutral-500 hover:text-white transition-colors text-sm"
+					class={getAuthCtaClass('back')}
 				>
 					← Back to home
 				</button>

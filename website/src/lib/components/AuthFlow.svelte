@@ -9,6 +9,7 @@
 	import Icon from './Icons.svelte';
 	import { onMount } from 'svelte';
 	import Button from '$lib/components/Button.svelte';
+	import { getAuthCtaClass } from '$lib/utils/auth-cta';
 
 	let { onSuccess } = $props<{
 		onSuccess: (account: AccountInfo) => void;
@@ -204,7 +205,7 @@
 				<button
 					type="button"
 					onclick={() => (showSeedPhrase = true)}
-					class="w-full text-center text-neutral-500 hover:text-white transition-colors text-sm py-2"
+					class={getAuthCtaClass('seed')}
 				>
 					Sign in with seed phrase instead
 				</button>

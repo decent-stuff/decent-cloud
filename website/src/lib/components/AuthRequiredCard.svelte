@@ -20,7 +20,7 @@
 		<span class="text-6xl">🔑</span>
 		<h2 class="text-2xl font-bold text-white">{heading}</h2>
 		<p class="text-neutral-400">{subtext}</p>
-		<Button variant="primary" onclick={handleLogin}>
+		<Button variant="primary" onclick={handleLogin} class="btn-control-md">
 			Login / Create Account
 		</Button>
 	</div>

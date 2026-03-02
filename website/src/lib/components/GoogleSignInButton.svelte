@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { API_BASE_URL } from '$lib/services/api';
+	import { getAuthCtaClass } from '$lib/utils/auth-cta';
 
 	function handleGoogleLogin() {
 		window.location.href = `${API_BASE_URL}/api/v1/oauth/google/authorize`;
@@ -8,7 +9,7 @@
 
 <button
 	onclick={handleGoogleLogin}
-	class="w-full flex items-center justify-center gap-3 px-6 py-2.5 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 text-left transition-all group"
+	class={getAuthCtaClass('google')}
 	type="button"
 >
 	<svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24">
