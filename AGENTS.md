@@ -105,27 +105,57 @@ Finalize the implementation:
 - Add a list of all items that are NOT YET fully done but are necessary for the completion to TODO.md
 - Clean up (remove) all items that ARE fully done from TODO.md, to reduce noise.
 
-## Running the API Server Locally
+## Local Development (AI Agents Use This)
+
+**IMPORTANT:** AI agents MUST use local services, NOT the dev deployment. Dev deployment (`dev.decent-cloud.org`) cannot be quickly redeployed by agents and thus should not be used for local development.
+
+### Prerequisites
+
+AI agents run inside Docker containers. The compose-level PostgreSQL is accessible via the `postgres` hostname (Docker network):
+
+```bash
+# Verify postgres is running
+docker exec agent-postgres-1 pg_isready -U test
+```
+
+### Running the API Server Locally
 
 ```bash
 # Build
 cargo build -p api --bin api-server
 
-# Find the DB URL
-./scripts/detect-postgres.sh
+# Run with local env (AI agents use 'postgres' hostname, not 'localhost')
+cp api/.env.local api/.env  # First time only
+./target/debug/api-server serve
 
-# Run with play database (and other cf/.env.dev values if needed)
-DATABASE_URL=<detected-above>
+# Or run inline (AI agents must use 'postgres' hostname):
+DATABASE_URL=postgres://test:test@postgres:5432/test \
 CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
-CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai" \
-API_SERVER_PORT=3001 \
+CANISTER_ID="ggia4-wyaaa-aaaai-actqq-cai" \
+API_SERVER_PORT=59011 \
 ./target/debug/api-server serve
 
 # Test health
-curl http://localhost:3001/api/v1/health
+curl http://localhost:59011/api/v1/health
 ```
 
-Add more env vars from `cf/.env.dev` as needed (CF_*, STRIPE_*, CHATWOOT_*, etc.).
+### Running the Website Locally
+
+```bash
+cd website
+npm run dev
+# Opens at http://localhost:5173
+
+# The website expects API at localhost:59011 by default
+# Or set VITE_API_URL=http://localhost:59011
+```
+
+### Environment Files
+
+- `api/.env.local` — Local development (AI agents use this, uses `postgres` hostname)
+- `api/.env` — Symlink or copy of `.env.local` for local work
+- `api/.env.dev` — Points to dev deployment (DO NOT use for local dev)
+- `cf/.env.dev` — Dev deployment secrets (DO NOT use for local dev)
 
 ---
 
