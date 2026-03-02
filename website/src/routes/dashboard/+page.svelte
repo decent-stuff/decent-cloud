@@ -1005,5 +1005,5 @@
 
 <!-- Welcome Modal: shown only on first login -->
 {#if currentIdentity}
-	<WelcomeModal />
+	<WelcomeModal identity={currentIdentity} />
 {/if}

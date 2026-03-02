@@ -110,12 +110,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Sidebar] Anonymous users don't see what they're missing** — "My Activity" section now shows preview of features with "Sign In" prompt.
 - **[Sidebar] "Provider Setup" naming confusing** — Renamed to "Support Account" (accurately reflects the page content).
 - **[Saved] No compare action** — Added "Compare Saved" button when 2+ items saved.
+- **[First-time user] No guided onboarding** — DONE (single-session): replaced generic welcome modal with 3-step first-login wizard: profile awareness, SSH key check, and activation CTAs (marketplace/provider). Remaining: persist completion across sessions if needed.
 
 **High-Impact Remaining:**
 
 - **[Landing page] Too long, diluted value proposition** — 8 sections before footer. Fix: condense to Hero → Social Proof → Trust System → CTA. Move AI Features and detailed benefits to a separate /features page. *(Multi-session: requires content restructuring.)*
-
-- **[First-time user] No guided onboarding** — New authenticated users land on a dashboard with many options. Fix: add a 3-step onboarding wizard on first login: 1) Complete profile (username, email), 2) Add SSH key, 3) Browse marketplace or become provider. *(Multi-session: wizard component + localStorage flag.)*
 
 **Medium Impact:**
 

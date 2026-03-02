@@ -1,46 +1,74 @@
-<script module lang="ts">
-	export const ONBOARDING_KEY = 'onboarding_completed';
-	export const ROLE_PREF_KEY = 'user_role_preference';
-	export type UserRolePreference = 'tenant' | 'provider';
-</script>
-
 <script lang="ts">
 	import { browser } from '$app/environment';
 	import Icon from '$lib/components/Icons.svelte';
+	import { getExternalKeys } from '$lib/services/user-api';
+	import type { IdentityInfo } from '$lib/stores/auth';
+	import {
+		completeOnboarding,
+		getActivationActionHref,
+		hasSshExternalKey,
+		isOnboardingCompleted,
+		nextStep,
+		type ActivationAction,
+		type OnboardingStep,
+	} from './welcome-onboarding';
 
-	function isOnboardingCompleted(): boolean {
-		if (!browser) return true;
-		return localStorage.getItem(ONBOARDING_KEY) === 'true';
-	}
+	let { identity = null }: { identity?: IdentityInfo | null } = $props();
 
-	function completeOnboarding() {
-		if (browser) localStorage.setItem(ONBOARDING_KEY, 'true');
+	let open = $state(browser ? !isOnboardingCompleted(sessionStorage) : false);
+	let step = $state<OnboardingStep>(1);
+	let hasSshKey = $state(false);
+	let sshKeysLoading = $state(false);
+	let sshKeysError = $state<string | null>(null);
+	let checkedUsername = $state<string | null>(null);
+
+	let username = $derived(identity?.account?.username ?? '');
+	let email = $derived(identity?.account?.email ?? '');
+	let hasUsername = $derived(username.length > 0);
+	let hasEmail = $derived(email.length > 0);
+
+	function finishOnboarding() {
+		if (browser) {
+			completeOnboarding(sessionStorage);
+		}
 		open = false;
 	}
 
-	function saveRolePreference(role: UserRolePreference) {
-		if (browser) localStorage.setItem(ROLE_PREF_KEY, role);
-		selectedRole = role;
+	function goToNextStep() {
+		step = nextStep(step);
 	}
 
-	let open = $state(!isOnboardingCompleted());
-	let step = $state(1);
-	let selectedRole = $state<UserRolePreference | null>(null);
-
-	function next() {
-		step += 1;
+	async function loadSshStatus(targetUsername: string) {
+		sshKeysLoading = true;
+		sshKeysError = null;
+		try {
+			const keys = await getExternalKeys(targetUsername);
+			hasSshKey = hasSshExternalKey(keys);
+		} catch (err) {
+			hasSshKey = false;
+			sshKeysError = err instanceof Error ? err.message : 'Failed to fetch SSH keys';
+		} finally {
+			sshKeysLoading = false;
+		}
 	}
 
-	function handleRoleSelect(role: UserRolePreference) {
-		saveRolePreference(role);
-		next();
+	$effect(() => {
+		if (!open || !username || checkedUsername === username) {
+			return;
+		}
+		checkedUsername = username;
+		void loadSshStatus(username);
+	});
+
+	function activationHref(action: ActivationAction): string {
+		return getActivationActionHref(action);
 	}
 </script>
 
 {#if open}
 	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
 		<!-- Backdrop -->
-		<div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick={completeOnboarding} role="presentation"></div>
+		<div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick={finishOnboarding} role="presentation"></div>
 
 		<!-- Modal -->
 		<div class="relative z-10 w-full max-w-lg bg-surface border border-neutral-800 shadow-2xl">
@@ -51,131 +79,112 @@
 				{/each}
 			</div>
 
-			<!-- Step 1: Welcome -->
+			<!-- Step 1: Complete profile -->
 			{#if step === 1}
 				<div class="p-6 space-y-4">
 					<div class="icon-box-accent w-12 h-12">
-						<Icon name="star" size={24} />
+						<Icon name="user" size={24} />
 					</div>
-					<h2 class="text-xl font-bold text-white">Welcome to Decent Cloud</h2>
+					<h2 class="text-xl font-bold text-white">Complete your profile</h2>
 					<p class="text-neutral-400 text-sm leading-relaxed">
-						A decentralized marketplace for cloud computing. Rent VMs from trusted providers, or list your own hardware and earn ICP.
+						Confirm your account details so providers can trust your requests and platform notifications can reach you.
 					</p>
-					<p class="text-neutral-500 text-xs">
-						No lock-in. No corporate intermediary. Fully verifiable on-chain.
-					</p>
+					<div class="space-y-2 rounded border border-neutral-800 bg-surface-elevated p-3 text-sm">
+						<div class="flex items-center justify-between">
+							<span class="text-neutral-400">Username</span>
+							<span class={hasUsername ? 'text-emerald-400' : 'text-amber-400'}>{hasUsername ? `@${username}` : 'Missing'}</span>
+						</div>
+						<div class="flex items-center justify-between">
+							<span class="text-neutral-400">Email</span>
+							<span class={hasEmail ? 'text-emerald-400' : 'text-amber-400'}>{hasEmail ? email : 'Missing'}</span>
+						</div>
+					</div>
 					<div class="flex items-center justify-between pt-2">
+						<a href="/dashboard/account/profile" class="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+							Open profile settings
+						</a>
 						<button
 							type="button"
-							onclick={completeOnboarding}
-							class="text-xs text-neutral-500 hover:text-neutral-400 transition-colors"
-						>
-							Skip
-						</button>
-						<button
-							type="button"
-							onclick={next}
+							onclick={goToNextStep}
 							class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
 						>
-							Get Started
+							Continue
 							<Icon name="arrow-right" size={16} />
 						</button>
 					</div>
 				</div>
 			{/if}
 
-			<!-- Step 2: Choose Role -->
+			<!-- Step 2: Add SSH key -->
 			{#if step === 2}
 				<div class="p-6 space-y-4">
-					<h2 class="text-xl font-bold text-white">How will you use Decent Cloud?</h2>
-					<p class="text-neutral-500 text-xs">Choose your primary role. You can do both.</p>
+					<h2 class="text-xl font-bold text-white">Add your SSH key</h2>
+					<p class="text-neutral-400 text-sm leading-relaxed">
+						You need at least one SSH key to access rented machines securely.
+					</p>
 
-					<div class="grid grid-cols-2 gap-3 mt-2">
-						<!-- Tenant card -->
-						<button
-							type="button"
-							onclick={() => handleRoleSelect('tenant')}
-							class="group text-left p-4 border {selectedRole === 'tenant' ? 'border-primary-500 bg-primary-500/10' : 'border-neutral-700 bg-surface-elevated hover:border-neutral-600'} transition-all"
-						>
-							<div class="icon-box mb-3 group-hover:border-primary-500/30 transition-colors">
-								<Icon name="cart" size={18} />
-							</div>
-							<h3 class="text-sm font-semibold text-white mb-2">Rent cloud resources</h3>
-							<ul class="space-y-1">
-								<li class="text-xs text-neutral-500">Deploy VMs in minutes</li>
-								<li class="text-xs text-neutral-500">Pay with ICP tokens</li>
-								<li class="text-xs text-neutral-500">Verified provider trust scores</li>
-							</ul>
-						</button>
-
-						<!-- Provider card -->
-						<button
-							type="button"
-							onclick={() => handleRoleSelect('provider')}
-							class="group text-left p-4 border {selectedRole === 'provider' ? 'border-primary-500 bg-primary-500/10' : 'border-neutral-700 bg-surface-elevated hover:border-neutral-600'} transition-all"
-						>
-							<div class="icon-box mb-3 group-hover:border-primary-500/30 transition-colors">
-								<Icon name="server" size={18} />
-							</div>
-							<h3 class="text-sm font-semibold text-white mb-2">Offer my resources</h3>
-							<ul class="space-y-1">
-								<li class="text-xs text-neutral-500">Monetize idle hardware</li>
-								<li class="text-xs text-neutral-500">Set your own pricing</li>
-								<li class="text-xs text-neutral-500">Build reputation on-chain</li>
-							</ul>
-						</button>
+					<div class="rounded border border-neutral-800 bg-surface-elevated p-3 text-sm">
+						{#if sshKeysLoading}
+							<p class="text-neutral-400">Checking your external keys...</p>
+						{:else if sshKeysError}
+							<p class="text-amber-400">Could not verify your SSH keys: {sshKeysError}</p>
+						{:else if hasSshKey}
+							<p class="text-emerald-400">SSH key detected. You are ready to rent.</p>
+						{:else}
+							<p class="text-amber-400">No SSH key found yet. Add one in Security settings.</p>
+						{/if}
 					</div>
 
-					<div class="flex items-center justify-between pt-2">
+					<div class="flex items-center justify-between gap-2 pt-2">
+						<div class="flex items-center gap-3">
+							<a href="/dashboard/account/security" class="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+								Manage SSH keys
+							</a>
+							<button type="button" onclick={() => loadSshStatus(username)} class="text-xs text-neutral-500 hover:text-neutral-300 transition-colors" disabled={sshKeysLoading || !username}>
+								Refresh
+							</button>
+						</div>
 						<button
 							type="button"
-							onclick={completeOnboarding}
-							class="text-xs text-neutral-500 hover:text-neutral-400 transition-colors"
+							onclick={goToNextStep}
+							class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
 						>
-							Skip
+							Continue
+							<Icon name="arrow-right" size={16} />
 						</button>
 					</div>
 				</div>
 			{/if}
 
-			<!-- Step 3: Next Steps -->
+			<!-- Step 3: Choose next action -->
 			{#if step === 3}
 				<div class="p-6 space-y-4">
-					<h2 class="text-xl font-bold text-white">You're all set!</h2>
-					<p class="text-neutral-400 text-sm">
-						{#if selectedRole === 'provider'}
-							Set up your provider profile to start listing your resources on the marketplace.
-						{:else}
-							Browse the marketplace to find a VM that fits your needs and deploy in minutes.
-						{/if}
-					</p>
+					<h2 class="text-xl font-bold text-white">Choose your next action</h2>
+					<p class="text-neutral-400 text-sm">Pick one path to start activating your account now.</p>
 
 					<div class="pt-2 flex flex-col gap-3">
-						{#if selectedRole === 'provider'}
-							<a
-								href="/dashboard/provider/support"
-								onclick={completeOnboarding}
-								class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
-							>
-								<Icon name="server" size={16} />
-								Set up provider profile
-							</a>
-						{:else}
-							<a
-								href="/dashboard/marketplace"
-								onclick={completeOnboarding}
-								class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
-							>
-								<Icon name="cart" size={16} />
-								Browse marketplace
-							</a>
-						{/if}
+						<a
+							href={activationHref('marketplace')}
+							onclick={finishOnboarding}
+							class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-primary-500 hover:bg-primary-400 text-neutral-900 text-sm font-semibold transition-colors"
+						>
+							<Icon name="cart" size={16} />
+							Browse marketplace
+						</a>
+						<a
+							href={activationHref('provider')}
+							onclick={finishOnboarding}
+							class="inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-neutral-700 bg-surface-elevated hover:border-neutral-500 text-white text-sm font-semibold transition-colors"
+						>
+							<Icon name="server" size={16} />
+							Become a provider
+						</a>
 						<button
 							type="button"
-							onclick={completeOnboarding}
+							onclick={finishOnboarding}
 							class="text-xs text-neutral-500 hover:text-neutral-400 transition-colors text-center"
 						>
-							Skip for now
+							Stay on dashboard
 						</button>
 					</div>
 				</div>
