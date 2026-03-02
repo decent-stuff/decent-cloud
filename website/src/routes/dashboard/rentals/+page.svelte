@@ -22,6 +22,7 @@
 		isProvisioningStuck,
 		calculateSpendingByCurrency,
 	} from "$lib/utils/contract-format";
+	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
@@ -493,19 +494,19 @@
 			<div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
 				<a
 					href="/dashboard/marketplace?preset=gpu"
-					class="w-full sm:w-auto px-6 py-3 bg-purple-500/20 border border-purple-500/40 text-purple-300 font-semibold hover:bg-purple-500/30 transition-all flex items-center justify-center gap-2"
+					class="{buildDashboardCtaClass('rentals-empty-state-cta')} bg-purple-500/20 border border-purple-500/40 text-purple-300 hover:bg-purple-500/30"
 				>
 					<span class="text-lg">🎮</span> Browse GPU Servers
 				</a>
 				<a
 					href="/dashboard/marketplace?preset=budget"
-					class="w-full sm:w-auto px-6 py-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-semibold hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2"
+					class="{buildDashboardCtaClass('rentals-empty-state-cta')} bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
 				>
 					<span class="text-lg">💰</span> Find Budget VMs
 				</a>
 				<a
 					href="/dashboard/marketplace"
-					class="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold text-white hover:brightness-110 transition-all flex items-center justify-center gap-2"
+					class="{buildDashboardCtaClass('rentals-empty-state-cta')} bg-gradient-to-r from-primary-500 to-primary-600 text-white hover:brightness-110"
 				>
 					<span class="text-lg">🚀</span> Explore Marketplace
 				</a>
@@ -523,11 +524,11 @@
 				<div class="flex items-center gap-2 shrink-0">
 					<button
 						onclick={() => { activeTab = 'pending'; }}
-						class="px-3 py-1 text-xs font-medium bg-primary-500/20 text-primary-300 border border-primary-500/30 hover:bg-primary-500/30 transition-colors"
+						class={buildDashboardCtaClass('rentals-pending-guidance-view')}
 					>View Pending</button>
 					<button
 						onclick={() => { pendingGuidanceDismissed = true; sessionStorage.setItem('pending_guidance_dismissed', '1'); }}
-						class="text-neutral-500 hover:text-neutral-300 transition-colors text-lg leading-none"
+						class={buildDashboardCtaClass('rentals-pending-guidance-dismiss')}
 						aria-label="Dismiss"
 					>×</button>
 				</div>
@@ -661,7 +662,7 @@
 											e.stopPropagation();
 											handleCancelContract(contract.contract_id, contract.status);
 										}}
-										class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
+										class="{buildDashboardCtaClass('rentals-contract-action-secondary')} bg-red-600/80 hover:bg-red-700"
 										title="Cancel this rental request"
 									>
 										Cancel
@@ -676,7 +677,7 @@
 											e.stopPropagation();
 											handleDownloadInvoice(contract.contract_id);
 										}}
-										class="px-2 py-1 text-xs bg-primary-600/80 text-white rounded hover:bg-primary-700 transition-colors flex items-center gap-1"
+										class="{buildDashboardCtaClass('rentals-contract-action-primary')} bg-primary-600/80 hover:bg-primary-700"
 										title="Download invoice PDF"
 									>
 										<span>&#8595;</span>
@@ -710,7 +711,7 @@
 									<button
 										type="button"
 										onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto(`/dashboard/marketplace/${contract.offering_id}`); }}
-										class="px-2 py-1 text-xs bg-primary-600/80 text-white rounded hover:bg-primary-700 transition-colors flex items-center gap-1"
+										class="{buildDashboardCtaClass('rentals-contract-action-primary')} bg-primary-600/80 hover:bg-primary-700"
 										title="Re-rent the same offering"
 									>
 										&#8635; Renew
@@ -721,7 +722,7 @@
 									<button
 										type="button"
 										onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto(`/dashboard/rentals/${contract.contract_id}#feedback`); }}
-										class="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors"
+										class="{buildDashboardCtaClass('rentals-contract-action-warning')} bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30"
 										title="Rate this provider"
 									>
 										Rate Provider

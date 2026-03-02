@@ -15,6 +15,7 @@
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
 	import { buildQuickPillClass, buildRowActionButtonClass } from "$lib/utils/marketplace-ui";
+	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
 	import Button from "$lib/components/Button.svelte";
 
 	let offerings = $state<Offering[]>([]);
@@ -1136,7 +1137,7 @@
 					{#each activeFilterChips as chip}
 						<button
 							onclick={chip.remove}
-							class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded hover:bg-primary-500/30 transition-colors"
+							class={buildDashboardCtaClass('marketplace-active-filter-chip')}
 						>
 							{chip.label}
 							<span class="text-primary-300 hover:text-white transition-colors leading-none">&times;</span>
@@ -1144,7 +1145,7 @@
 					{/each}
 					<button
 						onclick={clearFilters}
-						class="text-xs text-neutral-500 hover:text-white transition-colors"
+						class={buildDashboardCtaClass('marketplace-active-filter-clear')}
 					>Clear all</button>
 				</div>
 			{/if}
@@ -1157,15 +1158,15 @@
 				<div class="hidden md:flex items-center gap-1">
 					<button
 						onclick={() => setSortPrice("asc")}
-						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'price' && sortDir === 'asc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'price' && sortDir === 'asc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
 					>Price ↑</button>
 					<button
 						onclick={() => setSortPrice("desc")}
-						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'price' && sortDir === 'desc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'price' && sortDir === 'desc' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
 					>Price ↓</button>
 					<button
 						onclick={setSortTrust}
-						class="px-2 py-1 text-xs rounded transition-colors {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
+						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
 					>Trust ↓</button>
 				</div>
 			</div>
