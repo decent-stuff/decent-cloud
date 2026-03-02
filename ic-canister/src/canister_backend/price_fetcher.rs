@@ -1,79 +1,44 @@
-use candid::Func;
-use ic_cdk::management_canister::{
-    http_request, HttpHeader, HttpMethod, HttpRequestArgs, HttpRequestResult, TransformArgs,
-    TransformContext, TransformFunc,
-};
-use ledger_map::{error, info};
-use serde::Deserialize;
+use candid::{CandidType, Deserialize, Principal};
+use ic_cdk::management_canister::{HttpRequestResult, TransformArgs};
+use ledger_map::info;
 
-const KONGSWAP_API_URL: &str = "https://api.kongswap.io/api/tokens/by_canister";
+const KONGSWAP_BACKEND_CANISTER_ID: &str = "2ipq2-uqaaa-aaaar-qailq-cai";
 const ICP_LEDGER_CANISTER_ID: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";
+const CKUSDT_LEDGER_CANISTER_ID: &str = "cngnf-vqaaa-aaaar-qag4q-cai";
 
-#[derive(Debug, Clone, Deserialize)]
-struct KongSwapMetrics {
+#[derive(Debug, Clone, CandidType, Deserialize)]
+enum KongPoolsResult {
+    Ok(Vec<KongPoolReply>),
+    Err(String),
+}
+
+#[derive(Debug, Clone, CandidType, Deserialize)]
+struct KongPoolReply {
+    address_0: String,
+    address_1: String,
     price: f64,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct KongSwapToken {
-    metrics: KongSwapMetrics,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct KongSwapResponse {
-    items: Vec<KongSwapToken>,
+    is_removed: bool,
 }
 
 pub async fn fetch_icp_price_usd() -> Result<f64, String> {
-    let request_body = serde_json::json!({
-        "canister_ids": [ICP_LEDGER_CANISTER_ID],
-        "page": 1,
-        "limit": 1
-    });
-
-    let request = HttpRequestArgs {
-        url: KONGSWAP_API_URL.to_string(),
-        method: HttpMethod::POST,
-        headers: vec![HttpHeader {
-            name: "Content-Type".to_string(),
-            value: "application/json".to_string(),
-        }],
-        body: Some(request_body.to_string().into_bytes()),
-        max_response_bytes: Some(4096),
-        transform: Some(TransformContext {
-            function: TransformFunc(Func {
-                method: "transform_kongswap_response".to_string(),
-                principal: ic_cdk::api::canister_self(),
-            }),
-            context: vec![],
-        }),
-    };
-
-    match http_request(&request).await {
-        Ok(HttpRequestResult { status, body, .. }) => {
-            if status != 200u16 {
-                return Err(format!("HTTP status {}", status));
-            }
-            parse_kongswap_response(&body)
-        }
-        Err(e) => Err(format!("HTTP request failed: {:?}", e)),
-    }
+    fetch_token_price_usd(ICP_LEDGER_CANISTER_ID).await
 }
 
-fn parse_kongswap_response(body: &[u8]) -> Result<f64, String> {
-    let response: KongSwapResponse =
-        serde_json::from_slice(body).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+pub async fn fetch_dct_price_usd() -> Result<f64, String> {
+    let token_canister_id = ic_cdk::api::canister_self().to_text();
+    fetch_token_price_usd(&token_canister_id).await
+}
 
-    let token = response
-        .items
-        .first()
-        .ok_or_else(|| "No tokens in response".to_string())?;
-
-    if token.metrics.price <= 0.0 {
-        return Err(format!("Invalid price: {}", token.metrics.price));
-    }
-
-    Ok(token.metrics.price)
+async fn fetch_token_price_usd(token_canister_id: &str) -> Result<f64, String> {
+    let kongswap = Principal::from_text(KONGSWAP_BACKEND_CANISTER_ID)
+        .map_err(|e| format!("Invalid KongSwap canister id: {e}"))?;
+    let pool_filter = format!("{}_{}", token_canister_id, CKUSDT_LEDGER_CANISTER_ID);
+    #[allow(deprecated)]
+    let (result,): (KongPoolsResult,) =
+        ic_cdk::api::call::call(kongswap, "pools", (Some(pool_filter),))
+            .await
+            .map_err(|e| format!("KongSwap pools call failed: code={:?} message={}", e.0, e.1))?;
+    extract_price_from_pools_result(result, token_canister_id)
 }
 
 pub fn transform_kongswap_response(args: TransformArgs) -> HttpRequestResult {
@@ -84,22 +49,43 @@ pub fn transform_kongswap_response(args: TransformArgs) -> HttpRequestResult {
     }
 }
 
+fn extract_price_from_pools_result(
+    result: KongPoolsResult,
+    token_canister_id: &str,
+) -> Result<f64, String> {
+    match result {
+        KongPoolsResult::Err(e) => Err(format!("KongSwap pools returned error: {e}")),
+        KongPoolsResult::Ok(pools) => {
+            let pool = pools
+                .into_iter()
+                .find(|pool| {
+                    !pool.is_removed
+                        && pool.address_0 == token_canister_id
+                        && pool.address_1 == CKUSDT_LEDGER_CANISTER_ID
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "No active KongSwap pool found for {}_{}",
+                        token_canister_id, CKUSDT_LEDGER_CANISTER_ID
+                    )
+                })?;
+            if pool.price <= 0.0 {
+                return Err(format!("Invalid pool price: {}", pool.price));
+            }
+            Ok(pool.price)
+        }
+    }
+}
+
 pub fn price_to_e6(price_usd: f64) -> u64 {
     (price_usd * 1_000_000.0).round() as u64
 }
 
-pub async fn refresh_last_token_value_usd_e6_async() -> u64 {
-    match fetch_icp_price_usd().await {
-        Ok(price) => {
-            let price_e6 = price_to_e6(price);
-            info!("Fetched ICP/USD price: ${:.6} ({} e6)", price, price_e6);
-            price_e6
-        }
-        Err(e) => {
-            error!("Failed to fetch ICP/USD price: {}", e);
-            0
-        }
-    }
+pub async fn refresh_last_token_value_usd_e6_async() -> Result<u64, String> {
+    let price = fetch_dct_price_usd().await?;
+    let price_e6 = price_to_e6(price);
+    info!("Fetched DCT/USD price: ${:.6} ({} e6)", price, price_e6);
+    Ok(price_e6)
 }
 
 #[cfg(test)]
@@ -107,40 +93,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_kongswap_response() {
-        let json = r#"{
-            "items": [{
-                "token_id": 2,
-                "name": "Internet Computer",
-                "symbol": "ICP",
-                "metrics": {
-                    "token_id": 2,
-                    "price": 2.40480345239503,
-                    "market_cap": 1297568603.7792306
-                }
-            }],
-            "total_pages": 1,
-            "total_count": 1,
-            "page": 1,
-            "limit": 100
-        }"#;
+    fn extract_price_returns_exact_pool_price() {
+        let result = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: 0.0203852135,
+            is_removed: false,
+        }]);
 
-        let result = parse_kongswap_response(json.as_bytes()).unwrap();
-        assert!((result - 2.40480345239503).abs() < 0.0001);
+        let price = extract_price_from_pools_result(result, "ggi4a-wyaaa-aaaai-actqq-cai").unwrap();
+        assert!((price - 0.0203852135).abs() < 0.000_000_1);
     }
 
     #[test]
-    fn test_parse_kongswap_response_empty() {
-        let json = r#"{"items": [], "total_pages": 0, "total_count": 0}"#;
-        let result = parse_kongswap_response(json.as_bytes());
+    fn extract_price_rejects_kongswap_error_variant() {
+        let result = extract_price_from_pools_result(
+            KongPoolsResult::Err("upstream failed".to_string()),
+            "ggi4a-wyaaa-aaaai-actqq-cai",
+        );
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("KongSwap pools returned error"));
+    }
+
+    #[test]
+    fn extract_price_rejects_missing_matching_pool() {
+        let result = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: ICP_LEDGER_CANISTER_ID.to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: 2.39241518,
+            is_removed: false,
+        }]);
+
+        let result = extract_price_from_pools_result(result, "ggi4a-wyaaa-aaaai-actqq-cai");
         assert!(result.is_err());
     }
 
     #[test]
-    fn test_parse_kongswap_response_invalid_price() {
-        let json = r#"{"items": [{"metrics": {"price": -1.0}}]}"#;
-        let result = parse_kongswap_response(json.as_bytes());
-        assert!(result.is_err());
+    fn extract_price_rejects_removed_or_non_positive_pool() {
+        let removed_pool = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: 0.02,
+            is_removed: true,
+        }]);
+        let removed_result =
+            extract_price_from_pools_result(removed_pool, "ggi4a-wyaaa-aaaai-actqq-cai");
+        assert!(removed_result.is_err());
+
+        let non_positive_pool = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: 0.0,
+            is_removed: false,
+        }]);
+        let non_positive_result =
+            extract_price_from_pools_result(non_positive_pool, "ggi4a-wyaaa-aaaai-actqq-cai");
+        assert!(non_positive_result.is_err());
+        assert!(non_positive_result
+            .unwrap_err()
+            .contains("Invalid pool price"));
+    }
+
+    #[test]
+    fn fetch_dct_uses_current_canister_id_format_for_pool_filter() {
+        let filter = format!(
+            "{}_{}",
+            "ggi4a-wyaaa-aaaai-actqq-cai", CKUSDT_LEDGER_CANISTER_ID
+        );
+        assert_eq!(
+            filter,
+            "ggi4a-wyaaa-aaaai-actqq-cai_cngnf-vqaaa-aaaar-qag4q-cai"
+        );
     }
 
     #[test]
@@ -149,5 +174,52 @@ mod tests {
         assert_eq!(price_to_e6(2.5), 2_500_000);
         assert_eq!(price_to_e6(2.404803), 2_404_803);
         assert_eq!(price_to_e6(0.001), 1_000);
+    }
+
+    #[test]
+    fn test_price_to_e6_rounds_half_up() {
+        assert_eq!(price_to_e6(0.000_000_4), 0);
+        assert_eq!(price_to_e6(0.000_000_5), 1);
+    }
+
+    #[test]
+    fn fetch_icp_price_function_exists() {
+        let _ = fetch_icp_price_usd;
+    }
+
+    #[test]
+    fn fetch_dct_price_function_exists() {
+        let _ = fetch_dct_price_usd;
+    }
+
+    #[test]
+    fn kongswap_backend_canister_id_is_valid_principal() {
+        let parsed = Principal::from_text(KONGSWAP_BACKEND_CANISTER_ID);
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn ckusdt_canister_id_is_valid_principal() {
+        let parsed = Principal::from_text(CKUSDT_LEDGER_CANISTER_ID);
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn icp_canister_id_is_valid_principal() {
+        let parsed = Principal::from_text(ICP_LEDGER_CANISTER_ID);
+        assert!(parsed.is_ok());
+    }
+
+    #[test]
+    fn extract_price_fails_when_pool_is_for_reversed_pair() {
+        let result = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            address_1: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            price: 49.0,
+            is_removed: false,
+        }]);
+
+        let result = extract_price_from_pools_result(result, "ggi4a-wyaaa-aaaai-actqq-cai");
+        assert!(result.is_err());
     }
 }

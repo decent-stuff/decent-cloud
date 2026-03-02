@@ -6,6 +6,10 @@
 
 ---
 
+## Recently Done
+
+- **[IC canister] Real token price from KongSwap backend canister** — Replaced hardcoded `$1` token value with canister-to-canister query to KongSwap backend (`2ipq2-uqaaa-aaaar-qailq-cai`) using `pools(opt "<token_canister>_ckUSDT")`; now refreshes DCT (DC) USD price from the `DC_ckUSDT` pool and keeps the previous value on fetch errors.
+
 ## Cloud Provisioning
 
 ### Known Limitations
@@ -64,12 +68,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 ## Architectural Issues Requiring Review
 
-### Hardcoded Token Value ($1 USD) in IC canister — HIGH PRIORITY
-
-**Issue:** The IC canister's `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). The api-server now fetches real ICP/USD price from CoinGecko for UI display (cached 5 min, `GET /api/v1/prices/icp`), but the on-chain canister price remains hardcoded.
-**Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
-**Fix:** Use IC HTTP outcalls to fetch from **KongSwap** (backend canister `2ipq2-uqaaa-aaaar-qailq-cai` on ICP mainnet). KongSwap exposes a price query for ICP/USD. Use `ic_cdk::api::management_canister::http_request` for HTTP outcalls or canister-to-canister query. *(Single-session once implemented — ICP HTTP outcall pattern is well-documented.)*
-**Dependency:** Rust toolchain (`cargo`) must be available in the execution environment to run canister PoC/tests/build before implementing this safely.
+- None currently.
 
 ---
 

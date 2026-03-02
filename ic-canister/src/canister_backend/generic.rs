@@ -1,4 +1,6 @@
 use super::pre_icrc3::ledger_construct_hash_tree;
+#[cfg(target_arch = "wasm32")]
+use super::price_fetcher::refresh_last_token_value_usd_e6_async;
 use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
@@ -72,10 +74,39 @@ pub fn get_last_token_value_usd_e6() -> u64 {
     LAST_TOKEN_VALUE_USD_E6.with(|last_token_value_usd_e6| *last_token_value_usd_e6.borrow())
 }
 
+pub(crate) fn apply_refreshed_last_token_value_usd_e6(fetch_result: Result<u64, String>) {
+    match fetch_result {
+        Ok(token_value) => {
+            info!(
+                "Token value refresh succeeded: setting token_value_in_usd_e6={} (previous={})",
+                token_value,
+                get_last_token_value_usd_e6(),
+            );
+            update_last_token_value_usd_e6(token_value);
+        }
+        Err(e) => {
+            error!(
+                "Token value refresh failed; keeping previous token_value_in_usd_e6={} error={}",
+                get_last_token_value_usd_e6(),
+                e,
+            );
+        }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 pub fn refresh_last_token_value_usd_e6() {
-    // FIXME: Get the Token value from ICPSwap and KongSwap
-    let token_value = 1_000_000;
-    update_last_token_value_usd_e6(token_value);
+    ic_cdk::futures::spawn(async {
+        let fetch_result = refresh_last_token_value_usd_e6_async().await;
+        apply_refreshed_last_token_value_usd_e6(fetch_result);
+    });
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn refresh_last_token_value_usd_e6() {
+    apply_refreshed_last_token_value_usd_e6(Err(
+        "IC HTTP outcalls are only available on wasm32 canister runtime".to_string(),
+    ));
 }
 
 pub(crate) fn get_commit_interval() -> Duration {
@@ -619,4 +650,67 @@ pub(crate) fn _next_block_sync(
             })
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        apply_refreshed_last_token_value_usd_e6, get_last_token_value_usd_e6,
+        refresh_last_token_value_usd_e6, update_last_token_value_usd_e6,
+    };
+    use std::sync::Mutex;
+
+    static TOKEN_VALUE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn update_and_get_token_value_round_trip() {
+        let _guard = TOKEN_VALUE_TEST_LOCK
+            .lock()
+            .expect("test lock poisoned for token value state");
+        let original = get_last_token_value_usd_e6();
+        update_last_token_value_usd_e6(2_345_678);
+        assert_eq!(get_last_token_value_usd_e6(), 2_345_678);
+        update_last_token_value_usd_e6(original);
+    }
+
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn refresh_keeps_previous_value_until_async_update() {
+        let _guard = TOKEN_VALUE_TEST_LOCK
+            .lock()
+            .expect("test lock poisoned for token value state");
+        let original = get_last_token_value_usd_e6();
+        update_last_token_value_usd_e6(7_654_321);
+        refresh_last_token_value_usd_e6();
+        assert_eq!(
+            get_last_token_value_usd_e6(),
+            7_654_321,
+            "refresh must not overwrite value with fallback constant"
+        );
+        update_last_token_value_usd_e6(original);
+    }
+
+    #[test]
+    fn apply_refreshed_value_updates_on_success() {
+        let _guard = TOKEN_VALUE_TEST_LOCK
+            .lock()
+            .expect("test lock poisoned for token value state");
+        let original = get_last_token_value_usd_e6();
+        update_last_token_value_usd_e6(1_111_111);
+        apply_refreshed_last_token_value_usd_e6(Ok(2_222_222));
+        assert_eq!(get_last_token_value_usd_e6(), 2_222_222);
+        update_last_token_value_usd_e6(original);
+    }
+
+    #[test]
+    fn apply_refreshed_value_keeps_previous_on_error() {
+        let _guard = TOKEN_VALUE_TEST_LOCK
+            .lock()
+            .expect("test lock poisoned for token value state");
+        let original = get_last_token_value_usd_e6();
+        update_last_token_value_usd_e6(3_333_333);
+        apply_refreshed_last_token_value_usd_e6(Err("boom".to_string()));
+        assert_eq!(get_last_token_value_usd_e6(), 3_333_333);
+        update_last_token_value_usd_e6(original);
+    }
 }
