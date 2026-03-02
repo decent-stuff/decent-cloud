@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# Detect PostgreSQL: DATABASE_URL_PG first, then compose, then .env, then defaults
+# Detect PostgreSQL: DATABASE_URL first, then compose, then .env, then defaults
 # Source this script to set PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, PG_DB
 
 # Load .env if present
@@ -10,16 +10,16 @@ if [ -f .env ]; then
 fi
 
 
-# Check for DATABASE_URL_PG first (format: postgres://user:password@host:port/db)
-if [ -n "${DATABASE_URL_PG:-}" ]; then
+# Check for DATABASE_URL first (format: postgres://user:password@host:port/db)
+if [ -n "${DATABASE_URL:-}" ]; then
     # Parse postgres://user:password@host:port/db
-    if [[ "$DATABASE_URL_PG" =~ ^postgres://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+)$ ]]; then
+    if [[ "$DATABASE_URL" =~ ^postgres://([^:]+):([^@]+)@([^:]+):([0-9]+)/(.+)$ ]]; then
         export PG_HOST="${BASH_REMATCH[3]}"
         export PG_PORT="${BASH_REMATCH[4]}"
         export PG_USER="${BASH_REMATCH[1]}"
         export PG_PASSWORD="${BASH_REMATCH[2]}"
         export PG_DB="${BASH_REMATCH[5]}"
-        export PG_SOURCE="DATABASE_URL_PG"
+        export PG_SOURCE="DATABASE_URL"
         _pg_detected=true
     fi
 fi

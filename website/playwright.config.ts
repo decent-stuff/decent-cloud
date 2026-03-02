@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 const autoStartServers = process.env.E2E_AUTO_SERVER === '1';
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || (autoStartServers ? 'http://localhost:59010' : 'http://localhost:59000');
 const apiURL = autoStartServers ? 'http://localhost:59011' : 'http://localhost:59001';
+// In agent container, PostgreSQL runs on hostname 'postgres' (docker-compose service)
+const databaseUrl = process.env.DATABASE_URL || 'postgres://test:test@localhost:5432/test';
 
 /**
  * Playwright E2E Test Configuration
@@ -47,7 +49,7 @@ export default defineConfig({
 		? [
 			{
 				command:
-					'DATABASE_URL="postgres://test:test@localhost:5432/test" API_SERVER_PORT=59011 CANISTER_ID=ggi4a-wyaaa-aaaai-actqq-cai FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true cargo run --bin api-server -- serve',
+					`DATABASE_URL="${databaseUrl}" API_SERVER_PORT=59011 CANISTER_ID=ggi4a-wyaaa-aaaai-actqq-cai FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true cargo run --bin api-server -- serve`,
 				cwd: '../api',
 				url: apiURL,
 				reuseExistingServer: !process.env.CI,

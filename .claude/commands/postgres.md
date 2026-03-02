@@ -10,12 +10,12 @@ A PostgreSQL 16 instance is automatically available when running in the agent co
 
 ```bash
 # ALWAYS use this - it has correct host/credentials:
-psql $DATABASE_URL_PG
+psql $DATABASE_URL
 ```
 
 **DO NOT use localhost** - postgres runs in a separate container. The hostname is `postgres` (docker service name).
 
-**Credentials** (already set in `$DATABASE_URL_PG`):
+**Credentials** (already set in `$DATABASE_URL`):
 - Host: `postgres` (NOT localhost!)
 - Port: `5432`
 - User: `test`
@@ -25,18 +25,18 @@ psql $DATABASE_URL_PG
 ## Verify Connection
 
 ```bash
-psql $DATABASE_URL_PG -c "SELECT 1;"
+psql $DATABASE_URL -c "SELECT 1;"
 ```
 
 ## Reset Database
 
 ```bash
 # Drop and recreate schema
-psql $DATABASE_URL_PG -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+psql $DATABASE_URL -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
 ```
 
 ## Run Migrations
 
 ```bash
-DATABASE_URL=$DATABASE_URL_PG sqlx migrate run --source api/migrations_pg
+sqlx migrate run --source api/migrations_pg
 ```

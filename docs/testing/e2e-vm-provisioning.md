@@ -91,7 +91,7 @@ For testing dc-agent without going through the full API flow:
 
 ```bash
 # Connect to dev database
-psql $DATABASE_URL_PG
+psql $DATABASE_URL
 
 # Insert a test contract with status='accepted' and payment_status='succeeded'
 # The dc-agent will pick it up on next poll
