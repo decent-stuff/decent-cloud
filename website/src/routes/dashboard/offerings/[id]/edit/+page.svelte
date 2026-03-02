@@ -22,6 +22,10 @@
 	import OfferingPreviewCard from '$lib/components/OfferingPreviewCard.svelte';
 	import type { IdentityInfo } from '$lib/stores/auth';
 	import type { Offering } from '$lib/services/api';
+	import {
+		buildOfferingDraftDiff,
+		type OfferingDraftSnapshot
+	} from '$lib/utils/offering-draft-diff';
 
 	const offeringDbId = parseInt($page.params.id ?? '', 10);
 
@@ -65,6 +69,12 @@
 	let selectedTemplate = $state('');
 	import { RECIPE_TEMPLATES } from '$lib/data/recipe-templates';
 
+	interface ProvisionerConfigSnapshot {
+		server_type?: string;
+		location?: string;
+		image?: string;
+	}
+
 	// Derived preview object for OfferingPreviewCard
 	const previewOffering = $derived({
 		offer_name: offerName,
@@ -83,11 +93,93 @@
 		is_draft: isDraft
 	});
 
+	const existingProvisionerConfig = $derived.by(() =>
+		parseProvisionerConfig(existing?.provisioner_config ?? null)
+	);
+
+	const baselineDraftSnapshot = $derived.by<OfferingDraftSnapshot | null>(() => {
+		if (!existing) {
+			return null;
+		}
+
+		return {
+			offerName: existing.offer_name,
+			description: existing.description ?? '',
+			productType: existing.product_type,
+			visibility: existing.visibility,
+			isDraft: existing.is_draft ?? false,
+			publishAt: existing.publish_at ? existing.publish_at.slice(0, 16) : '',
+			monthlyPrice: existing.monthly_price,
+			currency: existing.currency,
+			setupFee: existing.setup_fee,
+			postProvisionScript: existing.post_provision_script ?? '',
+			serverType: existingProvisionerConfig.server_type ?? '',
+			location: existingProvisionerConfig.location ?? '',
+			image: existingProvisionerConfig.image ?? ''
+		};
+	});
+
+	const currentDraftSnapshot = $derived.by<OfferingDraftSnapshot | null>(() => {
+		if (!existing) {
+			return null;
+		}
+
+		const effectiveProvisionerConfig =
+			selectedServerType && selectedLocation && selectedImage
+				? {
+						server_type: selectedServerType.name,
+						location: selectedLocation.name,
+						image: selectedImage.name
+					}
+				: existingProvisionerConfig;
+
+		return {
+			offerName,
+			description,
+			productType,
+			visibility,
+			isDraft,
+			publishAt,
+			monthlyPrice,
+			currency,
+			setupFee,
+			postProvisionScript,
+			serverType: effectiveProvisionerConfig.server_type ?? '',
+			location: effectiveProvisionerConfig.location ?? '',
+			image: effectiveProvisionerConfig.image ?? ''
+		};
+	});
+
+	const draftDiffRows = $derived.by(() => {
+		if (!baselineDraftSnapshot || !currentDraftSnapshot) {
+			return [];
+		}
+
+		return buildOfferingDraftDiff(baselineDraftSnapshot, currentDraftSnapshot);
+	});
+
 	function applyTemplate() {
 		const tpl = RECIPE_TEMPLATES.find((t) => t.key === selectedTemplate);
 		if (tpl) {
 			postProvisionScript = tpl.script;
 			selectedTemplate = '';
+		}
+	}
+
+	function parseProvisionerConfig(rawConfig: string | null): ProvisionerConfigSnapshot {
+		if (!rawConfig) {
+			return {};
+		}
+
+		try {
+			const parsed = JSON.parse(rawConfig) as ProvisionerConfigSnapshot;
+			return {
+				server_type: parsed.server_type,
+				location: parsed.location,
+				image: parsed.image
+			};
+		} catch {
+			return {};
 		}
 	}
 
@@ -307,21 +399,20 @@
 
 			{#if existing.provisioner_type === 'hetzner'}
 				<!-- Current config summary -->
-				{@const config = (() => { try { return JSON.parse(existing.provisioner_config ?? '{}'); } catch { return {}; } })()}
 				<div class="bg-primary-500/10 border border-primary-500/20 p-4 text-sm space-y-1">
 					<p class="text-primary-400 font-medium mb-2">Current Configuration</p>
 					<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-neutral-300">
 						<div>
 							<span class="text-neutral-500 text-xs block">Server Type</span>
-							{config.server_type ?? '—'}
+							{existingProvisionerConfig.server_type ?? '—'}
 						</div>
 						<div>
 							<span class="text-neutral-500 text-xs block">Location</span>
-							{config.location ?? '—'}
+							{existingProvisionerConfig.location ?? '—'}
 						</div>
 						<div>
 							<span class="text-neutral-500 text-xs block">Image</span>
-							{config.image ?? '—'}
+							{existingProvisionerConfig.image ?? '—'}
 						</div>
 						<div>
 							<span class="text-neutral-500 text-xs block">Provisioner</span>
@@ -629,6 +720,36 @@
 
 		<!-- Marketplace preview -->
 	<OfferingPreviewCard offering={previewOffering} />
+
+		<!-- Draft diff summary -->
+		<div class="card p-6 border border-neutral-800 space-y-4">
+			<h2 class="text-lg font-semibold text-white flex items-center gap-2">
+				<Icon name="list" size={20} class="text-primary-400" />
+				Changes Since Last Save
+			</h2>
+			{#if draftDiffRows.length === 0}
+				<p class="text-sm text-neutral-400">No unsaved changes yet.</p>
+			{:else}
+				<p class="text-sm text-neutral-400">{draftDiffRows.length} field{draftDiffRows.length === 1 ? '' : 's'} changed.</p>
+				<div class="space-y-3">
+					{#each draftDiffRows as row (row.key)}
+						<div class="border border-neutral-700 bg-surface-elevated p-4 space-y-2">
+							<p class="text-sm font-semibold text-white">{row.label}</p>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+								<div class="rounded border border-neutral-700 bg-base p-3 space-y-1">
+									<p class="text-xs uppercase tracking-wide text-neutral-500">Before</p>
+									<p class="text-neutral-200 whitespace-pre-wrap break-words">{row.before}</p>
+								</div>
+								<div class="rounded border border-primary-500/30 bg-primary-500/10 p-3 space-y-1">
+									<p class="text-xs uppercase tracking-wide text-primary-300">After</p>
+									<p class="text-neutral-100 whitespace-pre-wrap break-words">{row.after}</p>
+								</div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
 
 	<!-- Submit -->
 		<div class="flex items-center justify-between">

@@ -10,6 +10,7 @@
 
 - **[IC canister] Real token price from KongSwap backend canister** — Replaced hardcoded `$1` token value with canister-to-canister query to KongSwap backend (`2ipq2-uqaaa-aaaar-qailq-cai`) using `pools(opt "<token_canister>_ckUSDT")`; now refreshes DCT (DC) USD price from the `DC_ckUSDT` pool and keeps the previous value on fetch errors.
 - **[IC canister] Removed obsolete price-fetch paths** — Deleted unused `fetch_icp_price_usd()` helper and removed leftover HTTP-outcall transform plumbing (`transform_kongswap_response`) now that price refresh is fully on-chain via canister-to-canister pool query.
+- **[Offerings] Draft diff view in offering edit flow** — Added a provider-facing "Changes Since Last Save" section in `/dashboard/offerings/[id]/edit` with human-readable before/after values from a shared frontend diff utility (`website/src/lib/utils/offering-draft-diff.ts`).
 
 ## Cloud Provisioning
 
@@ -175,8 +176,6 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Marketplace] Recommended for you** — Personalized recommendations section in marketplace. *(Multi-session.)*
 
 - **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown, or SLA violation history. *(Multi-session.)*
-
-- **[Offerings] Draft diff view** — Show "what changed since last save" before publish. *(Multi-session.)*
 
 - **[Tenant] Saved offerings price-change alerts** — Tenants receive no notification when a saved offering changes price or goes out of stock. *(Multi-session.)*
 
