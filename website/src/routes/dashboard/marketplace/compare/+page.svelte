@@ -3,7 +3,12 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { getOffering, fetchIcpPrice, type Offering } from '$lib/services/api';
-	import { removeFromComparison, COMPARE_MAX } from '$lib/utils/compare';
+	import { removeFromComparison } from '$lib/utils/compare';
+	import {
+		buildComparePath,
+		copyCompareShareUrl,
+		normalizeCompareIds,
+	} from '$lib/utils/compare-share';
 	import { truncatePubkey } from '$lib/utils/identity';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
@@ -12,13 +17,9 @@
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import { authStore } from '$lib/stores/auth';
 
-	// IDs come from ?ids=1,2,3 — validated and capped at COMPARE_MAX
+	// IDs come from ?ids=1,2,3 — validated and capped in compare-share util
 	const rawIds = $page.url.searchParams.get('ids') ?? '';
-	const offeringIds: number[] = rawIds
-		.split(',')
-		.map((s) => parseInt(s.trim(), 10))
-		.filter((n) => !isNaN(n) && n > 0)
-		.slice(0, COMPARE_MAX);
+	const offeringIds: number[] = normalizeCompareIds(rawIds);
 
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
@@ -27,6 +28,7 @@
 	let selectedOffering = $state<Offering | null>(null);
 	let showAuthModal = $state(false);
 	let successMessage = $state<string | null>(null);
+	let shareErrorMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 
 	authStore.isAuthenticated.subscribe((v) => { isAuthenticated = v; });
@@ -35,6 +37,11 @@
 		if (offeringIds.length < 2) {
 			goto('/dashboard/marketplace');
 			return;
+		}
+
+		const canonicalPath = buildComparePath(offeringIds);
+		if (`${$page.url.pathname}${$page.url.search}` !== canonicalPath) {
+			goto(canonicalPath, { replaceState: true, noScroll: true, keepFocus: true });
 		}
 		try {
 			[offerings, icpPriceUsd] = await Promise.all([
@@ -54,7 +61,24 @@
 			goto('/dashboard/marketplace');
 			return;
 		}
-		goto(`/dashboard/marketplace/compare?ids=${[...remaining].join(',')}`, { replaceState: true });
+		goto(buildComparePath(remaining), { replaceState: true });
+	}
+
+	async function shareComparison() {
+		successMessage = null;
+		shareErrorMessage = null;
+
+		try {
+			await copyCompareShareUrl({
+				ids: offeringIds,
+				origin: window.location.origin,
+				clipboard: navigator.clipboard,
+			});
+			successMessage = 'Comparison link copied to clipboard';
+		} catch (e) {
+			shareErrorMessage =
+				e instanceof Error ? `Failed to copy comparison link: ${e.message}` : 'Failed to copy comparison link';
+		}
 	}
 
 	function handleRentClick(offering: Offering) {
@@ -180,12 +204,27 @@
 
 	<div>
 		<h1 class="text-2xl font-bold text-white tracking-tight">Compare Offerings</h1>
-		<p class="text-neutral-500 text-sm mt-1">Side-by-side comparison · <a href="/dashboard/marketplace" class="text-primary-400 hover:text-primary-300 transition-colors">Back to marketplace</a></p>
+		<div class="mt-1 flex flex-wrap items-center gap-3 text-sm">
+			<p class="text-neutral-500">Side-by-side comparison · <a href="/dashboard/marketplace" class="text-primary-400 hover:text-primary-300 transition-colors">Back to marketplace</a></p>
+			<button
+				onclick={shareComparison}
+				class="inline-flex items-center gap-1.5 text-neutral-400 hover:text-primary-400 transition-colors"
+				title="Copy shareable comparison URL"
+			>
+				<Icon name="link" size={14} /> Share comparison
+			</button>
+		</div>
 	</div>
 
 	{#if successMessage}
 		<div class="bg-success/10 border border-success/20 p-3 text-success text-sm">
 			{successMessage}
+		</div>
+	{/if}
+
+	{#if shareErrorMessage}
+		<div class="bg-red-500/10 border border-red-500/30 p-3 text-red-300 text-sm">
+			{shareErrorMessage}
 		</div>
 	{/if}
 

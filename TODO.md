@@ -125,7 +125,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Low Impact:**
 
-- **[Compare] URL not shareable** — Compare URL format (`?ids=1,2,3`) is not intuitive for sharing. Consider short URLs or a "Share comparison" feature. *(Multi-session.)*
+- **[Compare] URL shareability/discoverability** — DONE (2026-03-02): Added explicit **Share comparison** action on `/dashboard/marketplace/compare` that copies a canonical URL and shows visible success/error feedback. Canonicalization now enforces positive numeric IDs, deduplication, and compare cap.
 
 - **[Landing page] CTA "Become a Provider" visible to all** — Shown on landing page but most users are not ready to be providers. Consider showing only after user has rented. *(Product decision needed.)*
 
