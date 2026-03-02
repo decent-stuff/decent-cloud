@@ -14,6 +14,7 @@
 	import { truncatePubkey } from "$lib/utils/identity";
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
+	import { buildQuickPillClass, buildRowActionButtonClass } from "$lib/utils/marketplace-ui";
 	import Button from "$lib/components/Button.svelte";
 
 	let offerings = $state<Offering[]>([]);
@@ -1075,13 +1076,13 @@
 				<span class="text-neutral-600 text-xs shrink-0">Sort:</span>
 				<button
 					onclick={() => toggleQuickFilter("newest")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'newest' ? 'bg-primary-500/20 text-primary-300 border-primary-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('filter', quickFilter === 'newest', 'neutral')}
 				>
 					<Icon name="clock" size={14} /> Recently Added
 				</button>
 				<button
 					onclick={() => toggleQuickFilter("trusted")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {quickFilter === 'trusted' ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('filter', quickFilter === 'trusted', 'amber')}
 				>
 					<Icon name="shield" size={14} /> Most Trusted
 				</button>
@@ -1089,25 +1090,25 @@
 				<span class="text-neutral-600 text-xs shrink-0">Category:</span>
 				<button
 					onclick={() => setPreset("gpu")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'gpu' ? 'bg-purple-500/20 text-purple-300 border-purple-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('preset', selectedPreset === 'gpu', 'purple')}
 				>
 					<Icon name="gpu" size={14} /> GPU Servers
 				</button>
 				<button
 					onclick={() => setPreset("budget")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'budget' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('preset', selectedPreset === 'budget', 'emerald')}
 				>
 					Budget (&lt;$20/mo)
 				</button>
 				<button
 					onclick={() => setPreset("na")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'na' ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('preset', selectedPreset === 'na', 'sky')}
 				>
 					North America
 				</button>
 				<button
 					onclick={() => setPreset("europe")}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full border transition-colors {selectedPreset === 'europe' ? 'bg-sky-500/20 text-sky-300 border-sky-500/50' : 'bg-neutral-800/60 text-neutral-400 border-neutral-700 hover:border-neutral-500 hover:text-white'}"
+					class={buildQuickPillClass('preset', selectedPreset === 'europe', 'sky')}
 				>
 					Europe
 				</button>
@@ -1348,18 +1349,18 @@
 									</td>
 									<td class="py-3">
 										{#if hasReseller(offering)}
-											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Rent</Button>
+											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 										{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-											<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="inline-flex items-center gap-1 bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
+											<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
 										{:else if offering.is_example}
-											<Button variant="sm" disabled class="bg-neutral-700 text-neutral-500 cursor-not-allowed whitespace-nowrap inline-block">Demo only</Button>
+											<Button variant="sm" disabled class="h-7 min-h-7 inline-flex items-center justify-center leading-none whitespace-nowrap bg-neutral-700 text-neutral-500 cursor-not-allowed">Demo only</Button>
 										{:else}
-											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500 whitespace-nowrap">Rent</Button>
+											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 										{/if}
 									</td>
 								<td class="py-3 text-right">
 									{#if offering.id !== undefined}
-										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="inline-flex items-center gap-1 border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">
+										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="{buildRowActionButtonClass('save', savedIds.has(offering.id))} gap-1">
 												<Icon name="bookmark" size={14} />
 												<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
 											</Button>
@@ -1368,7 +1369,7 @@
 									<td class="py-3 text-right">
 										{#if offering.id !== undefined}
 											{@const inCompare = compareIds.has(offering.id)}
-											<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class="border {inCompare ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">{inCompare ? "✓ Compare" : "+ Compare"}</Button>
+											<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class={buildRowActionButtonClass('compare', inCompare)}>{inCompare ? "✓ Compare" : "+ Compare"}</Button>
 										{/if}
 									</td>
 								</tr>
@@ -1643,7 +1644,7 @@
 								</div>
 								<div class="flex items-center gap-2 shrink-0">
 									{#if offering.id !== undefined}
-										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="inline-flex items-center gap-1 border {savedIds.has(offering.id) ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">
+										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="{buildRowActionButtonClass('save', savedIds.has(offering.id))} gap-1">
 												<Icon name="bookmark" size={14} />
 												<span class="hidden sm:inline">{savedIds.has(offering.id) ? 'Saved' : 'Save'}</span>
 											</Button>
@@ -1666,19 +1667,19 @@
 									</div>
 								</div>
 								{#if hasReseller(offering)}
-									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500">Rent</Button>
+									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 								{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-									<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="inline-flex items-center gap-1 bg-primary-600 hover:bg-primary-500">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
+									<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
 								{:else if offering.is_example}
-									<Button variant="sm" disabled class="bg-neutral-700 text-neutral-500 cursor-not-allowed inline-block">Demo only</Button>
+									<Button variant="sm" disabled class="h-7 min-h-7 inline-flex items-center justify-center leading-none bg-neutral-700 text-neutral-500 cursor-not-allowed">Demo only</Button>
 								{:else}
-									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class="bg-primary-600 hover:bg-primary-500">Rent</Button>
+									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 								{/if}
 							</div>
 							{#if offering.id !== undefined}
 								{@const inCompare = compareIds.has(offering.id)}
 								<div class="mt-2">
-									<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class="border {inCompare ? 'bg-primary-500/20 text-primary-300 border-primary-400/50 hover:bg-primary-500/10' : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700 hover:text-white'}">{inCompare ? "✓ In compare" : "+ Compare"}</Button>
+									<Button variant="sm" onclick={(e) => toggleCompare(e, offering.id!)} title={inCompare ? "Remove from comparison" : "Add to comparison"} class={buildRowActionButtonClass('compare', inCompare)}>{inCompare ? "✓ In compare" : "+ Compare"}</Button>
 								</div>
 							{/if}
 							{#if expandedRow === offering.id}

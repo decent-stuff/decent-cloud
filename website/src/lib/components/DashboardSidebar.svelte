@@ -2,7 +2,6 @@
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth';
-	import { navigateToLogin } from '$lib/utils/navigation';
 	import { onMount, onDestroy } from 'svelte';
 	import type { IdentityInfo } from '$lib/stores/auth';
 	import {
@@ -18,7 +17,6 @@
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
 	import UnreadBadge from './UnreadBadge.svelte';
-	import Button from './Button.svelte';
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
 
@@ -200,11 +198,6 @@
 		window.location.href = '/';
 	}
 
-	function handleLogin() {
-		closeSidebar();
-		navigateToLogin(currentPath);
-	}
-
 	function closeSidebar() {
 		isOpen = false;
 	}
@@ -292,13 +285,7 @@
 							<span class="text-xs">{item.label}</span>
 						</div>
 					{/each}
-					<button
-						type="button"
-						onclick={handleLogin}
-						class="mt-2 w-full text-center px-3 py-1.5 text-xs bg-primary-500/20 text-primary-400 hover:bg-primary-500/30 transition-colors rounded"
-					>
-						Sign In
-					</button>
+					<p class="mt-2 text-[11px] text-neutral-500">Use the top Sign In action to continue.</p>
 				</div>
 			{/if}
 		{/if}
@@ -461,10 +448,9 @@
 				<span class="text-sm">Logout</span>
 			</button>
 		{:else}
-			<Button variant="primary" type="button" onclick={handleLogin} class="w-full flex items-center justify-center gap-2 text-sm">
-				<Icon name="login" size={20} />
-				<span>Sign In</span>
-			</Button>
+			<div class="px-2 py-1">
+				<p class="text-xs text-neutral-500 text-center">Authentication actions are available in the page header.</p>
+			</div>
 		{/if}
 	</div>
 </aside>
