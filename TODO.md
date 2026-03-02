@@ -120,13 +120,9 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Medium Impact:**
 
-- **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
 - **[Offering detail] Too many CTAs** — DONE: secondary actions moved under overflow menu, primary rent CTA remains prominent.
 
 ### Usability Audit (2026-03-01) — Remaining Discoverability Issues
-
-**Medium Impact:**
-- **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
 
 **Low Impact:**
 
@@ -157,31 +153,18 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Scope audited:** `https://dev.decent-cloud.org/`, `/login`, `/dashboard/marketplace`, `/dashboard/rentals` (desktop).  
 **Evidence highlights:**  
-- `/dashboard/marketplace` currently shows **3 visible "Sign In" buttons** at once (heights: `28px`, `36px`, `36px`).  
+- `/dashboard/marketplace` previously showed **3 visible "Sign In" buttons** at once (heights: `28px`, `36px`, `36px`).  
 - `/login` auth actions have mismatched heights (`58px` Google CTA, `36px` seed CTA, `20px` back link button).  
-- Marketplace table row actions mix sizes in one row (`Rent 28px`, `Save 26px`, `+ Compare 42px`, "More details" icon tap target `12px`).
+- Marketplace table row actions previously mixed sizes in one row (`Rent 28px`, `Save 26px`, `+ Compare 42px`, "More details" icon tap target `12px`).
 
-**Critical:**
+**DONE (2026-03-02):**
 
-- **[Auth] Too many unauthenticated entry points on dashboard pages** — Banner CTA (`AuthPromptBanner`), sidebar CTA(s) (`DashboardSidebar`), and page-local "Login Required" cards compete simultaneously.
-  - **Precise fix:** Keep exactly **one primary auth CTA per viewport** for anonymous users.
-  - **Implementation target:** Use a single shared unauth pattern in:
-    - `website/src/lib/components/AuthPromptBanner.svelte`
-    - `website/src/lib/components/DashboardSidebar.svelte`
-    - all dashboard route-level `Login Required` blocks (examples: `dashboard/rentals`, `dashboard/account/*`, `dashboard/provider/*`, `dashboard/invoices`, `dashboard/transfers`).
-  - **Rule:** Desktop dashboard pages should show either banner CTA or route card CTA, not both.
-
-- **[Auth] Duplicate login UX implementations across many routes** — Repeated "Login Required" markup is duplicated in many files, creating drift.
-  - **Precise fix:** Extract `AuthRequiredCard.svelte` and replace repeated blocks (`<h2>Login Required</h2>` + primary/secondary CTA) everywhere.
-  - **Implementation target command to find all instances:** `grep -R -n "Login Required" website/src/routes/dashboard`
-  - **Acceptance criterion:** No route-level custom auth card markup remains; only shared component usage.
+- **[Auth] Too many unauthenticated entry points on dashboard pages** — Fixed by removing sidebar Sign In CTAs for anonymous users; global banner/route auth card remain the only primary auth actions. Validation script: `scripts/poc/assert_single_auth_cta.sh` (now passes with 1 visible CTA on `/dashboard/marketplace`).
+- **[Auth] Duplicate login UX implementations across many routes** — Verified complete: dashboard route-level auth gates are standardized on `AuthRequiredCard.svelte` (no remaining custom `Login Required` blocks under `website/src/routes/dashboard`).
+- **[Marketplace] Quick filter pills inconsistent** — Fixed by introducing semantic quick-pill variants (`quick-pill-filter` vs `quick-pill-preset`) via shared builder in `website/src/lib/utils/marketplace-ui.ts`.
+- **[Marketplace table] Row actions are visually unbalanced and hard to scan** — Fixed by introducing shared row-action class builder (`buildRowActionButtonClass`) and standardized compact control height (`h-7`) for Rent/Save/Compare across desktop and mobile marketplace cards.
 
 **High Impact:**
-
-- **[Rentals] Anonymous users see both "Login Required" and "No Rentals Yet"** — creates contradictory stacked states.
-  - **Precise fix:** Gate empty-state rendering behind auth.
-  - **Implementation target:** `website/src/routes/dashboard/rentals/+page.svelte`  
-    Change `{:else if contracts.length === 0}` to `{:else if isAuthenticated && contracts.length === 0}`.
 
 - **[Buttons] Missing design-system enforcement causes mixed CTA sizes** — many pages use ad-hoc utility classes instead of `btn-*` classes from `app.css`.
   - **Precise fix:** Standardize CTA variants and heights (`primary`, `secondary`, `tertiary`, plus `sm` if needed) in `website/src/app.css`, then migrate page-level buttons.
@@ -195,11 +178,6 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
   - **Acceptance criterion:** Adjacent peer CTAs differ by at most `2px` height unless intentionally icon-only.
 
 **Medium Impact:**
-
-- **[Marketplace table] Row actions are visually unbalanced and hard to scan** — CTA cluster uses inconsistent padding, border, and heights.
-  - **Precise fix:** Introduce one shared row-action class (or `ActionButton.svelte`) for `Rent`, `Save`, `Compare`, and `More details`.
-  - **Implementation target:** `website/src/routes/dashboard/marketplace/+page.svelte` (table rows + mobile cards).
-  - **Sizing target:** `Rent`, `Save`, `Compare` should share the same control height and corner radius.
 
 - **[Auth page hierarchy] `/login` secondary actions are too de-emphasized** — "Sign in with seed phrase instead" and back link are visually inconsistent with primary flow.
   - **Precise fix:** Keep Google as primary but promote seed login to a clear secondary button style (`btn-secondary`), and make back action consistent tertiary text-link style.
