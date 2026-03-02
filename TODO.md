@@ -9,6 +9,7 @@
 ## Recently Done
 
 - **[IC canister] Real token price from KongSwap backend canister** — Replaced hardcoded `$1` token value with canister-to-canister query to KongSwap backend (`2ipq2-uqaaa-aaaar-qailq-cai`) using `pools(opt "<token_canister>_ckUSDT")`; now refreshes DCT (DC) USD price from the `DC_ckUSDT` pool and keeps the previous value on fetch errors.
+- **[IC canister] Removed obsolete price-fetch paths** — Deleted unused `fetch_icp_price_usd()` helper and removed leftover HTTP-outcall transform plumbing (`transform_kongswap_response`) now that price refresh is fully on-chain via canister-to-canister pool query.
 
 ## Cloud Provisioning
 
@@ -43,7 +44,6 @@
 DB tables (`contract_health_checks`), API endpoints, and automated health check scheduling in dc-agent are implemented. Provider SLA Monitor page at `/dashboard/provider/sla` shows per-contract uptime with health check history. Tenant health check view available on contract detail page.
 
 - SLA compliance tracking and provider reputation scoring *(Blocked: needs product decisions on SLA metrics, scoring formula, how reputation affects discovery. Single-session once decisions are made.)*
-- **User feedback system** — DONE: `contract_feedback` table, `POST /contracts/{id}/feedback` (requester-only, terminal state, once per contract), `GET /contracts/{id}/feedback`, binary yes/no UI on rental detail page, aggregated in `offering-satisfaction-stats`.
 - **External benchmarking integration** — Cross-reference provider claims with https://serververify.com/ and https://www.vpsbenchmarks.com/ for independent verification. Price comparison vs market average. *(Multi-session: scraping/API integration + trust score formula.)*
 
 ---
@@ -140,20 +140,14 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Remaining:**
 
-- **[Subscription] Rental limit blocks paying customers** — DONE: Removed the 1-active-rental limit. Free plan now has `unlimited_rentals` (migration 034). Email verification required to create any rental — Sybil resistance without penalizing paying users. `one_rental` subscription feature retired.
-
-- **[Console] Persistent 404 errors (non-Chatwoot)** — DONE: Investigated and fixed. Root causes:
-  1. **Chatwoot SDK failing to load** — `dev-support.decent-cloud.org` not accessible from browser. Fixed by adding `script.onerror` handler in `ChatwootWidget.svelte` to gracefully handle the failure with a console warning instead of an error.
-  2. **JetBrains Mono font 404** — Browser cache contained old Google Fonts CSS referencing v18 font files (now removed by Google, current is v24). This is a transient cache issue that resolves as users' caches expire. The `display=swap` ensures fallback fonts are used. Added `crossorigin` attribute to font link for better CORS handling.
-
-- **[Password Resets SSE] Agent auth needs separate fix** — DONE: Added `agent_pubkey` query param support to `buildPasswordResetEventsUrl` function. Backend already supported agent auth via query params; frontend now supports it too with optional `isAgent` parameter.
+- No open full-journey rental issues from the 2026-03-01 audit.
 
 ### UI Consistency Audit (2026-03-01) — Auth Surface Duplication + Button Sizing
 
-**Scope audited:** `https://dev.decent-cloud.org/`, `/login`, `/dashboard/marketplace`, `/dashboard/rentals` (desktop).  
-**Evidence highlights:**  
-- `/dashboard/marketplace` previously showed **3 visible "Sign In" buttons** at once (heights: `28px`, `36px`, `36px`).  
-- `/login` auth actions have mismatched heights (`58px` Google CTA, `36px` seed CTA, `20px` back link button).  
+**Scope audited:** `https://dev.decent-cloud.org/`, `/login`, `/dashboard/marketplace`, `/dashboard/rentals` (desktop).
+**Evidence highlights:**
+- `/dashboard/marketplace` previously showed **3 visible "Sign In" buttons** at once (heights: `28px`, `36px`, `36px`).
+- `/login` auth actions have mismatched heights (`58px` Google CTA, `36px` seed CTA, `20px` back link button).
 - Marketplace table row actions previously mixed sizes in one row (`Rent 28px`, `Save 26px`, `+ Compare 42px`, "More details" icon tap target `12px`).
 
 **DONE (2026-03-02):**
@@ -162,8 +156,6 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Auth] Duplicate login UX implementations across many routes** — Verified complete: dashboard route-level auth gates are standardized on `AuthRequiredCard.svelte` (no remaining custom `Login Required` blocks under `website/src/routes/dashboard`).
 - **[Marketplace] Quick filter pills inconsistent** — Fixed by introducing semantic quick-pill variants (`quick-pill-filter` vs `quick-pill-preset`) via shared builder in `website/src/lib/utils/marketplace-ui.ts`.
 - **[Marketplace table] Row actions are visually unbalanced and hard to scan** — Fixed by introducing shared row-action class builder (`buildRowActionButtonClass`) and standardized compact control height (`h-7`) for Rent/Save/Compare across desktop and mobile marketplace cards.
-
-**DONE (2026-03-02):**
 
 - **[Auth page hierarchy] `/login` secondary actions are too de-emphasized** — Fixed. Seed login now uses an explicit secondary CTA style and back action uses a consistent tertiary CTA style via shared auth CTA class builder (`website/src/lib/utils/auth-cta.ts`), applied in `AuthFlow.svelte`, `GoogleSignInButton.svelte`, and `/login`.
 - **[Buttons] Design-system rollout (phase 1: auth surface)** — Added shared control-size token `btn-control-md` in `website/src/app.css` and applied it to auth entry points (`AuthFlow`, `GoogleSignInButton`, `AuthPromptBanner`, `AuthRequiredCard`, `/login`). Added PoC script `scripts/poc/probe_auth_button_heights.sh` and unit test `website/src/lib/utils/auth-cta.test.ts`.
