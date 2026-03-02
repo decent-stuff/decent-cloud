@@ -29,6 +29,7 @@
 	import { truncatePubkey } from '$lib/utils/identity';
 	import { recordView } from '$lib/utils/recently-viewed';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import { filterSimilarOfferings } from './similar-offerings';
 
 	const offeringId = parseInt($page.params.id ?? '', 10);
 
@@ -66,7 +67,7 @@
 				]);
 				try {
 					const all = await searchOfferings({ limit: 10, in_stock_only: true });
-					similarOfferings = all.filter(o => o.product_type === offering!.product_type && o.id !== offering!.id).slice(0, 4);
+					similarOfferings = filterSimilarOfferings(all, offering!, 4);
 				} catch { /* ignore */ }
 			}
 		} catch (e) {

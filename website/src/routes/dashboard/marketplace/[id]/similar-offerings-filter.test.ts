@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { filterSimilarOfferings } from './similar-offerings';
 
 type OfferingWithCurrency = {
 	id: number;
@@ -6,17 +7,6 @@ type OfferingWithCurrency = {
 	currency: string;
 	monthly_price?: number;
 };
-
-function filterSimilarOfferings(
-	allOfferings: OfferingWithCurrency[],
-	mainOffering: OfferingWithCurrency,
-	maxResults: number = 4
-): OfferingWithCurrency[] {
-	return allOfferings
-		.filter(o => o.product_type === mainOffering.product_type && o.id !== mainOffering.id)
-		.filter(o => o.currency.toUpperCase() === mainOffering.currency.toUpperCase())
-		.slice(0, maxResults);
-}
 
 describe('filterSimilarOfferings', () => {
 	const mainOfferingUsd: OfferingWithCurrency = {
