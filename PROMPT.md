@@ -11,6 +11,8 @@ For each item, first build a working PoC as per the mandatory workflow. The work
 
 Then update `TODO.md` to a) remove all fully done items, b) update existing items with ANY NEW DETAILS, c) splitting into subitems, d) adding dependencies etc. that you may now have on them (IF VALUABLE for future implementation or activities).
 
+Finally each subagent commits the VALUABLE part of its changes.
+
 If there are not enough MEANINGFUL items in `TODO.md` that you can do now, create a few subagents for each of the following:
 - Review the entire codebase and find zombie code and docs, inconsistencies, and half-baked things. Is everything ready for prod? Fix any gaps that are found and if you cannot fix them immediately, add them to `TODO.md`.
 - consider the app from the *user point of view* - we have a LOT of functionality that is not visible or not user friendly / easily usable for users, or if there are some UI/UX changes that would RADICALLY improve intuitiveness and usability from the user point of view (simple, clean, obviously usable UI, etc. - less is more!). Fix these found gaps in another subagent if possible, otherwise add them to `TODO.md` and we'll handle them in the follow-up session(s).
@@ -19,6 +21,4 @@ Note that you or the subagents should NOT do UX review and improvements, we have
 
 When fully done, use subagents to a) verify completeness and find implementation gaps, and b) fix these gaps immediately if small and easy, or add them to `TODO.md` if very large, c) remove all fully done items from `TODO.md` and reorganize `TODO.md` for size and readability.
 
-Then COMMIT all changes, ideally as separate commits.
-
-When all is done, quit opencode by invoking `/exit`
+You then do a final pass through git diff, analyze the leftover changes, and then COMMIT all VALUABLE changes, or revert/leave changes that should not committed, as appropriate.
