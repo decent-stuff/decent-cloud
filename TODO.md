@@ -167,43 +167,25 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Auth page hierarchy] `/login` secondary actions are too de-emphasized** — Fixed. Seed login now uses an explicit secondary CTA style and back action uses a consistent tertiary CTA style via shared auth CTA class builder (`website/src/lib/utils/auth-cta.ts`), applied in `AuthFlow.svelte`, `GoogleSignInButton.svelte`, and `/login`.
 - **[Buttons] Design-system rollout (phase 1: auth surface)** — Added shared control-size token `btn-control-md` in `website/src/app.css` and applied it to auth entry points (`AuthFlow`, `GoogleSignInButton`, `AuthPromptBanner`, `AuthRequiredCard`, `/login`). Added PoC script `scripts/poc/probe_auth_button_heights.sh` and unit test `website/src/lib/utils/auth-cta.test.ts`.
-
-**High Impact Remaining:**
-
-- **[Buttons] Complete design-system enforcement on dashboard pages** — Auth surfaces are migrated, but broader dashboard actions still use ad-hoc utility classes in some screens.
-  - **Next implementation targets:**  
-    - `website/src/routes/dashboard/marketplace/+page.svelte` (non-row-action CTAs)
-    - `website/src/routes/dashboard/rentals/+page.svelte`
-    - `website/src/lib/components/DashboardSidebar.svelte` (if new CTAs are introduced)
-  - **Acceptance criterion:** Adjacent peer CTAs differ by at most `2px` height unless intentionally icon-only.
+- **[Buttons] Complete design-system enforcement on dashboard pages** — Fixed for key routes in this phase: `website/src/routes/dashboard/marketplace/+page.svelte` (active filter and sort CTAs) and `website/src/routes/dashboard/rentals/+page.svelte` (status tab CTAs and peer dashboard actions). Added shared dashboard CTA class builder (`website/src/lib/utils/dashboard-cta.ts`), PoC script (`scripts/poc/assert_dashboard_cta_height_consistency.sh`), and test coverage (`website/src/lib/utils/dashboard-cta.test.ts`). **Follow-up dependency:** rerun `scripts/poc/assert_dashboard_cta_height_consistency.sh` on `https://dev.decent-cloud.org` after next website deploy.
 
 ### Backlog
 
 - **[Cloud] Stock tracking for self-provisioned resources** — When a cloud resource is listed on the marketplace, multiple tenants could theoretically rent the same VM. Needs: `stock` field on cloud_resources, 1-to-1 rental enforcement, automated credential sharing when contract is accepted. *(Blocked: billing decisions first.)*
 
-- **[Offerings] Per-offering analytics** — DONE. **Remaining:** Click-through rate (views → rentals) conversion funnel. *(Note: overall conversion rate per offering is shown on the Analytics page.)*
-
-- **[Marketplace] Offering comparison page** — DONE: `/dashboard/marketplace/compare?ids=1,2,3`.
-
-- **[Rentals] Contract lifecycle timing** — DONE: Expected time estimates and overdue warning.
-
-- **[Dashboard] Tenant spending insights** — DONE: Monthly spending widget.
+- **[Offerings] Click-through conversion funnel** — Add views → rentals funnel per offering. *(Overall conversion rate per offering is already shown on Analytics page.)*
 
 - **[Security] Two-factor authentication (TOTP)** — TOTP-based 2FA for accounts using email/password. *(Multi-session.)*
 
 - **[Global] Dark/light mode toggle** — Theme switcher in dashboard header. *(Multi-session.)*
 
-- **[Provider] Provider performance analytics** — DONE. **Remaining:** Pricing elasticity insights. *(Multi-session.)*
+- **[Provider] Pricing elasticity insights** — Extend provider analytics with price sensitivity guidance. *(Multi-session.)*
 
-- **[Provider] Request filtering and bulk actions** — DONE: Full implementation including auto-accept.
-
-- **[Tenant] SSH key onboarding guidance** — DONE: Platform-specific tabbed SSH key generation guide.
-
-- **[Marketplace] Trending and new providers sections** — DONE. **Remaining:** "Recommended for you" personalized section. *(Multi-session.)*
+- **[Marketplace] Recommended for you** — Personalized recommendations section in marketplace. *(Multi-session.)*
 
 - **[Provider] Provider public profile and reputation deep-dive** — Tenants cannot view a provider's historical trust score trend, feedback breakdown, or SLA violation history. *(Multi-session.)*
 
-- **[Offerings] Draft offerings scheduling** — DONE. **Remaining:** "What changed since last save" diff view. *(Multi-session.)*
+- **[Offerings] Draft diff view** — Show "what changed since last save" before publish. *(Multi-session.)*
 
 - **[Tenant] Saved offerings price-change alerts** — Tenants receive no notification when a saved offering changes price or goes out of stock. *(Multi-session.)*
 

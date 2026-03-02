@@ -69,7 +69,7 @@ fn extract_price_from_pools_result(
                         token_canister_id, CKUSDT_LEDGER_CANISTER_ID
                     )
                 })?;
-            if pool.price <= 0.0 {
+            if !pool.price.is_finite() || pool.price <= 0.0 {
                 return Err(format!("Invalid pool price: {}", pool.price));
             }
             Ok(pool.price)
@@ -154,6 +154,27 @@ mod tests {
         assert!(non_positive_result
             .unwrap_err()
             .contains("Invalid pool price"));
+    }
+
+    #[test]
+    fn extract_price_rejects_non_finite_pool_price() {
+        let nan_pool = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: f64::NAN,
+            is_removed: false,
+        }]);
+        let nan_result = extract_price_from_pools_result(nan_pool, "ggi4a-wyaaa-aaaai-actqq-cai");
+        assert!(nan_result.is_err());
+
+        let inf_pool = KongPoolsResult::Ok(vec![KongPoolReply {
+            address_0: "ggi4a-wyaaa-aaaai-actqq-cai".to_string(),
+            address_1: CKUSDT_LEDGER_CANISTER_ID.to_string(),
+            price: f64::INFINITY,
+            is_removed: false,
+        }]);
+        let inf_result = extract_price_from_pools_result(inf_pool, "ggi4a-wyaaa-aaaai-actqq-cai");
+        assert!(inf_result.is_err());
     }
 
     #[test]

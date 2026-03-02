@@ -35,4 +35,14 @@ describe('assertDashboardPeerCtaHeights', () => {
 		expect(result.pass).toBe(true);
 		expect(result.measuredKinds).toEqual<DashboardCtaKind[]>(['rentals-pending-guidance-view']);
 	});
+
+	it('fails when peer CTA heights differ by more than threshold', () => {
+		const result = assertDashboardPeerCtaHeights([
+			{ kind: 'rentals-empty-state-cta' },
+			{ kind: 'rentals-contract-action-primary' },
+		]);
+
+		expect(result.pass).toBe(false);
+		expect(result.deltaPx).toBeGreaterThan(2);
+	});
 });
