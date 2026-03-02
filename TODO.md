@@ -164,26 +164,19 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Marketplace] Quick filter pills inconsistent** — Fixed by introducing semantic quick-pill variants (`quick-pill-filter` vs `quick-pill-preset`) via shared builder in `website/src/lib/utils/marketplace-ui.ts`.
 - **[Marketplace table] Row actions are visually unbalanced and hard to scan** — Fixed by introducing shared row-action class builder (`buildRowActionButtonClass`) and standardized compact control height (`h-7`) for Rent/Save/Compare across desktop and mobile marketplace cards.
 
-**High Impact:**
+**DONE (2026-03-02):**
 
-- **[Buttons] Missing design-system enforcement causes mixed CTA sizes** — many pages use ad-hoc utility classes instead of `btn-*` classes from `app.css`.
-  - **Precise fix:** Standardize CTA variants and heights (`primary`, `secondary`, `tertiary`, plus `sm` if needed) in `website/src/app.css`, then migrate page-level buttons.
-  - **Implementation targets first:**  
-    - `website/src/lib/components/AuthFlow.svelte`
-    - `website/src/lib/components/GoogleSignInButton.svelte`
-    - `website/src/lib/components/AuthPromptBanner.svelte`
-    - `website/src/lib/components/DashboardSidebar.svelte`
-    - `website/src/routes/dashboard/marketplace/+page.svelte`
+- **[Auth page hierarchy] `/login` secondary actions are too de-emphasized** — Fixed. Seed login now uses an explicit secondary CTA style and back action uses a consistent tertiary CTA style via shared auth CTA class builder (`website/src/lib/utils/auth-cta.ts`), applied in `AuthFlow.svelte`, `GoogleSignInButton.svelte`, and `/login`.
+- **[Buttons] Design-system rollout (phase 1: auth surface)** — Added shared control-size token `btn-control-md` in `website/src/app.css` and applied it to auth entry points (`AuthFlow`, `GoogleSignInButton`, `AuthPromptBanner`, `AuthRequiredCard`, `/login`). Added PoC script `scripts/poc/probe_auth_button_heights.sh` and unit test `website/src/lib/utils/auth-cta.test.ts`.
+
+**High Impact Remaining:**
+
+- **[Buttons] Complete design-system enforcement on dashboard pages** — Auth surfaces are migrated, but broader dashboard actions still use ad-hoc utility classes in some screens.
+  - **Next implementation targets:**  
+    - `website/src/routes/dashboard/marketplace/+page.svelte` (non-row-action CTAs)
     - `website/src/routes/dashboard/rentals/+page.svelte`
+    - `website/src/lib/components/DashboardSidebar.svelte` (if new CTAs are introduced)
   - **Acceptance criterion:** Adjacent peer CTAs differ by at most `2px` height unless intentionally icon-only.
-
-**Medium Impact:**
-
-- **[Auth page hierarchy] `/login` secondary actions are too de-emphasized** — "Sign in with seed phrase instead" and back link are visually inconsistent with primary flow.
-  - **Precise fix:** Keep Google as primary but promote seed login to a clear secondary button style (`btn-secondary`), and make back action consistent tertiary text-link style.
-  - **Implementation targets:**  
-    - `website/src/lib/components/AuthFlow.svelte`
-    - `website/src/routes/login/+page.svelte`
 
 ### Backlog
 
