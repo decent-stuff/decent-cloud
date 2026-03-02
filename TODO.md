@@ -69,6 +69,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 **Issue:** The IC canister's `refresh_last_token_value_usd_e6()` always returns `1_000_000` ($1 USD). The api-server now fetches real ICP/USD price from CoinGecko for UI display (cached 5 min, `GET /api/v1/prices/icp`), but the on-chain canister price remains hardcoded.
 **Location:** `ic-canister/src/canister_backend/generic.rs:75-78`
 **Fix:** Use IC HTTP outcalls to fetch from **KongSwap** (backend canister `2ipq2-uqaaa-aaaar-qailq-cai` on ICP mainnet). KongSwap exposes a price query for ICP/USD. Use `ic_cdk::api::management_canister::http_request` for HTTP outcalls or canister-to-canister query. *(Single-session once implemented — ICP HTTP outcall pattern is well-documented.)*
+**Dependency:** Rust toolchain (`cargo`) must be available in the execution environment to run canister PoC/tests/build before implementing this safely.
 
 ---
 
@@ -86,12 +87,11 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Rental dialog] Price summary is at the bottom** — Price summary now at top of dialog.
 - **[Breadcrumb] "Dashboard" link opens wrong view** — Authenticated users now see `/dashboard/rentals`.
 - **[Testing tooling] All commands implemented** — `seed-contracts`, `--viewport mobile`, `tour`, `seed-edge-cases` all available.
+- **[Rental] SSH key is required before payment** — SSH section is after payment, with "Generate for me" and private-key download flow.
+- **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar-offering selection now enforces matching currency, preventing mixed-currency cards.
 
 **Remaining:**
-
-- **[Rental] SSH key is required before payment** — Most non-technical users don't have an SSH key. Fix: move the SSH key section below the payment section, or allow "generate for me" to create a keypair and download the private key automatically. *(Single-session.)*
-
-- **[Marketplace] Currency inconsistency in "Similar Offerings"** — Similar offerings mix `ICP/mo` (seeded demo data) with `USD/mo` (real offerings) without currency normalization. *(Single-session.)*
+- No open critical-path items from the 2026-02-28 rental UX audit.
 
 ### UI/UX Review (2026-03-01) — Radical Simplification
 
@@ -121,24 +121,14 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 **Medium Impact:**
 
 - **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
-
-- **[Offering detail] Too many CTAs** — "Copy link", "Save", "Ask Provider", "Rent this offering" all compete. Fix: primary CTA "Rent" should be prominent; move secondary actions to a "..." menu. *(Single-session: consolidate secondary actions.)*
+- **[Offering detail] Too many CTAs** — DONE: secondary actions moved under overflow menu, primary rent CTA remains prominent.
 
 ### Usability Audit (2026-03-01) — Remaining Discoverability Issues
 
 **Medium Impact:**
-
 - **[Marketplace] Quick filter pills inconsistent** — "Recently Added" and "Most Trusted" are filters, but "GPU Servers", "Budget", "North America", "Europe" are presets. Fix: visually distinguish filter pills (toggle behavior) from preset pills (exclusive selection). *(Single-session: add visual indicator.)*
 
-- **[Provider] Section collapsed by default** — Provider section starts collapsed even though it contains "Support Account" which all providers need. Fix: auto-expand Provider section when user has offerings. *(Already implemented in sidebar logic.)*
-
-- **[Rentals] Empty state could be more actionable** — When no rentals, show a quick link to a specific offering type the user might want. *(Single-session: add dynamic CTA.)*
-
-- **[Account] Settings tabs are hidden** — Settings sub-pages (Security, Profile, Subscription, Billing, Notifications) are only accessible from the Account overview. Fix: add sub-navigation or breadcrumbs on sub-pages. *(Single-session: add back navigation.)*
-
 **Low Impact:**
-
-- **[Saved] No bulk remove** — Users must remove saved items one at a time. *(Single-session: add checkboxes and bulk remove.)*
 
 - **[Compare] URL not shareable** — Compare URL format (`?ids=1,2,3`) is not intuitive for sharing. Consider short URLs or a "Share comparison" feature. *(Multi-session.)*
 
