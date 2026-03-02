@@ -187,7 +187,7 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
 The container has Playwright installed with a local headless Chromium. Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No setup needed: every call launches a fresh browser, performs the operation, and closes it automatically.
 
-**Dev frontend:** `https://dev.decent-cloud.org` — **Dev API:** `https://dev-api.decent-cloud.org`
+**Local dev:** `DC_WEB_URL=http://localhost:5173` — **Dev frontend:** `https://dev.decent-cloud.org` — **Dev API:** `https://dev-api.decent-cloud.org`
 
 ## Commands
 
@@ -207,6 +207,18 @@ node scripts/browser.js errs <url>
 # Raw HTML — use when you need to inspect full DOM structure
 node scripts/browser.js html <url>
 
+# Click an element and return snapshot
+node scripts/browser.js click <url> <selector>
+
+# Fill an input field and return snapshot
+node scripts/browser.js fill <url> <selector> <value>
+
+# Wait for selector to appear and return snapshot
+node scripts/browser.js wait <url> <selector>
+
+# Health check — returns JSON with page title, errors, warnings
+node scripts/browser.js health <url>
+
 # Page tour — visit key routes, capture snapshots, save JSON report
 node scripts/browser.js tour --seed <phrase>
 # → saves /tmp/dc-ux-tour.json with snapshots of landing, marketplace, rentals, provider pages
@@ -216,6 +228,14 @@ node scripts/browser.js tour --seed <phrase>
 
 - `--seed <phrase>` — Inject seed phrase for authenticated testing
 - `--viewport mobile` — Use 375×812 (iPhone X) viewport for mobile testing
+- `--timeout <ms>` — Override navigation timeout (default: 20000)
+- `--wait-api` — Wait for /api/v1/ response after navigation
+
+## Environment Variables
+
+- `DC_WEB_URL` — Frontend URL (default: `http://localhost:5173`)
+- `BROWSER_TIMEOUT` — Navigation timeout in ms (default: 20000)
+- `BROWSER_ENGINE` — "chromium" or "firefox" (default: chromium)
 
 ## Rules
 
@@ -223,7 +243,8 @@ node scripts/browser.js tour --seed <phrase>
 - Use `snap` for "does this page render correctly / does element X exist" checks.
 - Use `shot` only for visual layout verification — read the saved PNG with the `Read` tool.
 - Use `eval` to extract specific data (e.g., check a store value, read an API response).
-- `BROWSER_TIMEOUT` env var overrides the default navigation timeout (ms).
+- Use `health` for quick automated checks that return JSON status.
+- Use `click`/`fill`/`wait` for interaction flows like form submissions.
 
 ## Authenticated Testing with dc-auth.js
 
@@ -275,7 +296,7 @@ node scripts/browser.js snap https://dev.decent-cloud.org/dashboard/rentals --se
 
 The `--seed` flag: injects the seed into `localStorage`, navigates to `/dashboard` and waits for the `/api/v1/accounts` API response (so auth store is fully settled), then navigates to the target URL.
 
-Local dev server (port 59010): set `DC_WEB_URL=http://127.0.0.1:59010`.
+Local dev server (port 5173): set `DC_WEB_URL=http://localhost:5173`.
 Remote dev environment: omit `DC_WEB_URL` (defaults to remote).
 
 ---

@@ -6,18 +6,27 @@
  * Works from any context: main session, subagents, CI.
  *
  * Usage:
- *   node scripts/browser.js snap  <url>             # aria/accessibility tree
- *   node scripts/browser.js shot  <url> [out.png]   # screenshot → /tmp/browser-shot.png
- *   node scripts/browser.js eval  <url> <js-expr>   # evaluate JS, print JSON result
- *   node scripts/browser.js errs  <url>             # console errors/warnings only
- *   node scripts/browser.js html  <url>             # raw page HTML (truncated to 50k)
+ *   node scripts/browser.js snap   <url>              # aria/accessibility tree
+ *   node scripts/browser.js shot   <url> [out.png]    # screenshot → /tmp/browser-shot.png
+ *   node scripts/browser.js eval   <url> <js-expr>    # evaluate JS, print JSON result
+ *   node scripts/browser.js errs   <url>              # console errors/warnings only
+ *   node scripts/browser.js html   <url>              # raw page HTML (truncated to 50k)
+ *   node scripts/browser.js click  <url> <selector>   # click element, return snap
+ *   node scripts/browser.js fill   <url> <sel> <val>  # fill input, return snap
+ *   node scripts/browser.js wait   <url> <selector>   # wait for selector, return snap
+ *   node scripts/browser.js health <url>              # check page loads without errors
+ *   node scripts/browser.js tour   --seed <phrase>    # visit key routes, save JSON
  *
  * Options:
  *   --seed <phrase>    Inject seed phrase into localStorage before navigating
+ *   --viewport mobile  Use 375×812 (iPhone X) viewport
+ *   --timeout <ms>     Override navigation timeout (default: 20000)
+ *   --wait-api         Wait for /api/v1/ response after navigation
  *
  * Environment:
- *   BROWSER_TIMEOUT  Navigation timeout ms (default: 20000)
- *   DC_WEB_URL       Frontend URL (default: http://127.0.0.1:59010)
+ *   BROWSER_TIMEOUT   Navigation timeout ms (default: 20000)
+ *   DC_WEB_URL        Frontend URL (default: http://localhost:5173)
+ *   BROWSER_ENGINE    "chromium" or "firefox" (default: chromium)
  *
  * Note: uses page._snapshotForAI() (Playwright 1.44+ internal) for snap.
  * Returns a YAML-like accessibility tree — far more useful than raw DOM.
@@ -28,8 +37,9 @@
 const { chromium, firefox } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 const fs = require('fs');
 
-const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || '20000', 10);
-const WEB_URL = process.env.DC_WEB_URL || 'http://127.0.0.1:59010';
+const DEFAULT_TIMEOUT = 20000;
+const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || process.env.TIMEOUT || DEFAULT_TIMEOUT, 10);
+const WEB_URL = process.env.DC_WEB_URL || 'http://localhost:5173';
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 const BROWSER_ENGINE = (process.env.BROWSER_ENGINE || 'chromium').toLowerCase();
 
@@ -44,50 +54,65 @@ const TOUR_ROUTES = [
   { path: '/dashboard/account', name: 'Account Settings' },
 ];
 
+const COMMANDS = ['snap', 'shot', 'eval', 'errs', 'html', 'click', 'fill', 'wait', 'health', 'tour'];
+
 const [,, cmd, ...remainingArgs] = process.argv;
 
-let url = null;
-let seedPhrase = null;
-let viewport = null;
-let filteredRest = [];
-
-if (cmd === 'tour') {
-  const seedIndex = remainingArgs.indexOf('--seed');
-  if (seedIndex !== -1) {
-    seedPhrase = remainingArgs.slice(seedIndex + 1).join(' ');
-  }
-  const viewportIndex = remainingArgs.indexOf('--viewport');
-  if (viewportIndex !== -1 && remainingArgs[viewportIndex + 1] === 'mobile') {
-    viewport = MOBILE_VIEWPORT;
-  }
-} else {
-  url = remainingArgs[0];
-  const rest = remainingArgs.slice(1);
-
-  const seedIndex = rest.indexOf('--seed');
-  if (seedIndex !== -1) {
-    seedPhrase = rest.slice(seedIndex + 1).join(' ');
-    filteredRest = rest.slice(0, seedIndex);
-  } else {
-    filteredRest = rest;
-  }
-
-  const viewportIndex = filteredRest.indexOf('--viewport');
-  if (viewportIndex !== -1) {
-    const viewportValue = filteredRest[viewportIndex + 1];
-    if (viewportValue === 'mobile') {
-      viewport = MOBILE_VIEWPORT;
-    }
-    filteredRest = filteredRest.filter((_, i) => i !== viewportIndex && i !== viewportIndex + 1);
-  }
-}
-
-if (!cmd || (cmd !== 'tour' && !url)) {
-  console.error('Usage: browser.js <snap|shot|eval|errs|html|tour> <url> [args...]');
+if (!cmd || !COMMANDS.includes(cmd)) {
+  console.error('Usage: browser.js <snap|shot|eval|errs|html|click|fill|wait|health|tour> <url> [args...]');
   console.error('       browser.js tour --seed <phrase> [--viewport mobile]');
   console.error('Options:');
   console.error('  --seed <phrase>    Inject seed phrase for authenticated testing');
   console.error('  --viewport mobile  Use 375×812 (iPhone X) viewport');
+  console.error('  --timeout <ms>     Override navigation timeout');
+  console.error('  --wait-api         Wait for /api/v1/ response after navigation');
+  process.exit(1);
+}
+
+let url = null;
+let seedPhrase = null;
+let viewport = null;
+let waitApi = false;
+let customTimeout = TIMEOUT;
+let positionalArgs = [];
+
+function parseArgs(args) {
+  const result = { positional: [], seed: null, viewport: null, waitApi: false, timeout: TIMEOUT };
+  
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    
+    if (arg === '--seed') {
+      result.seed = args.slice(i + 1).join(' ');
+      break;
+    } else if (arg === '--viewport') {
+      i++;
+      if (args[i] === 'mobile') {
+        result.viewport = MOBILE_VIEWPORT;
+      }
+    } else if (arg === '--wait-api') {
+      result.waitApi = true;
+    } else if (arg === '--timeout') {
+      i++;
+      result.timeout = parseInt(args[i], 10) || TIMEOUT;
+    } else if (!arg.startsWith('--')) {
+      result.positional.push(arg);
+    }
+  }
+  
+  return result;
+}
+
+const parsed = parseArgs(remainingArgs);
+url = parsed.positional[0];
+positionalArgs = parsed.positional.slice(1);
+seedPhrase = parsed.seed;
+viewport = parsed.viewport;
+waitApi = parsed.waitApi;
+customTimeout = parsed.timeout;
+
+if (cmd !== 'tour' && !url) {
+  console.error('Error: URL is required for non-tour commands');
   process.exit(1);
 }
 
@@ -109,6 +134,8 @@ async function main() {
     ? await browser.newPage({ viewport })
     : await browser.newPage();
 
+  page.setDefaultTimeout(customTimeout);
+
   const consoleLogs = [];
   page.on('console', msg => {
     const type = msg.type();
@@ -117,45 +144,36 @@ async function main() {
     }
   });
   page.on('pageerror', err => consoleLogs.push(`[PAGEERROR] ${err.message}`));
+  page.on('requestfailed', req => {
+    const failure = req.failure();
+    if (failure) {
+      consoleLogs.push(`[REQUESTFAILED] ${req.url()} - ${failure.errorText}`);
+    }
+  });
 
   try {
+    const fullUrl = url.startsWith('http') ? url : `${WEB_URL}${url}`;
+    
     if (seedPhrase) {
-      const origin = new URL(url.startsWith('http') ? url : `${WEB_URL}${url}`).origin;
-      await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-
-      await page.evaluate((phrase) => {
-        const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
-        if (!stored.includes(phrase)) {
-          stored.push(phrase);
-          localStorage.setItem('seed_phrases', JSON.stringify(stored));
-        }
-      }, seedPhrase);
-
-      const authDone = page.waitForResponse(
-        r => r.url().includes('/api/v1/accounts'),
-        { timeout: TIMEOUT }
-      );
-      await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-      await authDone;
-      await page.waitForTimeout(200);
-
-      const targetUrl = url.startsWith('http') ? url : `${origin}${url}`;
-      if (targetUrl !== `${origin}/dashboard`) {
-        await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-      }
+      await authenticatePage(page, fullUrl, seedPhrase, customTimeout);
     } else {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+      await page.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: customTimeout });
     }
-    await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(e => {
+    
+    if (waitApi) {
+      await page.waitForResponse(
+        r => r.url().includes('/api/v1/'),
+        { timeout: customTimeout }
+      ).catch(() => {});
+    }
+    
+    await page.waitForLoadState('networkidle', { timeout: customTimeout }).catch(e => {
       process.stderr.write(`[WARN] networkidle timeout: ${e.message}\n`);
     });
 
     switch (cmd) {
       case 'snap': {
-        // Accessibility tree snapshot — structured YAML, far more useful than raw DOM.
-        // _snapshotForAI() is Playwright's internal method (public as ariaSnapshot in later builds).
-        const snapshot = await page._snapshotForAI({ timeout: TIMEOUT });
-        // Strip [ref=...] internal Playwright references — they add noise without value
+        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
         const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
         process.stdout.write(clean + '\n');
         if (consoleLogs.length) {
@@ -165,14 +183,15 @@ async function main() {
       }
 
       case 'shot': {
-        const outPath = filteredRest[0] || '/tmp/browser-shot.png';
+        const outPath = positionalArgs[0] || '/tmp/browser-shot.png';
         await page.screenshot({ path: outPath, fullPage: false });
         console.log(outPath);
         break;
       }
 
       case 'eval': {
-        const result = await page.evaluate(filteredRest.join(' '));
+        const expr = positionalArgs.join(' ');
+        const result = await page.evaluate(expr);
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -192,13 +211,103 @@ async function main() {
         break;
       }
 
+      case 'click': {
+        const selector = positionalArgs[0];
+        if (!selector) {
+          console.error('Error: click requires a selector argument');
+          process.exit(1);
+        }
+        await page.click(selector);
+        await page.waitForLoadState('networkidle', { timeout: customTimeout }).catch(() => {});
+        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
+        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        process.stdout.write(clean + '\n');
+        if (consoleLogs.length) {
+          process.stdout.write('\n--- Console ---\n' + consoleLogs.join('\n') + '\n');
+        }
+        break;
+      }
+
+      case 'fill': {
+        const selector = positionalArgs[0];
+        const value = positionalArgs[1];
+        if (!selector || value === undefined) {
+          console.error('Error: fill requires selector and value arguments');
+          process.exit(1);
+        }
+        await page.fill(selector, value);
+        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
+        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        process.stdout.write(clean + '\n');
+        break;
+      }
+
+      case 'wait': {
+        const selector = positionalArgs[0];
+        if (!selector) {
+          console.error('Error: wait requires a selector argument');
+          process.exit(1);
+        }
+        await page.waitForSelector(selector, { timeout: customTimeout });
+        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
+        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        process.stdout.write(clean + '\n');
+        break;
+      }
+
+      case 'health': {
+        const result = {
+          url: fullUrl,
+          status: 'ok',
+          title: await page.title(),
+          errors: consoleLogs.filter(l => l.includes('[ERROR]') || l.includes('[PAGEERROR]')),
+          warnings: consoleLogs.filter(l => l.includes('[WARNING]') || l.includes('[WARN]')),
+        };
+        
+        if (result.errors.length > 0) {
+          result.status = 'errors';
+        } else if (result.warnings.length > 0) {
+          result.status = 'warnings';
+        }
+        
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
       default:
-        console.error(`Unknown command: ${cmd}. Use: snap, shot, eval, errs, html, tour`);
+        console.error(`Unknown command: ${cmd}. Use: ${COMMANDS.join(', ')}`);
         process.exit(1);
     }
   } finally {
     await page.close();
     await browser.close();
+  }
+}
+
+async function authenticatePage(page, targetUrl, seedPhrase, timeout) {
+  const origin = new URL(targetUrl).origin;
+  
+  await page.goto(origin, { waitUntil: 'domcontentloaded', timeout });
+
+  await page.evaluate((phrase) => {
+    const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
+    if (!stored.includes(phrase)) {
+      stored.push(phrase);
+      localStorage.setItem('seed_phrases', JSON.stringify(stored));
+    }
+  }, seedPhrase);
+
+  const authDone = page.waitForResponse(
+    r => r.url().includes('/api/v1/accounts'),
+    { timeout }
+  );
+  
+  await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout });
+  await authDone.catch(() => {});
+  await page.waitForTimeout(300);
+
+  if (targetUrl !== `${origin}/dashboard`) {
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout });
   }
 }
 
@@ -208,8 +317,10 @@ async function runTour(browserType) {
     ? await browser.newPage({ viewport })
     : await browser.newPage();
 
+  page.setDefaultTimeout(customTimeout);
+  
   const origin = new URL(WEB_URL).origin;
-  const report = { timestamp: new Date().toISOString(), seed: seedPhrase, viewport, pages: [] };
+  const report = { timestamp: new Date().toISOString(), seed: seedPhrase ? '***' : null, viewport, pages: [] };
 
   try {
     for (const route of TOUR_ROUTES) {
@@ -222,32 +333,22 @@ async function runTour(browserType) {
 
       try {
         if (route.public && !seedPhrase) {
-          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: customTimeout });
         } else if (route.public) {
-          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
+          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: customTimeout });
         } else {
           if (seedPhrase && !report._authenticated) {
-            await page.goto(origin, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-            await page.evaluate((phrase) => {
-              const stored = JSON.parse(localStorage.getItem('seed_phrases') || '[]');
-              if (!stored.includes(phrase)) {
-                stored.push(phrase);
-                localStorage.setItem('seed_phrases', JSON.stringify(stored));
-              }
-            }, seedPhrase);
-            const authDone = page.waitForResponse(r => r.url().includes('/api/v1/accounts'), { timeout: TIMEOUT });
-            await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
-            await authDone;
-            await page.waitForTimeout(200);
+            await authenticatePage(page, `${origin}${route.path}`, seedPhrase, customTimeout);
             report._authenticated = true;
+          } else {
+            await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: customTimeout });
           }
-          await page.goto(`${origin}${route.path}`, { waitUntil: 'domcontentloaded', timeout: TIMEOUT });
         }
-        await page.waitForLoadState('networkidle', { timeout: TIMEOUT }).catch(() => {});
+        await page.waitForLoadState('networkidle', { timeout: customTimeout }).catch(() => {});
         await page.waitForTimeout(300);
 
         const title = await page.title();
-        const snapshot = await page._snapshotForAI({ timeout: TIMEOUT });
+        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
         pageReport.title = title;
         pageReport.snap = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
         pageReport.errors = pageConsole;
