@@ -133,7 +133,7 @@ cp api/.env.local api/.env  # First time only
 # Or run inline (AI agents must use 'postgres' hostname):
 DATABASE_URL=postgres://test:test@postgres:5432/test \
 CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
-CANISTER_ID="ggia4-wyaaa-aaaai-actqq-cai" \
+CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai" \
 API_SERVER_PORT=59011 \
 ./target/debug/api-server serve
 

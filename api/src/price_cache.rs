@@ -48,8 +48,16 @@ impl PriceCache {
                 Some(usd)
             }
             Err(e) => {
-                tracing::warn!("ICP price fetch failed: {:#} — returning null", e);
-                None
+                tracing::warn!("ICP price fetch failed: {:#}", e);
+                // Return stale cached value if available (better than nothing)
+                let cache = self.inner.read().expect("price cache lock poisoned");
+                if let Some(ref p) = *cache {
+                    tracing::warn!("Returning stale cached ICP price (${:.2}, {}s old)", p.usd, p.fetched_at.elapsed().as_secs());
+                    Some(p.usd)
+                } else {
+                    tracing::warn!("No cached ICP price available — returning null");
+                    None
+                }
             }
         }
     }
