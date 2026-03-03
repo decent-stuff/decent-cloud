@@ -812,9 +812,7 @@ fn start_or_wait_for_shared_postgres() -> String {
                                             .stderr(Stdio::null())
                                             .status()
                                             .ok();
-                                            if let Some(base_dir) =
-                                                Path::new(data_dir).parent()
-                                            {
+                                            if let Some(base_dir) = Path::new(data_dir).parent() {
                                                 std::fs::remove_dir_all(base_dir).ok();
                                             }
                                             break;

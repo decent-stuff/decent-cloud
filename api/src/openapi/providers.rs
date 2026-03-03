@@ -5704,8 +5704,10 @@ mod tests {
 
     #[test]
     fn test_provider_response_metrics_route_is_declared() {
-        const PROVIDERS_RS: &str =
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/openapi/providers.rs"));
+        const PROVIDERS_RS: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/openapi/providers.rs"
+        ));
         assert!(
             PROVIDERS_RS.contains("path = \"/providers/:pubkey/response-metrics\""),
             "Providers API must declare /providers/:pubkey/response-metrics route"

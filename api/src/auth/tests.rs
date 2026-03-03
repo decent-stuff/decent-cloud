@@ -520,13 +520,12 @@ fn test_authenticate_provider_or_agent_missing_auth() {
         .finish();
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-    
+
     struct MockDb;
     let _db = std::sync::Arc::new(MockDb);
-    
-    let result = rt.block_on(async {
-        Err::<Vec<u8>, _>(AuthError::MissingHeader("test".to_string()))
-    });
+
+    let result =
+        rt.block_on(async { Err::<Vec<u8>, _>(AuthError::MissingHeader("test".to_string())) });
     assert!(result.is_err());
     assert!(
         matches!(result.unwrap_err(), AuthError::MissingHeader(_)),
@@ -596,10 +595,7 @@ fn test_authenticate_provider_or_agent_agent_query_params_parsing() {
     .parse()
     .expect("valid URI");
 
-    let req = Request::builder()
-        .uri(uri)
-        .method(Method::GET)
-        .finish();
+    let req = Request::builder().uri(uri).method(Method::GET).finish();
 
     let headers = req.headers();
     let query = req.uri().query().unwrap_or("");
@@ -620,7 +616,10 @@ fn test_authenticate_provider_or_agent_agent_query_params_parsing() {
         (None, None) => panic!("Should have parsed agent_pubkey"),
     };
 
-    assert!(is_agent, "agent_pubkey query param should set is_agent=true");
+    assert!(
+        is_agent,
+        "agent_pubkey query param should set is_agent=true"
+    );
     assert_eq!(agent_pubkey_from_query, Some("aabbccdd"));
     assert_eq!(user_pubkey_from_query, None);
 }
@@ -706,10 +705,7 @@ fn test_authenticate_provider_or_agent_agent_query_params_invalid_signature() {
     .parse()
     .expect("valid URI");
 
-    let req = Request::builder()
-        .uri(uri)
-        .method(Method::GET)
-        .finish();
+    let req = Request::builder().uri(uri).method(Method::GET).finish();
 
     let result = authenticate_provider_or_agent_from_request_sync_agent_path(&req);
     assert!(
@@ -752,10 +748,7 @@ fn test_authenticate_provider_or_agent_agent_query_params_valid_signature() {
     .parse()
     .expect("valid URI");
 
-    let req = Request::builder()
-        .uri(uri)
-        .method(Method::GET)
-        .finish();
+    let req = Request::builder().uri(uri).method(Method::GET).finish();
 
     let result = authenticate_provider_or_agent_from_request_sync_agent_path(&req);
     assert!(
