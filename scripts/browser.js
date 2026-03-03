@@ -84,7 +84,11 @@ function parseArgs(args) {
     const arg = args[i];
     
     if (arg === '--seed') {
-      const rawSeed = args.slice(i + 1).join(' ').trim();
+      const seedWords = [];
+      for (let j = i + 1; j < args.length && !args[j].startsWith('--'); j++) {
+        seedWords.push(args[j]);
+      }
+      const rawSeed = seedWords.join(' ').trim();
       if (rawSeed && bip39.validateMnemonic(rawSeed)) {
         result.seed = rawSeed;
       } else if (rawSeed) {
@@ -92,7 +96,6 @@ function parseArgs(args) {
         console.error('Seed phrase must be 12 or 24 valid BIP39 words.');
         process.exit(1);
       }
-      break;
     } else if (arg === '--viewport') {
       i++;
       if (args[i] === 'mobile') {
