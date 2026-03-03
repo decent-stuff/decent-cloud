@@ -57,12 +57,15 @@ export async function registerNewAccount(
 	// Navigate to login page
 	await page.goto('/login');
 
+	// Wait for page to load and click "Sign in with seed phrase instead"
+	await page.waitForLoadState('networkidle');
+	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
+	await expect(seedPhraseButton).toBeVisible({ timeout: 10000 });
+	await seedPhraseButton.click();
+
 	// Wait for seed phrase choice to appear and be interactive
 	const generateNewButton = page.locator('button:has-text("Generate New")');
 	await expect(generateNewButton).toBeVisible({ timeout: 10000 });
-
-	// Wait for page to be fully hydrated by checking network idle
-	await page.waitForLoadState('networkidle');
 
 	// Click "Generate New" to generate seed phrase
 	await generateNewButton.click();
@@ -132,6 +135,11 @@ export async function signIn(
 
 	// Wait for page to be fully hydrated
 	await page.waitForLoadState('networkidle');
+
+	// Click "Sign in with seed phrase instead" to reveal seed phrase options
+	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
+	await expect(seedPhraseButton).toBeVisible({ timeout: 10000 });
+	await seedPhraseButton.click();
 
 	// Wait for seed phrase choice to appear and be interactive
 	const importButton = page.locator('button:has-text("Import Existing")');

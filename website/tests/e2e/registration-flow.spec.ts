@@ -28,9 +28,12 @@ test.describe('Account Registration Flow', () => {
 		// Step 1: Navigate to login page
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
-		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
-
+		
+		// Click "Sign in with seed phrase instead" to reveal seed phrase options
+		await page.click('button:has-text("Sign in with seed phrase instead")');
+		
 		// Step 2: Click "Generate New" to generate seed phrase
+		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 		await page.locator('button:has-text("Generate New")').click();
 
 		// Step 3: Seed phrase backup screen
@@ -105,6 +108,7 @@ test.describe('Account Registration Flow', () => {
 		// First registration
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -135,6 +139,7 @@ test.describe('Account Registration Flow', () => {
 
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -171,6 +176,7 @@ test.describe('Account Registration Flow', () => {
 		await page.waitForLoadState('networkidle');
 
 		// Complete registration flow
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -211,6 +217,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 	});
 });
