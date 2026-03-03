@@ -278,7 +278,7 @@ node scripts/browser.js tour --seed <phrase>
 - **No persistent online test providers** — UX test providers created by seed-ux-data go offline when heartbeat daemon terminates. For full E2E provisioning tests, use the real provider at offering ID 11 (p7ma2) or ensure heartbeat daemon is running.
 - **Rent button role selector** — Use `role=button[name='Rent']` instead of `button:has-text('Rent')` for Playwright clicks, as text-based selectors don't respect `inert` attribute.
 
-**When browser automation fails:** Use `api-cli` to test the full rental flow (create contract, wait for provisioning, verify SSH, cancel). This bypasses UI issues and tests the backend directly.
+**Fallback:** When browser automation isn't sufficient, use `api-cli` to test the full rental flow directly against the API (create contract, wait for provisioning, verify SSH, cancel).
 
 ## Authenticated Testing with dc-auth.js
 
