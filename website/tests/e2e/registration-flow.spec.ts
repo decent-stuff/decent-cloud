@@ -86,7 +86,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Step 6: Success screen
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Should show username
@@ -201,7 +201,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Should show success screen
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Click "Go to Dashboard"

@@ -41,7 +41,7 @@ export const test = baseFixtures.extend<{}>({
 
 		// Wait for page to be fully hydrated and auth state ready
 		await page.waitForLoadState('networkidle');
-		await page.locator(`text=@${testAccount.username}`).waitFor({ state: 'visible', timeout: 10000 });
+		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 10000 });
 
 		// Use the authenticated page
 		await use(page);

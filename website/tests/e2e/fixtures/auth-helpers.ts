@@ -111,7 +111,7 @@ export async function registerNewAccount(
 
 	// Wait for success message
 	await expect(
-		page.locator('text=Welcome to Decent Cloud!'),
+		page.locator('text=Welcome to Decent Cloud'),
 	).toBeVisible({ timeout: 15000 });
 
 	// Click the "Go to Dashboard" button
@@ -160,7 +160,7 @@ export async function signIn(
 
 	// Wait for success message (should auto-login if account exists)
 	await expect(
-		page.locator('text=Welcome to Decent Cloud!'),
+		page.locator('text=Welcome to Decent Cloud'),
 	).toBeVisible({ timeout: 10000 });
 
 	// Click "Go to Dashboard"

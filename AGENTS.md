@@ -154,8 +154,8 @@ npm run dev
 
 - `api/.env.local` — Local development (AI agents use this, uses `postgres` hostname)
 - `api/.env` — Symlink or copy of `.env.local` for local work
-- `api/.env.dev` — Points to dev deployment (DO NOT use for local dev)
-- `cf/.env.dev` — Dev deployment secrets (DO NOT use for local dev)
+- `api/.env.dev` — Points to staging deployment (DO NOT use for local dev)
+- `cf/.env.dev` — Staging deployment secrets (DO NOT use for local dev)
 
 ---
 
@@ -187,7 +187,16 @@ BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
 
 The container has Playwright installed with a local headless Chromium. Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No setup needed: every call launches a fresh browser, performs the operation, and closes it automatically.
 
-**Local dev:** `DC_WEB_URL=http://localhost:5173` — **Dev frontend:** `https://dev.decent-cloud.org` — **Dev API:** `https://dev-api.decent-cloud.org`
+**Local dev (browser.js):** `DC_WEB_URL=http://localhost:5173` — **Staging frontend:** `https://dev.decent-cloud.org` — **Staging API:** `https://dev-api.decent-cloud.org`
+
+**Playwright E2E (repo-local):**
+
+```bash
+cd website
+E2E_AUTO_SERVER=1 npx playwright test <spec-or-dir>
+```
+
+This auto-starts local website/API on `59010/59011`. If startup fails because ports are already in use, kill stale local `vite` / `api-server` processes first, then rerun.
 
 ## Commands
 
@@ -344,7 +353,7 @@ ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses!
 After completing any feature or fix, verify ALL of the following before committing:
 
 1. **Run locally**: Build a local debug binary and run it with all required environment variables against any REAL services (e.g. Chatwoot) to ensure that code behaves as expected and fix any issues you might encounter, even if unrelated to your changes.
-1a. **Verify endpoints and payloads**: Run http(s) requests against real endpoints if possible (e.g. dev Chatwoot instance) to verify endpoints and payload formats *before* writing code. This is required if task requires interaction with other services.
+1a. **Verify endpoints and payloads**: Run http(s) requests against real endpoints if possible (e.g. staging Chatwoot instance) to verify endpoints and payload formats *before* writing code. This is required if task requires interaction with other services.
 2. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
 3. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
 4. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate
@@ -424,7 +433,7 @@ api-cli identity show e2e-test              # show public key
 
 ```bash
 api-cli contract list --identity test                                          # dev (localhost:3000)
-api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test  # dev server
+api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test  # staging server
 api-cli --env prod contract list --identity test                                 # production
 ```
 
@@ -524,7 +533,7 @@ This single command: registers agent, generates keypair, creates Proxmox API tok
 
 Additional flags:
 - `--gateway-domain <DOMAIN>` (default: `decent-cloud.org`)
-- `--gateway-gw-prefix <PREFIX>` (default: `gw`, use `dev-gw` for dev)
+- `--gateway-gw-prefix <PREFIX>` (default: `gw`, use `dev-gw` for staging)
 - `--gateway-port-start/end` (default: `20000`/`59999`)
 - `--gateway-ports-per-vm` (default: `10`)
 - `--non-interactive`, `--force`
@@ -552,7 +561,7 @@ dc-agent test-provision --test-gateway --skip-dns             # gateway without 
 
 All gateway subdomains: `{slug}.{dc_id}.{gw_prefix}.{domain}`
 
-Examples: `k7m2p4.dc-lk.dev-gw.decent-cloud.org` (dev), `k7m2p4.a3x9f2b1.gw.decent-cloud.org` (prod).
+Examples: `k7m2p4.dc-lk.dev-gw.decent-cloud.org` (staging), `k7m2p4.a3x9f2b1.gw.decent-cloud.org` (prod).
 
 Per-provider wildcard cert `*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns (scoped to each provider).
 
