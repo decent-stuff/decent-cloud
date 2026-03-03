@@ -63,8 +63,48 @@
 	}
 	let contactMethod = $state("");
 	let buyerAddress = $state("");
-	let durationHours = $state(720); // Default: 30 days
 	let memo = $state("");
+
+	const DURATION_OPTIONS = [
+		{ value: 1, label: '1 Hour' },
+		{ value: 6, label: '6 Hours' },
+		{ value: 12, label: '12 Hours' },
+		{ value: 24, label: '1 Day' },
+		{ value: 72, label: '3 Days' },
+		{ value: 168, label: '1 Week' },
+		{ value: 336, label: '2 Weeks' },
+		{ value: 720, label: '1 Month' },
+		{ value: 1440, label: '2 Months' },
+		{ value: 2160, label: '3 Months' },
+		{ value: 4320, label: '6 Months' },
+		{ value: 8760, label: '1 Year' },
+	] as const;
+
+	let minHours = $derived(offering?.min_contract_hours ?? 1);
+	let maxHours = $derived(offering?.max_contract_hours ?? 8760);
+	let validDurationOptions = $derived(
+		DURATION_OPTIONS.filter(opt => opt.value >= minHours && opt.value <= maxHours)
+	);
+	let durationHours = $state<number | null>(null);
+	let durationValidationError = $derived(() => {
+		if (durationHours === null) return "Select a duration";
+		if (durationHours < minHours) return `Minimum duration is ${formatHours(minHours)}`;
+		if (durationHours > maxHours) return `Maximum duration is ${formatHours(maxHours)}`;
+		return null;
+	});
+
+	function formatHours(hours: number): string {
+		if (hours >= 720) return `${Math.round(hours / 720)} month${hours >= 1440 ? 's' : ''}`;
+		if (hours >= 24) return `${Math.round(hours / 24)} day${hours >= 48 ? 's' : ''}`;
+		return `${hours} hour${hours > 1 ? 's' : ''}`;
+	}
+
+	$effect(() => {
+		if (offering && durationHours === null) {
+			const firstValid = validDurationOptions[0];
+			durationHours = firstValid ? firstValid.value : minHours;
+		}
+	});
 	let loading = $state(false);
 	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
@@ -176,7 +216,8 @@
 
 	function calculatePrice(): string {
 		if (!offering) return "0.00";
-		const price = (offering.monthly_price * durationHours) / 720;
+		const hours = durationHours ?? 720;
+		const price = (offering.monthly_price * hours) / 720;
 		return price.toFixed(2);
 	}
 
@@ -279,7 +320,7 @@
 				ssh_pubkey: sshKey.trim(), // Required
 				contact_method: contactMethod || undefined,
 				request_memo: memo || undefined,
-				duration_hours: durationHours,
+				duration_hours: durationHours ?? undefined,
 				payment_method: paymentMethod,
 				buyer_address: buyerAddress || undefined,
 				operating_system: selectedOperatingSystem || undefined,
@@ -538,27 +579,44 @@
 				<!-- Duration (hidden for subscription offerings) -->
 				{#if !isSubscriptionOffering}
 					<div>
-						<label
-							for="duration"
-							class="block text-sm font-medium text-white mb-2"
-						>
-							Rental Duration
-						</label>
-						<select
-							id="duration"
-							bind:value={durationHours}
-							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
-						>
-							<option value={24}>1 Day (24 hours)</option>
-							<option value={168}>1 Week (7 days)</option>
-							<option value={720}>1 Month (30 days)</option>
-							<option value={2160}>3 Months (90 days)</option>
-							<option value={4320}>6 Months (180 days)</option>
-							<option value={8760}>1 Year (365 days)</option>
-						</select>
-						<p class="text-xs text-neutral-500 mt-1">
-							Ends: {new Date(Date.now() + durationHours * 60 * 60 * 1000).toLocaleString()}
-						</p>
+						<div class="flex items-center justify-between mb-2">
+							<label for="duration" class="block text-sm font-medium text-white">
+								Rental Duration
+							</label>
+							<span class="text-xs text-neutral-500">
+								{#if offering?.min_contract_hours || offering?.max_contract_hours}
+									{#if offering.min_contract_hours && offering.max_contract_hours}
+										{formatHours(offering.min_contract_hours)} – {formatHours(offering.max_contract_hours)}
+									{:else if offering.min_contract_hours}
+										Min: {formatHours(offering.min_contract_hours)}
+									{:else if offering.max_contract_hours}
+										Max: {formatHours(offering.max_contract_hours)}
+									{/if}
+								{/if}
+							</span>
+						</div>
+						{#if validDurationOptions.length > 0}
+							<select
+								id="duration"
+								bind:value={durationHours}
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800 text-white focus:outline-none focus:border-primary-400 transition-colors"
+							>
+								{#each validDurationOptions as opt}
+									<option value={opt.value}>{opt.label}</option>
+								{/each}
+							</select>
+							{#if durationHours}
+								<p class="text-xs text-neutral-500 mt-1">
+									Ends: {new Date(Date.now() + durationHours * 60 * 60 * 1000).toLocaleString()}
+								</p>
+							{/if}
+						{:else}
+							<div class="px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-sm">
+								No standard durations available for this offering's constraints ({formatHours(minHours)} – {formatHours(maxHours)}).
+								<br/>
+								<span class="text-yellow-400">Contact the provider for custom arrangements.</span>
+							</div>
+						{/if}
 					</div>
 				{/if}
 

@@ -826,7 +826,13 @@ impl Database {
                 .fetch_optional(&self.pool)
                 .await?;
 
-        Ok(offering)
+        let offering = match offering {
+            Some(o) => o,
+            None => return Ok(None),
+        };
+
+        let result = self.compute_provider_online_status(vec![offering]).await?;
+        Ok(result.into_iter().next())
     }
 
     /// Get example offerings for CSV template generation.

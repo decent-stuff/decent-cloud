@@ -36,6 +36,7 @@
 
 const { chromium, firefox } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
 const fs = require('fs');
+const bip39 = require('/code/decent-cloud/website/node_modules/bip39');
 
 const DEFAULT_TIMEOUT = 20000;
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || process.env.TIMEOUT || DEFAULT_TIMEOUT, 10);
@@ -83,7 +84,14 @@ function parseArgs(args) {
     const arg = args[i];
     
     if (arg === '--seed') {
-      result.seed = args.slice(i + 1).join(' ');
+      const rawSeed = args.slice(i + 1).join(' ').trim();
+      if (rawSeed && bip39.validateMnemonic(rawSeed)) {
+        result.seed = rawSeed;
+      } else if (rawSeed) {
+        console.error(`Error: Invalid BIP39 seed phrase. Got ${rawSeed.split(/\s+/).length} words: "${rawSeed.slice(0, 50)}..."`);
+        console.error('Seed phrase must be 12 or 24 valid BIP39 words.');
+        process.exit(1);
+      }
       break;
     } else if (arg === '--viewport') {
       i++;

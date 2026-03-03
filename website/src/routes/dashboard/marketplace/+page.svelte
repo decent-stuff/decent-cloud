@@ -2,6 +2,7 @@
 	import { onMount, tick } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
+	import { browser } from "$app/environment";
 	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, type Offering, type TrendingOffering, type NewProvider } from "$lib/services/api";
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
@@ -27,6 +28,7 @@
 	let successMessage = $state<string | null>(null);
 	let isAuthenticated = $state(false);
 	let savedIds = $state(new Set<number>());
+	let isDesktopViewport = $state(false);
 	const PROVIDER_CTA_KEY = 'dc-provider-cta-dismissed';
 	const FIRST_TIME_HINT_KEY = 'dc-marketplace-hint-visits';
 	const ADVANCED_FILTERS_KEY = 'dc-marketplace-advanced-filters';
@@ -63,6 +65,16 @@
 	let recentlyViewedIds = $state<number[]>([]);
 	let trendingOfferings = $state<TrendingOffering[]>([]);
 	let newProviders = $state<NewProvider[]>([]);
+
+	// Track viewport size to set inert on hidden containers for accessibility/Playwright
+	$effect(() => {
+		if (!browser) return;
+		const mq = window.matchMedia('(min-width: 768px)');
+		isDesktopViewport = mq.matches;
+		const handler = (e: MediaQueryListEvent) => { isDesktopViewport = e.matches; };
+		mq.addEventListener('change', handler);
+		return () => mq.removeEventListener('change', handler);
+	});
 
 	// Region definitions (matching dc-agent geolocation.rs)
 	const REGIONS = [
@@ -1268,7 +1280,7 @@
 				</div>
 			{:else}
 				<!-- Desktop Table -->
-				<div class="hidden md:block overflow-x-auto">
+				<div id="marketplace-desktop-table" class="hidden md:block overflow-x-auto" inert={!isDesktopViewport} aria-hidden={!isDesktopViewport}>
 					<table class="w-full text-sm">
 						<thead>
 							<tr
@@ -1592,7 +1604,7 @@
 				</div>
 
 				<!-- Mobile Cards -->
-				<div class="md:hidden space-y-3">
+				<div id="marketplace-mobile-cards" class="md:hidden space-y-3" inert={isDesktopViewport} aria-hidden={isDesktopViewport}>
 					{#each filteredOfferings as offering (offering.id)}
 						<div
 							id="offering-{offering.id}"
