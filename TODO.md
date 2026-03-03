@@ -150,17 +150,16 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 **Scope:** Full rental flow from marketplace to SSH access on dev.decent-cloud.org
 
-**CRITICAL ISSUES FOUND:**
-
-- **[Marketplace] /marketplace returns 404** — Should redirect to /dashboard/marketplace. *(Single-session: add redirect or server-side routing.)*
-- **[Auth] browser.js --seed authentication fails** — Console error: "Invalid seed phrase" when using --seed flag. dc-auth.js create-user works fine. *(Single-session: debug seed injection in browser.js.)*
-- **[Marketplace] Provider online status inconsistent** — API returns `provider_online: true` for offering ID 11, but UI shows "Offline" badge. Data sync issue between API and frontend. *(Single-session: investigate frontend data fetching.)*
-- **[Rental] Contract duration not configurable in UI** — Offering detail page has no duration selector, but API enforces min/max contract hours. User gets cryptic "Offering requires minimum 720 hours" error without UI explanation. *(Single-session: add duration picker to rental dialog.)*
+**DONE (2026-03-03):**
+- **[Marketplace] /marketplace returns 404** — Added SvelteKit redirect to /dashboard/marketplace.
+- **[Auth] browser.js --seed authentication fails** — Fixed arg parsing to stop at next `--` flag (was including `--timeout` etc. in seed).
+- **[Marketplace] Provider online status inconsistent** — Fixed `get_offering()` to compute provider_online status instead of returning NULL.
+- **[Rental] Contract duration not configurable in UI** — Added duration picker to RentalRequestDialog with min/max constraint filtering.
+- **[Rent button] Not clickable in marketplace table** — Added `inert`/`aria-hidden` to hidden viewport containers for proper accessibility.
 
 **TESTING INFRASTRUCTURE GAPS:**
 
 - **[E2E] No online providers for full provisioning test** — All UX test providers (`uxprovider*`) show `provider_online: false`. Need heartbeat daemon running or seed-ux-data enhancement to keep providers online. *(Single-session: add persistent keepalive to seed-ux-data or dedicated E2E provider.)*
-- **[Rent button] Not clickable in marketplace table** — browser.js click action timed out, "element is not visible". Possible z-index or scroll issue. *(Single-session: debug table row action visibility.)*
 
 **VERIFIED WORKING:**
 
@@ -168,14 +167,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - Contract cancellation works
 - API correctly enforces min/max contract duration
 - Stripe integration exists (not tested end-to-end due to offline providers)
-
-**NEXT STEPS:**
-
-1. Fix /marketplace 404 redirect
-2. Debug browser.js --seed authentication
-3. Investigate provider_online sync issue
-4. Add duration picker to rental UI
-5. Establish persistent online test provider for E2E testing
+- browser.js --seed now works with other flags like --timeout
 
 ### UI Consistency Audit (2026-03-01) — Auth Surface Duplication + Button Sizing
 

@@ -275,11 +275,8 @@ node scripts/browser.js tour --seed <phrase>
 
 ## Known Issues (2026-03-03 UX Audit)
 
-- **`--seed` authentication fails on dev.decent-cloud.org** — Console error "Invalid seed phrase" when using browser.js --seed flag. dc-auth.js create-user works fine. Workaround: use dc-auth.js commands instead of --seed for remote testing.
-- **Marketplace rent button not clickable** — browser.js click action on marketplace table "Rent" buttons times out. Workaround: navigate directly to offering detail page (`/dashboard/marketplace/<id>`) and click "Rent this offering" button there.
-- **Provider online status inconsistent** — API may return `provider_online: true` but UI shows "Offline" badge. Verify provider status via API before relying on UI.
 - **No persistent online test providers** — UX test providers created by seed-ux-data go offline when heartbeat daemon terminates. For full E2E provisioning tests, use the real provider at offering ID 11 (p7ma2) or ensure heartbeat daemon is running.
-- **Contract duration not in UI** — Rental dialog has no duration selector. Use api-cli with `--duration-hours` flag to test different contract lengths.
+- **Rent button role selector** — Use `role=button[name='Rent']` instead of `button:has-text('Rent')` for Playwright clicks, as text-based selectors don't respect `inert` attribute.
 
 **When browser automation fails:** Use `api-cli` to test the full rental flow (create contract, wait for provisioning, verify SSH, cancel). This bypasses UI issues and tests the backend directly.
 
