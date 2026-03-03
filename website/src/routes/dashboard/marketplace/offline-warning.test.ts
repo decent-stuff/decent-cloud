@@ -18,7 +18,7 @@ function getRentButtonState(offering: OfferingForRentButton): {
 	if (offering.is_example) {
 		return { disabled: true, label: 'Demo only', title: 'Demo only — not available for rent' };
 	}
-	if (!offering.provider_online) {
+	if (offering.provider_online === false) {
 		return {
 			disabled: true,
 			label: 'Offline',
@@ -37,18 +37,18 @@ describe('rent button: offline state', () => {
 		expect(state.title).toContain('queued');
 	});
 
-	it('shows disabled "Offline" button when provider_online is null', () => {
+	it('shows enabled "Rent" button when provider_online is null (status unknown)', () => {
 		const offering: OfferingForRentButton = { provider_online: null };
 		const state = getRentButtonState(offering);
-		expect(state.disabled).toBe(true);
-		expect(state.label).toBe('Offline');
+		expect(state.disabled).toBe(false);
+		expect(state.label).toBe('Rent');
 	});
 
-	it('shows disabled "Offline" button when provider_online is undefined', () => {
+	it('shows enabled "Rent" button when provider_online is undefined (status unknown)', () => {
 		const offering: OfferingForRentButton = { provider_online: undefined };
 		const state = getRentButtonState(offering);
-		expect(state.disabled).toBe(true);
-		expect(state.label).toBe('Offline');
+		expect(state.disabled).toBe(false);
+		expect(state.label).toBe('Rent');
 	});
 
 	it('shows enabled "Rent" button when provider_online is true', () => {

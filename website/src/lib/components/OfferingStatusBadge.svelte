@@ -39,7 +39,7 @@
 	}
 
 	function getPrimaryStatus(): { label: string; color: string } | null {
-		if (!providerOnline) {
+		if (providerOnline === false) {
 			return { label: "Offline", color: "bg-red-500/20 text-red-400 border-red-500/30" };
 		}
 		if (isDemo) {
@@ -79,7 +79,7 @@
 		<div
 			class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded border {primaryStatus.color}"
 		>
-			{#if !providerOnline}
+			{#if providerOnline === false}
 				<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
 			{/if}
 			{primaryStatus.label}

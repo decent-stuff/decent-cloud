@@ -110,8 +110,10 @@
 	}
 
 	onDestroy(() => {
-		window.removeEventListener('keydown', handleOptionsKeydown);
-		document.removeEventListener('click', handleOptionsClickOutside, true);
+		if (typeof window !== 'undefined') {
+			window.removeEventListener('keydown', handleOptionsKeydown);
+			document.removeEventListener('click', handleOptionsClickOutside, true);
+		}
 	});
 
 	async function toggleBookmark() {
@@ -365,7 +367,7 @@
 			<div>
 				<div class="flex items-center gap-3 flex-wrap">
 					<h1 class="text-2xl font-bold text-white tracking-tight">{offering.offer_name}</h1>
-					{#if !offering.provider_online}
+					{#if offering.provider_online === false}
 						<span class="flex items-center gap-1 px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded" title="Provider is not actively monitoring — requests are still accepted when agent comes back online">
 							<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>Offline
 						</span>
