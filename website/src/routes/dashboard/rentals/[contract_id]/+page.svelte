@@ -792,6 +792,16 @@
 		stopAutoRefresh();
 		passwordResetPoller.stop();
 	});
+
+	/** Returns true if the IP is RFC1918 private (10.x, 172.16-31.x, 192.168.x) */
+	function isPrivateIp(ip: string): boolean {
+		const parts = ip.split('.').map(Number);
+		if (parts.length !== 4) return false;
+		if (parts[0] === 10) return true;
+		if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+		if (parts[0] === 192 && parts[1] === 168) return true;
+		return false;
+	}
 </script>
 
 <div class="space-y-8">
@@ -1333,8 +1343,8 @@
 								</div>
 							{/if}
 						</div>
-					{:else if instanceDetails?.ip_address}
-						<!-- Direct IP access VM -->
+					{:else if instanceDetails?.ip_address && !isPrivateIp(instanceDetails.ip_address)}
+						<!-- Direct IP access VM (public IP only) -->
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
 								<div class="flex items-center justify-between mb-1">
@@ -1361,6 +1371,16 @@
 									<code class="text-white text-sm font-mono select-all">{instanceDetails.ipv6_address}</code>
 								</div>
 							{/if}
+						</div>
+					{:else if instanceDetails?.ip_address && isPrivateIp(instanceDetails.ip_address)}
+						<!-- VM is provisioned but only has private IP — gateway routing is pending -->
+						<div class="bg-yellow-500/10 border border-yellow-500/30 p-3">
+							<p class="text-yellow-300 text-sm font-medium">Gateway routing is being configured</p>
+							<p class="text-yellow-200/70 text-xs mt-1">
+								Your VM is provisioned but the public access gateway is still being set up.
+								Connection details will appear here once routing is ready.
+								This usually takes a few minutes.
+							</p>
 						</div>
 					{:else}
 						<!-- Raw JSON fallback -->
