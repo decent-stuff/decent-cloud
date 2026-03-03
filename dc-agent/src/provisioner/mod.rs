@@ -13,6 +13,9 @@ pub struct Instance {
     pub external_id: String,
     pub ip_address: Option<String>,
     pub ipv6_address: Option<String>,
+    /// Public IP of the gateway host (for Proxmox VMs behind NAT)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_ip: Option<String>,
     pub ssh_port: u16,
     pub root_password: Option<String>,
     pub additional_details: Option<serde_json::Value>,
@@ -117,5 +120,74 @@ pub trait Provisioner: Send + Sync {
     async fn collect_resources(&self) -> Option<ResourceInventory> {
         // Default: not supported
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_instance_serialization_includes_public_ip_when_set() {
+        let instance = Instance {
+            external_id: "100".to_string(),
+            ip_address: Some("10.0.0.5".to_string()),
+            ipv6_address: None,
+            public_ip: Some("203.0.113.1".to_string()),
+            ssh_port: 22,
+            root_password: None,
+            additional_details: None,
+            gateway_slug: Some("abc123".to_string()),
+            gateway_subdomain: Some("abc123.dc-lk.gw.decent-cloud.org".to_string()),
+            gateway_ssh_port: Some(20000),
+            gateway_port_range_start: Some(20000),
+            gateway_port_range_end: Some(20009),
+        };
+
+        let json = serde_json::to_value(&instance).unwrap();
+        assert_eq!(json["public_ip"], "203.0.113.1");
+    }
+
+    #[test]
+    fn test_instance_serialization_omits_public_ip_when_none() {
+        let instance = Instance {
+            external_id: "100".to_string(),
+            ip_address: Some("10.0.0.5".to_string()),
+            ipv6_address: None,
+            public_ip: None,
+            ssh_port: 22,
+            root_password: None,
+            additional_details: None,
+            gateway_slug: None,
+            gateway_subdomain: None,
+            gateway_ssh_port: None,
+            gateway_port_range_start: None,
+            gateway_port_range_end: None,
+        };
+
+        let json = serde_json::to_value(&instance).unwrap();
+        assert!(
+            json.get("public_ip").is_none(),
+            "public_ip should be omitted when None"
+        );
+    }
+
+    #[test]
+    fn test_instance_deserialization_without_public_ip_field() {
+        // Backward compatibility: JSON without public_ip should deserialize with public_ip: None
+        let json = r#"{
+            "external_id": "vm-123",
+            "ip_address": "10.0.0.100",
+            "ipv6_address": null,
+            "ssh_port": 22,
+            "root_password": null,
+            "additional_details": null
+        }"#;
+
+        let instance: Instance = serde_json::from_str(json).unwrap();
+        assert!(
+            instance.public_ip.is_none(),
+            "public_ip should default to None when absent from JSON"
+        );
     }
 }

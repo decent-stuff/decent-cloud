@@ -161,6 +161,7 @@ impl GatewayManager {
         instance.gateway_ssh_port = Some(allocation.base);
         instance.gateway_port_range_start = Some(allocation.base);
         instance.gateway_port_range_end = Some(allocation.base + allocation.count - 1);
+        instance.public_ip = Some(self.config.public_ip.clone());
 
         tracing::info!(
             "Gateway setup complete: {} -> {}:{} (ports {}-{})",

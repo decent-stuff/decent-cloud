@@ -865,6 +865,7 @@ impl Provisioner for ProxmoxProvisioner {
                 external_id: vmid.to_string(),
                 ip_address: ipv4,
                 ipv6_address: ipv6,
+                public_ip: None,
                 ssh_port: 22,
                 root_password: None,
                 additional_details: Some(serde_json::json!({
@@ -957,6 +958,7 @@ impl Provisioner for ProxmoxProvisioner {
             external_id: vmid.to_string(),
             ip_address: ipv4,
             ipv6_address: ipv6,
+            public_ip: None,
             ssh_port: 22,
             root_password: Some(root_password),
             additional_details: Some(serde_json::json!({
@@ -1057,6 +1059,7 @@ impl Provisioner for ProxmoxProvisioner {
                     external_id: vmid.to_string(),
                     ip_address: ipv4,
                     ipv6_address: ipv6,
+                    public_ip: None,
                     ssh_port: 22,
                     root_password: None,
                     additional_details: Some(serde_json::json!({
