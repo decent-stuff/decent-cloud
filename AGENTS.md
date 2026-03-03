@@ -118,6 +118,8 @@ AI agents run inside Docker containers. The compose-level PostgreSQL is accessib
 docker exec agent-postgres-1 pg_isready -U test
 ```
 
+Note: compose-level local stack currently provides PostgreSQL only. Chatwoot is not part of `agent/docker-compose.yml`.
+
 ### Running the API Server Locally
 
 ```bash

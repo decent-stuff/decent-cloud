@@ -113,6 +113,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 - **[Saved] No compare action** — Added "Compare Saved" button when 2+ items saved.
 - **[First-time user] No guided onboarding** — DONE (single-session): replaced generic welcome modal with 3-step first-login wizard: profile awareness, SSH key check, and activation CTAs (marketplace/provider). Remaining: persist completion across sessions if needed.
 - **[E2E] Onboarding wizard progression coverage** — DONE (2026-03-03): added Playwright spec `website/tests/e2e/first-login-onboarding.spec.ts` validating first-login wizard steps and one-session completion persistence.
+- **[API] Provider response metrics endpoint mismatch** — DONE (2026-03-03): fixed backend route to serve contract response metrics on canonical path `/api/v1/providers/:pubkey/response-metrics` (removed conflicting `/contract-response-metrics` route path).
 
 **High-Impact Remaining:**
 
@@ -128,6 +129,7 @@ ICPay does not have a programmatic payout API. Currently payouts are manual via 
 
 - **[Compare] URL shareability/discoverability** — DONE (2026-03-02): Added explicit **Share comparison** action on `/dashboard/marketplace/compare` that copies a canonical URL and shows visible success/error feedback. Canonicalization now enforces positive numeric IDs, deduplication, and compare cap.
 - **[E2E] Compare share action coverage** — DONE (2026-03-03): added Playwright spec `website/tests/e2e/compare-share.spec.ts` covering canonical URL copy + success feedback.
+- **[Local E2E] Chatwoot noise in Playwright runs** — DONE (2026-03-03): Playwright local webserver now disables frontend Chatwoot widget env vars during E2E and loads API env from `api/.env.local`; this removes external-widget/API misconfiguration noise from local test runs.
 
 - **[Landing page] CTA "Become a Provider" visible to all** — Shown on landing page but most users are not ready to be providers. Consider showing only after user has rented. *(Product decision needed.)*
 

@@ -50,14 +50,14 @@ export default defineConfig({
 		? [
 			{
 				command:
-					`DATABASE_URL="${databaseUrl}" API_SERVER_PORT=59011 CANISTER_ID="${canisterId}" FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true cargo run --bin api-server -- serve`,
+					`bash -lc 'set -a; [ -f ./.env.local ] && . ./.env.local; set +a; CARGO_BIN="$(command -v cargo || true)"; [ -z "$CARGO_BIN" ] && CARGO_BIN="/usr/local/cargo/bin/cargo"; DATABASE_URL="${databaseUrl}" API_SERVER_PORT=59011 CANISTER_ID="${canisterId}" FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true "$CARGO_BIN" run --bin api-server -- serve'`,
 				cwd: '../api',
 				url: apiURL,
 				reuseExistingServer: false,
 				timeout: 120_000,
 			},
 			{
-				command: 'VITE_DECENT_CLOUD_API_URL=http://localhost:59011 npm run dev -- --host 127.0.0.1 --port 59010 --strictPort',
+				command: 'VITE_DECENT_CLOUD_API_URL=http://localhost:59011 VITE_CHATWOOT_WEBSITE_TOKEN= VITE_CHATWOOT_BASE_URL= npm run dev -- --host 127.0.0.1 --port 59010 --strictPort',
 				url: baseURL,
 				reuseExistingServer: false,
 				timeout: 30_000,
