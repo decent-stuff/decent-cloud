@@ -56,7 +56,7 @@ const offeringFixtures = {
 } as const;
 
 test.describe('Marketplace compare sharing', () => {
-	test('copies canonical comparison URL and shows success feedback', async ({ page }) => {
+	test('@smoke copies canonical comparison URL and shows success feedback', async ({ page }) => {
 		await page.route('**/api/v1/prices/icp', async (route) => {
 			await route.fulfill({
 				status: 200,

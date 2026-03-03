@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/test-account';
 
 test.describe('First login onboarding', () => {
-	test('guides a new user through all onboarding steps once', async ({ page }) => {
+	test('@smoke guides a new user through all onboarding steps once', async ({ page }) => {
 		await page.route('**/api/v1/accounts/*/external-keys', async (route) => {
 			await route.fulfill({
 				status: 200,

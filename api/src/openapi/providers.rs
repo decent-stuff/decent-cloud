@@ -4952,6 +4952,7 @@ pub struct BandwidthHistoryResponse {
 #[cfg(test)]
 mod tests {
     use super::{BandwidthHistoryResponse, BandwidthStatsResponse};
+    use crate::database::test_helpers::setup_test_db;
     use crate::openapi::common::{
         ApiResponse, AutoAcceptRequest, AutoAcceptResponse, BulkUpdatePricesRequest,
         BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest, CsvImportError,
@@ -4965,6 +4966,10 @@ mod tests {
         LockResponse, ReconcileKeepInstance, ReconcileResponse, ReconcileTerminateInstance,
         ReconcileUnknownInstance,
     };
+    use poem::web::Data;
+    use poem_openapi::param::Path;
+    use poem_openapi::payload::Json;
+    use std::sync::Arc;
 
     // ── normalize_provisioning_details ──────────────────────────────────────
 
@@ -5659,5 +5664,41 @@ mod tests {
             Some("text/event-stream"),
             "Contract SSE response must have text/event-stream content type"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_provider_response_metrics_success_with_empty_dataset() {
+        let db = Arc::new(setup_test_db().await);
+        let api = super::ProvidersApi;
+        let pubkey = "0".repeat(64);
+
+        let Json(response) = api
+            .get_provider_response_metrics(Data(&db), Path(pubkey))
+            .await;
+
+        assert!(response.success);
+        assert!(response.error.is_none());
+
+        let metrics = response.data.expect("response data should be present");
+        assert!(metrics.avg_response_seconds.is_none());
+        assert!(metrics.avg_response_hours.is_none());
+        assert_eq!(metrics.sla_compliance_percent, 100.0);
+        assert_eq!(metrics.breach_count_30d, 0);
+        assert_eq!(metrics.total_inquiries_30d, 0);
+        assert_eq!(metrics.distribution.total_responses, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_provider_response_metrics_invalid_pubkey() {
+        let db = Arc::new(setup_test_db().await);
+        let api = super::ProvidersApi;
+
+        let Json(response) = api
+            .get_provider_response_metrics(Data(&db), Path("invalid-pubkey".to_string()))
+            .await;
+
+        assert!(!response.success);
+        assert!(response.data.is_none());
+        assert_eq!(response.error.as_deref(), Some("Invalid pubkey format"));
     }
 }

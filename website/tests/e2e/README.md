@@ -85,10 +85,10 @@ npm run test:e2e
 npm run test:e2e:smoke
 ```
 - Uses local auto-start stack (`E2E_AUTO_SERVER=1`) and Chromium only
-- Runs a minimal deterministic set:
+- Runs a minimal deterministic set (tests tagged `@smoke` in):
   - `first-login-onboarding.spec.ts`
   - `compare-share.spec.ts`
-  - `chatwoot-api.spec.ts` filtered to `Provider Response Metrics`
+  - `chatwoot-api.spec.ts`
 
 **Tip:** If you get connection errors, verify:
 ```bash
