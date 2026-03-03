@@ -5701,4 +5701,18 @@ mod tests {
         assert!(response.data.is_none());
         assert_eq!(response.error.as_deref(), Some("Invalid pubkey format"));
     }
+
+    #[test]
+    fn test_provider_response_metrics_route_is_declared() {
+        const PROVIDERS_RS: &str =
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/openapi/providers.rs"));
+        assert!(
+            PROVIDERS_RS.contains("path = \"/providers/:pubkey/response-metrics\""),
+            "Providers API must declare /providers/:pubkey/response-metrics route"
+        );
+        assert!(
+            PROVIDERS_RS.contains("async fn get_provider_response_metrics"),
+            "Providers API must keep get_provider_response_metrics handler"
+        );
+    }
 }

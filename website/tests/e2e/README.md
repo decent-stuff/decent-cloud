@@ -88,7 +88,7 @@ npm run test:e2e:smoke
 - Runs a minimal deterministic set (tests tagged `@smoke` in):
   - `first-login-onboarding.spec.ts`
   - `compare-share.spec.ts`
-  - `chatwoot-api.spec.ts`
+  - `provider-response-metrics.spec.ts`
 
 **Tip:** If you get connection errors, verify:
 ```bash
