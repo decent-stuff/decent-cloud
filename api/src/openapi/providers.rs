@@ -975,10 +975,11 @@ impl ProvidersApi {
         }
     }
 
-    /// Get provider response metrics
+    /// Get provider contract request response metrics
     ///
-    /// Returns response time and SLA compliance metrics for contract status changes.
-    /// Measures how quickly a provider responds to rental requests (accepts/rejects).
+    /// Returns response-time and SLA compliance metrics for contract rental requests.
+    /// Measures how quickly a provider accepts or rejects incoming requests.
+    /// This endpoint is for contract request handling, not chat message thread replies.
     #[oai(
         path = "/providers/:pubkey/response-metrics",
         method = "get",

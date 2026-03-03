@@ -80,6 +80,16 @@ cd ../cf && ./deploy.py deploy dev
 npm run test:e2e
 ```
 
+### Run Local Smoke Set (Fast Regression)
+```bash
+npm run test:e2e:smoke
+```
+- Uses local auto-start stack (`E2E_AUTO_SERVER=1`) and Chromium only
+- Runs a minimal deterministic set:
+  - `first-login-onboarding.spec.ts`
+  - `compare-share.spec.ts`
+  - `chatwoot-api.spec.ts` filtered to `Provider Response Metrics`
+
 **Tip:** If you get connection errors, verify:
 ```bash
 # Check if website is accessible

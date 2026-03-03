@@ -144,8 +144,8 @@ test.describe('Chatwoot API', () => {
 	});
 });
 
-test.describe('Provider Response Metrics', () => {
-	test('GET /providers/:pubkey/response-metrics returns contract response metrics', async ({
+test.describe('Provider Contract Request Response Metrics', () => {
+	test('GET /providers/:pubkey/response-metrics returns contract request SLA metrics', async ({
 		request
 	}) => {
 		// Use a valid 32-byte hex pubkey (64 chars)
@@ -158,7 +158,7 @@ test.describe('Provider Response Metrics', () => {
 
 		const data = await response.json();
 		expect(data.success).toBe(true);
-		// Response format from ProvidersApi endpoint (contract status response times)
+		// Response format from ProvidersApi endpoint (contract request accept/reject response times)
 		expect(data.data).toHaveProperty('avgResponseSeconds');
 		expect(data.data).toHaveProperty('avgResponseHours');
 		expect(data.data).toHaveProperty('slaCompliancePercent');
@@ -173,7 +173,7 @@ test.describe('Provider Response Metrics', () => {
 		expect(data.data.distribution).toHaveProperty('totalResponses');
 	});
 
-	test('GET /providers/:pubkey/response-metrics returns error for invalid pubkey', async ({
+	test('GET /providers/:pubkey/response-metrics returns error for invalid pubkey in contract request metrics', async ({
 		request
 	}) => {
 		const response = await request.get(

@@ -831,6 +831,7 @@ impl Database {
 
     /// Get example offerings for CSV template generation.
     /// Used by: database tests for example data verification
+    #[cfg(test)]
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
         let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
@@ -987,6 +988,7 @@ impl Database {
 impl Database {
     /// Count offerings.
     /// Used by: database tests for count verification
+    #[cfg(test)]
     pub async fn count_offerings(&self, filters: Option<&str>) -> Result<i64> {
         let query = if let Some(f) = filters {
             format!(
@@ -1747,6 +1749,7 @@ impl Database {
     /// Import seeded offerings from CSV data with offering_source='seeded'.
     /// Used by: `api-cli import-seeded-offerings` command
     /// Returns (success_count, errors) where errors is Vec<(row_number, error_message)>
+    #[allow(dead_code)] // Used by api-cli binary, not api-server
     pub async fn import_seeded_offerings_csv(
         &self,
         pubkey: &[u8],
@@ -2080,6 +2083,7 @@ impl Database {
     }
 
     /// Check whether a specific offering is saved by the user.
+    #[cfg(test)]
     pub async fn is_offering_saved(&self, user_pubkey: &[u8], offering_id: i64) -> Result<bool> {
         let count: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(*) as "count!: i64" FROM saved_offerings WHERE user_pubkey = $1 AND offering_id = $2"#,

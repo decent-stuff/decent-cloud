@@ -33,6 +33,7 @@ pub struct CloudAccount {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)] // Schema type for OpenAPI/TS generation
 pub struct CreateCloudAccountInput {
     pub backend_type: String,
     pub name: String,
@@ -44,6 +45,7 @@ pub struct CreateCloudAccountInput {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)] // Schema type for OpenAPI/TS generation
 pub struct CloudAccountWithCatalog {
     #[serde(flatten)]
     #[oai(flatten)]

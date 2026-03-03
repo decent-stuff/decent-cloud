@@ -267,6 +267,10 @@ export interface ResponseTimeDistribution {
 	totalResponses: number;
 }
 
+/**
+ * Provider SLA metrics for contract request handling (accept/reject timing).
+ * This is not chat message thread response telemetry.
+ */
 export interface ProviderResponseMetrics {
 	avgResponseSeconds: number | null;
 	avgResponseHours: number | null;
@@ -276,6 +280,9 @@ export interface ProviderResponseMetrics {
 	distribution: ResponseTimeDistribution;
 }
 
+/**
+ * Fetch contract request response metrics for a provider.
+ */
 export async function getProviderResponseMetrics(
 	pubkey: string | Uint8Array
 ): Promise<ProviderResponseMetrics> {

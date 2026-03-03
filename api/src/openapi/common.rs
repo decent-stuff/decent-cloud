@@ -128,26 +128,26 @@ pub struct AllowlistAddRequest {
     pub allowed_pubkey: String,
 }
 
-/// Response time distribution across time buckets
+/// Contract request response-time distribution across time buckets
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseTimeDistributionResponse {
-    /// Percentage of inquiries responded to within 1 hour
+    /// Percentage of contract requests responded to within 1 hour
     pub within_1h_pct: f64,
-    /// Percentage of inquiries responded to within 4 hours
+    /// Percentage of contract requests responded to within 4 hours
     pub within_4h_pct: f64,
-    /// Percentage of inquiries responded to within 12 hours
+    /// Percentage of contract requests responded to within 12 hours
     pub within_12h_pct: f64,
-    /// Percentage of inquiries responded to within 24 hours
+    /// Percentage of contract requests responded to within 24 hours
     pub within_24h_pct: f64,
-    /// Percentage of inquiries responded to within 72 hours
+    /// Percentage of contract requests responded to within 72 hours
     pub within_72h_pct: f64,
     /// Total number of responses measured
     pub total_responses: i64,
 }
 
-/// Response metrics for provider support response times
+/// Response metrics for provider contract request handling (accept/reject SLA)
 #[derive(Debug, Serialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -160,7 +160,7 @@ pub struct ResponseMetricsResponse {
     pub sla_compliance_percent: f64,
     /// Number of SLA breaches in last 30 days
     pub breach_count_30d: i64,
-    /// Total customer inquiries in last 30 days
+    /// Total contract requests in last 30 days
     pub total_inquiries_30d: i64,
     /// Response time distribution across time buckets
     pub distribution: ResponseTimeDistributionResponse,

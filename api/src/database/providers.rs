@@ -521,6 +521,7 @@ impl Database {
 
     /// Create or update an external provider.
     /// Used by: `api-cli scrape-provider` command
+    #[allow(dead_code)] // Used by api-cli binary, not api-server
     pub async fn create_or_update_external_provider(
         &self,
         pubkey: &[u8],

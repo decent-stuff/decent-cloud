@@ -45,6 +45,7 @@ impl Database {
 
     /// Access the underlying pool.
     /// Used by: sync_service tests for direct SQL verification
+    #[cfg(test)]
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }

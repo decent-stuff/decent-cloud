@@ -50,6 +50,7 @@ pub struct CloudResource {
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)] // Schema type for OpenAPI/TS generation
 pub struct CreateCloudResourceInput {
     pub cloud_account_id: String,
     pub name: String,
@@ -297,6 +298,7 @@ impl Database {
         Ok(())
     }
 
+    #[cfg(test)]
     pub async fn update_cloud_resource_status(&self, id: &Uuid, status: &str) -> Result<()> {
         let rows_affected = sqlx::query(
             r#"

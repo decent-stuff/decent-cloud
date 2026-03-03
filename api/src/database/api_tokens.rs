@@ -34,7 +34,6 @@ pub fn hash_token_hex(token_hex: &str) -> Result<Vec<u8>> {
 #[derive(Debug, Clone, FromRow)]
 pub struct ApiToken {
     pub id: uuid::Uuid,
-    pub user_pubkey: Vec<u8>,
     pub name: String,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
@@ -98,7 +97,7 @@ impl Database {
     /// List all tokens for a user (does not include the raw token value).
     pub async fn list_api_tokens(&self, user_pubkey: &[u8]) -> Result<Vec<ApiToken>> {
         let tokens = sqlx::query_as::<_, ApiToken>(
-            "SELECT id, user_pubkey, name, created_at, last_used_at, expires_at, revoked_at
+            "SELECT id, name, created_at, last_used_at, expires_at, revoked_at
              FROM api_tokens
              WHERE user_pubkey = $1
              ORDER BY created_at DESC",
@@ -164,7 +163,7 @@ impl Database {
     /// Get a single API token by its ID (internal helper).
     async fn get_api_token_by_id(&self, id: uuid::Uuid) -> Result<Option<ApiToken>> {
         let token = sqlx::query_as::<_, ApiToken>(
-            "SELECT id, user_pubkey, name, created_at, last_used_at, expires_at, revoked_at
+            "SELECT id, name, created_at, last_used_at, expires_at, revoked_at
              FROM api_tokens WHERE id = $1",
         )
         .bind(id)
@@ -193,7 +192,6 @@ mod tests {
         // raw token must be 64 hex chars (32 bytes)
         assert_eq!(raw_hex.len(), 64);
         assert_eq!(token.name, "ci-token");
-        assert_eq!(token.user_pubkey, pubkey);
         assert!(token.revoked_at.is_none());
         assert!(token.expires_at.is_none());
         assert!(token.is_active().unwrap());

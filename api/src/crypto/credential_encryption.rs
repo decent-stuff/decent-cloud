@@ -68,6 +68,7 @@ impl EncryptedCredentials {
     }
 
     /// Deserialize from JSON string format
+    #[cfg(test)]
     pub fn from_json(s: &str) -> Result<Self> {
         serde_json::from_str(s).context("Failed to parse encrypted credentials")
     }
@@ -214,6 +215,7 @@ pub fn encrypt_credentials(
 ///
 /// # Returns
 /// The decrypted plaintext credentials
+#[allow(dead_code)] // Exposed via crypto module for client-side decryption parity
 pub fn decrypt_credentials(
     encrypted: &EncryptedCredentials,
     ed25519_secret: &[u8],
@@ -353,6 +355,7 @@ pub fn encrypt_credentials_with_aad(
 ///
 /// # Returns
 /// The decrypted plaintext credentials
+#[allow(dead_code)] // Exposed via crypto module for client-side decryption parity
 pub fn decrypt_credentials_with_aad(
     encrypted: &EncryptedCredentials,
     ed25519_secret: &[u8],
