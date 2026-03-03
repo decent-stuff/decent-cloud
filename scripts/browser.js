@@ -314,11 +314,13 @@ async function authenticatePage(page, targetUrl, seedPhrase, timeout) {
   );
   
   await page.goto(`${origin}/dashboard`, { waitUntil: 'domcontentloaded', timeout });
-  await authDone.catch(() => {});
-  await page.waitForTimeout(300);
+  await authDone;
+  await page.waitForTimeout(200);
 
   if (targetUrl !== `${origin}/dashboard`) {
     await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout });
+    await page.waitForLoadState('networkidle', { timeout }).catch(() => {});
+    await page.waitForTimeout(300);
   }
 }
 
