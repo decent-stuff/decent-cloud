@@ -1202,6 +1202,7 @@
 				{@const instanceDetails = (() => {
 					try { return JSON.parse(contract.provisioning_instance_details); } catch { return null; }
 				})()}
+				{@const connectableIp = instanceDetails?.public_ip || (instanceDetails?.ip_address && !isPrivateIp(instanceDetails.ip_address) ? instanceDetails.ip_address : null)}
 				<div class="bg-green-500/10 border border-green-500/30  p-4">
 					<div class="text-green-400 font-semibold mb-3">Connection Details</div>
 
@@ -1343,14 +1344,16 @@
 								</div>
 							{/if}
 						</div>
-					{:else if instanceDetails?.ip_address && !isPrivateIp(instanceDetails.ip_address)}
-						<!-- Direct IP access VM (public IP only) -->
+					{:else if connectableIp}
+						<!-- Direct public IP access -->
+						{@const sshPort = instanceDetails?.gateway_ssh_port || instanceDetails?.ssh_port || 22}
+						{@const sshCmd = sshPort === 22 ? `ssh root@${connectableIp}` : `ssh -p ${sshPort} root@${connectableIp}`}
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
 								<div class="flex items-center justify-between mb-1">
 									<div class="text-neutral-500 text-xs">SSH Command</div>
 									<button
-										onclick={() => copySSHCommand(`ssh root@${instanceDetails.ip_address}`)}
+										onclick={() => copySSHCommand(sshCmd)}
 										class="text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors"
 										title="Copy SSH command"
 									>
@@ -1358,12 +1361,12 @@
 									</button>
 								</div>
 								<code class="text-green-300 text-sm font-mono break-all select-all">
-									ssh root@{instanceDetails.ip_address}
+									{sshCmd}
 								</code>
 							</div>
 							<div class="bg-black/20  p-3">
 								<div class="text-neutral-500 text-xs mb-1">IP Address</div>
-								<code class="text-white text-sm font-mono select-all">{instanceDetails.ip_address}</code>
+								<code class="text-white text-sm font-mono select-all">{connectableIp}</code>
 							</div>
 							{#if instanceDetails.ipv6_address}
 								<div class="bg-black/20  p-3">
@@ -1372,14 +1375,13 @@
 								</div>
 							{/if}
 						</div>
-					{:else if instanceDetails?.ip_address && isPrivateIp(instanceDetails.ip_address)}
-						<!-- VM is provisioned but only has private IP — gateway routing is pending -->
+					{:else if instanceDetails?.ip_address}
+						<!-- VM provisioned but only has a private IP — gateway routing pending -->
 						<div class="bg-yellow-500/10 border border-yellow-500/30 p-3">
 							<p class="text-yellow-300 text-sm font-medium">Gateway routing is being configured</p>
 							<p class="text-yellow-200/70 text-xs mt-1">
 								Your VM is provisioned but the public access gateway is still being set up.
 								Connection details will appear here once routing is ready.
-								This usually takes a few minutes.
 							</p>
 						</div>
 					{:else}

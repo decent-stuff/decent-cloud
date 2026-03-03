@@ -44,6 +44,35 @@ describe('isPrivateIp', () => {
 	});
 });
 
+/** Derives the connectable IP: prefers public_ip, falls back to non-private ip_address */
+function connectableIp(details: Record<string, unknown> | null): string | null {
+	if (!details) return null;
+	if (typeof details.public_ip === 'string') return details.public_ip;
+	if (typeof details.ip_address === 'string' && !isPrivateIp(details.ip_address)) return details.ip_address;
+	return null;
+}
+
+describe('connectableIp derivation', () => {
+	it('prefers public_ip over ip_address', () => {
+		const details = { public_ip: '203.0.113.5', ip_address: '172.16.0.146' };
+		expect(connectableIp(details)).toBe('203.0.113.5');
+	});
+
+	it('falls back to public ip_address when no public_ip', () => {
+		const details = { ip_address: '203.0.113.1' };
+		expect(connectableIp(details)).toBe('203.0.113.1');
+	});
+
+	it('returns null for private ip_address without public_ip', () => {
+		const details = { ip_address: '172.16.0.146' };
+		expect(connectableIp(details)).toBeNull();
+	});
+
+	it('returns null for null details', () => {
+		expect(connectableIp(null)).toBeNull();
+	});
+});
+
 describe('connection details display logic', () => {
 	it('prefers gateway over direct IP', () => {
 		const contract = {
@@ -55,7 +84,7 @@ describe('connection details display logic', () => {
 		expect(useGateway).toBe(true);
 	});
 
-	it('shows pending message for private IP without gateway', () => {
+	it('shows pending message for private IP without gateway or public_ip', () => {
 		const contract = {
 			gateway_subdomain: null,
 			gateway_ssh_port: null,
@@ -63,11 +92,27 @@ describe('connection details display logic', () => {
 		};
 		const useGateway = !!(contract.gateway_subdomain && contract.gateway_ssh_port);
 		const details = JSON.parse(contract.provisioning_instance_details);
-		const showPending = !useGateway && details?.ip_address && isPrivateIp(details.ip_address);
-		expect(showPending).toBe(true);
+		const ip = connectableIp(details);
+		expect(useGateway).toBe(false);
+		expect(ip).toBeNull();
+		// Only private ip_address remains → pending message
+		expect(details.ip_address).toBeTruthy();
 	});
 
-	it('shows direct IP when IP is public and no gateway', () => {
+	it('shows direct public_ip from cloud provisioning', () => {
+		const contract = {
+			gateway_subdomain: null,
+			gateway_ssh_port: null,
+			provisioning_instance_details: JSON.stringify({ public_ip: '49.12.34.56', ip_address: '172.16.0.146' }),
+		};
+		const useGateway = !!(contract.gateway_subdomain && contract.gateway_ssh_port);
+		const details = JSON.parse(contract.provisioning_instance_details);
+		const ip = connectableIp(details);
+		expect(useGateway).toBe(false);
+		expect(ip).toBe('49.12.34.56');
+	});
+
+	it('shows direct ip_address when it is public', () => {
 		const contract = {
 			gateway_subdomain: null,
 			gateway_ssh_port: null,
@@ -75,7 +120,8 @@ describe('connection details display logic', () => {
 		};
 		const useGateway = !!(contract.gateway_subdomain && contract.gateway_ssh_port);
 		const details = JSON.parse(contract.provisioning_instance_details);
-		const showDirectIp = !useGateway && details?.ip_address && !isPrivateIp(details.ip_address);
-		expect(showDirectIp).toBe(true);
+		const ip = connectableIp(details);
+		expect(useGateway).toBe(false);
+		expect(ip).toBe('203.0.113.1');
 	});
 });
