@@ -159,6 +159,22 @@ npm run dev
 - `api/.env.dev` — Points to staging deployment (DO NOT use for local dev)
 - `cf/.env.dev` — Staging deployment secrets (DO NOT use for local dev)
 
+### Seeding Test Data
+
+After a fresh database setup, the marketplace will be empty because example offerings have offline providers. To create an online provider with test offerings:
+
+```bash
+# Create a test user + online provider + 3 KVM offerings
+DC_WEB_URL=http://localhost:5173 DC_API_URL=http://localhost:59011 \
+node scripts/dc-auth.js seed-ux-data
+
+# Or create test contracts against existing offerings
+DC_WEB_URL=http://localhost:5173 DC_API_URL=http://localhost:59011 \
+node scripts/dc-auth.js seed-contracts
+```
+
+This starts a heartbeat daemon to keep the provider online. Kill it with: `kill $(cat /tmp/dc-keepalive-*.pid)`
+
 ---
 
 # Project Rules
