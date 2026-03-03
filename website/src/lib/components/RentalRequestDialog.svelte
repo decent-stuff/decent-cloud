@@ -8,6 +8,7 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { getExternalKeys, UserApiClient } from "$lib/services/user-api";
 	import { authStore } from "$lib/stores/auth";
+	import { bytesToHex } from "$lib/utils/identity";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import { loadStripe, type Stripe } from "@stripe/stripe-js";
@@ -142,19 +143,32 @@
 		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
 	);
 
-	// Check if Stripe is supported for this offering's currency (used for default)
+	// Stripe is available for fiat currencies (USD, EUR, etc.)
 	let isStripeAvailable = $derived(
 		offering ? isStripeSupportedCurrency(offering.currency) : false,
 	);
 
-	// Default to Stripe for fiat currencies (USD, EUR, etc.) when available,
-	// otherwise default to ICPay for crypto-only offerings
-	let paymentMethod = $state<"icpay" | "stripe">(
-		offering && isStripeSupportedCurrency(offering.currency) ? "stripe" : "icpay"
-	);
+	// ICPay is only available for non-fiat (crypto) currencies
+	let isIcpayAvailable = $derived(!isStripeAvailable);
 
-	// Payment is required when a payment method is selected (icpay or stripe)
-	let paymentRequired = $derived(paymentMethod === "icpay" || paymentMethod === "stripe");
+	// Default: Stripe for fiat, ICPay for crypto. Reactive to offering changes.
+	let paymentMethod = $state<"icpay" | "stripe">("stripe");
+	$effect(() => {
+		if (offering) {
+			paymentMethod = isStripeSupportedCurrency(offering.currency) ? "stripe" : "icpay";
+		}
+	});
+
+	// Self-rental: user renting their own offering (no payment needed)
+	let isSelfRental = $derived(() => {
+		if (!offering?.pubkey) return false;
+		const active = get(authStore.activeIdentity);
+		if (!active?.publicKeyBytes) return false;
+		return bytesToHex(active.publicKeyBytes) === offering.pubkey;
+	});
+
+	// Payment is required unless it's a self-rental
+	let paymentRequired = $derived(!isSelfRental() && (paymentMethod === "icpay" || paymentMethod === "stripe"));
 
 	// Subscription offering helpers
 	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
@@ -554,16 +568,21 @@
 							{/if}
 						</div>
 						<div class="text-right">
-							<span class="text-2xl font-bold text-white">
+							{#if isSelfRental()}
+								<span class="text-2xl font-bold text-green-400">Free</span>
+								<p class="text-xs text-neutral-500">You own this offering</p>
+							{:else}
+								<span class="text-2xl font-bold text-white">
+									{#if isSubscriptionOffering}
+										{offering.monthly_price.toFixed(2)}
+									{:else}
+										{calculatePrice()}
+									{/if}
+									<span class="text-lg">{offering.currency}</span>
+								</span>
 								{#if isSubscriptionOffering}
-									{offering.monthly_price.toFixed(2)}
-								{:else}
-									{calculatePrice()}
+									<p class="text-xs text-neutral-500">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
 								{/if}
-								<span class="text-lg">{offering.currency}</span>
-							</span>
-							{#if isSubscriptionOffering}
-								<p class="text-xs text-neutral-500">/{subscriptionIntervalLabel().toLowerCase().replace('ly', '')}</p>
 							{/if}
 						</div>
 					</div>
@@ -653,11 +672,18 @@
 					<div class="grid grid-cols-2 gap-3">
 						<button
 							type="button"
-							onclick={() => (paymentMethod = "icpay")}
+							onclick={() =>
+								isIcpayAvailable && (paymentMethod = "icpay")}
+							disabled={!isIcpayAvailable}
 							class="px-4 py-3  font-semibold transition-all border-2 {paymentMethod ===
 							'icpay'
 								? 'bg-primary-500/20 border-primary-500 text-white'
-								: 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'}"
+								: isIcpayAvailable
+									? 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'
+									: 'bg-surface-elevated border-neutral-800 text-neutral-700 cursor-not-allowed'}"
+							title={!isIcpayAvailable
+								? `Crypto payment is not available for ${offering?.currency} currency`
+								: ""}
 						>
 							Crypto (ICPay)
 						</button>
@@ -673,7 +699,7 @@
 									? 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'
 									: 'bg-surface-elevated border-neutral-800 text-neutral-700 cursor-not-allowed'}"
 							title={!isStripeAvailable
-								? `Stripe does not support ${offering?.currency} currency`
+								? `Credit card payment is not available for ${offering?.currency} currency`
 								: ""}
 						>
 							Credit Card
@@ -681,8 +707,11 @@
 					</div>
 					{#if !isStripeAvailable}
 						<p class="text-xs text-yellow-400/80 mt-2">
-							Stripe payment is not available for {offering?.currency}
-							currency
+							Credit card payment is not available for {offering?.currency} currency
+						</p>
+					{:else if !isIcpayAvailable}
+						<p class="text-xs text-yellow-400/80 mt-2">
+							Crypto payment is not available for {offering?.currency} currency
 						</p>
 					{/if}
 				</fieldset>
@@ -720,8 +749,20 @@
 					</div>
 				{/if}
 
-				<!-- Stripe Payment Info -->
-				{#if paymentMethod === "stripe"}
+				<!-- Payment Info -->
+				{#if isSelfRental()}
+					<div
+						class="bg-green-500/10  p-4 border border-green-500/30"
+					>
+						<h3 class="text-sm font-semibold text-green-400 mb-2">
+							No Payment Required
+						</h3>
+						<p class="text-sm text-neutral-500">
+							You own this offering. The rental will be created
+							at no cost.
+						</p>
+					</div>
+				{:else if paymentMethod === "stripe"}
 					<div
 						class="bg-surface-elevated  p-4 border border-neutral-800"
 					>

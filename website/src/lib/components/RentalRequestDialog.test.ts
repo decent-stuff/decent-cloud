@@ -138,6 +138,33 @@ describe('RentalRequestDialog payment method default', () => {
 	});
 });
 
+describe('RentalRequestDialog payment method availability', () => {
+	it('should disable ICPay for fiat currencies (USD)', () => {
+		const currency = 'USD';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		const isIcpayAvailable = !isStripeAvailable;
+		expect(isIcpayAvailable).toBe(false);
+	});
+
+	it('should disable ICPay for EUR', () => {
+		const currency = 'EUR';
+		const isIcpayAvailable = !isStripeSupportedCurrency(currency);
+		expect(isIcpayAvailable).toBe(false);
+	});
+
+	it('should enable ICPay for crypto currencies (ICP)', () => {
+		const currency = 'ICP';
+		const isIcpayAvailable = !isStripeSupportedCurrency(currency);
+		expect(isIcpayAvailable).toBe(true);
+	});
+
+	it('should disable Stripe for crypto currencies (ICP)', () => {
+		const currency = 'ICP';
+		const isStripeAvailable = isStripeSupportedCurrency(currency);
+		expect(isStripeAvailable).toBe(false);
+	});
+});
+
 describe('RentalRequestDialog SSH key generation', () => {
 	it('should generate a valid SSH keypair for the "Generate for me" feature', async () => {
 		const { publicKeySsh, privateKeyPem } = await generateSshKeyPair('test-user');
