@@ -32,6 +32,10 @@ pub struct AgentPool {
     /// When pool was created
     #[ts(type = "number")]
     pub created_at_ns: i64,
+    /// Target version for remote upgrade (set via API, cleared after agents upgrade)
+    #[oai(skip_serializing_if_is_none)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_to_version: Option<String>,
 }
 
 /// Agent pool with agent statistics
@@ -128,6 +132,7 @@ struct PoolRow {
     location: String,
     provisioner_type: String,
     created_at_ns: i64,
+    upgrade_to_version: Option<String>,
 }
 
 /// Internal row for pool with stats queries
@@ -139,6 +144,7 @@ struct PoolWithStatsRow {
     location: String,
     provisioner_type: String,
     created_at_ns: i64,
+    upgrade_to_version: Option<String>,
     agent_count: i64,
     online_count: i64,
     active_contracts: i64,
@@ -154,6 +160,19 @@ struct SetupTokenRow {
     expires_at_ns: i64,
     used_at_ns: Option<i64>,
     used_by_agent: Option<Vec<u8>>,
+}
+
+/// Convert a PoolRow to AgentPool (DRY helper).
+fn pool_from_row(r: PoolRow) -> AgentPool {
+    AgentPool {
+        pool_id: r.pool_id,
+        provider_pubkey: hex::encode(&r.provider_pubkey),
+        name: r.name,
+        location: r.location,
+        provisioner_type: r.provisioner_type,
+        created_at_ns: r.created_at_ns,
+        upgrade_to_version: r.upgrade_to_version,
+    }
 }
 
 impl Database {
@@ -213,26 +232,20 @@ impl Database {
             location: location.to_string(),
             provisioner_type: provisioner_type.to_string(),
             created_at_ns: now_ns,
+            upgrade_to_version: None,
         })
     }
 
     /// Get a pool by ID.
     pub async fn get_agent_pool(&self, pool_id: &str) -> Result<Option<AgentPool>> {
         let row = sqlx::query_as::<_, PoolRow>(
-            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns FROM agent_pools WHERE pool_id = $1",
+            "SELECT pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns, upgrade_to_version FROM agent_pools WHERE pool_id = $1",
         )
         .bind(pool_id)
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| AgentPool {
-            pool_id: r.pool_id,
-            provider_pubkey: hex::encode(&r.provider_pubkey),
-            name: r.name,
-            location: r.location,
-            provisioner_type: r.provisioner_type,
-            created_at_ns: r.created_at_ns,
-        }))
+        Ok(row.map(pool_from_row))
     }
 
     /// List all pools for a provider with agent statistics.
@@ -246,7 +259,7 @@ impl Database {
 
         let rows = sqlx::query_as::<_, PoolWithStatsRow>(
             r#"SELECT
-                p.pool_id, p.provider_pubkey, p.name, p.location, p.provisioner_type, p.created_at_ns,
+                p.pool_id, p.provider_pubkey, p.name, p.location, p.provisioner_type, p.created_at_ns, p.upgrade_to_version,
                 COUNT(DISTINCT d.agent_pubkey)::BIGINT as agent_count,
                 COUNT(DISTINCT CASE WHEN s.online = TRUE AND s.last_heartbeat_ns > $1 THEN d.agent_pubkey END)::BIGINT as online_count,
                 COALESCE(SUM(s.active_contracts), 0)::BIGINT as active_contracts
@@ -302,6 +315,7 @@ impl Database {
                         location: r.location,
                         provisioner_type: r.provisioner_type,
                         created_at_ns: r.created_at_ns,
+                        upgrade_to_version: r.upgrade_to_version,
                     },
                     agent_count: r.agent_count,
                     online_count: r.online_count,
@@ -523,6 +537,26 @@ impl Database {
             pool_id,
             provider_pubkey
         )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Set (or clear) the upgrade target version for a pool.
+    /// Pass `None` to cancel a pending upgrade.
+    pub async fn set_pool_upgrade_version(
+        &self,
+        pool_id: &str,
+        provider_pubkey: &[u8],
+        version: Option<&str>,
+    ) -> Result<bool> {
+        let result = sqlx::query(
+            "UPDATE agent_pools SET upgrade_to_version = $1 WHERE pool_id = $2 AND provider_pubkey = $3",
+        )
+        .bind(version)
+        .bind(pool_id)
+        .bind(provider_pubkey)
         .execute(&self.pool)
         .await?;
 
@@ -1075,5 +1109,86 @@ mod tests {
             caps.is_none(),
             "Pool without agents should have no capabilities"
         );
+    }
+
+    #[tokio::test]
+    async fn test_set_and_get_pool_upgrade_version() {
+        let db = setup_test_db().await;
+        let provider_pubkey = vec![9u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        let pool = db
+            .create_agent_pool("upgrade-pool", &provider_pubkey, "Upgrade Pool", "europe", "proxmox")
+            .await
+            .unwrap();
+
+        // Initially no upgrade version
+        assert!(pool.upgrade_to_version.is_none());
+        let fetched = db.get_agent_pool(&pool.pool_id).await.unwrap().unwrap();
+        assert!(fetched.upgrade_to_version.is_none());
+
+        // Set upgrade version
+        let updated = db
+            .set_pool_upgrade_version(&pool.pool_id, &provider_pubkey, Some("0.4.21"))
+            .await
+            .unwrap();
+        assert!(updated);
+
+        let fetched = db.get_agent_pool(&pool.pool_id).await.unwrap().unwrap();
+        assert_eq!(fetched.upgrade_to_version.as_deref(), Some("0.4.21"));
+
+        // Clear upgrade version
+        let cleared = db
+            .set_pool_upgrade_version(&pool.pool_id, &provider_pubkey, None)
+            .await
+            .unwrap();
+        assert!(cleared);
+
+        let fetched = db.get_agent_pool(&pool.pool_id).await.unwrap().unwrap();
+        assert!(fetched.upgrade_to_version.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_set_pool_upgrade_version_wrong_provider() {
+        let db = setup_test_db().await;
+        let provider_pubkey = vec![10u8; 32];
+        let wrong_pubkey = vec![11u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        let pool = db
+            .create_agent_pool("upgrade-pool-2", &provider_pubkey, "Pool", "na", "proxmox")
+            .await
+            .unwrap();
+
+        // Wrong provider should not update
+        let updated = db
+            .set_pool_upgrade_version(&pool.pool_id, &wrong_pubkey, Some("0.4.21"))
+            .await
+            .unwrap();
+        assert!(!updated);
+
+        // Original value unchanged
+        let fetched = db.get_agent_pool(&pool.pool_id).await.unwrap().unwrap();
+        assert!(fetched.upgrade_to_version.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_upgrade_to_version_in_pool_with_stats() {
+        let db = setup_test_db().await;
+        let provider_pubkey = vec![12u8; 32];
+        register_provider(&db, &provider_pubkey).await;
+
+        let pool = db
+            .create_agent_pool("stats-upgrade-pool", &provider_pubkey, "Pool", "europe", "proxmox")
+            .await
+            .unwrap();
+
+        db.set_pool_upgrade_version(&pool.pool_id, &provider_pubkey, Some("1.0.0"))
+            .await
+            .unwrap();
+
+        let stats = db.list_agent_pools_with_stats(&provider_pubkey).await.unwrap();
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].pool.upgrade_to_version.as_deref(), Some("1.0.0"));
     }
 }

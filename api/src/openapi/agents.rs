@@ -502,14 +502,13 @@ impl AgentsApi {
         }
 
         // Fetch pool info if agent belongs to a pool
-        let pool_name = if let Some(pool_id) = &auth.pool_id {
+        let (pool_name, upgrade_to_version) = if let Some(pool_id) = &auth.pool_id {
             match db.get_agent_pool(pool_id).await {
-                Ok(Some(pool)) => Some(pool.name),
-                // Log error but don't fail heartbeat if pool lookup fails
-                _ => None,
+                Ok(Some(pool)) => (Some(pool.name), pool.upgrade_to_version),
+                _ => (None, None),
             }
         } else {
-            None
+            (None, None)
         };
 
         // Convert resources to JSON value if provided
@@ -568,6 +567,7 @@ impl AgentsApi {
                 next_heartbeat_seconds: 60,
                 pool_id: auth.pool_id,
                 pool_name,
+                upgrade_to_version,
             }),
             error: None,
         })

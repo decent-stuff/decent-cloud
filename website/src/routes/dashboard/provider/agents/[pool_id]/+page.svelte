@@ -11,6 +11,7 @@
 		updateAgentDelegationLabel,
 		getOfferingSuggestions,
 		generateOfferings,
+		requestPoolUpgrade,
 		hexEncode,
 		type CreateSetupTokenParams,
 		type AgentDelegation,
@@ -33,6 +34,8 @@
 
 	let showTokenDialog = $state(false);
 	let showGenerateOfferingsDialog = $state(false);
+	let latestVersion = $state<string | null>(null);
+	let upgradeRequesting = $state(false);
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -101,6 +104,8 @@
 				listSetupTokens(providerHex, poolId, signedTokens.headers)
 			]);
 
+			// Fetch latest release version (non-blocking)
+			fetchLatestVersion();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load pool details.";
 		} finally {
@@ -243,6 +248,75 @@
 		return generateOfferings(providerHex, poolId, request, signed.headers);
 	}
 
+	async function fetchLatestVersion() {
+		try {
+			const resp = await fetch('https://api.github.com/repos/decent-stuff/decent-cloud/releases/latest');
+			if (!resp.ok) return;
+			const data = await resp.json();
+			const tag = data.tag_name as string;
+			latestVersion = tag.replace(/^v/, '');
+		} catch {
+			// Non-critical — don't block UI
+		}
+	}
+
+	function isVersionNewer(current: string, latest: string): boolean {
+		const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+		const c = parse(current);
+		const l = parse(latest);
+		for (let i = 0; i < 3; i++) {
+			if ((l[i] ?? 0) > (c[i] ?? 0)) return true;
+			if ((l[i] ?? 0) < (c[i] ?? 0)) return false;
+		}
+		return false;
+	}
+
+	// Compute which agents are outdated
+	let outdatedAgents = $derived(
+		latestVersion
+			? delegations.filter(d => d.version && isVersionNewer(d.version, latestVersion!))
+			: []
+	);
+
+	async function handleRequestUpgrade() {
+		if (!latestVersion || !signingIdentityInfo) return;
+		if (!confirm(`Upgrade all agents in this pool to v${latestVersion}?`)) return;
+
+		try {
+			upgradeRequesting = true;
+			const signed = await signRequest(
+				signingIdentityInfo.identity,
+				"POST",
+				`/api/v1/providers/${providerHex}/pools/${poolId}/upgrade`,
+				{ version: latestVersion }
+			);
+			await requestPoolUpgrade(providerHex, poolId, latestVersion, signed.headers);
+			// Refresh pool data to show the pending upgrade
+			await refreshAgentData();
+		} catch (e) {
+			alert(e instanceof Error ? e.message : "Failed to request upgrade");
+		} finally {
+			upgradeRequesting = false;
+		}
+	}
+
+	async function handleCancelUpgrade() {
+		if (!signingIdentityInfo) return;
+
+		try {
+			const signed = await signRequest(
+				signingIdentityInfo.identity,
+				"POST",
+				`/api/v1/providers/${providerHex}/pools/${poolId}/upgrade`,
+				{ version: null }
+			);
+			await requestPoolUpgrade(providerHex, poolId, null, signed.headers);
+			await refreshAgentData();
+		} catch (e) {
+			alert(e instanceof Error ? e.message : "Failed to cancel upgrade");
+		}
+	}
+
 	function formatPubkey(hex: string): string {
 		if (hex.length <= 16) return hex;
 		return hex.slice(0, 8) + "..." + hex.slice(-8);
@@ -316,6 +390,40 @@
 			</div>
 		</div>
 
+		<!-- Upgrade Banner -->
+		{#if pool.upgradeToVersion}
+			<div class="bg-blue-500/10 border border-blue-500/30 p-4 flex items-center justify-between">
+				<div>
+					<span class="text-blue-300 font-medium">Upgrade to v{pool.upgradeToVersion} requested</span>
+					<span class="text-neutral-400 text-sm ml-2">— agents will upgrade on next heartbeat</span>
+				</div>
+				<button
+					onclick={handleCancelUpgrade}
+					class="px-3 py-1 text-xs bg-neutral-700 text-neutral-300 border border-neutral-600 rounded hover:bg-neutral-600 transition-colors"
+				>
+					Cancel
+				</button>
+			</div>
+		{:else if latestVersion && outdatedAgents.length > 0}
+			<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-center justify-between">
+				<div>
+					<span class="text-amber-300 font-medium">
+						{outdatedAgents.length} agent{outdatedAgents.length > 1 ? 's' : ''} outdated
+					</span>
+					<span class="text-neutral-400 text-sm ml-2">
+						— latest version: v{latestVersion}
+					</span>
+				</div>
+				<button
+					onclick={handleRequestUpgrade}
+					disabled={upgradeRequesting}
+					class="px-4 py-1.5 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+				>
+					{upgradeRequesting ? 'Requesting...' : 'Upgrade Agents'}
+				</button>
+			</div>
+		{/if}
+
 		<!-- Agent Delegations Table -->
 		<div class="bg-surface-elevated border border-neutral-800  overflow-hidden">
 			<h3 class="px-6 py-4 text-lg font-medium text-white border-b border-neutral-800">
@@ -349,8 +457,14 @@
 							<td class="px-6 py-4 font-mono text-xs text-neutral-400" title={delegation.agentPubkey}>
 								{formatPubkey(delegation.agentPubkey)}
 							</td>
-							<td class="px-6 py-4 text-neutral-300">
-								{delegation.version || "—"}
+							<td class="px-6 py-4">
+								{#if delegation.version && latestVersion && isVersionNewer(delegation.version, latestVersion)}
+									<span class="text-amber-400" title="Outdated (latest: v{latestVersion})">{delegation.version}</span>
+								{:else if delegation.version}
+									<span class="text-green-400">{delegation.version}</span>
+								{:else}
+									<span class="text-neutral-500">—</span>
+								{/if}
 							</td>
 							<td class="px-6 py-4">
 								<div class="flex flex-wrap gap-1">

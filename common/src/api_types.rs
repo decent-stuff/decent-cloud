@@ -181,6 +181,10 @@ pub struct HeartbeatResponse {
     #[oai(skip_serializing_if_is_none)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pool_name: Option<String>,
+    /// Version to upgrade to, if an upgrade has been requested for this pool
+    #[oai(skip_serializing_if_is_none)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub upgrade_to_version: Option<String>,
 }
 
 // ============================================================================
@@ -231,6 +235,7 @@ mod tests {
             next_heartbeat_seconds: 60,
             pool_id: Some("pool-1".to_string()),
             pool_name: None,
+            upgrade_to_version: None,
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -239,10 +244,30 @@ mod tests {
         assert!(json.contains("poolId"));
         // pool_name should be skipped when None
         assert!(!json.contains("poolName"));
+        // upgrade_to_version should be skipped when None
+        assert!(!json.contains("upgradeToVersion"));
 
         let parsed: HeartbeatResponse = serde_json::from_str(&json).unwrap();
         assert!(parsed.acknowledged);
         assert_eq!(parsed.pool_id, Some("pool-1".to_string()));
+    }
+
+    #[test]
+    fn test_heartbeat_response_with_upgrade_version() {
+        let response = HeartbeatResponse {
+            acknowledged: true,
+            next_heartbeat_seconds: 30,
+            pool_id: Some("pool-1".to_string()),
+            pool_name: Some("EU Pool".to_string()),
+            upgrade_to_version: Some("0.4.21".to_string()),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("upgradeToVersion"));
+        assert!(json.contains("0.4.21"));
+
+        let parsed: HeartbeatResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.upgrade_to_version.as_deref(), Some("0.4.21"));
     }
 
     #[test]

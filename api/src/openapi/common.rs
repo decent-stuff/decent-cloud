@@ -636,6 +636,16 @@ pub struct UpdatePoolRequest {
     pub provisioner_type: Option<String>,
 }
 
+/// Request to upgrade agents in a pool to a specific version.
+/// Set version to null to cancel a pending upgrade.
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct PoolUpgradeRequest {
+    /// Target version (e.g. "0.4.21"), or null to cancel
+    pub version: Option<String>,
+}
+
 /// Request to create a setup token for agent registration
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

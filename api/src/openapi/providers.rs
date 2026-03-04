@@ -9,7 +9,7 @@ use super::common::{
     ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance, RentalResponseRequest,
     ResponseMetricsResponse, ResponseTimeDistributionResponse, TestNotificationRequest,
     TestNotificationResponse, UpdateNotificationConfigRequest, UpdatePasswordRequest,
-    UpdatePoolRequest, UpdateSlaUptimeConfigRequest,
+    PoolUpgradeRequest, UpdatePoolRequest, UpdateSlaUptimeConfigRequest,
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
@@ -3697,6 +3697,81 @@ impl ProvidersApi {
                 success: true,
                 data: Some(deleted),
                 error: if deleted {
+                    None
+                } else {
+                    Some("Pool not found".to_string())
+                },
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Request agent upgrade for a pool
+    ///
+    /// Sets the target version for all agents in a pool. Agents pick up
+    /// the upgrade directive on their next heartbeat and self-upgrade.
+    /// Pass `version: null` to cancel a pending upgrade.
+    #[oai(
+        path = "/providers/:pubkey/pools/:pool_id/upgrade",
+        method = "post",
+        tag = "ApiTags::Pools"
+    )]
+    async fn request_pool_upgrade(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        pool_id: Path<String>,
+        req: Json<PoolUpgradeRequest>,
+    ) -> Json<ApiResponse<bool>> {
+        let provider_pubkey = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&provider_pubkey, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        // Validate version format if provided (semver: X.Y.Z)
+        if let Some(ref version) = req.version {
+            let v = version.trim().trim_start_matches('v');
+            let parts: Vec<&str> = v.split('.').collect();
+            let valid = parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok());
+            if !valid {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!(
+                        "Invalid version format '{}': expected semver like 0.4.21",
+                        version
+                    )),
+                });
+            }
+        }
+
+        match db
+            .set_pool_upgrade_version(&pool_id.0, &provider_pubkey, req.version.as_deref())
+            .await
+        {
+            Ok(updated) => Json(ApiResponse {
+                success: true,
+                data: Some(updated),
+                error: if updated {
                     None
                 } else {
                     Some("Pool not found".to_string())

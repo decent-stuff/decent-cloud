@@ -195,21 +195,36 @@ fn release_lock() {
 }
 
 /// Main upgrade function.
-pub async fn run_upgrade(check_only: bool, skip_confirm: bool, force: bool) -> Result<()> {
+///
+/// If `target_version` is provided, upgrades to that specific version instead of latest.
+pub async fn run_upgrade(
+    check_only: bool,
+    skip_confirm: bool,
+    force: bool,
+    target_version: Option<&str>,
+) -> Result<()> {
     println!("dc-agent upgrade");
     println!("================\n");
 
     let current_version = env!("CARGO_PKG_VERSION");
     println!("Current version: {}", current_version);
 
-    // Check for latest version
-    print!("Checking for updates... ");
-    io::stdout().flush()?;
-
-    let latest_version = check_latest_version().await?;
-    println!("done");
-    println!("Latest version:  {}", latest_version);
-    println!();
+    let latest_version = if let Some(v) = target_version {
+        // Use the explicitly requested version
+        let v = v.trim().trim_start_matches('v').to_string();
+        println!("Target version:  {} (requested via API)", v);
+        println!();
+        v
+    } else {
+        // Check GitHub for latest version
+        print!("Checking for updates... ");
+        io::stdout().flush()?;
+        let v = check_latest_version().await?;
+        println!("done");
+        println!("Latest version:  {}", v);
+        println!();
+        v
+    };
 
     // Compare versions
     let needs_upgrade = is_newer(current_version, &latest_version);

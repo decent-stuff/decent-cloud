@@ -339,6 +339,18 @@ enum ProviderAction {
         #[arg(long)]
         pubkey: String,
     },
+    /// Request agent upgrade for a pool
+    PoolUpgrade {
+        /// Identity name (from ~/.dc-test-keys/)
+        #[arg(long)]
+        identity: String,
+        /// Pool ID
+        #[arg(long)]
+        pool_id: String,
+        /// Target version (e.g. "0.4.21"), omit to cancel pending upgrade
+        #[arg(long)]
+        version: Option<String>,
+    },
 }
 
 // =============================================================================
@@ -1321,6 +1333,36 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
                     println!("{}", "-".repeat(100));
                 }
                 println!("Total: {} offering(s)", offerings.len());
+            }
+        }
+        ProviderAction::PoolUpgrade {
+            identity,
+            pool_id,
+            version,
+        } => {
+            let id = Identity::load(&identity)?;
+            let client = SignedClient::new(&id, api_url)?;
+            let path = format!(
+                "/providers/{}/pools/{}/upgrade",
+                id.public_key_hex, pool_id
+            );
+
+            #[derive(Serialize)]
+            struct UpgradeBody {
+                version: Option<String>,
+            }
+
+            let result: bool = client
+                .post_api(&path, &UpgradeBody { version: version.clone() })
+                .await?;
+
+            if result {
+                match &version {
+                    Some(v) => println!("Upgrade to {} requested for pool {}", v, pool_id),
+                    None => println!("Pending upgrade cancelled for pool {}", pool_id),
+                }
+            } else {
+                println!("Pool {} not found", pool_id);
             }
         }
     }

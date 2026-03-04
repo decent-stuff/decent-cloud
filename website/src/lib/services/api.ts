@@ -2396,6 +2396,37 @@ export async function listAgentsInPool(
 	return payload.data ?? [];
 }
 
+// ==================== Pool Upgrade API ====================
+
+export async function requestPoolUpgrade(
+	providerPubkey: string | Uint8Array,
+	poolId: string,
+	version: string | null,
+	headers: SignedRequestHeaders
+): Promise<boolean> {
+	const pubkeyHex = typeof providerPubkey === 'string' ? providerPubkey : hexEncode(providerPubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/pools/${poolId}/upgrade`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ version })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to request pool upgrade: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<boolean>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to request pool upgrade');
+	}
+
+	return payload.data ?? false;
+}
+
 // ==================== Setup Token APIs ====================
 
 export async function listSetupTokens(

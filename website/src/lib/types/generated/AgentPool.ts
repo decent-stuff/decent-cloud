@@ -27,4 +27,8 @@ provisionerType: string,
 /**
  * When pool was created
  */
-createdAtNs: number, };
+createdAtNs: number, 
+/**
+ * Target version for remote upgrade (set via API, cleared after agents upgrade)
+ */
+upgradeToVersion: string | null, };

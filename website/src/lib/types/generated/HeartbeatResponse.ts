@@ -19,4 +19,8 @@ poolId: string | null,
 /**
  * The agent's pool name, if it belongs to one
  */
-poolName: string | null, };
+poolName: string | null, 
+/**
+ * Version to upgrade to, if an upgrade has been requested for this pool
+ */
+upgradeToVersion: string | null, };

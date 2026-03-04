@@ -229,7 +229,7 @@ async fn main() -> Result<()> {
             check_only,
             yes,
             force,
-        } => dc_agent::upgrade::run_upgrade(check_only, yes, force).await,
+        } => dc_agent::upgrade::run_upgrade(check_only, yes, force, None).await,
         Commands::ResetPassword {
             contract_id,
             password,
@@ -1656,6 +1656,24 @@ async fn send_heartbeat(
                 *heartbeat_interval_secs = suggested;
                 *heartbeat_ticker = interval(Duration::from_secs(suggested));
                 info!(interval_seconds = suggested, "Heartbeat interval updated");
+            }
+            // Check for remote upgrade directive
+            if let Some(ref target_version) = response.upgrade_to_version {
+                let current = env!("CARGO_PKG_VERSION");
+                if dc_agent::upgrade::is_newer(current, target_version) {
+                    info!(
+                        current = current,
+                        target = %target_version,
+                        "Remote upgrade requested, starting self-upgrade"
+                    );
+                    // Run upgrade in background — skip_confirm=true, force=false
+                    let version = target_version.clone();
+                    tokio::spawn(async move {
+                        if let Err(e) = dc_agent::upgrade::run_upgrade(false, true, false, Some(&version)).await {
+                            error!(error = %e, "Remote upgrade failed");
+                        }
+                    });
+                }
             }
         }
         Err(e) => {
