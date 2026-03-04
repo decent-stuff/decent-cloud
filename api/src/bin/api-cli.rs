@@ -1342,10 +1342,7 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
         } => {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
-            let path = format!(
-                "/providers/{}/pools/{}/upgrade",
-                id.public_key_hex, pool_id
-            );
+            let path = format!("/providers/{}/pools/{}/upgrade", id.public_key_hex, pool_id);
 
             #[derive(Serialize)]
             struct UpgradeBody {
@@ -1353,7 +1350,12 @@ async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result
             }
 
             let result: bool = client
-                .post_api(&path, &UpgradeBody { version: version.clone() })
+                .post_api(
+                    &path,
+                    &UpgradeBody {
+                        version: version.clone(),
+                    },
+                )
                 .await?;
 
             if result {

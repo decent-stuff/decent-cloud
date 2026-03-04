@@ -1669,7 +1669,9 @@ async fn send_heartbeat(
                     // Run upgrade in background — skip_confirm=true, force=false
                     let version = target_version.clone();
                     tokio::spawn(async move {
-                        if let Err(e) = dc_agent::upgrade::run_upgrade(false, true, false, Some(&version)).await {
+                        if let Err(e) =
+                            dc_agent::upgrade::run_upgrade(false, true, false, Some(&version)).await
+                        {
                             error!(error = %e, "Remote upgrade failed");
                         }
                     });

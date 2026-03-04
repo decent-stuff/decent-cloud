@@ -1118,7 +1118,13 @@ mod tests {
         register_provider(&db, &provider_pubkey).await;
 
         let pool = db
-            .create_agent_pool("upgrade-pool", &provider_pubkey, "Upgrade Pool", "europe", "proxmox")
+            .create_agent_pool(
+                "upgrade-pool",
+                &provider_pubkey,
+                "Upgrade Pool",
+                "europe",
+                "proxmox",
+            )
             .await
             .unwrap();
 
@@ -1179,7 +1185,13 @@ mod tests {
         register_provider(&db, &provider_pubkey).await;
 
         let pool = db
-            .create_agent_pool("stats-upgrade-pool", &provider_pubkey, "Pool", "europe", "proxmox")
+            .create_agent_pool(
+                "stats-upgrade-pool",
+                &provider_pubkey,
+                "Pool",
+                "europe",
+                "proxmox",
+            )
             .await
             .unwrap();
 
@@ -1187,7 +1199,10 @@ mod tests {
             .await
             .unwrap();
 
-        let stats = db.list_agent_pools_with_stats(&provider_pubkey).await.unwrap();
+        let stats = db
+            .list_agent_pools_with_stats(&provider_pubkey)
+            .await
+            .unwrap();
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].pool.upgrade_to_version.as_deref(), Some("1.0.0"));
     }
