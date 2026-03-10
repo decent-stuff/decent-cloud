@@ -22,7 +22,7 @@ docker run --rm \
         cp .cargo/config.toml /tmp/cargo-config-backup.toml
         trap "mv /tmp/cargo-config-backup.toml .cargo/config.toml" EXIT
         rm -f .cargo/config.toml
-        cargo build --release --bin dc-agent
+        cargo build --release --locked --bin dc-agent
     '
 
 echo "==> Binary: $PROJECT_ROOT/target/release/dc-agent"
