@@ -55,12 +55,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update version in Cargo.toml
-        run: |
-          VERSION="${{ needs.create-release.outputs.version }}"
-          sed -i.bak 's/^version = "[0-9.]*"/version = "'"$VERSION"'"/' Cargo.toml
-          rm -f Cargo.toml.bak
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -72,16 +66,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mingw-w64
 
+      - name: Update version and lockfile
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          sed -i.bak 's/^version = "[0-9.]*"/version = "'"$VERSION"'"/' Cargo.toml
+          rm -f Cargo.toml.bak
+          cargo update --workspace
+
       - name: Remove local linker config
         run: rm -f .cargo/config.toml
 
       - name: Build Release Binary
+        env:
+          SQLX_OFFLINE: "true"
         run: |
           if [ "${{ matrix.target }}" = "x86_64-pc-windows-gnu" ]; then
             cargo install cross --git https://github.com/cross-rs/cross
-            cross build --release --target ${{ matrix.target }} --bin dc
+            cross build --release --locked --target ${{ matrix.target }} --bin dc
           else
-            cargo build --release --target ${{ matrix.target }} --bin dc
+            cargo build --release --locked --target ${{ matrix.target }} --bin dc
           fi
 
       - name: Prepare binary
@@ -99,10 +102,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update version in Cargo.toml
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update version and lockfile
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
           sed -i 's/^version = "[0-9.]*"/version = "'"$VERSION"'"/' Cargo.toml
+          cargo update --workspace
 
       - name: Build dc-agent
         run: ./scripts/build-dc-agent.sh
@@ -160,13 +167,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Update version in Cargo.toml files
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update version in Cargo.toml and lockfile
         run: |
           VERSION="${{ needs.create-release.outputs.version }}"
-          for toml in $(find . -name "Cargo.toml"); do
-            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" "$toml"
-          done
-          timeout 10 cargo check || true
+          sed -i "s/^version = \"[0-9.]*\"/version = \"$VERSION\"/" Cargo.toml
+          cargo update --workspace
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
