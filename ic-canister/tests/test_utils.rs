@@ -64,8 +64,8 @@ pub fn workspace_dir() -> PathBuf {
 }
 
 pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let mut path = workspace_dir();
-    let canister_dir = path.join("ic-canister");
+    let workspace = workspace_dir();
+    let canister_dir = workspace.join("ic-canister");
     let output = Command::new("dfx")
         .arg("build")
         .current_dir(&canister_dir)
@@ -83,8 +83,11 @@ pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
         );
     }
 
-    path.push("target/wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
-    fs_err::read(path).unwrap()
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| workspace.join("target"));
+    let wasm_path = target_dir.join("wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
+    fs_err::read(&wasm_path).unwrap()
 });
 
 /// Shared PocketIc instance across all tests.
