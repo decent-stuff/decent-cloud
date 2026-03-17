@@ -1,61 +1,21 @@
-name: Rust
+name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
   workflow_dispatch:
-
-env:
-  CARGO_TERM_COLOR: always
-  CI_IMAGE: ghcr.io/${{ github.repository }}/ci-image@sha256:0f2daecabee202c1cb4269b9c66f4288bf87e018fb37211f0d70f98e7b94a250
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    name: Build & Test
+    runs-on: self-hosted
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target/decent-cloud
+      RUSTUP_HOME: /cache/cargo/rustup
     steps:
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-
       - uses: actions/checkout@v4
-
-      - name: Login to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build and test in container
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -w /workspace \
-            -e XDG_DATA_HOME=/usr/local \
-            -e CARGO_TERM_COLOR=always \
-            -e DATABASE_URL=postgres://test:test@localhost:5432/test \
-            -e TEST_DATABASE_URL=postgres://test:test@localhost:5432/test \
-            --network host \
-            $CI_IMAGE \
-            /bin/bash -c "git config --global --add safe.directory /workspace && dfxvm default 0.28.0 && dfx --version && /tini -s -- cargo make"
+      - run: cargo make all
+      - run: cargo sweep --time 14 --installed

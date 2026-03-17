@@ -230,7 +230,16 @@ fi
 echo "✓ sqlx prepare completed"
 '''
 
+[tasks.website-deps]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+cd website
+npm ci
+'''
+
 [tasks.website-check]
+dependencies = ["website-deps"]
 script = '''
 #!/usr/bin/env bash
 set -eEuo pipefail
