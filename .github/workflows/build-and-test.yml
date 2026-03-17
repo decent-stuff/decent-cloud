@@ -18,4 +18,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo make all
-      - run: cargo sweep --time 14 --installed
+      - run: cargo sweep --time 14
