@@ -1163,6 +1163,8 @@ export interface Contract {
 	auto_renew: boolean;
 	// Set when user has requested a password reset; cleared by agent after completion
 	password_reset_requested_at_ns?: number;
+	// Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
+	operating_system?: string;
 }
 
 export interface RentalRequestParams {

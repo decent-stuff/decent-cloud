@@ -4,7 +4,74 @@ use crate::database::contracts::Contract;
 use crate::database::Database;
 use anyhow::{Context, Result};
 use email_utils::EmailService;
+use std::net::Ipv4Addr;
 use std::sync::Arc;
+
+/// Connection info derived from contract gateway fields and instance details.
+/// Prefers gateway access; falls back to public IP; never exposes private IPs.
+struct ConnectionInfo {
+    ssh_command: String,
+    host_display: String,
+}
+
+/// Derive SSH login username from the operating system name.
+/// Ubuntu cloud images use `ubuntu`; most others default to `root`.
+fn ssh_username(os: Option<&str>) -> &'static str {
+    match os.map(|s| s.to_lowercase()).as_deref() {
+        Some(os) if os.contains("ubuntu") => "ubuntu",
+        Some(os) if os.contains("fedora") => "fedora",
+        Some(os) if os.contains("centos") => "centos",
+        Some(os) if os.contains("alma") => "almalinux",
+        Some(os) if os.contains("rocky") => "rocky",
+        _ => "root",
+    }
+}
+
+fn derive_connection_info(contract: &Contract, instance_details: &str) -> ConnectionInfo {
+    let user = ssh_username(contract.operating_system.as_deref());
+
+    // Prefer gateway (reverse proxy with public subdomain)
+    if let (Some(subdomain), Some(port)) =
+        (&contract.gateway_subdomain, contract.gateway_ssh_port)
+    {
+        return ConnectionInfo {
+            ssh_command: format!("ssh -p {} {}@{}", port, user, subdomain),
+            host_display: format!("{} (port {})", subdomain, port),
+        };
+    }
+
+    // Fall back to public IP from instance details
+    if let Ok(details) = serde_json::from_str::<serde_json::Value>(instance_details) {
+        // Prefer explicit public_ip field
+        if let Some(ip) = details.get("public_ip").and_then(|v| v.as_str()) {
+            return ConnectionInfo {
+                ssh_command: format!("ssh {}@{}", user, ip),
+                host_display: ip.to_string(),
+            };
+        }
+        // Use ip_address only if it's public
+        if let Some(ip) = details.get("ip_address").and_then(|v| v.as_str()) {
+            if !is_private_ipv4(ip) {
+                return ConnectionInfo {
+                    ssh_command: format!("ssh {}@{}", user, ip),
+                    host_display: ip.to_string(),
+                };
+            }
+        }
+    }
+
+    ConnectionInfo {
+        ssh_command: "See your dashboard for connection details".to_string(),
+        host_display: "Pending — check your dashboard".to_string(),
+    }
+}
+
+/// Returns true if the IP is RFC1918 private (10.x, 172.16-31.x, 192.168.x).
+fn is_private_ipv4(ip: &str) -> bool {
+    ip.parse::<Ipv4Addr>()
+        .map(|addr| addr.is_private())
+        .unwrap_or(false)
+}
 
 /// Notify provider about a new rental request after payment succeeds.
 /// Uses the provider's notification preferences (telegram, email, SMS).
@@ -386,25 +453,20 @@ async fn send_telegram_provisioned_notification(
 
     let telegram = TelegramClient::from_env()?;
 
-    // Parse instance details to extract IP
-    let ip_info = if let Ok(details) = serde_json::from_str::<serde_json::Value>(instance_details) {
-        let ip = details
-            .get("ip_address")
-            .and_then(|v| v.as_str())
-            .unwrap_or("N/A");
-        format!("IP: `{}`", ip)
-    } else {
-        format!("Details: {}", instance_details)
-    };
+    let conn = derive_connection_info(contract, instance_details);
 
     let message = format!(
         "*Your VM is Ready!*\n\n\
-        Contract: `{}`\n\
-        {}\n\n\
-        Connect with: `ssh root@<ip>`\n\n\
+        Contract: `{contract_id}`\n\
+        Host: `{host}`\n\n\
+        Connect: `{ssh_cmd}`\n\n\
+        If you generated a key, use:\n\
+        `chmod 600 ~/Downloads/id_ed25519_decent_cloud`\n\
+        `{ssh_cmd} -o IdentitiesOnly=yes -i ~/Downloads/id_ed25519_decent_cloud`\n\n\
         View details in your dashboard.",
-        &contract.contract_id[..32],
-        ip_info
+        contract_id = &contract.contract_id[..32],
+        host = conn.host_display,
+        ssh_cmd = conn.ssh_command,
     );
 
     telegram.send_message(chat_id, &message).await?;
@@ -444,36 +506,22 @@ async fn send_email_provisioned_notification(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("No email address on user account"))?;
 
-    // Parse instance details for email
-    let (ip_address, ipv6_address) =
-        if let Ok(details) = serde_json::from_str::<serde_json::Value>(instance_details) {
-            let ip = details
-                .get("ip_address")
-                .and_then(|v| v.as_str())
-                .unwrap_or("N/A");
-            let ipv6 = details
-                .get("ipv6_address")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            (ip.to_string(), ipv6)
-        } else {
-            ("See dashboard".to_string(), None)
-        };
-
-    let ipv6_line = ipv6_address
-        .map(|v6| format!("\nIPv6: {}", v6))
-        .unwrap_or_default();
+    let conn = derive_connection_info(contract, instance_details);
 
     let email_body = format!(
         "Great news! Your virtual machine has been provisioned and is ready to use.\n\n\
-        Contract ID: {}\n\
-        IP Address: {}{}\n\n\
+        Contract ID: {contract_id}\n\
+        Host: {host}\n\n\
         Connect using SSH:\n\
-        ssh root@{}\n\n\
-        Use the SSH key you provided during the rental request.\n\n\
-        View your rental details: https://decent-cloud.org/dashboard/rentals?contract={}\n\n\
+        {ssh_cmd}\n\n\
+        If you generated a new SSH key during rental, use:\n\
+        chmod 600 ~/Downloads/id_ed25519_decent_cloud\n\
+        {ssh_cmd} -o IdentitiesOnly=yes -i ~/Downloads/id_ed25519_decent_cloud\n\n\
+        View your rental details: https://decent-cloud.org/dashboard/rentals?contract={contract_id}\n\n\
         If you have any issues, please contact the provider through the platform.",
-        contract.contract_id, ip_address, ipv6_line, ip_address, contract.contract_id
+        contract_id = contract.contract_id,
+        host = conn.host_display,
+        ssh_cmd = conn.ssh_command,
     );
 
     let from_addr =
@@ -1388,5 +1436,170 @@ mod tests {
             "expected TELEGRAM_BOT_TOKEN error, got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_is_private_ipv4() {
+        assert!(is_private_ipv4("10.0.0.1"));
+        assert!(is_private_ipv4("10.255.255.255"));
+        assert!(is_private_ipv4("172.16.0.146"));
+        assert!(is_private_ipv4("172.31.255.255"));
+        assert!(is_private_ipv4("192.168.1.1"));
+        assert!(!is_private_ipv4("172.15.0.1"));
+        assert!(!is_private_ipv4("172.32.0.1"));
+        assert!(!is_private_ipv4("8.8.8.8"));
+        assert!(!is_private_ipv4("203.0.113.1"));
+        assert!(!is_private_ipv4("not-an-ip"));
+        assert!(!is_private_ipv4(""));
+    }
+
+    fn make_test_contract(
+        gateway_subdomain: Option<&str>,
+        gateway_ssh_port: Option<i32>,
+    ) -> Contract {
+        Contract {
+            contract_id: "a".repeat(64),
+            requester_pubkey: "b".repeat(64),
+            requester_ssh_pubkey: String::new(),
+            requester_contact: String::new(),
+            provider_pubkey: "c".repeat(64),
+            offering_id: "offering-1".to_string(),
+            region_name: None,
+            instance_config: None,
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: None,
+            end_timestamp_ns: None,
+            duration_hours: Some(24),
+            original_duration_hours: None,
+            request_memo: String::new(),
+            created_at_ns: 0,
+            status: "active".to_string(),
+            provisioning_instance_details: None,
+            provisioning_completed_at_ns: None,
+            payment_method: "stripe".to_string(),
+            stripe_payment_intent_id: None,
+            stripe_customer_id: None,
+            icpay_transaction_id: None,
+            payment_status: "succeeded".to_string(),
+            currency: "USD".to_string(),
+            refund_amount_e9s: None,
+            stripe_refund_id: None,
+            refund_created_at_ns: None,
+            status_updated_at_ns: None,
+            icpay_payment_id: None,
+            icpay_refund_id: None,
+            total_released_e9s: None,
+            last_release_at_ns: None,
+            tax_amount_e9s: None,
+            tax_rate_percent: None,
+            tax_type: None,
+            tax_jurisdiction: None,
+            customer_tax_id: None,
+            reverse_charge: None,
+            buyer_address: None,
+            stripe_invoice_id: None,
+            receipt_number: None,
+            receipt_sent_at_ns: None,
+            stripe_subscription_id: None,
+            subscription_status: None,
+            current_period_end_ns: None,
+            cancel_at_period_end: false,
+            auto_renew: false,
+            gateway_slug: None,
+            gateway_subdomain: gateway_subdomain.map(|s| s.to_string()),
+            gateway_ssh_port,
+            gateway_port_range_start: None,
+            gateway_port_range_end: None,
+            password_reset_requested_at_ns: None,
+            offering_name: None,
+            operating_system: None,
+        }
+    }
+
+    #[test]
+    fn test_ssh_username() {
+        assert_eq!(ssh_username(Some("Ubuntu 22.04")), "ubuntu");
+        assert_eq!(ssh_username(Some("ubuntu-24.04-lts")), "ubuntu");
+        assert_eq!(ssh_username(Some("Fedora 39")), "fedora");
+        assert_eq!(ssh_username(Some("CentOS Stream 9")), "centos");
+        assert_eq!(ssh_username(Some("AlmaLinux 9")), "almalinux");
+        assert_eq!(ssh_username(Some("Rocky Linux 9")), "rocky");
+        assert_eq!(ssh_username(Some("Debian 12")), "root");
+        assert_eq!(ssh_username(None), "root");
+        assert_eq!(ssh_username(Some("SomeUnknownOS")), "root");
+    }
+
+    #[test]
+    fn test_derive_connection_info_prefers_gateway() {
+        let mut contract =
+            make_test_contract(Some("k7m2p4.dc-lk.dev-gw.decent-cloud.org"), Some(20000));
+        contract.operating_system = Some("Ubuntu 22.04".to_string());
+        let details = r#"{"ip_address": "10.0.0.5", "ssh_port": 22}"#;
+        let conn = derive_connection_info(&contract, details);
+        assert_eq!(
+            conn.ssh_command,
+            "ssh -p 20000 ubuntu@k7m2p4.dc-lk.dev-gw.decent-cloud.org"
+        );
+        assert!(conn.host_display.contains("k7m2p4.dc-lk.dev-gw.decent-cloud.org"));
+        // Must NOT contain private IP
+        assert!(!conn.ssh_command.contains("10.0.0.5"));
+        assert!(!conn.host_display.contains("10.0.0.5"));
+    }
+
+    #[test]
+    fn test_derive_connection_info_uses_root_for_debian() {
+        let mut contract =
+            make_test_contract(Some("k7m2p4.dc-lk.dev-gw.decent-cloud.org"), Some(20000));
+        contract.operating_system = Some("Debian 12".to_string());
+        let details = r#"{"ip_address": "10.0.0.5"}"#;
+        let conn = derive_connection_info(&contract, details);
+        assert!(
+            conn.ssh_command.contains("root@"),
+            "Debian should use root: {}",
+            conn.ssh_command
+        );
+    }
+
+    #[test]
+    fn test_derive_connection_info_uses_public_ip_fallback() {
+        let contract = make_test_contract(None, None);
+        let details = r#"{"ip_address": "10.0.0.5", "public_ip": "49.12.34.56"}"#;
+        let conn = derive_connection_info(&contract, details);
+        assert_eq!(conn.ssh_command, "ssh root@49.12.34.56");
+        assert_eq!(conn.host_display, "49.12.34.56");
+    }
+
+    #[test]
+    fn test_derive_connection_info_uses_public_ip_address() {
+        let contract = make_test_contract(None, None);
+        let details = r#"{"ip_address": "203.0.113.1"}"#;
+        let conn = derive_connection_info(&contract, details);
+        assert_eq!(conn.ssh_command, "ssh root@203.0.113.1");
+        assert_eq!(conn.host_display, "203.0.113.1");
+    }
+
+    #[test]
+    fn test_derive_connection_info_hides_private_ip() {
+        let contract = make_test_contract(None, None);
+        let details = r#"{"ip_address": "172.16.0.146"}"#;
+        let conn = derive_connection_info(&contract, details);
+        assert!(
+            !conn.ssh_command.contains("172.16"),
+            "private IP must not appear in ssh_command: {}",
+            conn.ssh_command
+        );
+        assert!(
+            !conn.host_display.contains("172.16"),
+            "private IP must not appear in host_display: {}",
+            conn.host_display
+        );
+        assert!(conn.host_display.contains("dashboard"));
+    }
+
+    #[test]
+    fn test_derive_connection_info_invalid_json() {
+        let contract = make_test_contract(None, None);
+        let conn = derive_connection_info(&contract, "not-json");
+        assert!(conn.host_display.contains("dashboard"));
     }
 }

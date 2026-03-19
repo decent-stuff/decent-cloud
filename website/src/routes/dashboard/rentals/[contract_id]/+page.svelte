@@ -47,10 +47,15 @@
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { createPasswordResetPoller, type PasswordResetPoller } from "$lib/utils/password-reset-poller";
+	import { isPrivateIp, sshUsername } from "$lib/utils/network";
 
 	const contractId = $page.params.contract_id ?? "";
 
 	let contract = $state<Contract | null>(null);
+	let sshUser = $derived(sshUsername(contract?.operating_system));
+	let identityTip = $derived(contract?.gateway_subdomain && contract?.gateway_ssh_port
+		? `chmod 600 ~/Downloads/id_ed25519_decent_cloud && ssh -p ${contract.gateway_ssh_port} -o IdentitiesOnly=yes -i ~/Downloads/id_ed25519_decent_cloud ${sshUser}@${contract.gateway_subdomain}`
+		: '');
 	let usage = $state<ContractUsage | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -793,15 +798,6 @@
 		passwordResetPoller.stop();
 	});
 
-	/** Returns true if the IP is RFC1918 private (10.x, 172.16-31.x, 192.168.x) */
-	function isPrivateIp(ip: string): boolean {
-		const parts = ip.split('.').map(Number);
-		if (parts.length !== 4) return false;
-		if (parts[0] === 10) return true;
-		if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-		if (parts[0] === 192 && parts[1] === 168) return true;
-		return false;
-	}
 </script>
 
 <div class="space-y-8">
@@ -1213,7 +1209,7 @@
 								<div class="flex items-center justify-between mb-1">
 									<div class="text-neutral-500 text-xs">SSH Command</div>
 									<button
-										onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+										onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} ${sshUser}@${contract!.gateway_subdomain}`)}
 										class="text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors"
 										title="Copy SSH command"
 									>
@@ -1221,7 +1217,7 @@
 									</button>
 								</div>
 								<code class="text-green-300 text-sm font-mono break-all select-all">
-									ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}
+									ssh -p {contract.gateway_ssh_port} {sshUser}@{contract.gateway_subdomain}
 								</code>
 							</div>
 							<!-- How to Connect guide -->
@@ -1251,9 +1247,9 @@
 												<li>
 													Run:
 													<div class="flex items-center justify-between mt-1 font-mono text-xs bg-black/30 px-3 py-2 rounded">
-														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}</code>
+														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} {sshUser}@{contract.gateway_subdomain}</code>
 														<button
-															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} ${sshUser}@${contract!.gateway_subdomain}`)}
 															class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
 														>{copiedSsh ? 'Copied!' : '📋 Copy'}</button>
 													</div>
@@ -1261,15 +1257,25 @@
 												<li>If prompted about host authenticity, type <code class="font-mono text-green-300">yes</code></li>
 												<li>You're connected!</li>
 											</ol>
+											<div class="mt-3 p-2 bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/80">
+												<strong class="text-amber-300">Generated a key during rental?</strong> Set permissions and specify it:
+												<div class="flex items-center justify-between mt-1 font-mono text-xs bg-black/30 px-3 py-2 rounded">
+													<code class="text-amber-300 select-all break-all">{identityTip}</code>
+													<button
+														onclick={() => copySSHCommand(identityTip)}
+														class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
+													>{copiedSsh ? 'Copied!' : '📋 Copy'}</button>
+												</div>
+											</div>
 										{:else if connectGuideTab === 'win-terminal'}
 											<ol class="text-xs text-neutral-300 space-y-2 list-decimal list-inside">
 												<li>Open Windows Terminal or PowerShell</li>
 												<li>
 													Run:
 													<div class="flex items-center justify-between mt-1 font-mono text-xs bg-black/30 px-3 py-2 rounded">
-														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} root@{contract.gateway_subdomain}</code>
+														<code class="text-green-300 select-all">ssh -p {contract.gateway_ssh_port} {sshUser}@{contract.gateway_subdomain}</code>
 														<button
-															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} root@${contract!.gateway_subdomain}`)}
+															onclick={() => copySSHCommand(`ssh -p ${contract!.gateway_ssh_port} ${sshUser}@${contract!.gateway_subdomain}`)}
 															class="ml-2 text-xs px-2 py-0.5 bg-surface-elevated text-neutral-400 border border-neutral-700 hover:text-white transition-colors shrink-0"
 														>{copiedSsh ? 'Copied!' : '📋 Copy'}</button>
 													</div>
@@ -1277,13 +1283,17 @@
 												<li>If prompted about host authenticity, type <code class="font-mono text-green-300">yes</code></li>
 												<li>You're connected!</li>
 											</ol>
+											<div class="mt-3 p-2 bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/80">
+												<strong class="text-amber-300">Generated a key during rental?</strong> Specify it explicitly:
+												<code class="block mt-1 font-mono text-amber-300 select-all break-all bg-black/30 px-3 py-2 rounded">ssh -p {contract.gateway_ssh_port} -o IdentitiesOnly=yes -i %USERPROFILE%\Downloads\id_ed25519_decent_cloud {sshUser}@{contract.gateway_subdomain}</code>
+											</div>
 										{:else}
 											<ol class="text-xs text-neutral-300 space-y-2 list-decimal list-inside">
 												<li>Download PuTTY from <a href="https://putty.org" target="_blank" rel="noopener" class="text-green-400 hover:underline">putty.org</a></li>
 												<li>Enter host: <code class="font-mono text-green-300">{contract.gateway_subdomain}</code></li>
 												<li>Enter port: <code class="font-mono text-green-300">{contract.gateway_ssh_port}</code></li>
 												<li>Click <strong>Open</strong></li>
-												<li>Login as: <code class="font-mono text-green-300">root</code></li>
+												<li>Login as: <code class="font-mono text-green-300">{sshUser}</code></li>
 											</ol>
 										{/if}
 									</div>
@@ -1347,7 +1357,7 @@
 					{:else if connectableIp}
 						<!-- Direct public IP access -->
 						{@const sshPort = instanceDetails?.gateway_ssh_port || instanceDetails?.ssh_port || 22}
-						{@const sshCmd = sshPort === 22 ? `ssh root@${connectableIp}` : `ssh -p ${sshPort} root@${connectableIp}`}
+						{@const sshCmd = sshPort === 22 ? `ssh ${sshUser}@${connectableIp}` : `ssh -p ${sshPort} ${sshUser}@${connectableIp}`}
 						<div class="space-y-3">
 							<div class="bg-black/20  p-3">
 								<div class="flex items-center justify-between mb-1">

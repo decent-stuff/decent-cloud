@@ -1,14 +1,5 @@
 import { describe, it, expect } from 'vitest';
-
-/** Returns true if the IP is RFC1918 private (10.x, 172.16-31.x, 192.168.x) */
-function isPrivateIp(ip: string): boolean {
-	const parts = ip.split('.').map(Number);
-	if (parts.length !== 4) return false;
-	if (parts[0] === 10) return true;
-	if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-	if (parts[0] === 192 && parts[1] === 168) return true;
-	return false;
-}
+import { isPrivateIp, connectableIp } from '$lib/utils/network';
 
 describe('isPrivateIp', () => {
 	it('detects 10.x.x.x as private', () => {
@@ -43,14 +34,6 @@ describe('isPrivateIp', () => {
 		expect(isPrivateIp('1.2.3')).toBe(false);
 	});
 });
-
-/** Derives the connectable IP: prefers public_ip, falls back to non-private ip_address */
-function connectableIp(details: Record<string, unknown> | null): string | null {
-	if (!details) return null;
-	if (typeof details.public_ip === 'string') return details.public_ip;
-	if (typeof details.ip_address === 'string' && !isPrivateIp(details.ip_address)) return details.ip_address;
-	return null;
-}
 
 describe('connectableIp derivation', () => {
 	it('prefers public_ip over ip_address', () => {

@@ -23,6 +23,7 @@
 		calculateSpendingByCurrency,
 	} from "$lib/utils/contract-format";
 	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
+	import { connectableIp, sshUsername } from "$lib/utils/network";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
@@ -883,8 +884,10 @@
 
 					{#if contract.gateway_subdomain && contract.gateway_ssh_port || contract.provisioning_instance_details}
 						{@const instanceJson = (() => { try { return JSON.parse(contract.provisioning_instance_details ?? ''); } catch { return null; } })()}
-						{@const gatewaySshCmd = contract.gateway_subdomain && contract.gateway_ssh_port ? `ssh -p ${contract.gateway_ssh_port} root@${contract.gateway_subdomain}` : null}
-						{@const directSshCmd = instanceJson?.ip_address ? `ssh root@${instanceJson.ip_address}` : null}
+						{@const user = sshUsername(contract.operating_system)}
+						{@const gatewaySshCmd = contract.gateway_subdomain && contract.gateway_ssh_port ? `ssh -p ${contract.gateway_ssh_port} ${user}@${contract.gateway_subdomain}` : null}
+						{@const directIp = connectableIp(instanceJson)}
+						{@const directSshCmd = directIp ? `ssh ${user}@${directIp}` : null}
 						<div class="bg-green-500/10 border border-green-500/30 p-4 space-y-3">
 							<div class="text-green-400 font-semibold text-sm">Connection Details</div>
 							{#if gatewaySshCmd}
@@ -914,7 +917,7 @@
 								</div>
 							{/if}
 							{#if !gatewaySshCmd && !directSshCmd && contract.provisioning_instance_details}
-								<div class="text-white text-xs font-mono whitespace-pre-wrap">{contract.provisioning_instance_details}</div>
+								<div class="text-yellow-300 text-xs">Gateway routing is being configured. Connection details will appear shortly.</div>
 							{/if}
 							{#if contract.provisioning_completed_at_ns}
 								<div class="text-green-400/60 text-xs">Provisioned: {formatDate(contract.provisioning_completed_at_ns)}</div>
