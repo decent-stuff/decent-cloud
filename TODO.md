@@ -20,6 +20,7 @@
 
 ### Remaining
 
+- **SSH key rotation** — If a renter loses their private key they are locked out with no recovery path. The dc-agent already SSHes into VMs (for password reset); the same mechanism can inject a new public key into `~/.ssh/authorized_keys`. Needs: API endpoint (`POST /contracts/{id}/rotate-ssh-key` accepting a new public key), dc-agent handler that SSHes in and replaces the authorized key, frontend UI on the rental detail page (similar to password reset flow). The generated-key download warning added in `RentalRequestDialog` mitigates the UX gap but doesn't eliminate it.
 - **Marketplace billing for listed resources** — Platform fee for marketplace-listed self-provisioned resources. *(Blocked: needs product decisions on fee structure.)*
 - **Marketplace rental fulfillment for self-provisioned** — When a tenant rents a self-provisioned offering, the contract is created but the VM access handoff (credential sharing) is manual. Needs: automated credential sharing mechanism, stock tracking (one VM = stock of 1). *(Blocked: needs billing decisions first.)*
 
