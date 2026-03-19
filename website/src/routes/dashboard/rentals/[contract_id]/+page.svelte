@@ -1418,8 +1418,8 @@
 								<code class="text-neutral-500 text-sm font-mono">••••••••••••</code>
 							{/if}
 							<div class="text-amber-400/60 text-xs mt-2 space-y-1">
-								<div>Save this password now - it can only be decrypted on this device/browser.</div>
-								<div>Auto-deletes 7 days after provisioning. You can always use your SSH key to access the VM.</div>
+								<div>Save this password now — it can only be decrypted on this device/browser.</div>
+								<div>Auto-deletes 7 days after provisioning. This is the system root password (for <code class="font-mono">sudo</code> / console). SSH uses your key.</div>
 							</div>
 						</div>
 					{:else if credentialsLoading}
@@ -1459,7 +1459,7 @@
 									<div class="text-red-400 text-xs mt-2">{passwordResetError}</div>
 								{/if}
 								<p class="text-neutral-500 text-xs mt-2">
-									Request a new root password. The provider will reset it and you'll be able to decrypt it here.
+									Reset the system root password. Useful for <code class="font-mono">sudo</code> or console access. SSH login uses your key, not this password.
 								</p>
 							{/if}
 						</div>

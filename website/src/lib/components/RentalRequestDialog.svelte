@@ -57,9 +57,12 @@
 		}
 	}
 
+	let privateKeyDownloaded = $state(false);
+
 	function handleDownloadPrivateKey() {
 		if (generatedPrivateKey) {
 			downloadPrivateKey(generatedPrivateKey, 'id_ed25519_decent_cloud');
+			privateKeyDownloaded = true;
 		}
 	}
 	let contactMethod = $state("");
@@ -848,11 +851,14 @@
 							<div class="flex items-start gap-2">
 								<span class="text-yellow-400 text-lg shrink-0">&#9888;</span>
 								<div class="flex-1">
-									<p class="text-yellow-300 text-sm font-medium">Save your private key!</p>
+									<p class="text-yellow-300 text-sm font-medium">Download your private key now — this is your only chance!</p>
 									<p class="text-yellow-200/70 text-xs mt-1">
-										Your private key was generated and the public key is filled in above.
-										<strong>You must download and save the private key securely</strong> - it cannot be recovered.
-										You'll need it to SSH into your server.
+										The private key exists only in your browser right now. It is <strong>not stored on our servers</strong> and
+										<strong>cannot be recovered</strong> after you close this dialog.
+										Without it, you will not be able to connect to your server.
+									</p>
+									<p class="text-yellow-200/70 text-xs mt-1">
+										After downloading, set file permissions: <code class="font-mono text-yellow-300">chmod 600 ~/Downloads/id_ed25519_decent_cloud</code>
 									</p>
 									<button
 										type="button"
@@ -1017,7 +1023,7 @@
 				</button>
 				<button
 					onclick={handleSubmit}
-					disabled={loading}
+					disabled={loading || (generatedPrivateKey !== null && !privateKeyDownloaded)}
 					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 				>
 					{#if processingPayment}
