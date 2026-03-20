@@ -246,11 +246,67 @@ The script supports running multiple agents in parallel using unique project nam
 ./run-container.sh -n opencode1 opencode
 ```
 
+## Credential Management (dc-secrets)
+
+Single source of truth for all credentials. Uses SOPS with age encryption — keys are visible in git diffs, values are encrypted. The `secrets/` directory is bind-mounted into all containers.
+
+### How It Works
+
+```
+secrets/
+  .sops.yaml          # SOPS config (committed to git)
+  .age-identity       # Private key (NEVER committed — in .gitignore)
+  shared/*.yaml       # SOPS-encrypted shared creds (committed to git)
+  agents/*.yaml       # SOPS-encrypted per-agent creds (committed to git)
+```
+
+### First-Time Setup (on host)
+
+```bash
+scripts/dc-secrets init                          # Generate age keypair + .sops.yaml
+scripts/dc-secrets import api/.env.local shared/api
+scripts/dc-secrets import cf/.env.dev shared/cf-dev
+```
+
+### Adding/Editing Credentials
+
+```bash
+# CLI set (flock-protected for concurrent agents)
+scripts/dc-secrets set shared/cloudflare CF_API_TOKEN=xxx CF_ZONE_ID=yyy
+
+# Per-agent
+scripts/dc-secrets set agents/agent-1 HETZNER_TOKEN=secret_1
+
+# Interactive edit (opens $EDITOR with decrypted YAML, re-encrypts on save)
+scripts/dc-secrets edit shared/api
+```
+
+### How Agents Load Credentials
+
+On container startup, `entrypoint.sh` automatically runs `dc-secrets export --agent $AGENT_NAME` and exports all shared + agent-specific credentials as environment variables. No manual sourcing needed.
+
+### CLI Reference
+
+```bash
+dc-secrets init                          # Initialize store
+dc-secrets get <path> <key>              # Read one credential
+dc-secrets set <path> <key>=<value> ...  # Write credentials (flock-protected)
+dc-secrets delete <path> <key>           # Remove a credential
+dc-secrets export [--agent <name>]       # Print all creds as key=value
+dc-secrets list [<path>]                 # List files or keys
+dc-secrets import <env-file> <path>      # Import a .env file
+dc-secrets edit <path>                   # Open in $EDITOR via sops
+```
+
+Paths: `shared/<name>` for shared, `agents/<name>` for per-agent.
+
 ## Security Notes
 
 - Container runs as non-root user
 - Only project directory is mounted
 - Network access limited to bridge network
-- No access to host system files or credentials
+- Credentials are SOPS-encrypted (AES-256-GCM + age) and committed to git
+- Private key (`.age-identity`) is gitignored and never leaves the host
+- Concurrent writes are flock-protected
 - Container can be easily recreated if compromised
 - AI tool configs are mounted read-only from host

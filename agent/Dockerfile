@@ -26,7 +26,7 @@ RUN DFXVM_INIT_YES=yes sh -ci "$(curl -fsSL https://internetcomputer.org/install
 
 # Install deps
 RUN apt update && \
-    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 curl gosu postgresql iproute2 \
+    apt install -y libunwind-dev curl libssl-dev pkg-config gzip build-essential ca-certificates less jq clang mold sqlite3 curl gosu postgresql iproute2 tmux screen byobu \
     # Docker CLI for running docker commands inside the container
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
@@ -34,6 +34,12 @@ RUN apt update && \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources-docker.list \
     && cat /etc/apt/sources-docker.list >> /etc/apt/sources.list.d/docker.list \
     && apt update && apt install -y docker-ce-cli docker-compose-plugin
+
+# Install age + sops (dc-secrets credential store)
+RUN curl -fsSL https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz \
+    | tar -xz -C /usr/local/bin --strip-components=1 age/age age/age-keygen \
+    && curl -fsSL -o /usr/local/bin/sops https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64 \
+    && chmod +x /usr/local/bin/sops
 
 # Install Node.js directly from NodeSource repository (simpler than NVM for Docker)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
@@ -61,6 +67,9 @@ RUN rustup target add x86_64-unknown-linux-gnu wasm32-unknown-unknown \
 
 # Install cargo tools using binstall for faster installation
 RUN cargo binstall cargo-make cargo-nextest sqlx-cli ripgrep cargo-sweep typst-cli ralph-cli ripgrep
+
+# Install br (beads_rust) — local-first issue tracker for AI agent task coordination
+RUN curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh" | bash
 
 # Install UV to .local/bin (not .cargo/bin which gets shadowed by cargo-cache volume)
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HOME/.local/bin" sh

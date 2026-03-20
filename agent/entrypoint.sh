@@ -30,6 +30,15 @@ SSHEOF
     chown ubuntu:ubuntu /home/ubuntu/.ssh/config
 fi
 
+# Load credentials from SOPS-encrypted dc-secrets store
+DC_SECRETS="/code/decent-cloud/scripts/dc-secrets"
+if [ -f /code/decent-cloud/secrets/.sops.yaml ] && [ -f /code/decent-cloud/secrets/.age-identity ]; then
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        export "$line"
+    done < <(gosu ubuntu "$DC_SECRETS" export ${AGENT_NAME:+--agent "$AGENT_NAME"} 2>/dev/null || true)
+fi
+
 # Clean old build artifacts (files not accessed in 1 day)
 gosu ubuntu cargo sweep --time 1 --installed /code/target 2>/dev/null || true
 

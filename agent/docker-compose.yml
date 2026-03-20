@@ -34,6 +34,8 @@ services:
       - VIRTUAL_ENV=/home/ubuntu/.venv
       # PostgreSQL connection for testing (used by Playwright and other tooling)
       - DATABASE_URL=postgres://test:test@postgres:5432/test
+      # Agent identity for per-agent credential loading (set by run-container.sh)
+      - AGENT_NAME=${AGENT_NAME:-}
     volumes:
       # Mount the entire repository directory
       - ..:/code/decent-cloud
@@ -55,6 +57,8 @@ services:
       # SSH key for agent access to remote nodes
       - ${HOME}/.ssh/claude-code:/tmp/claude-ssh/claude-code:ro
       - ${HOME}/.ssh/claude-code.pub:/tmp/claude-ssh/claude-code.pub:ro
+      # Shared secrets store (age-encrypted, flock-coordinated)
+      - ../secrets:/code/decent-cloud/secrets
       # Docker socket for running docker commands inside the container
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /code/decent-cloud

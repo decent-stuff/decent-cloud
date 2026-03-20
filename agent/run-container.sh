@@ -303,8 +303,8 @@ run_tool() {
 		log_warning "Press Ctrl+D to exit $TOOL"
 
 		# Use docker-compose run for interactive session instead of up
-		# Export DOCKER_GID for socket access inside container
-		DOCKER_GID="$(get_docker_gid)" docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
+		# Export DOCKER_GID for socket access, AGENT_NAME for per-agent credential loading
+		DOCKER_GID="$(get_docker_gid)" AGENT_NAME="${PROJECT_NAME#dc-agent-}" docker-compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" "${docker_args[@]}" run --rm "$SERVICE_NAME" $tool_command
 	fi
 }
 

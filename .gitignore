@@ -90,7 +90,6 @@ Desktop.ini
 .env.*
 !.env.example
 .envrc
-/secrets/
 
 ### Project Specific ###
 .aider*
