@@ -2,7 +2,7 @@
 
 **Generated:** 2026-03-20 Europe/Zurich
 **Scope:** `repo/` submodule
-**Mirror:** keep `AGENTS.md` and `CLAUDE.md` byte-for-byte aligned
+**Mirror:** `CLAUDE.md` is a symlink to `AGENTS.md` — edit only `AGENTS.md`
 
 ## OVERVIEW
 `repo/` is the real product root: Rust workspace (`api`, `cli`, `common`, `dc-agent`, `ic-canister`, `ledger-map`), SvelteKit frontend (`website`), Python tooling, CI, scripts, and vendored third-party source for integration debugging.
@@ -124,6 +124,13 @@ All secrets are stored in SOPS-encrypted files under `secrets/`. Use `scripts/dc
 - `scripts/dc-secrets set shared/env KEY=value` - add/update a credential
 - `scripts/dc-secrets edit shared/env` - interactive edit in $EDITOR
 - `scripts/dc-secrets list` - list all secret files
+
+**Hire accounts** (GitHub, email credentials for new team members) are in the private parent repo under `secrets/hires/`, one file per person. Access them with:
+```bash
+DC_SECRETS_DIR=secrets scripts/dc-secrets list                          # list all hire files
+DC_SECRETS_DIR=secrets scripts/dc-secrets list hires/andris-kalns       # list keys for a hire
+DC_SECRETS_DIR=secrets scripts/dc-secrets get hires/andris-kalns GITHUB_PAT  # get specific value
+```
 
 ### Seeding Test Data
 ```bash
