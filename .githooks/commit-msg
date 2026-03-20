@@ -24,7 +24,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # --- Step 1: Remove lines containing unwanted strings using sed ---
-if ! sed '/Generated with/d; /via \[/d; /Co-Authored-By: Claude/d; /Co-Authored-By:.*@happy\.engineering/d' "$COMMIT_MSG_FILE" > "$TMP_PROCESSED_MSG_FILE"; then
+if ! sed '/^.*Generated with \[Claude Code\]/d; /^.*via \[Claude Code\]/d; /^Co-Authored-By: Claude/d; /^Co-Authored-By:.*@happy\.engineering/d' "$COMMIT_MSG_FILE" > "$TMP_PROCESSED_MSG_FILE"; then
     echo "Error: sed command failed while processing commit message" >&2
     exit 1
 fi
