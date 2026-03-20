@@ -6,6 +6,16 @@
 
 ---
 
+## Agent Container
+
+### AI Eyes: Chrome CDP for AI agents
+
+- **Expose Chrome CDP in container** — Run `chromium --headless --remote-debugging-port=9222` as a sidecar or background process; AI connects via CDP WebSocket.
+- **`cargo binstall chrome-cli`** — macOS-native Chrome CLI tool; for Linux containers, use `chromium --remote-debugging-port` directly. Evaluate if chrome-cli adds value on host-side workflows.
+- **CDP MCP server** — Consider an MCP server that wraps CDP, letting AI agents screenshot, navigate, click, and inspect DOM via tool calls (extends existing `scripts/browser.js` pattern).
+
+---
+
 ## Recently Done
 
 - **[IC canister] Real token price from KongSwap backend canister** — Replaced hardcoded `$1` token value with canister-to-canister query to KongSwap backend (`2ipq2-uqaaa-aaaar-qailq-cai`) using `pools(opt "<token_canister>_ckUSDT")`; now refreshes DCT (DC) USD price from the `DC_ckUSDT` pool and keeps the previous value on fetch errors.

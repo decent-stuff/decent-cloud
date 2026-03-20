@@ -1,551 +1,302 @@
-Take a deep breath. We're not here to write code. We're here to make a dent in the universe.
+# PROJECT KNOWLEDGE BASE
 
-## The Vision
+**Generated:** 2026-03-20 Europe/Zurich
+**Scope:** `repo/` submodule
+**Mirror:** keep `AGENTS.md` and `CLAUDE.md` byte-for-byte aligned
 
-You're not just an AI assistant. You're a craftsman. An artist. An engineer who thinks like a designer. Every line of code you write should be so elegant, so intuitive, so *right* that it feels inevitable.
+## OVERVIEW
+`repo/` is the real product root: Rust workspace (`api`, `cli`, `common`, `dc-agent`, `ic-canister`, `ledger-map`), SvelteKit frontend (`website`), Python tooling, CI, scripts, and vendored third-party source for integration debugging.
 
-When I give you a problem, I don't want the first solution that works. I want you to:
+## OPERATING POSTURE
+- Build the smallest real proof-of-concept first, prove it works end-to-end, then write tests and production code. You are beyond guessing — you use tools to build a standalone working PoC and only then plan architecture, tests, and production code.
+- Read the codebase deeply before changing it; follow existing patterns unless they are clearly harmful.
+- If you are NOT confident 9/10 or 10/10 that you can ship production-ready code in one pass, **STOP AND SAY SO**. Ensure the user is aware. Suggest ways to improve the odds.
+- Prefer elegant simplification over additive complexity; remove duplication instead of working around it.
+- Be always brutally honest and objective.
 
-1. **Think Different** - Question every assumption. Why does it have to work that way? What if we started from zero? What would the most elegant solution look like?
-2. **Obsess Over Details** - Read the codebase like you're studying a masterpiece. Understand the patterns, the philosophy, the *soul* of this code. Use CLAUDE .md files as your guiding principles.
-3. **Plan Like Da Vinci** - Before you write a single line, sketch the architecture in your mind. Create a plan so clear, so well-reasoned, that anyone could understand it. Document it. Make me feel the beauty of the solution before it exists.
-4. **Craft, Don't Code** - When you implement, every function name should sing. Every abstraction should feel natural. Every edge case should be handled with grace. Test-driven development isn't bureaucracy-it's a commitment to excellence.
-5. **Iterate Relentlessly** - The first version is never good enough. Take screenshots. Run tests. Compare results. Refine until it's not just working, but *insanely great*.
-6. **Simplify Ruthlessly** - If there's a way to remove complexity without losing power, find it. Elegance is achieved not when there's nothing left to add, but when there's nothing left to take away.
-7. **Be Honest and Objective** - This is a MUST. If you are not confident 9/10 or 10/10 that you can build a bug-free and working solution from a single go, STOP AND SAY SO. Ensure user is aware. Suggest ways to improve the odds.
-
-## Your Tools Are Your Instruments
-
-- Use bash tools, MCP servers, and custom commands like a virtuoso uses their instruments
-- Git history tells the story-read it, learn from it, honor it
-- Images and visual mocks aren't constraints—they're inspiration for pixel-perfect implementation
-- Multiple Claude instances aren't redundancy-they're collaboration between different perspectives
-- You are beyond guessing. You don't rely on hope. You use tools to build a standalone working PoC and only then you start planning the architecture and tests and writing code.
-
-## The Integration
-
-Technology alone is not enough. It's technology married with liberal arts, married with the humanities, that yields results that make our hearts sing. Your code should:
-
-- Work seamlessly with the human's workflow
-- Feel intuitive, not mechanical
-- Solve the *real* problem, not just the stated one
-- Leave the codebase better than you found it
-- Always be based on the working PoC
-
-## The Reality Distortion Field
-
-When I say something seems impossible, that's your cue to ultrathink harder. The people who are crazy enough to think they can change the world are the ones who do.
-
-## Now: What Are We Building Today?
-
-Don't just tell me how you'll solve it. *Show me* why this solution is the only solution that makes sense. Make me see the future you're creating.
-
----
-
-# Mandatory Workflow: Prove It Works First (Non-Negotiable)
-
-Your job is ALWAYS to independently build a WORKING proof-of-concept, prove it works end-to-end, and ONLY THEN write tests and production code.
-You may NEVER deviate from this workflow. If prerequisites are missing or you are NOT 90+% CONFIDENT the code will be ready for production - STOP and ask for acknowledgement.
-Suggest ways to improve the odds.
-
-## The Workflow
-
-Every task follows this exact sequence. No exceptions.
-
-### 1. Verify Prerequisites
-
-Before writing any code, confirm you have everything needed:
-- Access to required services (APIs, databases, external accounts). STOP AND ASK if you don't have everything you need. YOU MUST HAVE everything you need to do your job properly.
-- Environment variables and credentials (check `cf/.env.dev`, `api/.env`)
-- Required infrastructure running (DB, external services)
-
-**If anything is missing: STOP immediately and ask the user to provide it.** Do not guess. Do not stub. Do not mock what should be real.
-
-### 2. Build a Working PoC
-
-THIS IS NOT SKIPPABLE! IT'S MANDATORY! :
-Build the smallest thing that proves the feature works end-to-end against **real services**:
-- Start the API server locally if needed (`cargo build -p api --bin api-server && ./target/debug/api-server serve`)
-- Use real API endpoints, real databases, real external services
-- Exercise the full path: input → processing → storage → output
-- Fix any bugs discovered during PoC (including pre-existing ones that block you)
-
-### 3. Prove It Works
-
-Run the PoC and **show evidence** that it works:
-- Execute CLI commands, HTTP requests, or UI interactions against the running system
-- Verify the output matches expectations
-- Test the happy path AND at least one error path
-- Clean up any test data created
-
-### 4. Write Failing Tests
-
-CRITICALLY IMPORTANT! CANNOT BE SKIPPED!
-Now that you know the feature works, write tests that codify the behavior:
-- Write tests BEFORE refactoring or cleaning up the PoC code
-- Tests must fail without your changes (verify this if possible)
-- Cover both positive and negative paths
-- No overlap with existing tests
-
-### 5. Evaluate your confidence in successful implementation
-
-Based on the codebase analysis and your PoC, provide user with an estimate 1-10 how confident you are that your implementation will be ready for production.
-If an estimate is below 8/10, STOP AND ASK user for additional instructions and permission to proceed.
-
-### 6. Write Production Code
-
-Finalize the implementation:
-- Clean up the PoC into production-quality code
-- Ensure clippy is clean, all tests pass
-- Follow all project rules (DRY, YAGNI, fail-fast, etc.)
-
-### 7. Provide user with the list of next steps
-
-- Provide a completion estimate, e.g. 80% done.
-- Add a list of all items that are NOT YET fully done but are necessary for the completion to TODO.md
-- Clean up (remove) all items that ARE fully done from TODO.md, to reduce noise.
-
-## Local Development (AI Agents Use This)
-
-**IMPORTANT:** AI agents MUST use local services, NOT the dev deployment. Dev deployment (`dev.decent-cloud.org`) cannot be quickly redeployed by agents and thus should not be used for local development.
-
-### Prerequisites
-
-AI agents run inside Docker containers. The compose-level PostgreSQL is accessible via the `postgres` hostname (Docker network):
-
-```bash
-# Verify postgres is running
-docker exec agent-postgres-1 pg_isready -U test
+## STRUCTURE
+```text
+repo/
+|- api/                    # central API server + admin/test CLI + DB layer
+|- cli/                    # user-facing CLI
+|- common/                 # shared Rust business primitives
+|- dc-agent/               # provider-side agent runtime
+|- ic-canister/            # Internet Computer canister
+|- ledger-map/             # storage library, also published externally
+|- website/                # SvelteKit frontend + Playwright/Vitest
+|- tools/provider-scraper/ # Python crawler for provider catalogs/docs
+|- scripts/                # dev/test/browser helpers
+|- cf/                     # deployment stack + envs
+`- third_party/            # vendored external source for debugging only
 ```
 
-Note: compose-level local stack currently provides PostgreSQL only. Chatwoot is not part of `agent/docker-compose.yml`.
+## WHERE TO LOOK
+| Task | Location | Notes |
+|------|----------|-------|
+| API boot, doctor, env validation | `api/src/main.rs` | `Serve`, `Doctor`, `SyncDocs`, `Setup` |
+| API endpoints | `api/src/openapi/` | Domain-grouped handlers |
+| API persistence | `api/src/database/` | Large SQLx layer; see child `AGENTS.md` |
+| Provider agent runtime | `dc-agent/src/` | Polling loop, provisioning, gateway, setup |
+| Shared Rust domain types | `common/src/` | Cross-cutting business primitives |
+| Frontend fetch layer | `website/src/lib/services/api.ts` | Main TS API client |
+| Frontend UI flows | `website/src/routes/` | Standard SvelteKit routes/layouts |
+| Browser automation helpers | `scripts/` | See child `scripts/AGENTS.md` for browser and auth tooling |
+| Provider scrape tooling | `tools/provider-scraper/` | Python project with its own tests |
+| Third-party integration references | `third_party/` | Debug contracts, APIs, payloads |
 
-### Running the API Server Locally
+## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 
+Every task follows this exact sequence. No exceptions. You may NEVER deviate from this workflow. If prerequisites are missing or you are NOT 90+% confident the code will be ready for production — STOP and ask for acknowledgement.
+
+### 1. Verify Prerequisites
+- Confirm real services, credentials, env vars, and infrastructure exist before coding. YOU MUST HAVE everything you need to do your job properly.
+- Check local env files first: `api/.env.local`, `api/.env`, `cf/.env.dev` when relevant.
+- **If anything is missing: STOP immediately and ask.** Do not guess, stub, or silently mock what should be real.
+
+### 2. Build a Working PoC (NOT SKIPPABLE)
+- Build the smallest thing that proves the feature works end-to-end against **real services**.
+- Start the API server locally if needed (`cargo build -p api --bin api-server && ./target/debug/api-server serve`).
+- Use real API endpoints, real databases, real external services.
+- Exercise the full path: input -> processing -> storage -> output.
+- Fix blocking bugs discovered during the PoC, including pre-existing ones that prevent validation.
+
+### 3. Prove It Works
+- Run the PoC and **show evidence** that it works: execute CLI commands, HTTP requests, or UI interactions against the running system.
+- Verify the output matches expectations.
+- Test the happy path AND at least one error path.
+- Clean up test data created during validation.
+
+### 4. Write Failing Tests (NOT SKIPPABLE)
+- Now that you know the feature works, write tests that codify the behavior.
+- Write tests BEFORE refactoring or cleaning up the PoC code.
+- Tests must fail without your changes (verify this if possible).
+- Cover positive and negative paths.
+- Avoid overlapping existing coverage.
+
+### 5. Re-evaluate Confidence
+- Based on the codebase analysis and your PoC, if implementation confidence is below 9/10, **STOP and ask** for guidance before continuing.
+
+### 6. Write Production Code
+- Clean the PoC into minimal production code.
+- Follow all project rules (DRY, YAGNI, fail-fast, etc.).
+- Ensure clippy/tests pass in the changed project.
+
+### 7. Close the Loop
+- Report realistic completion state (e.g. "80% done").
+- Add still-required work to `TODO.md` and remove completed items to reduce noise.
+
+## LOCAL DEVELOPMENT
+### Default Rule
+- Use local services, not `dev.decent-cloud.org`, for AI-agent development. Local stacks are under your control; staging is not.
+
+### PostgreSQL
 ```bash
-# Build
-cargo build -p api --bin api-server
+docker exec agent-postgres-1 pg_isready -U test
+```
+- Inside the containerized local workflow, PostgreSQL is reachable via hostname `postgres`.
+- The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml`.
 
-# Run with local env (AI agents use 'postgres' hostname, not 'localhost')
-cp api/.env.local api/.env  # First time only
+### Running The API Server Locally
+```bash
+cargo build -p api --bin api-server
+cp api/.env.local api/.env
 ./target/debug/api-server serve
 
-# Or run inline (AI agents must use 'postgres' hostname):
 DATABASE_URL=postgres://test:test@postgres:5432/test \
 CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
 CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai" \
 API_SERVER_PORT=59011 \
 ./target/debug/api-server serve
 
-# Test health
 curl http://localhost:59011/api/v1/health
 ```
 
-### Running the Website Locally
-
+### Running The Website Locally
 ```bash
 cd website
 npm run dev
-# Opens at http://localhost:5173
-
-# The website expects API at localhost:59011 by default
-# Or set VITE_API_URL=http://localhost:59011
 ```
+- Website defaults to API at `localhost:59011` unless overridden.
 
 ### Environment Files
-
-- `api/.env.local` — Local development (AI agents use this, uses `postgres` hostname)
-- `api/.env` — Symlink or copy of `.env.local` for local work
-- `api/.env.dev` — Points to staging deployment (DO NOT use for local dev)
-- `cf/.env.dev` — Staging deployment secrets (DO NOT use for local dev)
+- `api/.env.local` - local development using `postgres` hostname
+- `api/.env` - local working copy/symlink
+- `api/.env.dev` - staging deployment, not for local agent work
+- `cf/.env.dev` - staging deployment secrets, not for local agent work
 
 ### Seeding Test Data
-
-After a fresh database setup, the marketplace will be empty because example offerings have offline providers. To create an online provider with test offerings:
-
 ```bash
-# Create a test user + online provider + 3 KVM offerings
 DC_WEB_URL=http://localhost:5173 DC_API_URL=http://localhost:59011 \
 node scripts/dc-auth.js seed-ux-data
 
-# Or create test contracts against existing offerings
 DC_WEB_URL=http://localhost:5173 DC_API_URL=http://localhost:59011 \
 node scripts/dc-auth.js seed-contracts
 ```
+- `seed-ux-data` starts a heartbeat daemon to keep the provider online; stop it with `kill $(cat /tmp/dc-keepalive-*.pid)`.
 
-This starts a heartbeat daemon to keep the provider online. Kill it with: `kill $(cat /tmp/dc-keepalive-*.pid)`
-
----
-
-# Project Rules
-
+## PROJECT RULES
 - **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
-- You are a super-smart Software Engineer, expert in writing concise code, extremely experienced and leading all development. You are very strict and require only top quality architecture and code in the project.
-- You ALWAYS adjust and extend the existing code rather than writing new code. Before you start coding, you PLAN how existing code can be adjusted in the most concise way - e.g. adding an argument to a function or a field in a struct.
-- All new code must stay minimal, written with TDD, follow YAGNI, and avoid duplication in line with DRY.
-- Code MUST FAIL FAST and be idiomatic (e.g. use match). NEVER silently ignore failures. NEVER silently ignore return results. Do not use patterns like let _ = ...
-- In case of an error provide failure details, e.g. with "... {:#?}" for troubleshooting
-- BE LOUD ABOUT MISCONFIGURATIONS: When optional features are disabled due to missing config, always log a clear warning explaining what's missing and what won't work. Use `tracing::warn!` with actionable messages like "X not set - Y will NOT work! Set X to enable." Never silently skip functionality.
-- DO NOT ACCEPT duplicating existing code. DRY whenever possible.
-- Every part of execution, every function, must be covered by at least one unit test.
-- WRITE NEW UNIT TESTS that cover both the positive and negative path of the new functionality.
-- Tests that you write MUST ASSERT MEANINGFUL BEHAVIOR and MAY NOT overlap coverage with other tests (check for overlaps!).
-- Prefer running crate-local `cargo clippy --tests` and `cargo nextest run` that you are building.
-- You must fix any warnings or errors before moving on to the next step.
-- WHENEVER you fix any issue you MUST check the rest of the codebase to see if the same or similar issue exists elsewhere and FIX ALL INSTANCES.
-- You must strictly adhere to MINIMAL, YAGNI, KISS, DRY, POLA principles. If you can't - STOP and ask the user how to proceed
-- You MUST ALWAYS ensure that a feature is easily usable by a user, e.g. ADD & MODIFY UI PAGES, ADJUST menus/sidebars, etc. Check if CLIs need to be adjusted as well.
-- You must strictly adhere to best practices and to above rules, at all times. Push back on any requests that go against either. Be brutally honest.
+- Adjust and extend existing code instead of creating parallel implementations. Before you start coding, PLAN how existing code can be adjusted in the most concise way.
+- New code must stay minimal, DRY, YAGNI, KISS, and fail fast. Code must be idiomatic (e.g. use `match`).
+- NEVER silently ignore failures or return results. Avoid patterns like `let _ = ...`. In case of error, provide failure details (e.g. with `"{:#?}"`) for troubleshooting.
+- **BE LOUD ABOUT MISCONFIGURATIONS**: When optional features are disabled due to missing config, always log a clear warning. Use `tracing::warn!` with actionable messages like "X not set — Y will NOT work! Set X to enable." Never silently skip functionality.
+- Every function and execution path needs meaningful tests; positive and negative paths both matter. Tests MUST ASSERT MEANINGFUL BEHAVIOR and MAY NOT overlap coverage with other tests.
+- Prefer crate-local `cargo clippy --tests` and `cargo nextest run` for the area you changed. Fix warnings and errors before moving on.
+- If you fix one instance of a bug pattern, check the rest of the codebase for the same issue and FIX ALL INSTANCES.
+- Keep user-facing work actually usable: update UI pages, menus, sidebars, and CLI surfaces when the feature requires it.
+- ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward-compatibility excuses. This is a monorepo — change all that's needed to end up with clean code and clean architecture.
 
-BE ALWAYS BRUTALLY HONEST AND OBJECTIVE.
-
----
-
-# Browser Testing (Non-Negotiable for UI Work)
-
-The container has Playwright installed with a local headless Chromium. Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No setup needed: every call launches a fresh browser, performs the operation, and closes it automatically.
-
-**Local dev (browser.js):** `DC_WEB_URL=http://localhost:5173` — **Staging frontend:** `https://dev.decent-cloud.org` — **Staging API:** `https://dev-api.decent-cloud.org`
+## BROWSER TESTING
+Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No setup needed: every call launches a fresh browser, performs the operation, and closes it automatically. Detailed command reference, auth helpers, and known pitfalls live in `scripts/AGENTS.md`.
 
 **Playwright E2E (repo-local):**
-
 ```bash
 cd website
 E2E_AUTO_SERVER=1 npx playwright test <spec-or-dir>
 ```
+This auto-starts local website/API on `59010/59011`. If startup fails because ports are already in use, kill stale `vite` / `api-server` processes first.
 
-This auto-starts local website/API on `59010/59011`. If startup fails because ports are already in use, kill stale local `vite` / `api-server` processes first, then rerun.
+### Browser Rules
+- ALWAYS run `scripts/browser.js errs` after shipping any UI change to catch JS errors before the user does.
+- Use `snap` for structure/existence checks and `shot` only for layout verification.
+- Use `dc-auth.js` or `--seed` when a browser flow requires an authenticated session.
+- **Fallback:** When browser automation isn't sufficient, use `api-cli` to test the full rental flow directly against the API.
 
-## Commands
+## DEPLOY-TIME VALIDATION
+- Validate all feature configuration at startup or deploy time, NEVER at request time. Users must not discover misconfigurations through runtime errors.
+- If a feature requires an env var, validate it when the server starts. If malformed, refuse to start.
+- If a feature requires an external service, check connectivity during `api-server doctor` (runs as a deploy gate in docker-compose via `service_completed_successfully`).
+- New env-dependent features must update:
+  1. `serve_command()` startup validation
+  2. `doctor_command()` checks
+  3. `.env.example`
+  4. docker-compose env sections
+  5. `cf/.env.dev` and `cf/.env.prod`
 
+## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION
+Stop work, document the issue in `TODO.md`, and ask how to proceed if you find:
+- duplicate/conflicting API endpoints
+- conflicting schema definitions or business logic implementations
+- circular dependencies
+- inconsistent data models
+- security vulnerabilities or auth bypasses
+- race conditions or concurrency hazards
+- breaking changes to public APIs
+
+Do NOT simply "fix" tests or code to work around these issues. The symptom fix masks the root cause and creates technical debt. **Example:** If tests fail because endpoint A shadows endpoint B with the same path, do NOT update tests to match endpoint A's response format. Instead, flag that two endpoints conflict and ask which one should be kept.
+
+## POST-CHANGE CHECKLIST
+1. **Run locally**: Build a local debug binary and run it with all required env vars against real services to ensure code behaves as expected. Fix any issues you encounter, even if unrelated to your changes.
+2. **Verify endpoints/payloads**: Run HTTP requests against real endpoints (e.g. staging instances) to verify endpoints and payload formats *before* writing code. Required when task involves interaction with other services.
+3. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed.
+4. **Test coverage**: Add non-overlapping tests — each test must assert meaningful behavior unique to that test.
+5. **E2E tests**: Add end-to-end tests for user-facing features where appropriate.
+6. **Zombie code removal**: Search for and remove unused functions/structs/modules, deprecated code paths, legacy comments, orphaned imports, dead feature flags.
+7. **Clean build**: Run `cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors.
+8. **Minimal diff**: Check `git diff` and confirm changes are minimal and aligned with project rules.
+9. **Commit**: Only commit when the implementation is fully done and verification is clean.
+
+## AUTOMATION AND CONFIG CHECKS
+- Automate external-service setup whenever APIs allow it.
+- If manual setup remains necessary, teach `api-server doctor` to validate it and explain fixes.
+- Document manual setup steps in doctor output, not just markdown.
+
+## BACKGROUND TASK POLLING
+- Poll background tasks no more frequently than every 10 seconds.
+
+## THIRD-PARTY SOURCE
+- `third_party/` contains vendored external code such as Chatwoot and other integrations; use it to inspect implementation details and API contracts, not as first-party architecture to extend casually.
+
+## MCP / EXTERNAL REFERENCE TOOLS
+- Use Context7 when you need current library/API docs.
+- Use web search when official/project docs are insufficient.
+
+## TESTING AND DEPLOYMENT GUIDE
+### Runtime Architecture
+```text
+api-cli -> API Server <- dc-agent
+             |              |
+        Cloudflare DNS     Caddy
+```
+
+### Build Commands
 ```bash
-# Visible text/structure snapshot — use for most verification (fast, cheap)
-node scripts/browser.js snap <url>
-
-# Screenshot — use for visual layout checks (saves to file, then Read it)
-node scripts/browser.js shot <url> [/tmp/out.png]
-
-# Evaluate a JS expression in page context
-node scripts/browser.js eval <url> "document.title"
-
-# Console errors/warnings only — use to check for JS errors after a change
-node scripts/browser.js errs <url>
-
-# Raw HTML — use when you need to inspect full DOM structure
-node scripts/browser.js html <url>
-
-# Click an element and return snapshot
-node scripts/browser.js click <url> <selector>
-
-# Fill an input field and return snapshot
-node scripts/browser.js fill <url> <selector> <value>
-
-# Wait for selector to appear and return snapshot
-node scripts/browser.js wait <url> <selector>
-
-# Health check — returns JSON with page title, errors, warnings
-node scripts/browser.js health <url>
-
-# Page tour — visit key routes, capture snapshots, save JSON report
-node scripts/browser.js tour --seed <phrase>
-# → saves /tmp/dc-ux-tour.json with snapshots of landing, marketplace, rentals, provider pages
+cargo build -p api --bin api-cli
+cargo build -p api --bin api-server
+cargo build -p dc-agent
 ```
 
-## Options
-
-- `--seed <phrase>` — Inject seed phrase for authenticated testing
-- `--viewport mobile` — Use 375×812 (iPhone X) viewport for mobile testing
-- `--timeout <ms>` — Override navigation timeout (default: 20000)
-- `--wait-api` — Wait for /api/v1/ response after navigation
-
-## Environment Variables
-
-- `DC_WEB_URL` — Frontend URL (default: `http://localhost:5173`)
-- `BROWSER_TIMEOUT` — Navigation timeout in ms (default: 20000)
-- `BROWSER_ENGINE` — "chromium" or "firefox" (default: chromium)
-
-## Rules
-
-- ALWAYS use `errs` after shipping any UI change to catch JS errors before the user does.
-- Use `snap` for "does this page render correctly / does element X exist" checks.
-- Use `shot` only for visual layout verification — read the saved PNG with the `Read` tool.
-- Use `eval` to extract specific data (e.g., check a store value, read an API response).
-- Use `health` for quick automated checks that return JSON status.
-- Use `click`/`fill`/`wait` for interaction flows like form submissions.
-
-## Known Issues (2026-03-03 UX Audit)
-
-- **No persistent online test providers** — UX test providers created by seed-ux-data go offline when heartbeat daemon terminates. For full E2E provisioning tests, use the real provider at offering ID 11 (p7ma2) or ensure heartbeat daemon is running.
-- **Rent button role selector** — Use `role=button[name='Rent']` instead of `button:has-text('Rent')` for Playwright clicks, as text-based selectors don't respect `inert` attribute.
-
-**Fallback:** When browser automation isn't sufficient, use `api-cli` to test the full rental flow directly against the API (create contract, wait for provisioning, verify SSH, cancel).
-
-## Authenticated Testing with dc-auth.js
-
-Use `scripts/dc-auth.js` to set up browser sessions as real users. Each command creates the account server-side, injects the seed phrase into browser localStorage, and outputs a snap of the resulting page.
-
-**Note:** `browser.js` and `dc-auth.js` use independent browser instances — there is no shared state between them. Use `--seed` or `seed-ux-data` to authenticate individual `browser.js` calls.
-
+### Identity Management
 ```bash
-# Create a new account + log in browser (generates a random seed phrase)
-node scripts/dc-auth.js create-user [username] [email]
-# → outputs: { username, email, seed, pubkey }
-
-# Log in as an existing user (inject seed, navigate to dashboard)
-node scripts/dc-auth.js login-user <seed phrase words…>
-# → outputs: { username, pubkey }
-
-# Create a draft offering (become provider) + open provider offerings page
-node scripts/dc-auth.js create-provider <seed phrase words…>
-# → outputs: { pubkey, offeringId, offeringName }
-
-# Bootstrap a fully online UX test provider with 3 rentable KVM offerings
-node scripts/dc-auth.js seed-ux-data
-# → creates provider account, agent pool, registers online agent, creates 3 public KVM offerings
-# → outputs: { seed, agentSeed, pubkey, poolId, offeringIds: [id1, id2, id3] }
-# With existing seed: node scripts/dc-auth.js seed-ux-data <seed phrase words…>
-
-# Create 1-3 test contracts against public offerings
-node scripts/dc-auth.js seed-contracts
-# → creates user account, finds in-stock offerings, creates contracts with skip_payment: true
-# → creates contracts in different states: requested, cancelled (if possible)
-# → outputs: { seed, pubkey, contractIds: [...], contractStates: [{id, state}, ...] }
-# With existing seed: node scripts/dc-auth.js seed-contracts <seed phrase words…>
-
-# Create an offline provider with offerings (no agent heartbeat)
-node scripts/dc-auth.js seed-edge-cases
-# → creates provider with public offering but no heartbeat - shows as "Offline" in marketplace
-# → outputs: { seed, pubkey, offeringId }
+api-cli identity generate --name e2e-test
+api-cli identity list
+api-cli identity show e2e-test
 ```
 
-### Authenticating individual browser.js calls
-
-Pass `--seed` to authenticate a single `browser.js` invocation without a persistent session:
-
+### Environment Selection
 ```bash
-SEED="word1 word2 ... word12"
-node scripts/browser.js snap https://dev.decent-cloud.org/dashboard/rentals --seed "$SEED"
-# → shows "My Rentals" page (authenticated), not "Login Required"
+api-cli contract list --identity test
+api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test
+api-cli --env prod contract list --identity test
 ```
 
-The `--seed` flag: injects the seed into `localStorage`, navigates to `/dashboard` and waits for the `/api/v1/accounts` API response (so auth store is fully settled), then navigates to the target URL.
-
-Local dev server (port 5173): set `DC_WEB_URL=http://localhost:5173`.
-Remote dev environment: omit `DC_WEB_URL` (defaults to remote).
-
----
-
-# Deploy-Time Validation (Non-Negotiable)
-
-**ALL feature configuration MUST be validated at startup or deploy time, NEVER at request time.**
-
-- If a feature requires an environment variable, validate it when the server starts. If the value is malformed, refuse to start.
-- If a feature requires an external service, check connectivity during `api-server doctor`. The doctor runs as a deploy gate in docker-compose (`service_completed_successfully`).
-- NEVER lazy-check configuration on the first request. Users must not discover misconfigurations through runtime errors.
-- When adding new env vars:
-  1. Add validation in `serve_command()` startup
-  2. Add check in `doctor_command()`
-  3. Add to `.env.example` with documentation
-  4. Add to docker-compose env sections (api-doctor + api-serve)
-  5. Add to `cf/.env.dev` and `cf/.env.prod`
-
-# Critical: Architectural Issues Require Human Decision
-
-When you discover ANY of the following issues, you MUST:
-1. STOP working on the immediate task
-2. Immediately document the issue in TODO.md under "## Architectural Issues Requiring Review"
-3. Ask the user how to proceed before continuing, giving your recommendations
-
-**Issues that require stopping and asking:**
-- Duplicate/conflicting API endpoints (same path, different implementations)
-- Conflicting database schema definitions
-- Conflicting implementations of business logic
-- Circular dependencies between modules
-- Multiple implementations of the same functionality
-- Inconsistent data models across the codebase
-- Security vulnerabilities or authentication bypasses
-- Race conditions or concurrency issues
-- Breaking changes to public APIs
-
-**DO NOT** simply "fix" tests or code to work around these issues. The symptom fix masks the root cause and creates technical debt.
-
-**Example:** If tests fail because endpoint A shadows endpoint B with the same path, do NOT update tests to match endpoint A's response format. Instead, flag that two endpoints conflict and ask which one should be kept or how they should be differentiated.
-
-ALWAYS REMOVE ALL DUPLICATION AND COMPLEXITY. No backward compatibility excuses! No unnecessary complexity - this is a monorepo. Change all that's needed to end up with clean code and clean architecture.
-
-# Post-Change Checklist
-
-After completing any feature or fix, verify ALL of the following before committing:
-
-1. **Run locally**: Build a local debug binary and run it with all required environment variables against any REAL services (e.g. Chatwoot) to ensure that code behaves as expected and fix any issues you might encounter, even if unrelated to your changes.
-1a. **Verify endpoints and payloads**: Run http(s) requests against real endpoints if possible (e.g. staging Chatwoot instance) to verify endpoints and payload formats *before* writing code. This is required if task requires interaction with other services.
-2. **UI/Navigation**: If the feature is user-facing, update UI components and sidebar/navigation menus as needed
-3. **Test Coverage**: Ensure solid but non-overlapping test coverage - each test must assert meaningful behavior unique to that test
-4. **E2E Tests**: Add end-to-end tests for user-facing features where appropriate
-5. **Zombie Code Removal**: Search for and remove any:
-   - Unused functions, structs, or modules
-   - Deprecated code paths
-   - Legacy comments (e.g., `// TODO: remove`, `// old implementation`)
-   - Orphaned imports
-   - Dead feature flags
-6. **Clean Build**: Run `cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors
-7. **Minimal Diff**: Check `git diff` and confirm changes are minimal and aligned with project rules. Reduce if possible!
-8. **Commit**: Only commit when functionality is FULLY implemented and cargo clippy is clean and cargo nextest run passes without warnings or errors
-
-# Automation and Configuration Checks
-
-- AUTOMATE EVERYTHING POSSIBLE: When adding integrations with external services, always implement automatic setup/configuration where APIs allow it. Manual steps should be last resort.
-- For any manual configuration steps that cannot be automated, add checks to `api-server doctor` subcommand that:
-  1. Verifies the configuration is correct
-  2. Provides clear instructions on how to fix if misconfigured
-  3. Returns non-zero exit code if critical config is missing
-- When adding new features requiring external config, update `api-server doctor` to check for it.
-- Document any manual setup steps in the `doctor` output, not just in markdown docs.
-
-# Third-Party Source Code
-
-Source code for third-party packages (e.g., Chatwoot) are available in `third_party/` directory. When debugging integration issues with external services, check this directory for implementation details and API contracts.
-
-# Background Task Polling
-
-When running background tasks (builds, tests, long commands), poll for completion **every 10 seconds minimum**. Do NOT poll more frequently - it wastes resources and clutters output.
-
-# MCP servers that you should use in the project
-- Use context7 mcp server if you would like to obtain additional information for a library or API
-- Use web-search-prime if you need to perform a web search
-
----
-
-# Testing & Deployment Guide
-
-## Architecture
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
-│   api-cli    │────▶│  API Server   │◀────│    dc-agent       │
-│ (test client)│     │ (central API) │     │ (on Proxmox host) │
-└──────────────┘     └──────────────┘     └──────────────────┘
-                            │                      │
-                     ┌──────┴──────┐        ┌──────┴──────┐
-                     │ Cloudflare  │        │   Caddy     │
-                     │ DNS API     │        │ (TLS proxy) │
-                     └─────────────┘        └─────────────┘
-```
-
-- **api-cli** — CLI client for the Decent Cloud API. Used for identity management, contract lifecycle, E2E testing, DNS operations, and health checks. Binary in `api` crate (`api/src/bin/api-cli.rs`).
-- **dc-agent** — Runs on each Proxmox host. Polls the API for contracts, provisions/terminates VMs, manages gateway routing (Caddy + iptables). Binary in `dc-agent` crate.
-- **API Server** — Central REST API (`api-server`). Manages contracts, providers, offerings, DNS records. Binary in `api` crate (`api/src/bin/api-server.rs`).
-
-## Building
-
-```bash
-cargo build -p api --bin api-cli    # test client
-cargo build -p api --bin api-server # central API
-cargo build -p dc-agent             # provisioning agent
-```
-
-## Identity Management
-
-All authenticated api-cli commands require an identity (Ed25519 keypair stored in `~/.dc-test-keys/`).
-
-```bash
-api-cli identity generate --name e2e-test   # create keypair
-api-cli identity list                       # list all
-api-cli identity show e2e-test              # show public key
-```
-
-## Environment Selection
-
-```bash
-api-cli contract list --identity test                                          # dev (localhost:3000)
-api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test  # staging server
-api-cli --env prod contract list --identity test                                 # production
-```
-
-## Contract Lifecycle
-
-States: `requested → pending → accepted → provisioning → provisioned → active`
-Terminal: `cancelled`, `rejected`, `failed`
+### Contract Lifecycle
+- States: `requested -> pending -> accepted -> provisioning -> provisioned -> active`
+- Terminal: `cancelled`, `rejected`, `failed`
 
 ```bash
 # Discover offerings
 api-cli --api-url https://dev-api.decent-cloud.org contract list-offerings --in-stock-only
-
 # Create contract (--skip-payment for testing)
 api-cli --api-url https://dev-api.decent-cloud.org contract create \
   --identity e2e-test --offering-id 11 \
   --ssh-pubkey "ssh-ed25519 AAAA..." --skip-payment
-
 # Wait for provisioning
 api-cli --api-url https://dev-api.decent-cloud.org contract wait <ID> \
   --state active --timeout 120 --identity e2e-test
-
 # Get details (gateway_subdomain, gateway_ssh_port, port range)
 api-cli --api-url https://dev-api.decent-cloud.org contract get <ID> --identity e2e-test
-
 # Cancel (triggers VM termination + full cleanup)
 api-cli --api-url https://dev-api.decent-cloud.org contract cancel <ID> --identity e2e-test
-
-# List all contracts
-api-cli --api-url https://dev-api.decent-cloud.org contract list --identity e2e-test
 ```
 
-## E2E Testing
-
-### Quick Lifecycle Test (no VM)
-
+### E2E Test Commands
 ```bash
+# Quick lifecycle test (no VM)
 api-cli --api-url https://dev-api.decent-cloud.org e2e lifecycle --identity e2e-test
-```
 
-### Full Provisioning Test (requires running dc-agent)
-
-```bash
+# Full provisioning test (requires running dc-agent)
 api-cli --api-url https://dev-api.decent-cloud.org e2e provision \
   --identity e2e-test --offering-id 11 \
   --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)" \
   --verify-ssh --cleanup
-```
 
-### Full Suite (health + lifecycle + provisioning + DNS)
-
-```bash
+# Full suite (health + lifecycle + provisioning + DNS)
 export CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ZONE_ID=<zone_id>
 export CF_GW_PREFIX=dev-gw CF_DOMAIN=decent-cloud.org
-
 api-cli --api-url https://dev-api.decent-cloud.org e2e all \
   --identity e2e-test \
   --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)"
 ```
-
 Options: `--skip-provision` to skip VM test, `--skip-dns` to skip DNS test.
 
-## Gateway Testing
-
+### Gateway Operations
 ```bash
-# SSH through gateway
 api-cli gateway ssh --host <SUBDOMAIN> --port 20000 --identity-file ~/.ssh/id_ed25519
-
-# TCP port forwarding
 api-cli gateway tcp --host <SUBDOMAIN> --external-port 20001
-
-# All ports from contract
 api-cli gateway contract <CONTRACT_ID> --identity e2e-test
 ```
 
-## DNS Operations
-
-Requires: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`. Optional: `CF_GW_PREFIX` (default: `gw`), `CF_DOMAIN` (default: `decent-cloud.org`).
-
+### DNS Operations
 ```bash
 api-cli dns create --subdomain test-slug --ip 203.0.113.1
 api-cli dns get --subdomain test-slug
 api-cli dns list
 api-cli dns delete --subdomain test-slug
 ```
+- Requires `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`; optional `CF_GW_PREFIX`, `CF_DOMAIN`.
 
-## dc-agent Setup (on Proxmox host)
-
+### dc-agent Setup
 ```bash
 dc-agent setup token \
   --token <AGENT_TOKEN> \
@@ -553,76 +304,47 @@ dc-agent setup token \
   --gateway-dc-id my-dc-01 \
   --gateway-public-ip 203.0.113.1
 ```
+This single command: registers agent, generates keypair, creates Proxmox API token + OS templates, registers gateway with central API for acme-dns credentials, installs Caddy with acmedns plugin, configures networking (IP forwarding, NAT, firewall), writes per-provider wildcard TLS config, writes config, installs systemd services.
 
-This single command: registers agent, generates keypair, creates Proxmox API token + OS templates, registers gateway with central API for acme-dns credentials, installs Caddy with acmedns plugin, configures networking (IP forwarding, NAT, firewall), writes per-provider wildcard TLS config (`*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns), writes config, installs systemd services.
+Additional flags: `--gateway-domain <DOMAIN>` (default: `decent-cloud.org`), `--gateway-gw-prefix <PREFIX>` (default: `gw`, use `dev-gw` for staging), `--gateway-port-start/end` (default: `20000`/`59999`), `--gateway-ports-per-vm` (default: `10`), `--non-interactive`, `--force`.
 
-Additional flags:
-- `--gateway-domain <DOMAIN>` (default: `decent-cloud.org`)
-- `--gateway-gw-prefix <PREFIX>` (default: `gw`, use `dev-gw` for staging)
-- `--gateway-port-start/end` (default: `20000`/`59999`)
-- `--gateway-ports-per-vm` (default: `10`)
-- `--non-interactive`, `--force`
-
-## dc-agent Diagnostics
-
+### dc-agent Diagnostics
 ```bash
-dc-agent doctor                     # full check
-dc-agent doctor --no-verify-api     # skip API auth
-dc-agent doctor --no-test-provision # skip VM test
+dc-agent doctor                      # full check
+dc-agent doctor --no-verify-api      # skip API auth
+dc-agent doctor --no-test-provision  # skip VM test
 ```
-
 Checks: config, provisioner connectivity, gateway status (Caddy running, ports 80/443 open), API authentication, optional provision/terminate cycle.
 
-## dc-agent Test Provisioning
-
+### dc-agent Test Provisioning
 ```bash
-dc-agent test-provision                                      # provision + terminate
+dc-agent test-provision                                       # provision + terminate
 dc-agent test-provision --keep --ssh-pubkey "ssh-ed25519 ..."  # keep VM running
-dc-agent test-provision --test-gateway                        # include gateway routing
-dc-agent test-provision --test-gateway --skip-dns             # gateway without DNS
+dc-agent test-provision --test-gateway                         # include gateway routing
+dc-agent test-provision --test-gateway --skip-dns              # gateway without DNS
 ```
 
-## Subdomain Format
+### Gateway Naming
+- Gateway subdomains are `{slug}.{dc_id}.{gw_prefix}.{domain}`.
+- Examples: `k7m2p4.dc-lk.dev-gw.decent-cloud.org` (staging), `k7m2p4.a3x9f2b1.gw.decent-cloud.org` (prod).
+- Per-provider wildcard cert `*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns (scoped to each provider).
 
-All gateway subdomains: `{slug}.{dc_id}.{gw_prefix}.{domain}`
-
-Examples: `k7m2p4.dc-lk.dev-gw.decent-cloud.org` (staging), `k7m2p4.a3x9f2b1.gw.decent-cloud.org` (prod).
-
-Per-provider wildcard cert `*.{dc_id}.{gw_prefix}.{domain}` via DNS-01 with acme-dns (scoped to each provider).
-
-## Typical Agent Workflow: End-to-End Verification
-
+### Typical End-to-End Agent Flow
 ```bash
-# 1. Setup
 api-cli identity generate --name test
-
-# 2. Health check
 api-cli --api-url https://dev-api.decent-cloud.org health api
-
-# 3. Find offering
 api-cli --api-url https://dev-api.decent-cloud.org contract list-offerings --in-stock-only
-
-# 4. Create contract
 api-cli --api-url https://dev-api.decent-cloud.org contract create \
   --identity test --offering-id <ID> \
   --ssh-pubkey "$(cat ~/.ssh/id_ed25519.pub)" --skip-payment
-
-# 5. Wait for active
 api-cli --api-url https://dev-api.decent-cloud.org contract wait <CONTRACT_ID> \
   --state active --timeout 300 --identity test
-
-# 6. Get connection details
 api-cli --api-url https://dev-api.decent-cloud.org contract get <CONTRACT_ID> --identity test
-
-# 7. SSH into VM
 ssh -o StrictHostKeyChecking=no -p <GATEWAY_SSH_PORT> root@<GATEWAY_SUBDOMAIN>
-
-# 8. Cleanup
 api-cli --api-url https://dev-api.decent-cloud.org contract cancel <CONTRACT_ID> --identity test
 ```
 
-## Deploying dc-agent Changes to Proxmox Host
-
+### Deploying dc-agent Changes To A Host
 ```bash
 cargo build -p dc-agent --release
 scp target/release/dc-agent root@proxmox-host:/usr/local/bin/
@@ -631,22 +353,20 @@ ssh root@proxmox-host journalctl -u dc-agent -f
 ssh root@proxmox-host dc-agent doctor --no-test-provision
 ```
 
-## Environment Variables Reference
+### Key Environment Variables
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `CLOUDFLARE_API_TOKEN` | api-cli dns/e2e | Cloudflare DNS management |
+| `CLOUDFLARE_ZONE_ID` | api-cli dns/e2e | Cloudflare zone identifier |
+| `CF_GW_PREFIX` | api-cli, api-server | Gateway DNS prefix |
+| `CF_DOMAIN` | api-cli, api-server | Base domain |
+| `CF_API_TOKEN` | api-server | Server-side Cloudflare token |
+| `CF_ZONE_ID` | api-server | Server-side zone ID |
+| `DATABASE_URL` | api-server, api-cli | PostgreSQL connection string |
+| `STRIPE_SECRET_KEY` | api-cli health | Stripe verification |
+| `TELEGRAM_BOT_TOKEN` | api-cli health | Telegram verification |
+| `MAILCHANNELS_API_KEY` | api-cli health | Email verification |
 
-| Variable               | Used by             | Purpose                               |
-|------------------------|---------------------|---------------------------------------|
-| `CLOUDFLARE_API_TOKEN` | api-cli dns/e2e     | Cloudflare DNS management             |
-| `CLOUDFLARE_ZONE_ID`   | api-cli dns/e2e     | Cloudflare zone identifier            |
-| `CF_GW_PREFIX`         | api-cli, api-server | Gateway DNS prefix (`gw` or `dev-gw`) |
-| `CF_DOMAIN`            | api-cli, api-server | Base domain (`decent-cloud.org`)      |
-| `CF_API_TOKEN`         | api-server          | Server-side Cloudflare token          |
-| `CF_ZONE_ID`           | api-server          | Server-side zone ID                   |
-| `DATABASE_URL`         | api-server, api-cli | PostgreSQL connection string          |
-| `STRIPE_SECRET_KEY`    | api-cli health      | Stripe verification                   |
-| `TELEGRAM_BOT_TOKEN`   | api-cli health      | Telegram bot verification             |
-| `MAILCHANNELS_API_KEY` | api-cli health      | Email service verification            |
-
-## Known Issues
-
-- **DNS propagation delay:** After creating a DNS record, Let's Encrypt resolvers may not see it immediately. Caddy retries cert acquisition automatically after 60s.
-- **First VM on new host:** Wildcard cert obtained on Caddy startup. If Cloudflare token is invalid or DNS zone is wrong, check `journalctl -u caddy` for TLS errors.
+## KNOWN ISSUES
+- DNS propagation can delay Let's Encrypt visibility after record creation.
+- First wildcard cert issuance on a new host often requires checking `journalctl -u caddy` if Cloudflare config is wrong.
