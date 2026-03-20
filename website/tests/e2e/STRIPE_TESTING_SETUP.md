@@ -86,9 +86,9 @@ curl http://localhost:59001/api/v1/offerings | jq
 ```
 
 ### Webhook simulation fails
-Ensure `STRIPE_WEBHOOK_SECRET=whsec_test_secret` in `api/.env`
+Ensure `STRIPE_WEBHOOK_SECRET=whsec_test_secret` is set via `scripts/dc-secrets set shared/env STRIPE_WEBHOOK_SECRET=whsec_test_secret`
 
 ### Card element doesn't appear
-- Verify `VITE_STRIPE_PUBLISHABLE_KEY` is set in `website/.env`
+- Verify `VITE_STRIPE_PUBLISHABLE_KEY` is set via `scripts/dc-secrets get shared/env VITE_STRIPE_PUBLISHABLE_KEY`
 - Restart dev server after changing env vars
 - Check browser console for errors

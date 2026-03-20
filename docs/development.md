@@ -137,7 +137,7 @@ The project uses two separate database environment variables for different purpo
 - **DATABASE_URL**: Used by the API server at runtime
   - Includes the database name: `postgres://test:test@localhost:5432/test`
   - Points to a specific database for the application to use
-  - Set in `api/.env` for local development
+  - Set via `scripts/dc-secrets set shared/env DATABASE_URL=postgres://test:test@localhost:5432/test`
 
 - **TEST_DATABASE_URL**: Used by tests for database management
   - Does NOT include a database name: `postgres://test:test@localhost:5432`
@@ -153,7 +153,7 @@ Tests need admin-level access to create and drop databases. By connecting to the
 **Running Tests:**
 
 ```bash
-# Tests work automatically with TEST_DATABASE_URL from api/.env
+# Tests work automatically with TEST_DATABASE_URL from dc-secrets
 cargo test
 
 # Or override the default if needed
@@ -195,10 +195,12 @@ DATABASE_URL=postgres://test:test@localhost:5432/test sqlx migrate run --source 
   psql postgres://test:test@localhost:5432/test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
   ```
 
-- **Test failures**: Ensure TEST_DATABASE_URL is set correctly in `api/.env`
+- **Test failures**: Ensure TEST_DATABASE_URL is set correctly via dc-secrets
   ```bash
-  # Check your api/.env file has:
-  TEST_DATABASE_URL=postgres://test:test@localhost:5432
+  # Verify with:
+  scripts/dc-secrets get shared/env TEST_DATABASE_URL
+  # Set if missing:
+  scripts/dc-secrets set shared/env TEST_DATABASE_URL=postgres://test:test@localhost:5432
   ```
 
 ### Docker Setup for Volume Permissions
@@ -376,7 +378,10 @@ The API backend includes optional email support using [MailChannels](https://www
 
 ### Email Environment Variables
 
-Add these to your `api/.env` file (see `api/.env.example` for reference).
+Set these via dc-secrets (see `api/.env.example` for reference):
+```bash
+scripts/dc-secrets set shared/env MAILCHANNELS_API_KEY=your_key FRONTEND_URL=http://localhost:59000
+```
 
 ### How Email Works
 
@@ -391,7 +396,7 @@ DKIM (DomainKeys Identified Mail) improves email deliverability by signing email
 
 1. Generate a DKIM key pair (MailChannels dashboard or `openssl`)
 2. Add the public key as a TXT record in your DNS
-3. Add the private key (base64 encoded) to your `.env` file
+3. Add the private key (base64 encoded) via `scripts/dc-secrets set shared/env DKIM_PRIVATE_KEY=...`
 
 Without DKIM, emails will still be sent but may have lower deliverability rates.
 
@@ -419,16 +424,10 @@ Optional payment processing for marketplace rentals. Without Stripe, only DCT to
    - Copy `pk_test_...` (publishable) and `sk_test_...` (secret)
    - Use test keys for development, live keys (`pk_live_...`, `sk_live_...`) for production
 
-3. **Set Environment Variables** in `api/.env`:
+3. **Set Environment Variables** via dc-secrets:
 ```bash
-STRIPE_SECRET_KEY=sk_test_your_key
-STRIPE_PUBLISHABLE_KEY=pk_test_your_key
-STRIPE_WEBHOOK_SECRET=whsec_test_secret  # Placeholder for local dev
-```
-
-And in `website/.env`:
-```bash
-VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_key
+scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_test_your_key STRIPE_PUBLISHABLE_KEY=pk_test_your_key STRIPE_WEBHOOK_SECRET=whsec_test_secret
+scripts/dc-secrets set shared/env VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_key
 ```
 
 4. **Test Locally**: Use test cards (no real charges)
@@ -442,12 +441,13 @@ Dashboard → Developers → Webhooks → Add endpoint:
 - URL: `https://your-domain.com/api/v1/webhooks/stripe`
 - API version: `2025-11-17` (or latest)
 - Events: **`payment_intent.succeeded`** and **`payment_intent.payment_failed`** only
-- Replace `STRIPE_WEBHOOK_SECRET` in production `.env` with signing secret (`whsec_...`)
+- Update `STRIPE_WEBHOOK_SECRET` via `scripts/dc-secrets set shared/env STRIPE_WEBHOOK_SECRET=whsec_...`
 
 **Local Webhook Testing** (optional - for realistic testing):
 ```bash
 stripe listen --forward-to localhost:59001/api/v1/webhooks/stripe
-# Use webhook secret from CLI output in api/.env
+# Set webhook secret from CLI output via dc-secrets:
+# scripts/dc-secrets set shared/env STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 For E2E test setup, see [website/tests/e2e/STRIPE_TESTING_SETUP.md](../website/tests/e2e/STRIPE_TESTING_SETUP.md).

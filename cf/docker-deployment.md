@@ -114,7 +114,7 @@ python3 deploy.py deploy prod
 
 The scripts will:
 - Validate Docker and build tool installation
-- Check for tunnel token (stored in `.env`, not on command line)
+- Check for tunnel token (loaded from dc-secrets)
 - Build API server binary natively (optimized for target platform)
 - Build and start containers using simplified Dockerfiles
 - Verify tunnel connection
@@ -158,26 +158,18 @@ The command looks like:
 docker run cloudflare/cloudflared:latest tunnel --no-autoupdate run --token eyJhIjoiNWFi...
 ```
 
-### Step 4: Save Token Locally
+### Step 4: Save Token via dc-secrets
 
-Create `.env` file in the `cf/` directory:
+Set the tunnel token using dc-secrets:
 
 ```bash
-cd cf
-
-# Copy the example file
-cp .env.tunnel.example .env
-
-# Edit and add your token
-nano .env
+scripts/dc-secrets set shared/env TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
 ```
 
-Add your token:
+Verify it was saved:
 ```bash
-export TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
+scripts/dc-secrets list shared/env
 ```
-
-**Important:** This file is gitignored and contains secrets - never commit it!
 
 ### Step 5: Start Services
 
@@ -192,15 +184,15 @@ python3 deploy.py deploy dev
 python3 deploy.py deploy prod
 ```
 
-Or manually with docker compose:
+Or manually with docker compose (deploy.py handles env loading from dc-secrets):
 ```bash
 cd cf
 
-# Load env and start services (dev)
-source .env.dev && docker compose -f docker-compose.dev.yml up -d
+# Development
+docker compose -f docker-compose.dev.yml up -d
 
 # Or production
-source .env.prod && docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 **Note:** Manual docker compose assumes native builds completed first:

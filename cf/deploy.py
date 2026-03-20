@@ -9,7 +9,6 @@ import hashlib
 from pathlib import Path
 from typing import Optional
 import argparse
-from dotenv import dotenv_values
 
 
 def calculate_binary_hash() -> str:
@@ -208,24 +207,34 @@ def check_docker() -> bool:
         return False
 
 
-def load_env_file(env_file: Path) -> Optional[dict[str, str]]:
-    """Load environment variables from a file using python-dotenv."""
-    if not env_file.exists():
+def load_secrets_from_sops() -> Optional[dict[str, str]]:
+    """Load all secrets from dc-secrets (SOPS-encrypted store)."""
+    dc_secrets = Path(__file__).parent.parent / "scripts" / "dc-secrets"
+    if not dc_secrets.exists():
+        print_error(f"dc-secrets not found at {dc_secrets}")
         return None
 
-    # dotenv_values handles various formats: KEY=value, export KEY=value, quoted values, etc.
-    env_vars = dotenv_values(env_file)
+    try:
+        result = subprocess.run(
+            [str(dc_secrets), "export"],
+            capture_output=True, text=True, check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        print_error(f"dc-secrets export failed: {e.stderr.strip()}")
+        return None
 
-    # Convert to regular dict[str, str] (dotenv_values returns dict[str, str | None])
-    return {k: v for k, v in env_vars.items() if v is not None}
+    env_vars: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        if not line or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        env_vars[key] = value
 
-
-def get_tunnel_token(env_file: Path) -> Optional[str]:
-    """Get tunnel token from environment file."""
-    env_vars = load_env_file(env_file)
     if not env_vars:
+        print_error("dc-secrets export returned no credentials")
         return None
-    return env_vars.get("TUNNEL_TOKEN")
+
+    return env_vars
 
 
 def run_docker_compose(
@@ -370,7 +379,7 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
 
     Args:
         environment: 'dev' or 'prod' - determines API endpoint configuration
-        env_vars: Environment variables from .env file (contains Stripe keys)
+        env_vars: Environment variables from dc-secrets (contains Stripe keys)
     """
     cf_dir = Path(__file__).parent
     project_root = cf_dir.parent
@@ -391,9 +400,8 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
         if not stripe_key:
             print_warning("STRIPE_PUBLISHABLE_KEY not found in environment config")
             print_warning("Credit card payments will NOT work without this key")
-            print_info(f"Add to {cf_dir}/.env.{environment}:")
-            print_info("  export STRIPE_PUBLISHABLE_KEY=pk_test_... (for dev)")
-            print_info("  export STRIPE_PUBLISHABLE_KEY=pk_live_... (for prod)")
+            print_info("Add it: scripts/dc-secrets set shared/env STRIPE_PUBLISHABLE_KEY=pk_test_...")
+            print_info("Use pk_test_... for dev, pk_live_... for prod")
             print()
             # Don't fail - allow deployment without Stripe (DCT payments still work)
 
@@ -481,42 +489,30 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         return 1
     print()
 
-    # Check for environment-specific .env file
-    cf_dir = Path(__file__).parent
-    env_file = cf_dir / f".env.{env_name}"
-
-    if not env_file.exists():
-        print_warning(f"Environment config not found: {env_file}")
-        print()
-        print(f"Create {env_file} with required configuration")
-        print(f"See {cf_dir}/.env.dev or {cf_dir}/.env.prod for examples")
-        print()
+    # Load all secrets from dc-secrets (SOPS-encrypted store)
+    secrets = load_secrets_from_sops()
+    if not secrets:
+        print_error("Failed to load secrets from dc-secrets. Run: scripts/dc-secrets init")
         return 1
 
-    print_success(f"Found {env_file.name}")
+    print_success(f"Loaded {len(secrets)} credentials from dc-secrets")
     print()
 
-    # Load all environment variables from file
-    file_env_vars = load_env_file(env_file)
-    if not file_env_vars:
-        print_error(f"Failed to load environment variables from {env_file}")
-        return 1
-
-    # Merge file env vars into env_vars (file vars take precedence)
-    env_vars.update(file_env_vars)
+    # Merge secrets into env_vars (secrets take precedence)
+    env_vars.update(secrets)
 
     # Verify tunnel token exists
     if not env_vars.get("TUNNEL_TOKEN"):
         if is_prod:
-            print_error("TUNNEL_TOKEN not found in production config")
+            print_error("TUNNEL_TOKEN not found in dc-secrets")
             print()
-            print(f"Add TUNNEL_TOKEN to {env_file}")
-            print(f"Get token from: https://one.dash.cloudflare.com/")
+            print("Add it: scripts/dc-secrets set shared/env TUNNEL_TOKEN=<token>")
+            print("Get token from: https://one.dash.cloudflare.com/")
             print()
             return 1
         else:
             print_warning("TUNNEL_TOKEN not found - public access will not work")
-            print_info(f"Add TUNNEL_TOKEN to {env_file} for public access")
+            print_info("Add it: scripts/dc-secrets set shared/env TUNNEL_TOKEN=<token>")
             print()
     else:
         print_success("Tunnel token loaded")

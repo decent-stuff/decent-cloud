@@ -80,13 +80,14 @@ Check if OAuth account exists
 
 #### 2. Configure Environment Variables
 
-Edit `cf/.env.dev`:
+Set via dc-secrets:
 
 ```bash
-GOOGLE_OAUTH_CLIENT_ID=your_dev_google_client_id
-GOOGLE_OAUTH_CLIENT_SECRET=your_dev_google_client_secret
-GOOGLE_OAUTH_REDIRECT_URL=http://localhost:59001/api/v1/oauth/google/callback
-FRONTEND_URL=http://localhost:59000
+scripts/dc-secrets set shared/env \
+  GOOGLE_OAUTH_CLIENT_ID=your_dev_google_client_id \
+  GOOGLE_OAUTH_CLIENT_SECRET=your_dev_google_client_secret \
+  GOOGLE_OAUTH_REDIRECT_URL=http://localhost:59001/api/v1/oauth/google/callback \
+  FRONTEND_URL=http://localhost:59000
 ```
 
 #### 3. Start the Application
@@ -121,19 +122,20 @@ npm run dev
 
 #### 2. Configure Production Environment
 
-Edit `cf/.env.prod`:
+Set via dc-secrets:
 
 ```bash
-GOOGLE_OAUTH_CLIENT_ID=your_prod_google_client_id
-GOOGLE_OAUTH_CLIENT_SECRET=your_prod_google_client_secret
-GOOGLE_OAUTH_REDIRECT_URL=https://api.decent-cloud.org/api/v1/oauth/google/callback
-FRONTEND_URL=https://decent-cloud.org
-TUNNEL_TOKEN=your_production_tunnel_token
+scripts/dc-secrets set shared/env \
+  GOOGLE_OAUTH_CLIENT_ID=your_prod_google_client_id \
+  GOOGLE_OAUTH_CLIENT_SECRET=your_prod_google_client_secret \
+  GOOGLE_OAUTH_REDIRECT_URL=https://api.decent-cloud.org/api/v1/oauth/google/callback \
+  FRONTEND_URL=https://decent-cloud.org \
+  TUNNEL_TOKEN=your_production_tunnel_token
 ```
 
 **Security Notes:**
 - Secure cookies are **automatically enabled** when `FRONTEND_URL` starts with `https://`
-- Never commit `.env.prod` to version control
+- Credentials are managed via dc-secrets (SOPS-encrypted)
 - Use separate credentials for dev and prod environments
 
 ## API Endpoints
@@ -228,7 +230,7 @@ For multi-server production deployments:
 ### "GOOGLE_OAUTH_CLIENT_ID environment variable not set"
 
 **Solution:**
-- Ensure all 4 environment variables are set in `cf/.env.dev` (or `cf/.env.prod`)
+- Ensure all 4 environment variables are set via `scripts/dc-secrets set shared/env`
 - Restart the API server after adding variables
 
 ### OAuth callback redirects to error page

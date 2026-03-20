@@ -264,8 +264,9 @@ secrets/
 
 ```bash
 scripts/dc-secrets init                          # Generate age keypair + .sops.yaml
-scripts/dc-secrets import api/.env.local shared/api
-scripts/dc-secrets import cf/.env.dev shared/cf-dev
+scripts/dc-secrets set shared/env DATABASE_URL=postgres://test:test@postgres:5432/test
+scripts/dc-secrets set shared/env TEST_DATABASE_URL=postgres://test:test@postgres:5432
+# ... set other required credentials
 ```
 
 ### Adding/Editing Credentials

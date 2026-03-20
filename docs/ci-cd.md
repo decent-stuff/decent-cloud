@@ -198,4 +198,4 @@ All stages must pass for a merge to `main`.
 
 - [Development Setup](./development.md) - Local development environment setup
 - [Migration Guide](./migrations.md) - Database migration procedures
-- [Environment Variables](../api/.env.example) - Complete configuration reference
+- [Environment Variables](../api/.env.example) - Configuration reference template (credentials managed via dc-secrets)

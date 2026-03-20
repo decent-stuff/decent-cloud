@@ -75,7 +75,7 @@ The deployment includes an optional blockchain validator service that earns DCT 
 
 ### Configuration
 
-Environment variables (set in `.env` or docker-compose override):
+Environment variables (set via `scripts/dc-secrets set shared/env` or docker-compose override):
 
 - `VALIDATION_INTERVAL_SECS`: Validation frequency in seconds (default: 600 = 10 minutes)
 - `VALIDATION_MEMO`: Optional memo for validation transactions
@@ -116,15 +116,14 @@ See [docs/mining-and-validation.md](../docs/mining-and-validation.md) for more d
 
 ### Configuration
 
-- **.env.example** - Example environment file
-- **.env.tunnel.example** - Example tunnel configuration
-- **.env** - Your actual configuration (gitignored, created by setup_tunnel.py)
+- **.env.example** - Documents what environment variables exist
+- Secrets are managed via `scripts/dc-secrets` (SOPS + age encryption)
 
 ## Security
 
-- Tunnel token is stored in `.env` file (gitignored)
+- Secrets are encrypted at rest via SOPS + age (managed by `scripts/dc-secrets`)
+- `deploy.py` loads secrets from dc-secrets automatically
 - Token is **never** passed on command line
-- Scripts load token from environment file securely
 
 ## Documentation
 

@@ -50,7 +50,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ### 1. Verify Prerequisites
 - Confirm real services, credentials, env vars, and infrastructure exist before coding. YOU MUST HAVE everything you need to do your job properly.
-- Check local env files first: `api/.env.local`, `api/.env`, `cf/.env.dev` when relevant.
+- Check credentials: run `scripts/dc-secrets list` and `scripts/dc-secrets export` to verify secrets are available.
 - **If anything is missing: STOP immediately and ask.** Do not guess, stub, or silently mock what should be real.
 
 ### 2. Build a Working PoC (NOT SKIPPABLE)
@@ -99,7 +99,7 @@ docker exec agent-postgres-1 pg_isready -U test
 ### Running The API Server Locally
 ```bash
 cargo build -p api --bin api-server
-cp api/.env.local api/.env
+eval "$(scripts/dc-secrets export)"
 ./target/debug/api-server serve
 
 DATABASE_URL=postgres://test:test@postgres:5432/test \
@@ -118,11 +118,12 @@ npm run dev
 ```
 - Website defaults to API at `localhost:59011` unless overridden.
 
-### Environment Files
-- `api/.env.local` - local development using `postgres` hostname
-- `api/.env` - local working copy/symlink
-- `api/.env.dev` - staging deployment, not for local agent work
-- `cf/.env.dev` - staging deployment secrets, not for local agent work
+### Credentials (dc-secrets)
+All secrets are stored in SOPS-encrypted files under `secrets/`. Use `scripts/dc-secrets` to manage them:
+- `scripts/dc-secrets export` - print all credentials as key=value (used by entrypoint.sh automatically)
+- `scripts/dc-secrets set shared/env KEY=value` - add/update a credential
+- `scripts/dc-secrets edit shared/env` - interactive edit in $EDITOR
+- `scripts/dc-secrets list` - list all secret files
 
 ### Seeding Test Data
 ```bash
@@ -169,9 +170,9 @@ This auto-starts local website/API on `59010/59011`. If startup fails because po
 - New env-dependent features must update:
   1. `serve_command()` startup validation
   2. `doctor_command()` checks
-  3. `.env.example`
+  3. `api/.env.example` and `cf/.env.example` (documentation templates)
   4. docker-compose env sections
-  5. `cf/.env.dev` and `cf/.env.prod`
+  5. `scripts/dc-secrets set shared/env <KEY>=<value>`
 
 ## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION
 Stop work, document the issue in `TODO.md`, and ask how to proceed if you find:

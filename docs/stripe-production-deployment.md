@@ -29,32 +29,22 @@ This guide explains how to deploy Stripe payment integration to production.
 
 ### 1. Configure Environment Variables
 
-Create or update the environment config file for your target environment:
+Set credentials via dc-secrets for your target environment:
 
-**For production (`cf/.env.prod`)**:
+**For production:**
 ```bash
-# Copy example and edit
-cd cf
-cp .env.example .env.prod
-
-# Edit .env.prod and add your LIVE Stripe keys:
-export STRIPE_SECRET_KEY=sk_live_YOUR_SECRET_KEY
-export STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY
-export STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET
+scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_live_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET
 ```
 
-**For development (`cf/.env.dev`)**:
+**For development:**
 ```bash
-# Edit .env.dev and add your TEST Stripe keys:
-export STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY
-export STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY
-export STRIPE_WEBHOOK_SECRET=whsec_test_secret
+scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_test_secret
 ```
 
 ### 2. Deploy with deploy.py
 
 The deploy script **automatically**:
-- Reads Stripe keys from `.env.{environment}` file
+- Reads Stripe keys from dc-secrets
 - Embeds `VITE_STRIPE_PUBLISHABLE_KEY` into website build
 - Validates Stripe key format before building
 - Passes API keys to docker-compose
@@ -70,7 +60,7 @@ python3 deploy.py deploy dev
 ```
 
 **What happens**:
-1. Script reads `STRIPE_PUBLISHABLE_KEY` from `.env.prod` (or `.env.dev`)
+1. Script reads `STRIPE_PUBLISHABLE_KEY` from dc-secrets
 2. Creates `website/.env.local` with `VITE_STRIPE_PUBLISHABLE_KEY=$STRIPE_PUBLISHABLE_KEY`
 3. Runs `npm run build` which:
    - Validates Stripe key format (warns if missing, fails if invalid)

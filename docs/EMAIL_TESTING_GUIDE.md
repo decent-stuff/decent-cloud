@@ -14,24 +14,15 @@ This guide walks you through testing all email functionality before production d
 
 ### 1. Configure Environment Variables
 
-Create `api/.env` from `api/.env.example`:
-
-```bash
-cd api
-cp .env.example .env
-```
-
-Edit `.env` and set:
+Set credentials via dc-secrets (see `api/.env.example` for the full list):
 
 ```bash
 # Required
-MAILCHANNELS_API_KEY=your_actual_api_key_here
-FRONTEND_URL=http://localhost:59000  # or your staging URL
+scripts/dc-secrets set shared/env MAILCHANNELS_API_KEY=your_actual_api_key_here
+scripts/dc-secrets set shared/env FRONTEND_URL=http://localhost:59000  # or your staging URL
 
 # Optional but recommended for production
-DKIM_DOMAIN=decent-cloud.org
-DKIM_SELECTOR=mailchannels
-DKIM_PRIVATE_KEY=your_base64_encoded_private_key_here
+scripts/dc-secrets set shared/env DKIM_DOMAIN=decent-cloud.org DKIM_SELECTOR=mailchannels DKIM_PRIVATE_KEY=your_base64_encoded_private_key_here
 ```
 
 ### 2. Add DKIM DNS Records
@@ -199,8 +190,8 @@ Test that failed emails are retried with exponential backoff:
 
 1. **Simulate Failure:** Use an invalid API key temporarily
    ```bash
-   # In .env, set a bad API key
-   MAILCHANNELS_API_KEY=invalid_key_for_testing
+   # Set a bad API key via dc-secrets
+   scripts/dc-secrets set shared/env MAILCHANNELS_API_KEY=invalid_key_for_testing
    ```
 
 2. **Queue an Email:**
