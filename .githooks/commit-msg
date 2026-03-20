@@ -1,0 +1,71 @@
+#!/bin/sh
+
+# Validate input
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <commit-msg-file>" >&2
+    exit 1
+fi
+
+COMMIT_MSG_FILE=$1
+
+# Validate commit message file exists and is readable
+if [ ! -f "$COMMIT_MSG_FILE" ] || [ ! -r "$COMMIT_MSG_FILE" ]; then
+    echo "Error: Cannot read commit message file: $COMMIT_MSG_FILE" >&2
+    exit 1
+fi
+
+# Temporary file for processing
+TMP_PROCESSED_MSG_FILE="${COMMIT_MSG_FILE}.processed.$$"
+
+# Function to clean up temporary file on exit
+cleanup() {
+    rm -f "$TMP_PROCESSED_MSG_FILE"
+}
+trap cleanup EXIT INT TERM
+
+# --- Step 1: Remove lines containing unwanted strings using sed ---
+if ! sed '/Generated with/d; /via \[/d; /Co-Authored-By: Claude/d; /Co-Authored-By:.*@happy\.engineering/d' "$COMMIT_MSG_FILE" > "$TMP_PROCESSED_MSG_FILE"; then
+    echo "Error: sed command failed while processing commit message" >&2
+    exit 1
+fi
+
+# Check if the processed file has content
+if [ ! -s "$TMP_PROCESSED_MSG_FILE" ]; then
+    echo "Error: Commit message became empty after filtering" >&2
+    exit 1
+fi
+
+# --- Step 2: Clean up blank lines from the processed message ---
+# Skip leading blank lines, collapse consecutive blanks, trim trailing blanks.
+awk '
+    BEGIN {
+        content_has_started = 0
+        pending_blank_line = 0
+    }
+
+    NF {
+        if (!content_has_started) {
+            content_has_started = 1
+        } else if (pending_blank_line) {
+            print ""
+        }
+        print $0
+        pending_blank_line = 0
+        next
+    }
+
+    !NF {
+        if (content_has_started) {
+            pending_blank_line = 1
+        }
+    }
+' "$TMP_PROCESSED_MSG_FILE" > "$COMMIT_MSG_FILE"
+
+# Check if final file has content
+if [ ! -s "$COMMIT_MSG_FILE" ]; then
+    echo "Error: Commit message became empty after blank line cleanup" >&2
+    exit 1
+fi
+
+rm -f "$TMP_PROCESSED_MSG_FILE"
+exit 0
