@@ -1,4 +1,5 @@
 # TODO
+<!-- Pipeline test successful -->
 
 **Specs:**
 - [docs/specs/2026-02-14-decent-recipes.md](docs/specs/2026-02-14-decent-recipes.md)
