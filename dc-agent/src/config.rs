@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub api: ApiConfig,
     pub polling: PollingConfig,
@@ -19,6 +20,7 @@ pub struct Config {
 
 /// Gateway configuration for per-host reverse proxy (Caddy)
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     /// Unique datacenter identifier (2-20 chars [a-z0-9-], e.g., "a3x9f2b1")
     /// Generate with: openssl rand -hex 4
@@ -79,6 +81,7 @@ fn default_port_allocations_path() -> String {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApiConfig {
     pub endpoint: String,
     pub provider_pubkey: String,
@@ -93,6 +96,7 @@ pub struct ApiConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PollingConfig {
     #[serde(default = "default_interval")]
     pub interval_seconds: u64,
@@ -292,6 +296,7 @@ where
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProxmoxConfig {
     pub api_url: String,
     pub api_token_id: String,
@@ -312,6 +317,7 @@ pub struct ProxmoxConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScriptConfig {
     pub provision: String,
     pub terminate: String,
@@ -321,6 +327,7 @@ pub struct ScriptConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManualConfig {
     pub notification_webhook: Option<String>,
 }
@@ -1606,6 +1613,42 @@ type = "manual"
         assert_eq!(
             config.polling.orphan_tracker_path,
             "/custom/path/orphans.json"
+        );
+    }
+
+    #[test]
+    fn test_unknown_field_in_gateway_config_fails() {
+        // Verifies that a config containing the removed `traefik_dynamic_dir` field (or any
+        // other unknown field) in [gateway] is rejected at load time, not silently ignored.
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+dc_id = "a3x9f2b1"
+public_ip = "203.0.113.1"
+traefik_dynamic_dir = "/etc/traefik/dynamic"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err(), "Config with unknown gateway field must fail");
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("traefik_dynamic_dir") || err_msg.contains("unknown field"),
+            "Error must identify the unknown field, got: {}",
+            err_msg
         );
     }
 }
