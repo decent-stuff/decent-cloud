@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     pub api: ApiConfig,
     pub polling: PollingConfig,
@@ -19,6 +20,7 @@ pub struct Config {
 
 /// Gateway configuration for per-host reverse proxy (Caddy)
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayConfig {
     /// Unique datacenter identifier (2-20 chars [a-z0-9-], e.g., "a3x9f2b1")
     /// Generate with: openssl rand -hex 4
@@ -43,10 +45,6 @@ pub struct GatewayConfig {
     /// Directory for Caddy site configuration files
     #[serde(default = "default_caddy_sites_dir")]
     pub caddy_sites_dir: String,
-    /// DEPRECATED: Legacy field name for caddy_sites_dir. Traefik is no longer supported.
-    /// If set, Config::load() will fail with a clear error message.
-    #[serde(default)]
-    traefik_dynamic_dir: Option<String>,
     /// Path to port allocations state file
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
@@ -83,6 +81,7 @@ fn default_port_allocations_path() -> String {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ApiConfig {
     pub endpoint: String,
     pub provider_pubkey: String,
@@ -97,6 +96,7 @@ pub struct ApiConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PollingConfig {
     #[serde(default = "default_interval")]
     pub interval_seconds: u64,
@@ -296,6 +296,7 @@ where
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProxmoxConfig {
     pub api_url: String,
     pub api_token_id: String,
@@ -316,6 +317,7 @@ pub struct ProxmoxConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScriptConfig {
     pub provision: String,
     pub terminate: String,
@@ -325,6 +327,7 @@ pub struct ScriptConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManualConfig {
     pub notification_webhook: Option<String>,
 }
@@ -346,14 +349,8 @@ impl Config {
         let config: Self = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
 
-        // Check for deprecated traefik_dynamic_dir
+        // Validate gateway config
         if let Some(ref gw) = config.gateway {
-            if gw.traefik_dynamic_dir.is_some() {
-                anyhow::bail!(
-                    "Config uses deprecated 'traefik_dynamic_dir'. Rename to 'caddy_sites_dir'. \
-                     Traefik is no longer supported - the gateway now uses Caddy."
-                );
-            }
             // Validate dc_id format
             let dc_id = &gw.dc_id;
             if dc_id.len() < 2 || dc_id.len() > 20 {
@@ -1262,40 +1259,6 @@ port_allocations_path = "/custom/allocations.json"
     }
 
     #[test]
-    fn test_deprecated_traefik_dynamic_dir_fails() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("config.toml");
-
-        let config_content = r#"
-[api]
-endpoint = "https://api.decent-cloud.org"
-provider_pubkey = "ed25519_pubkey_hex"
-provider_secret_key = "ed25519_secret_hex"
-
-[polling]
-
-[provisioner]
-type = "manual"
-
-[gateway]
-dc_id = "dc-us"
-public_ip = "10.0.0.1"
-traefik_dynamic_dir = "/old/traefik/path"
-"#;
-
-        fs::write(&config_path, config_content).unwrap();
-
-        let result = Config::load(&config_path);
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(
-            err_msg.contains("traefik_dynamic_dir") && err_msg.contains("caddy_sites_dir"),
-            "Error should mention both old and new field names: {}",
-            err_msg
-        );
-    }
-
-    #[test]
     fn test_gateway_dc_id_validation_too_short() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("config.toml");
@@ -1650,6 +1613,42 @@ type = "manual"
         assert_eq!(
             config.polling.orphan_tracker_path,
             "/custom/path/orphans.json"
+        );
+    }
+
+    #[test]
+    fn test_unknown_field_in_gateway_config_fails() {
+        // Verifies that a config containing the removed `traefik_dynamic_dir` field (or any
+        // other unknown field) in [gateway] is rejected at load time, not silently ignored.
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "manual"
+
+[gateway]
+dc_id = "a3x9f2b1"
+public_ip = "203.0.113.1"
+traefik_dynamic_dir = "/etc/traefik/dynamic"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = Config::load(&config_path);
+        assert!(result.is_err(), "Config with unknown gateway field must fail");
+        let err_msg = format!("{:#}", result.unwrap_err());
+        assert!(
+            err_msg.contains("traefik_dynamic_dir") || err_msg.contains("unknown field"),
+            "Error must identify the unknown field, got: {}",
+            err_msg
         );
     }
 }
