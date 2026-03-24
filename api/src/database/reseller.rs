@@ -1,6 +1,3 @@
-// Reseller functionality is partially implemented - some methods only used in tests
-#![allow(dead_code)]
-
 use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -127,25 +124,6 @@ impl Database {
             ResellerRelationship,
             r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE id = $1"#,
             id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(relationship)
-    }
-
-    /// Get a reseller relationship by reseller and external provider pubkeys
-    #[allow(dead_code)] // Prepared for reseller API feature
-    pub async fn get_reseller_relationship_by_pubkeys(
-        &self,
-        reseller_pubkey: &[u8],
-        external_provider_pubkey: &[u8],
-    ) -> Result<Option<ResellerRelationship>> {
-        let relationship = sqlx::query_as!(
-            ResellerRelationship,
-            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE reseller_pubkey = $1 AND external_provider_pubkey = $2"#,
-            reseller_pubkey,
-            external_provider_pubkey
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -316,35 +294,6 @@ impl Database {
             sqlx::query_as!(
                 ResellerOrder,
                 r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE reseller_pubkey = $1 ORDER BY created_at_ns DESC"#,
-                pubkey
-            )
-            .fetch_all(&self.pool)
-            .await?
-        };
-
-        Ok(orders)
-    }
-
-    /// List reseller orders for an external provider (orders they need to fulfill) with optional status filter
-    #[allow(dead_code)] // Prepared for reseller API feature
-    pub async fn list_reseller_orders_for_external_provider(
-        &self,
-        pubkey: &[u8],
-        status_filter: Option<&str>,
-    ) -> Result<Vec<ResellerOrder>> {
-        let orders = if let Some(status) = status_filter {
-            sqlx::query_as!(
-                ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = $1 AND status = $2 ORDER BY created_at_ns DESC"#,
-                pubkey,
-                status
-            )
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as!(
-                ResellerOrder,
-                r#"SELECT id as "id!", contract_id, reseller_pubkey, external_provider_pubkey, offering_id as "offering_id!", base_price_e9s as "base_price_e9s!", commission_e9s as "commission_e9s!", total_paid_e9s as "total_paid_e9s!", external_order_id, external_order_details, status, created_at_ns as "created_at_ns!", fulfilled_at_ns FROM reseller_orders WHERE external_provider_pubkey = $1 ORDER BY created_at_ns DESC"#,
                 pubkey
             )
             .fetch_all(&self.pool)
