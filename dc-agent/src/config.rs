@@ -43,10 +43,6 @@ pub struct GatewayConfig {
     /// Directory for Caddy site configuration files
     #[serde(default = "default_caddy_sites_dir")]
     pub caddy_sites_dir: String,
-    /// DEPRECATED: Legacy field name for caddy_sites_dir. Traefik is no longer supported.
-    /// If set, Config::load() will fail with a clear error message.
-    #[serde(default)]
-    traefik_dynamic_dir: Option<String>,
     /// Path to port allocations state file
     #[serde(default = "default_port_allocations_path")]
     pub port_allocations_path: String,
@@ -346,14 +342,8 @@ impl Config {
         let config: Self = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
 
-        // Check for deprecated traefik_dynamic_dir
+        // Validate gateway config
         if let Some(ref gw) = config.gateway {
-            if gw.traefik_dynamic_dir.is_some() {
-                anyhow::bail!(
-                    "Config uses deprecated 'traefik_dynamic_dir'. Rename to 'caddy_sites_dir'. \
-                     Traefik is no longer supported - the gateway now uses Caddy."
-                );
-            }
             // Validate dc_id format
             let dc_id = &gw.dc_id;
             if dc_id.len() < 2 || dc_id.len() > 20 {
@@ -1259,40 +1249,6 @@ port_allocations_path = "/custom/allocations.json"
         assert_eq!(gateway.ports_per_vm, 5);
         assert_eq!(gateway.caddy_sites_dir, "/custom/caddy");
         assert_eq!(gateway.port_allocations_path, "/custom/allocations.json");
-    }
-
-    #[test]
-    fn test_deprecated_traefik_dynamic_dir_fails() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("config.toml");
-
-        let config_content = r#"
-[api]
-endpoint = "https://api.decent-cloud.org"
-provider_pubkey = "ed25519_pubkey_hex"
-provider_secret_key = "ed25519_secret_hex"
-
-[polling]
-
-[provisioner]
-type = "manual"
-
-[gateway]
-dc_id = "dc-us"
-public_ip = "10.0.0.1"
-traefik_dynamic_dir = "/old/traefik/path"
-"#;
-
-        fs::write(&config_path, config_content).unwrap();
-
-        let result = Config::load(&config_path);
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(
-            err_msg.contains("traefik_dynamic_dir") && err_msg.contains("caddy_sites_dir"),
-            "Error should mention both old and new field names: {}",
-            err_msg
-        );
     }
 
     #[test]
