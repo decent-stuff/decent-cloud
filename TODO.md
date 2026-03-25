@@ -1,5 +1,7 @@
 # TODO
 
+> Last reviewed: 2026-03-25
+
 **Specs:**
 - [docs/specs/2026-02-14-decent-recipes.md](docs/specs/2026-02-14-decent-recipes.md)
 - [docs/specs/2026-02-14-self-provisioning-platform.md](docs/specs/2026-02-14-self-provisioning-platform.md) — Phases 1-4 complete (marketplace listing flow implemented).
