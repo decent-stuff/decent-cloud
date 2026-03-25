@@ -7,6 +7,7 @@ Welcome to the official Decent Cloud documentation. This resource is designed to
 | Document                                          | Description                                         | Audience   |
 |---------------------------------------------------|-----------------------------------------------------|------------|
 | [Getting Started](getting-started.md)             | Quick setup for new users                           | Everyone   |
+| [Web Interface Guide](web-interface-guide.md)     | Complete guide to using the web interface           | Users      |
 | [Installation](installation.md)                   | Step-by-step installation guide                     | Everyone   |
 | [User Guide](user-guide.md)                       | Detailed instructions for platform users            | Users      |
 | [Mining and Validation](mining-and-validation.md) | Instructions for validators to participate          | Validators |
