@@ -187,7 +187,12 @@ impl LedgerMap {
         self._insert_entry_into_next_block(label, key, Vec::new(), Operation::Delete)
     }
 
-    pub fn refresh_ledger(&mut self) -> anyhow::Result<()> {
+    /// Refresh ledger with an optional callback invoked for each entry during iteration.
+    /// This eliminates the need for a separate pass over the ledger data.
+    pub fn refresh_ledger_with_callback<F>(&mut self, mut entry_callback: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&LedgerEntry),
+    {
         self.metadata.borrow_mut().clear();
         self.entries.clear();
         self.next_block_entries.clear();
@@ -205,8 +210,6 @@ impl LedgerMap {
         }
 
         let mut expected_parent_hash = Vec::new();
-        let mut updates = Vec::new();
-        // Step 1: Read all Ledger Blocks
         for entry in self.iter_raw(0) {
             let (block_header, ledger_block) = entry?;
 
@@ -233,13 +236,9 @@ impl LedgerMap {
             );
             expected_parent_hash = new_chain_hash;
 
-            updates.push(ledger_block);
-        }
-
-        // Step 2: Add ledger entries into the index (self.entries) for quick search
-        for ledger_block in updates {
             for ledger_entry in ledger_block.entries() {
-                // Skip entries that are not in the labels_to_index
+                entry_callback(ledger_entry);
+
                 if !match &self.labels_to_index {
                     Some(labels_to_index) => labels_to_index.contains(ledger_entry.label()),
                     None => true,
@@ -271,6 +270,11 @@ impl LedgerMap {
         debug!("Ledger refreshed successfully");
 
         Ok(())
+    }
+
+    /// Refresh ledger index from persistent storage.
+    pub fn refresh_ledger(&mut self) -> anyhow::Result<()> {
+        self.refresh_ledger_with_callback(|_| {})
     }
 
     pub fn next_block_iter(&self, label: Option<&str>) -> impl Iterator<Item = &LedgerEntry> {

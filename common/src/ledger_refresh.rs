@@ -21,101 +21,148 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
-pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
+fn process_entry_for_caches(
+    entry: &LedgerEntry,
+    num_providers: &mut u64,
+    num_users: &mut u64,
+    principals: &mut AHashMap<Principal, Vec<u8>>,
+) -> anyhow::Result<()> {
+    match entry.label() {
+        LABEL_REPUTATION_CHANGE => {
+            let reputation_change: ReputationChange =
+                BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
+                    error!(
+                        "Failed to deserialize reputation change {:?} ==> {:?}",
+                        entry, e
+                    );
+                    e
+                })?;
+
+            reputations_apply_changes(&reputation_change);
+        }
+        LABEL_REPUTATION_AGE => {
+            let reputation_age: ReputationAge =
+                BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
+                    error!(
+                        "Failed to deserialize reputation age {:?} ==> {:?}",
+                        entry, e
+                    );
+                    e
+                })?;
+            reputations_apply_aging(&reputation_age);
+        }
+        LABEL_DC_TOKEN_TRANSFER => {
+            let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
+                .map_err(|e| {
+                error!("Failed to deserialize transfer {:?} ==> {:?}", entry, e);
+                e
+            })?;
+
+            if !transfer.from().is_minting_account() {
+                let amount = transfer.amount() + transfer.fee().unwrap_or_default();
+                account_balance_sub(transfer.from(), amount)?;
+            }
+
+            if !transfer.to().is_minting_account() {
+                account_balance_add(transfer.to(), transfer.amount())?;
+            }
+
+            RecentCache::append_entry(transfer.into());
+        }
+        LABEL_DC_TOKEN_APPROVAL => {
+            let approval = FundsTransferApproval::deserialize(entry.value()).map_err(|e| {
+                error!("Failed to deserialize approval {:?} ==> {:?}", entry, e);
+                e
+            })?;
+            approval_update(
+                approval.approver().into(),
+                approval.spender().into(),
+                approval.allowance(),
+            );
+        }
+        LABEL_PROV_REGISTER | LABEL_USER_REGISTER => {
+            match dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
+                .and_then(|id| id.to_ic_principal().map(|p| (id, p)))
+            {
+                Ok((_, principal)) => {
+                    if entry.label() == LABEL_PROV_REGISTER {
+                        *num_providers += 1;
+                    } else if entry.label() == LABEL_USER_REGISTER {
+                        *num_users += 1;
+                    }
+                    principals.insert(principal, entry.key().to_vec());
+                }
+                Err(e) => {
+                    debug!("Skipping entry with bad key during replay: {e}");
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+pub fn refresh_ledger_and_caches(ledger: &mut LedgerMap) -> anyhow::Result<()> {
     if ledger.get_blocks_count() == 0 {
         return Ok(());
     }
-    let mut replayed_blocks = 0;
+
     account_balances_clear();
     reputations_clear();
+
     let mut num_providers = 0u64;
     let mut num_users = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
-    for block in ledger.iter_raw(0) {
-        let (_blk_head, block) = block?;
-        for entry in block.entries() {
-            match entry.label() {
-                LABEL_REPUTATION_CHANGE => {
-                    let reputation_change: ReputationChange =
-                        BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
-                            error!(
-                                "Failed to deserialize reputation change {:?} ==> {:?}",
-                                entry, e
-                            );
-                            e
-                        })?;
+    let mut cache_error: Option<anyhow::Error> = None;
 
-                    reputations_apply_changes(&reputation_change);
-                }
-                LABEL_REPUTATION_AGE => {
-                    let reputation_age: ReputationAge =
-                        BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
-                            error!(
-                                "Failed to deserialize reputation age {:?} ==> {:?}",
-                                entry, e
-                            );
-                            e
-                        })?;
-                    reputations_apply_aging(&reputation_age);
-                }
-                LABEL_DC_TOKEN_TRANSFER => {
-                    let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                        .map_err(|e| {
-                        error!("Failed to deserialize transfer {:?} ==> {:?}", entry, e);
-                        e
-                    })?;
-
-                    if !transfer.from().is_minting_account() {
-                        let amount = transfer.amount() + transfer.fee().unwrap_or_default();
-                        account_balance_sub(transfer.from(), amount)?;
-                    }
-
-                    if !transfer.to().is_minting_account() {
-                        account_balance_add(transfer.to(), transfer.amount())?;
-                    }
-
-                    RecentCache::append_entry(transfer.into());
-                }
-                LABEL_DC_TOKEN_APPROVAL => {
-                    let approval =
-                        FundsTransferApproval::deserialize(entry.value()).map_err(|e| {
-                            error!("Failed to deserialize approval {:?} ==> {:?}", entry, e);
-                            e
-                        })?;
-                    approval_update(
-                        approval.approver().into(),
-                        approval.spender().into(),
-                        approval.allowance(),
-                    );
-                }
-                LABEL_PROV_REGISTER | LABEL_USER_REGISTER => {
-                    match dcc_identity::DccIdentity::new_verifying_from_bytes(entry.key())
-                        .and_then(|id| id.to_ic_principal().map(|p| (id, p)))
-                    {
-                        Ok((_, principal)) => {
-                            if entry.label() == LABEL_PROV_REGISTER {
-                                num_providers += 1;
-                            } else if entry.label() == LABEL_USER_REGISTER {
-                                num_users += 1;
-                            }
-                            principals.insert(principal, entry.key().to_vec());
-                        }
-                        Err(e) => {
-                            debug!("Skipping entry with bad key during replay: {e}");
-                        }
-                    }
-                }
-                _ => {}
-            }
+    ledger.refresh_ledger_with_callback(|entry| {
+        if cache_error.is_some() {
+            return;
         }
-        replayed_blocks += 1;
+        match process_entry_for_caches(entry, &mut num_providers, &mut num_users, &mut principals) {
+            Ok(()) => {}
+            Err(e) => cache_error = Some(e),
+        }
+    })?;
+
+    if let Some(e) = cache_error {
+        return Err(e);
     }
+
     PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
     set_num_providers(num_providers);
     set_num_users(num_users);
     debug!(
-        "Refreshed caches from {} ledger blocks, found {} transactions",
-        replayed_blocks,
+        "Refreshed ledger and caches, found {} transactions",
+        RecentCache::get_max_tx_num().unwrap_or_default()
+    );
+    Ok(())
+}
+
+pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
+    if ledger.get_blocks_count() == 0 {
+        return Ok(());
+    }
+
+    account_balances_clear();
+    reputations_clear();
+
+    let mut num_providers = 0u64;
+    let mut num_users = 0u64;
+    let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+    for block in ledger.iter_raw(0) {
+        let (_blk_head, block) = block?;
+        for entry in block.entries() {
+            process_entry_for_caches(entry, &mut num_providers, &mut num_users, &mut principals)?;
+        }
+    }
+
+    PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
+    set_num_providers(num_providers);
+    set_num_users(num_users);
+    debug!(
+        "Refreshed caches from ledger blocks, found {} transactions",
         RecentCache::get_max_tx_num().unwrap_or_default()
     );
     Ok(())
