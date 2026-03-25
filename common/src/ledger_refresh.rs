@@ -113,21 +113,10 @@ pub fn refresh_ledger_and_caches(ledger: &mut LedgerMap) -> anyhow::Result<()> {
     let mut num_providers = 0u64;
     let mut num_users = 0u64;
     let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
-    let mut cache_error: Option<anyhow::Error> = None;
 
     ledger.refresh_ledger_with_callback(|entry| {
-        if cache_error.is_some() {
-            return;
-        }
-        match process_entry_for_caches(entry, &mut num_providers, &mut num_users, &mut principals) {
-            Ok(()) => {}
-            Err(e) => cache_error = Some(e),
-        }
+        process_entry_for_caches(entry, &mut num_providers, &mut num_users, &mut principals)
     })?;
-
-    if let Some(e) = cache_error {
-        return Err(e);
-    }
 
     PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
     set_num_providers(num_providers);
@@ -322,4 +311,225 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
         })
     }
     entries
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{account_balance_get, reputations_clear, MINTING_ACCOUNT};
+    use candid::Principal;
+    use icrc_ledger_types::icrc1::account::Account;
+    use ledger_map::{LedgerEntry, LedgerMap, Operation};
+
+    fn new_temp_ledger() -> LedgerMap {
+        let file_path = tempfile::tempdir()
+            .unwrap()
+            .path()
+            .join("test_ledger_store.bin");
+        LedgerMap::new_with_path(None, Some(file_path)).expect("Failed to create temp ledger")
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_unknown_label_is_noop() {
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let entry = LedgerEntry::new("UnknownLabel", b"key", b"value", Operation::Upsert);
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_ok());
+        assert_eq!(num_providers, 0);
+        assert_eq!(num_users, 0);
+        assert!(principals.is_empty());
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_malformed_reputation_change_fails() {
+        reputations_clear();
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let entry = LedgerEntry::new(
+            LABEL_REPUTATION_CHANGE,
+            b"key",
+            b"malformed_data",
+            Operation::Upsert,
+        );
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_malformed_transfer_fails() {
+        crate::account_balances_clear();
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let entry = LedgerEntry::new(
+            LABEL_DC_TOKEN_TRANSFER,
+            b"key",
+            b"malformed_data",
+            Operation::Upsert,
+        );
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_valid_transfer_updates_balance() {
+        crate::account_balances_clear();
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let to = Account {
+            owner: Principal::from_slice(&[1u8; 29]),
+            subaccount: None,
+        };
+        let transfer = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to.clone()),
+            None,
+            None,
+            Some(0),
+            vec![],
+            1000,
+            0,
+            1000,
+        );
+        let entry = LedgerEntry::new(
+            LABEL_DC_TOKEN_TRANSFER,
+            transfer.to_tx_id(),
+            borsh::to_vec(&transfer).unwrap(),
+            Operation::Upsert,
+        );
+
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_ok());
+        assert_eq!(account_balance_get(&to), 1000);
+    }
+
+    #[test]
+    fn test_refresh_ledger_and_caches_empty_ledger() {
+        let mut ledger = new_temp_ledger();
+        assert_eq!(ledger.get_blocks_count(), 0);
+
+        let result = refresh_ledger_and_caches(&mut ledger);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_refresh_ledger_and_caches_with_valid_entries() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut ledger = new_temp_ledger();
+
+        let to = Account {
+            owner: Principal::from_slice(&[1u8; 29]),
+            subaccount: None,
+        };
+        let transfer = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to.clone()),
+            None,
+            None,
+            Some(0),
+            vec![],
+            500,
+            0,
+            500,
+        );
+        ledger
+            .upsert(
+                LABEL_DC_TOKEN_TRANSFER,
+                transfer.to_tx_id(),
+                borsh::to_vec(&transfer).unwrap(),
+            )
+            .unwrap();
+        ledger.commit_block().unwrap();
+
+        let result = refresh_ledger_and_caches(&mut ledger);
+
+        assert!(result.is_ok());
+        assert_eq!(account_balance_get(&to), 500);
+    }
+
+    #[test]
+    fn test_refresh_ledger_and_caches_short_circuits_on_malformed_entry() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut ledger = new_temp_ledger();
+
+        let to1 = Account {
+            owner: Principal::from_slice(&[1u8; 29]),
+            subaccount: None,
+        };
+        let transfer1 = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to1.clone()),
+            None,
+            None,
+            Some(0),
+            vec![],
+            100,
+            0,
+            100,
+        );
+        ledger
+            .upsert(
+                LABEL_DC_TOKEN_TRANSFER,
+                transfer1.to_tx_id(),
+                borsh::to_vec(&transfer1).unwrap(),
+            )
+            .unwrap();
+
+        ledger
+            .upsert(
+                LABEL_REPUTATION_CHANGE,
+                b"key",
+                b"malformed_reputation_data",
+            )
+            .unwrap();
+
+        let to2 = Account {
+            owner: Principal::from_slice(&[2u8; 29]),
+            subaccount: None,
+        };
+        let transfer2 = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to2.clone()),
+            None,
+            None,
+            Some(0),
+            vec![],
+            200,
+            0,
+            200,
+        );
+        ledger
+            .upsert(
+                LABEL_DC_TOKEN_TRANSFER,
+                transfer2.to_tx_id(),
+                borsh::to_vec(&transfer2).unwrap(),
+            )
+            .unwrap();
+
+        ledger.commit_block().unwrap();
+
+        let result = refresh_ledger_and_caches(&mut ledger);
+
+        assert!(result.is_err());
+    }
 }

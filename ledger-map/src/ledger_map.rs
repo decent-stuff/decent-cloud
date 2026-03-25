@@ -189,9 +189,10 @@ impl LedgerMap {
 
     /// Refresh ledger with an optional callback invoked for each entry during iteration.
     /// This eliminates the need for a separate pass over the ledger data.
+    /// The callback returns `Result<()>` to enable fail-fast iteration on error.
     pub fn refresh_ledger_with_callback<F>(&mut self, mut entry_callback: F) -> anyhow::Result<()>
     where
-        F: FnMut(&LedgerEntry),
+        F: FnMut(&LedgerEntry) -> anyhow::Result<()>,
     {
         self.metadata.borrow_mut().clear();
         self.entries.clear();
@@ -237,7 +238,8 @@ impl LedgerMap {
             expected_parent_hash = new_chain_hash;
 
             for ledger_entry in ledger_block.entries() {
-                entry_callback(ledger_entry);
+                // Fail-fast: short-circuit iteration on callback error
+                entry_callback(ledger_entry)?;
 
                 if !match &self.labels_to_index {
                     Some(labels_to_index) => labels_to_index.contains(ledger_entry.label()),
