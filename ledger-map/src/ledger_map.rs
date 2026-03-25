@@ -276,7 +276,7 @@ impl LedgerMap {
 
     /// Refresh ledger index from persistent storage.
     pub fn refresh_ledger(&mut self) -> anyhow::Result<()> {
-        self.refresh_ledger_with_callback(|_| {})
+        self.refresh_ledger_with_callback(|_| Ok(()))
     }
 
     pub fn next_block_iter(&self, label: Option<&str>) -> impl Iterator<Item = &LedgerEntry> {

@@ -11,11 +11,9 @@ use std::collections::BTreeMap;
 use crate::FundsTransfer;
 
 const CACHE_MAX_LENGTH: usize = 1_000_000;
-const CHECKPOINT_INTERVAL: u64 = 10_000;
 
 thread_local! {
     static RECENT_CACHE: RefCell<BTreeMap<u64, Transaction>> = const { RefCell::new(BTreeMap::new()) };
-    static TX_NUM_CHECKPOINTS: RefCell<BTreeMap<u64, u64>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 /// Caches up to <CACHE_MAX_LENGTH> entries with the highest entry number.
@@ -102,9 +100,6 @@ impl RecentCache {
         RECENT_CACHE.with(|cache| {
             cache.borrow_mut().clear();
         });
-        TX_NUM_CHECKPOINTS.with(|checkpoints| {
-            checkpoints.borrow_mut().clear();
-        });
     }
 
     /// Parse transactions from a LedgerBlock and append transactions to the cache.
@@ -136,26 +131,6 @@ impl RecentCache {
         RECENT_CACHE.with(|cache| {
             Self::trim_cache(&mut cache.borrow_mut());
         });
-    }
-
-    pub fn add_checkpoint(tx_num: u64, block_position: u64) {
-        if tx_num % CHECKPOINT_INTERVAL == 0 {
-            TX_NUM_CHECKPOINTS.with(|checkpoints| {
-                checkpoints.borrow_mut().insert(tx_num, block_position);
-            });
-        }
-    }
-
-    pub fn get_checkpoint_before(target_tx_num: u64) -> Option<(u64, u64)> {
-        TX_NUM_CHECKPOINTS.with(|checkpoints| {
-            let checkpoints = checkpoints.borrow();
-            let checkpoint_tx_num = (target_tx_num / CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL;
-            checkpoints.get(&checkpoint_tx_num).map(|&pos| (checkpoint_tx_num, pos))
-        })
-    }
-
-    pub fn get_checkpoints_count() -> usize {
-        TX_NUM_CHECKPOINTS.with(|checkpoints| checkpoints.borrow().len())
     }
 }
 
@@ -312,41 +287,5 @@ mod tests {
         assert!(RecentCache::get_transaction(1001).is_some());
         assert!(RecentCache::get_transaction(1002).is_none());
         assert!(RecentCache::get_transaction(1003).is_none());
-    }
-
-    #[test]
-    fn test_checkpoint_add_at_interval() {
-        RecentCache::clear_cache();
-
-        RecentCache::add_checkpoint(5000, 100);
-        RecentCache::add_checkpoint(10000, 200);
-        RecentCache::add_checkpoint(15000, 300);
-        RecentCache::add_checkpoint(5001, 999);
-
-        assert_eq!(RecentCache::get_checkpoints_count(), 3);
-    }
-
-    #[test]
-    fn test_checkpoint_find_before() {
-        RecentCache::clear_cache();
-
-        RecentCache::add_checkpoint(0, 0);
-        RecentCache::add_checkpoint(10000, 200);
-        RecentCache::add_checkpoint(20000, 400);
-
-        assert_eq!(RecentCache::get_checkpoint_before(5000), Some((0, 0)));
-        assert_eq!(RecentCache::get_checkpoint_before(10000), Some((10000, 200)));
-        assert_eq!(RecentCache::get_checkpoint_before(15000), Some((10000, 200)));
-        assert_eq!(RecentCache::get_checkpoint_before(25000), Some((20000, 400)));
-    }
-
-    #[test]
-    fn test_checkpoint_clear_with_cache() {
-        RecentCache::clear_cache();
-        RecentCache::add_checkpoint(10000, 100);
-        assert_eq!(RecentCache::get_checkpoints_count(), 1);
-
-        RecentCache::clear_cache();
-        assert_eq!(RecentCache::get_checkpoints_count(), 0);
     }
 }
