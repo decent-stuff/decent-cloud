@@ -7,6 +7,8 @@
 ## OVERVIEW
 `repo/` is the real product root: Rust workspace (`api`, `cli`, `common`, `dc-agent`, `ic-canister`, `ledger-map`), SvelteKit frontend (`website`), Python tooling, CI, scripts, and vendored third-party source for integration debugging.
 
+**Automation Scope:** When team automation is launched from the outer workspace, all product code changes, git operations, PRs, builds, tests, and browser flows run in `repo/` only.
+
 ## OPERATING POSTURE
 - Build the smallest real proof-of-concept first, prove it works end-to-end, then write tests and production code. You are beyond guessing — you use tools to build a standalone working PoC and only then plan architecture, tests, and production code.
 - Read the codebase deeply before changing it; follow existing patterns unless they are clearly harmful.
