@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { debugLog } from '$lib/utils/debug';
 	import AuthRequiredCard from '$lib/components/AuthRequiredCard.svelte';
 	import {
 		getProviderContracts,
@@ -124,7 +125,7 @@
 			slaConfig = await getProviderSlaUptimeConfig(signed.headers, providerHex);
 		} catch (e) {
 			// Config not found is not fatal - keep defaults
-			console.debug('SLA config not found, using defaults:', e);
+			debugLog('SLA config not found, using defaults:', e);
 		} finally {
 			slaConfigLoading = false;
 		}
