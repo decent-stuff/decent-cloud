@@ -5,7 +5,7 @@ use candid::{CandidType, Principal};
 use dcc_common::{
     account_balance_get, account_registration_fee_e9s, blocks_until_next_halving, cursor_from_data,
     get_account_from_pubkey, get_num_providers, recent_transactions_cleanup,
-    refresh_caches_from_ledger, reputation_get, reward_e9s_per_block,
+    refresh_ledger_and_caches, reputation_get, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_distribute,
     rewards_pending_e9s, set_test_config, LedgerCursor, NextBlockSyncRequest,
     NextBlockSyncResponse, RecentCache, TokenAmountE9s, BLOCK_INTERVAL_SECS,
@@ -168,7 +168,7 @@ fn start_periodic_ledger_task() {
 pub fn _init(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
-        if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
+        if let Err(e) = refresh_ledger_and_caches(&mut ledger.borrow_mut()) {
             ic_cdk::trap(format!(
                 "CRITICAL: _init failed to load caches from ledger: {}",
                 e
@@ -199,7 +199,7 @@ pub fn _pre_upgrade() {
 pub fn _post_upgrade(enable_test_config: Option<bool>) {
     start_periodic_ledger_task();
     LEDGER_MAP.with(|ledger| {
-        if let Err(e) = refresh_caches_from_ledger(&ledger.borrow()) {
+        if let Err(e) = refresh_ledger_and_caches(&mut ledger.borrow_mut()) {
             ic_cdk::trap(format!(
                 "CRITICAL: _post_upgrade failed to load caches from ledger: {}",
                 e
@@ -390,12 +390,8 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                 "; ledger NOT refreshed".to_string()
             } else {
                 let refresh_result = LEDGER_MAP.with(|ledger| {
-                    // TODO: Entire ledger is iterated twice, effectively. It should be possible to do this in a single go.
-                    if let Err(e) = ledger.borrow_mut().refresh_ledger() {
-                        error!("Failed to refresh ledger: {:#}", e)
-                    }
-                    refresh_caches_from_ledger(&ledger.borrow())
-                        .map_err(|e| format!("Failed to refresh caches from ledger: {:#}", e))
+                    refresh_ledger_and_caches(&mut *ledger.borrow_mut())
+                        .map_err(|e| format!("Failed to refresh ledger and caches: {:#}", e))
                         .map(|_| {
                             reward_e9s_per_block_recalculate();
                         })

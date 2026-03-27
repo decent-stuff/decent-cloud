@@ -10,10 +10,9 @@ use std::collections::BTreeMap;
 
 use crate::FundsTransfer;
 
-const CACHE_MAX_LENGTH: usize = 1_000_000; // Keep at most 1M entries with the highest ids in the cache
+const CACHE_MAX_LENGTH: usize = 1_000_000;
 
 thread_local! {
-    /// Recently committed transactions, to serve from the get_transactions endpoint
     static RECENT_CACHE: RefCell<BTreeMap<u64, Transaction>> = const { RefCell::new(BTreeMap::new()) };
 }
 
@@ -285,7 +284,7 @@ mod tests {
         assert_eq!(RecentCache::get_min_tx_num(), Some(899));
         assert!(RecentCache::get_transaction(898).is_none());
         assert!(RecentCache::get_transaction(899).is_some());
-        assert!(RecentCache::get_transaction(1001).is_some()); // in range [899..1001] (inclusive) there are 103 elements
+        assert!(RecentCache::get_transaction(1001).is_some());
         assert!(RecentCache::get_transaction(1002).is_none());
         assert!(RecentCache::get_transaction(1003).is_none());
     }
