@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
+	import { debugLog } from "$lib/utils/debug";
 	import AuthRequiredCard from "$lib/components/AuthRequiredCard.svelte";
 	import {
 		getUserContracts,
@@ -328,7 +329,7 @@
 				try {
 					usage = await getContractUsage(contractId, headers);
 				} catch (e) {
-					console.debug("No usage data for contract:", e);
+					debugLog("No usage data for contract:", e);
 				}
 			}
 			lastRefresh = Date.now();
@@ -373,7 +374,7 @@
 					usage = await getContractUsage(contractId, headers);
 				} catch (e) {
 					// Usage not available is not an error
-					console.debug("No usage data for contract:", e);
+					debugLog("No usage data for contract:", e);
 				}
 
 				// Try to fetch recipe log
@@ -385,7 +386,7 @@
 					)).headers;
 					recipeLog = await getContractRecipeLog(contractId, logHeaders);
 				} catch (e) {
-					console.debug("No recipe log for contract:", e);
+					debugLog("No recipe log for contract:", e);
 				}
 
 				// Try to fetch and decrypt credentials for provisioned contracts
@@ -442,7 +443,7 @@
 			// Decrypt the credentials
 			decryptedPassword = await decryptCredentials(encryptedJson, secretKey);
 		} catch (e) {
-			console.debug("No credentials available:", e);
+			debugLog("No credentials available:", e);
 			// Don't show error - credentials may not be set for all contracts
 		} finally {
 			credentialsLoading = false;
