@@ -33,15 +33,21 @@ impl EmailProcessor {
         }
     }
 
-    /// Run the email processor indefinitely
-    pub async fn run(self) {
+    /// Run the email processor until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         // Process immediately on startup
         self.run_all_processors().await;
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Email processor shutting down gracefully");
+                    return;
+                }
+            }
             self.run_all_processors().await;
         }
     }

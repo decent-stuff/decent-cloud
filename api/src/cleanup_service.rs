@@ -26,8 +26,8 @@ impl CleanupService {
         }
     }
 
-    /// Run the cleanup service indefinitely
-    pub async fn run(self) {
+    /// Run the cleanup service until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         // Run initial cleanup immediately on startup
@@ -36,7 +36,13 @@ impl CleanupService {
         }
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Cleanup service shutting down gracefully");
+                    return;
+                }
+            }
             if let Err(e) = self.cleanup_once().await {
                 tracing::error!("Cleanup failed: {:#}", e);
             }
@@ -238,11 +244,7 @@ impl CleanupService {
                 return None;
             }
             Err(e) => {
-                tracing::error!(
-                    "Failed to fetch contract {}: {:#}",
-                    usage.contract_id,
-                    e
-                );
+                tracing::error!("Failed to fetch contract {}: {:#}", usage.contract_id, e);
                 return None;
             }
         };
@@ -252,7 +254,11 @@ impl CleanupService {
             _ => return None,
         };
 
-        let offering = match self.database.get_offering_by_id(&contract.offering_id).await {
+        let offering = match self
+            .database
+            .get_offering_by_id(&contract.offering_id)
+            .await
+        {
             Ok(Some(o)) => o,
             Ok(None) => {
                 tracing::warn!(

@@ -32,7 +32,6 @@ impl Database {
         Ok(result.id)
     }
 
-
     /// Get current billing period usage for a contract
     pub async fn get_current_usage(&self, contract_id: &[u8]) -> Result<Option<ContractUsage>> {
         let now = chrono::Utc::now().timestamp();
@@ -66,7 +65,6 @@ impl Database {
 
         Ok(usage)
     }
-
 
     /// Update usage from heartbeat events for a contract
     /// Calculates units_used based on heartbeat intervals
@@ -147,7 +145,6 @@ impl Database {
         Ok(total_units)
     }
 
-
     /// Mark usage as reported to Stripe
     pub async fn mark_usage_reported(
         &self,
@@ -166,7 +163,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Get unreported usage records that are past their billing period end
     pub async fn get_unreported_usage(&self) -> Result<Vec<ContractUsage>> {
@@ -198,7 +194,6 @@ impl Database {
 
         Ok(usage)
     }
-
 
     // === Contract Health Checks ===
 
@@ -238,7 +233,6 @@ impl Database {
         Ok(result.id)
     }
 
-
     /// Get recent health checks for a contract
     ///
     /// Returns health checks ordered by checked_at descending (most recent first).
@@ -269,7 +263,6 @@ impl Database {
 
         Ok(checks)
     }
-
 
     /// Get provider health summary with uptime calculation
     ///
@@ -331,7 +324,6 @@ impl Database {
         })
     }
 
-
     /// Get health summary for a single contract
     ///
     /// Aggregates all health check data for one contract (all-time).
@@ -370,5 +362,4 @@ impl Database {
             last_checked_at: stats.last_checked_at,
         })
     }
-
 }

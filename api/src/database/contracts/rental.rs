@@ -213,7 +213,6 @@ impl Database {
         Ok(contract_id)
     }
 
-
     /// Update contract status with authorization check and state transition validation
     ///
     /// # Errors
@@ -309,7 +308,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Reject a rental request with full refund (provider-initiated)
     ///
@@ -479,7 +477,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Check if a contract status is cancellable
     fn is_cancellable_status(status: &str) -> bool {
         status
@@ -487,7 +484,6 @@ impl Database {
             .map(|s| s.is_cancellable())
             .unwrap_or(false)
     }
-
 
     /// Cancel a rental request (only by the original requester)
     ///
@@ -670,5 +666,4 @@ impl Database {
 
         Ok(())
     }
-
 }

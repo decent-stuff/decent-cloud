@@ -487,10 +487,10 @@ impl Database {
     }
 }
 
-mod rental;
-mod provisioning;
-mod payment;
 mod extensions;
+mod payment;
+mod provisioning;
+mod rental;
 mod usage;
 
 /// Contract usage tracking for billing periods

@@ -29,15 +29,21 @@ impl SlaAlertService {
         }
     }
 
-    /// Run the SLA alert service indefinitely.
-    pub async fn run(self) {
+    /// Run the SLA alert service until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         // Run initial check on startup
         self.check_sla_breaches().await;
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("SLA alert service shutting down gracefully");
+                    return;
+                }
+            }
             self.check_sla_breaches().await;
         }
     }

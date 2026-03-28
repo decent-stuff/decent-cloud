@@ -31,8 +31,7 @@ fn derive_connection_info(contract: &Contract, instance_details: &str) -> Connec
     let user = ssh_username(contract.operating_system.as_deref());
 
     // Prefer gateway (reverse proxy with public subdomain)
-    if let (Some(subdomain), Some(port)) =
-        (&contract.gateway_subdomain, contract.gateway_ssh_port)
+    if let (Some(subdomain), Some(port)) = (&contract.gateway_subdomain, contract.gateway_ssh_port)
     {
         return ConnectionInfo {
             ssh_command: format!("ssh -p {} {}@{}", port, user, subdomain),
@@ -1540,7 +1539,9 @@ mod tests {
             conn.ssh_command,
             "ssh -p 20000 ubuntu@k7m2p4.dc-lk.dev-gw.decent-cloud.org"
         );
-        assert!(conn.host_display.contains("k7m2p4.dc-lk.dev-gw.decent-cloud.org"));
+        assert!(conn
+            .host_display
+            .contains("k7m2p4.dc-lk.dev-gw.decent-cloud.org"));
         // Must NOT contain private IP
         assert!(!conn.ssh_command.contains("10.0.0.5"));
         assert!(!conn.host_display.contains("10.0.0.5"));

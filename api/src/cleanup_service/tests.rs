@@ -64,18 +64,21 @@ async fn test_cleanup_service_runs_periodically() {
         retention_days: 180,
     };
 
-    // Run service with timeout to prevent infinite loop in test
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    // Run service with shutdown signal
     let service_task = tokio::spawn(async move {
-        service.run().await;
+        service.run(shutdown_rx).await;
     });
 
     // Wait for at least 2 cleanup cycles (250ms)
     tokio::time::sleep(Duration::from_millis(250)).await;
 
-    // Abort the service task
-    service_task.abort();
+    // Signal graceful shutdown
+    shutdown_tx.send(true).unwrap();
 
-    // If we got here without panicking, the service is running correctly
+    // Service should exit cleanly
+    service_task.await.unwrap();
 }
 
 #[tokio::test]

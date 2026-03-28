@@ -1643,7 +1643,10 @@ traefik_dynamic_dir = "/etc/traefik/dynamic"
         fs::write(&config_path, config_content).unwrap();
 
         let result = Config::load(&config_path);
-        assert!(result.is_err(), "Config with unknown gateway field must fail");
+        assert!(
+            result.is_err(),
+            "Config with unknown gateway field must fail"
+        );
         let err_msg = format!("{:#}", result.unwrap_err());
         assert!(
             err_msg.contains("traefik_dynamic_dir") || err_msg.contains("unknown field"),

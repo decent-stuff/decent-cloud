@@ -43,7 +43,10 @@ pub async fn handle_keygen_command(
     let mnemonic = if keygen_args.generate {
         let lang = language_from_code(&keygen_args.language);
         let mnemonic = Mnemonic::new(MnemonicType::Words12, lang);
-        info!("Generated mnemonic ({}): {}", keygen_args.language, mnemonic);
+        info!(
+            "Generated mnemonic ({}): {}",
+            keygen_args.language, mnemonic
+        );
         mnemonic
     } else if keygen_args.mnemonic.is_some() {
         let mnemonic_string = keygen_args
@@ -141,10 +144,11 @@ mod tests {
 
     #[test]
     fn test_mnemonic_from_strings_auto_detects() {
-        let words: Vec<String> = "guilt faith betray uphold faint come scheme south venture visa carry stay"
-            .split_whitespace()
-            .map(String::from)
-            .collect();
+        let words: Vec<String> =
+            "guilt faith betray uphold faint come scheme south venture visa carry stay"
+                .split_whitespace()
+                .map(String::from)
+                .collect();
         let mnemonic = mnemonic_from_strings(words).unwrap();
         assert_eq!(
             mnemonic.to_string(),

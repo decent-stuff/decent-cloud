@@ -115,7 +115,6 @@ impl Database {
         Ok(extension_payment_e9s)
     }
 
-
     /// Get extension history for a contract
     pub async fn get_contract_extensions(
         &self,
@@ -134,7 +133,6 @@ impl Database {
 
         Ok(extensions)
     }
-
 
     /// Return active contracts where auto_renew is true and expiry is within 48 hours.
     ///
@@ -171,7 +169,6 @@ impl Database {
 
         Ok(contracts)
     }
-
 
     /// Set auto_renew flag on a contract.
     ///
@@ -210,7 +207,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Insert a contract event into the timeline.
     pub async fn insert_contract_event(
         &self,
@@ -240,7 +236,6 @@ impl Database {
         Ok(id)
     }
 
-
     /// Get all events for a contract ordered chronologically.
     pub async fn get_contract_events(&self, contract_id: &[u8]) -> Result<Vec<ContractEvent>> {
         let events = sqlx::query_as!(
@@ -258,5 +253,4 @@ impl Database {
 
         Ok(events)
     }
-
 }

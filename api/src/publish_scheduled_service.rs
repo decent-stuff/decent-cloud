@@ -19,12 +19,18 @@ impl PublishScheduledService {
         }
     }
 
-    /// Run the publish-scheduled service indefinitely.
-    pub async fn run(self) {
+    /// Run the publish-scheduled service until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Publish-scheduled service shutting down gracefully");
+                    return;
+                }
+            }
             match self.database.publish_scheduled_offerings().await {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("Published {} scheduled offering(s)", n),

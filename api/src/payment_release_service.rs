@@ -16,8 +16,8 @@ impl PaymentReleaseService {
         }
     }
 
-    /// Run the payment release service indefinitely
-    pub async fn run(self) {
+    /// Run the payment release service until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         // Run initial release immediately on startup
@@ -26,7 +26,13 @@ impl PaymentReleaseService {
         }
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Payment release service shutting down gracefully");
+                    return;
+                }
+            }
             if let Err(e) = self.process_releases_once().await {
                 tracing::error!("Payment release processing failed: {:#}", e);
             }

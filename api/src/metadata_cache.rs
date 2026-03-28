@@ -75,11 +75,17 @@ impl MetadataCache {
         }
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.refresh_interval);
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Metadata cache shutting down gracefully");
+                    return;
+                }
+            }
             if let Err(e) = self.refresh().await {
                 tracing::error!("Metadata refresh failed: {:#}", e);
             }

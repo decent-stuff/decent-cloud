@@ -20,15 +20,21 @@ impl AutoRenewalService {
         }
     }
 
-    /// Run the auto-renewal service indefinitely.
-    pub async fn run(self) {
+    /// Run the auto-renewal service until shutdown is signalled.
+    pub async fn run(self, mut shutdown: tokio::sync::watch::Receiver<bool>) {
         let mut interval = tokio::time::interval(self.interval);
 
         // Run initial check on startup
         self.process_renewals_once().await;
 
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = shutdown.changed() => {
+                    tracing::info!("Auto-renewal service shutting down gracefully");
+                    return;
+                }
+            }
             self.process_renewals_once().await;
         }
     }

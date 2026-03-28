@@ -1258,10 +1258,20 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .with(request_logging::RequestLogging)
         .with(cors);
 
+    // Graceful shutdown: all background tasks share a shutdown signal.
+    // On SIGTERM/SIGINT, the server stops accepting connections and tasks
+    // finish their current work cycle before exiting.
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+
+    let drain_timeout_secs: u64 = env::var("GRACEFUL_SHUTDOWN_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+
     // Start metadata cache service in background
     let cache_for_task = ctx.metadata_cache.clone();
     let metadata_cache_task = tokio::spawn(async move {
-        cache_for_task.run().await;
+        cache_for_task.run(shutdown_rx).await;
     });
 
     // Start cleanup service in background (runs every 24 hours, 180-day retention)
@@ -1275,9 +1285,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(180);
 
     let db_for_cleanup = ctx.database.clone();
-    let cleanup_stripe = crate::stripe_client::StripeClient::new()
-        .ok()
-        .map(Arc::new);
+    let cleanup_stripe = crate::stripe_client::StripeClient::new().ok().map(Arc::new);
+    let cleanup_shutdown = shutdown_tx.subscribe();
     let cleanup_task = tokio::spawn(async move {
         let cleanup_service = CleanupService::new(
             db_for_cleanup,
@@ -1290,7 +1299,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             cleanup_interval_hours,
             cleanup_retention_days
         );
-        cleanup_service.run().await;
+        cleanup_service.run(cleanup_shutdown).await;
     });
 
     // Start email processor in background if email service is configured
@@ -1305,6 +1314,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             .unwrap_or(10);
 
         let db_for_email = ctx.database.clone();
+        let email_shutdown = shutdown_tx.subscribe();
         Some(tokio::spawn(async move {
             let email_processor = EmailProcessor::new(
                 db_for_email,
@@ -1317,7 +1327,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
                 email_interval_secs,
                 email_batch_size
             );
-            email_processor.run().await;
+            email_processor.run(email_shutdown).await;
         }))
     } else {
         tracing::info!("Email processor not started (no email service configured)");
@@ -1331,6 +1341,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(24);
 
     let db_for_release = ctx.database.clone();
+    let release_shutdown = shutdown_tx.subscribe();
     let payment_release_task = tokio::spawn(async move {
         let payment_release_service =
             PaymentReleaseService::new(db_for_release, release_interval_hours);
@@ -1338,7 +1349,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "Starting payment release service (interval: {}h)",
             release_interval_hours
         );
-        payment_release_service.run().await;
+        payment_release_service.run(release_shutdown).await;
     });
 
     // Start auto-renewal service in background (runs every 6 hours)
@@ -1348,6 +1359,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(6);
 
     let db_for_renewal = ctx.database.clone();
+    let renewal_shutdown = shutdown_tx.subscribe();
     let auto_renewal_task = tokio::spawn(async move {
         let auto_renewal_service =
             AutoRenewalService::new(db_for_renewal, auto_renewal_interval_hours);
@@ -1355,7 +1367,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "Starting auto-renewal service (interval: {}h)",
             auto_renewal_interval_hours
         );
-        auto_renewal_service.run().await;
+        auto_renewal_service.run(renewal_shutdown).await;
     });
 
     // Start SLA alert service in background (runs every 1 hour)
@@ -1366,6 +1378,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     let db_for_sla = ctx.database.clone();
     let email_svc_for_sla = ctx.email_service.clone();
+    let sla_shutdown = shutdown_tx.subscribe();
     let sla_alert_task = tokio::spawn(async move {
         let sla_alert_service =
             SlaAlertService::new(db_for_sla, email_svc_for_sla, sla_alert_interval_hours);
@@ -1373,14 +1386,17 @@ async fn serve_command() -> Result<(), std::io::Error> {
             "Starting SLA alert service (interval: {}h)",
             sla_alert_interval_hours
         );
-        sla_alert_service.run().await;
+        sla_alert_service.run(sla_shutdown).await;
     });
 
     // Start scheduled-offering publish service in background (runs every 60 seconds)
     let db_for_publish = ctx.database.clone();
+    let publish_shutdown = shutdown_tx.subscribe();
     let publish_scheduled_task = tokio::spawn(async move {
         tracing::info!("Starting publish-scheduled-offerings service (interval: 60s)");
-        PublishScheduledService::new(db_for_publish, 60).run().await;
+        PublishScheduledService::new(db_for_publish, 60)
+            .run(publish_shutdown)
+            .await;
     });
 
     // Start cloud provisioning service in background
@@ -1397,6 +1413,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let db_for_cloud = ctx.database.clone();
     let email_svc_for_cloud = ctx.email_service.clone();
     let cf_dns_for_cloud = ctx.cloudflare_dns.clone();
+    let cloud_shutdown = shutdown_tx.subscribe();
     let cloud_provisioning_task = tokio::spawn(async move {
         let cloud_provisioning_service = CloudProvisioningService::new(
             db_for_cloud,
@@ -1405,21 +1422,68 @@ async fn serve_command() -> Result<(), std::io::Error> {
             cloud_provisioning_interval_secs,
             cloud_termination_interval_secs,
         );
-        cloud_provisioning_service.run().await;
+        cloud_provisioning_service.run(cloud_shutdown).await;
     });
 
-    let server_result = Server::new(TcpListener::bind(&addr)).run(app).await;
+    // Wait for either the server to finish or a shutdown signal (SIGTERM/SIGINT).
+    // On signal: stop accepting connections, then drain background tasks.
+    let server = Server::new(TcpListener::bind(&addr));
 
-    metadata_cache_task.abort();
-    cleanup_task.abort();
-    payment_release_task.abort();
-    auto_renewal_task.abort();
-    sla_alert_task.abort();
-    publish_scheduled_task.abort();
-    cloud_provisioning_task.abort();
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("failed to install SIGTERM handler");
+
+    let server_result = tokio::select! {
+        result = server.run(app) => result,
+        _ = tokio::signal::ctrl_c() => {
+            tracing::info!("Received SIGINT, initiating graceful shutdown");
+            Ok(())
+        }
+        _ = sigterm.recv() => {
+            tracing::info!("Received SIGTERM, initiating graceful shutdown");
+            Ok(())
+        }
+    };
+
+    // Signal all background tasks to finish their current work cycle
+    tracing::info!(
+        "Draining background tasks (timeout: {}s)",
+        drain_timeout_secs
+    );
+    let _ = shutdown_tx.send(true);
+
+    // Collect all task handles for awaiting
+    let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![
+        metadata_cache_task,
+        cleanup_task,
+        payment_release_task,
+        auto_renewal_task,
+        sla_alert_task,
+        publish_scheduled_task,
+        cloud_provisioning_task,
+    ];
     if let Some(task) = email_processor_task {
-        task.abort();
+        tasks.push(task);
     }
+
+    // Wait for tasks to drain, with a hard timeout
+    let drain = futures::future::join_all(tasks);
+    match tokio::time::timeout(std::time::Duration::from_secs(drain_timeout_secs), drain).await {
+        Ok(results) => {
+            let failed = results.iter().filter(|r| r.is_err()).count();
+            if failed > 0 {
+                tracing::warn!("{} background task(s) failed during shutdown", failed);
+            } else {
+                tracing::info!("All background tasks shut down cleanly");
+            }
+        }
+        Err(_) => {
+            tracing::warn!(
+                "Drain timeout ({}s) exceeded, aborting remaining tasks",
+                drain_timeout_secs
+            );
+        }
+    }
+
     server_result
 }
 

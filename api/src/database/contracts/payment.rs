@@ -39,7 +39,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Update stripe_invoice_id for a contract (called from invoice.paid webhook)
     pub async fn update_stripe_invoice_id(
         &self,
@@ -56,7 +55,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Get offering by offering_id string
     pub async fn get_offering_by_id(
@@ -86,7 +84,6 @@ impl Database {
 
         Ok(offering)
     }
-
 
     /// Calculate prorated refund amount based on time used
     ///
@@ -148,7 +145,6 @@ impl Database {
         refund_amount.max(0)
     }
 
-
     /// Update ICPay transaction ID for a contract
     pub async fn update_icpay_transaction_id(
         &self,
@@ -165,7 +161,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Update ICPay payment confirmation (webhook callback)
     /// Sets icpay_payment_id and payment_status = 'succeeded'
@@ -186,7 +181,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Update ICPay payment status
     pub async fn update_icpay_payment_status(
         &self,
@@ -203,7 +197,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Process ICPay refund for a contract cancellation
     ///
@@ -272,7 +265,6 @@ impl Database {
         }
     }
 
-
     /// Get active ICPay contracts ready for daily release
     pub async fn get_contracts_for_release(&self) -> Result<Vec<Contract>> {
         let contracts = sqlx::query_as!(
@@ -299,7 +291,6 @@ impl Database {
 
         Ok(contracts)
     }
-
 
     /// Calculate and create a payment release record for a contract
     pub async fn create_payment_release(
@@ -345,7 +336,6 @@ impl Database {
         })
     }
 
-
     /// Update contract's release tracking fields
     pub async fn update_contract_release_tracking(
         &self,
@@ -364,7 +354,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Get pending releases for a provider (ready for payout)
     pub async fn get_provider_pending_releases(
@@ -385,7 +374,6 @@ impl Database {
 
         Ok(releases)
     }
-
 
     /// Mark releases as paid out with payout_id
     pub async fn mark_releases_paid_out(&self, release_ids: &[i64], payout_id: &str) -> Result<()> {
@@ -413,7 +401,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Get all providers with pending releases (for admin overview)
     pub async fn get_providers_with_pending_releases(
         &self,
@@ -430,7 +417,6 @@ impl Database {
 
         Ok(results)
     }
-
 
     // ========== Pending Stripe Receipts ==========
 
@@ -451,7 +437,6 @@ impl Database {
 
         Ok(())
     }
-
 
     pub async fn get_pending_stripe_receipts(
         &self,
@@ -480,7 +465,6 @@ impl Database {
             .collect())
     }
 
-
     /// Update pending receipt for next retry (1 minute intervals, max 5 attempts)
     pub async fn update_pending_stripe_receipt_retry(&self, contract_id: &[u8]) -> Result<bool> {
         let now_ns = crate::now_ns()?;
@@ -499,7 +483,6 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
-
     /// Remove pending receipt (either sent successfully or max attempts reached)
     pub async fn remove_pending_stripe_receipt(&self, contract_id: &[u8]) -> Result<()> {
         sqlx::query!(
@@ -511,7 +494,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Cancel pending receipt if receipt already sent (e.g., via invoice.paid webhook)
     pub async fn cancel_pending_stripe_receipt_if_sent(&self, contract_id: &[u8]) -> Result<bool> {
@@ -525,5 +507,4 @@ impl Database {
         }
         Ok(false)
     }
-
 }

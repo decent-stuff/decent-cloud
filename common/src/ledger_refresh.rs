@@ -367,7 +367,7 @@ mod tests {
         };
         let transfer = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to.clone()),
+            crate::IcrcCompatibleAccount::from(to),
             None,
             None,
             Some(0),
@@ -412,7 +412,7 @@ mod tests {
         };
         let transfer = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to.clone()),
+            crate::IcrcCompatibleAccount::from(to),
             None,
             None,
             Some(0),
@@ -449,7 +449,7 @@ mod tests {
         };
         let transfer1 = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to1.clone()),
+            crate::IcrcCompatibleAccount::from(to1),
             None,
             None,
             Some(0),
@@ -480,7 +480,7 @@ mod tests {
         };
         let transfer2 = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to2.clone()),
+            crate::IcrcCompatibleAccount::from(to2),
             None,
             None,
             Some(0),
@@ -598,7 +598,7 @@ mod tests {
         };
         let transfer_a = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to_a.clone()),
+            crate::IcrcCompatibleAccount::from(to_a),
             None,
             None,
             Some(0),
@@ -623,7 +623,7 @@ mod tests {
         };
         let transfer_b = crate::FundsTransfer::new(
             MINTING_ACCOUNT,
-            crate::IcrcCompatibleAccount::from(to_b.clone()),
+            crate::IcrcCompatibleAccount::from(to_b),
             None,
             None,
             Some(1),

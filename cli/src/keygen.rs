@@ -62,7 +62,7 @@ pub fn mnemonic_from_strings(input_phrase: Vec<String>) -> Result<Mnemonic, Box<
     }
     let phrase = input_phrase.join(" ");
     let phrase = phrase.trim();
-    detect_mnemonic(phrase).map_err(Into::into)
+    detect_mnemonic(phrase)
 }
 
 pub fn mnemonic_from_stdin<R: BufRead, W: Write>(

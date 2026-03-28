@@ -390,7 +390,7 @@ pub(crate) fn _data_push(cursor: String, data: Vec<u8>) -> Result<String, String
                 "; ledger NOT refreshed".to_string()
             } else {
                 let refresh_result = LEDGER_MAP.with(|ledger| {
-                    refresh_ledger_and_caches(&mut *ledger.borrow_mut())
+                    refresh_ledger_and_caches(&mut ledger.borrow_mut())
                         .map_err(|e| format!("Failed to refresh ledger and caches: {:#}", e))
                         .map(|_| {
                             reward_e9s_per_block_recalculate();

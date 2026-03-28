@@ -42,7 +42,7 @@ impl CloudProvisioningService {
         }
     }
 
-    pub async fn run(self) {
+    pub async fn run(self, shutdown: tokio::sync::watch::Receiver<bool>) {
         // Cloud provisioning requires CREDENTIAL_ENCRYPTION_KEY to decrypt provider credentials.
         // The key is validated at startup in serve_command(); if we reach here without it,
         // the service simply doesn't run (the key was never set).
@@ -75,10 +75,17 @@ impl CloudProvisioningService {
         let email_svc = self.email_service.clone();
 
         let prov_interval = self.poll_interval;
+        let mut prov_shutdown = shutdown.clone();
         let provision_task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(prov_interval);
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {}
+                    _ = prov_shutdown.changed() => {
+                        tracing::info!("Cloud provisioning task shutting down gracefully");
+                        return;
+                    }
+                }
                 if let Err(e) = provision_pending_resources(
                     &db,
                     &lock_holder,
@@ -99,10 +106,17 @@ impl CloudProvisioningService {
         let cf_dns = self.cloudflare_dns.clone();
 
         let term_interval = self.termination_poll_interval;
+        let mut term_shutdown = shutdown;
         let termination_task = tokio::spawn(async move {
             let mut interval = tokio::time::interval(term_interval);
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = interval.tick() => {}
+                    _ = term_shutdown.changed() => {
+                        tracing::info!("Cloud termination task shutting down gracefully");
+                        return;
+                    }
+                }
                 if let Err(e) =
                     terminate_pending_resources(&db, &lock_holder, &key, cf_dns.as_deref()).await
                 {

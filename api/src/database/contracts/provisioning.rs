@@ -149,7 +149,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Delete expired credentials (should be called periodically)
     pub async fn cleanup_expired_credentials(&self) -> Result<i64> {
         let now_ns = crate::now_ns()?;
@@ -170,8 +169,6 @@ impl Database {
 
         Ok(deleted)
     }
-
-
 
     /// Purge terminal contracts older than `retention_days`.
     ///
@@ -289,7 +286,6 @@ impl Database {
         Ok(count)
     }
 
-
     /// Get encrypted credentials for a contract (only returns if not expired)
     pub async fn get_encrypted_credentials(&self, contract_id: &[u8]) -> Result<Option<String>> {
         let now_ns = crate::now_ns()?;
@@ -307,7 +303,6 @@ impl Database {
 
         Ok(credentials)
     }
-
 
     /// Update encrypted credentials for a contract (for password reset).
     /// Encrypts the new password with the requester's public key and updates the expiration.
@@ -368,7 +363,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Request a password reset for a contract.
     /// Sets password_reset_requested_at_ns to current time.
     pub async fn request_password_reset(&self, contract_id: &[u8]) -> Result<()> {
@@ -397,7 +391,6 @@ impl Database {
         Ok(())
     }
 
-
     /// Clear password reset request after it's been handled.
     pub async fn clear_password_reset_request(&self, contract_id: &[u8]) -> Result<()> {
         sqlx::query(
@@ -411,7 +404,6 @@ impl Database {
 
         Ok(())
     }
-
 
     /// Get contracts with pending password reset requests for a provider.
     /// Returns contracts where password_reset_requested_at_ns is set and contract is active.
@@ -435,7 +427,6 @@ impl Database {
 
         Ok(rows)
     }
-
 
     /// Auto-accept a rental contract when provider has auto_accept_rentals enabled.
     ///
@@ -547,7 +538,6 @@ impl Database {
         Ok(true)
     }
 
-
     /// After auto-accept, check if the offering uses Hetzner provisioning and create
     /// a cloud_resource linked to the contract. The provisioning service will pick it up.
     pub async fn try_trigger_hetzner_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
@@ -619,7 +609,6 @@ impl Database {
 
         Ok(true)
     }
-
 
     // ==================== Cloud Resource Provisioning Bridge ====================
 
@@ -693,7 +682,6 @@ impl Database {
 
         Ok(())
     }
-
 
     // ==================== Provisioning Locks ====================
 
@@ -777,7 +765,6 @@ impl Database {
         }
     }
 
-
     /// Release a provisioning lock held by the specified agent.
     /// Returns Ok(true) if lock was released, Ok(false) if agent didn't hold the lock.
     pub async fn release_provisioning_lock(
@@ -801,7 +788,6 @@ impl Database {
         Ok(result.rows_affected() > 0)
     }
 
-
     /// Clear expired provisioning locks.
     /// Should be called by a background job periodically.
     /// Returns the number of locks cleared.
@@ -823,7 +809,6 @@ impl Database {
 
         Ok(result.rows_affected())
     }
-
 
     /// Get pending contracts filtered by agent's pool.
     /// Returns contracts that:
@@ -927,5 +912,4 @@ impl Database {
 
         Ok(contracts)
     }
-
 }
