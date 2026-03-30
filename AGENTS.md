@@ -144,10 +144,6 @@ node scripts/dc-auth.js seed-contracts
 ```
 - `seed-ux-data` starts a heartbeat daemon to keep the provider online; stop it with `kill $(cat /tmp/dc-keepalive-*.pid)`.
 
-### Local Docker Stack
-- Inside the containerized local workflow, PostgreSQL is reachable via hostname `postgres`.
-- The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml` (in the outer workspace).
-
 ## PROJECT RULES
 - **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
 - Adjust and extend existing code instead of creating parallel implementations. Before you start coding, PLAN how existing code can be adjusted in the most concise way.
