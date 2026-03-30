@@ -41,8 +41,8 @@ fn process_entry_for_caches(
             reputations_apply_changes(&reputation_change);
         }
         LABEL_REPUTATION_AGE => {
-            let reputation_age: ReputationAge =
-                BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
+            let reputation_age: ReputationAge = BorshDeserialize::try_from_slice(entry.value())
+                .map_err(|e| {
                     error!(
                         "Failed to deserialize reputation age {:?} ==> {:?}",
                         entry, e
@@ -52,11 +52,11 @@ fn process_entry_for_caches(
             reputations_apply_aging(&reputation_age);
         }
         LABEL_DC_TOKEN_TRANSFER => {
-            let transfer: FundsTransfer = BorshDeserialize::try_from_slice(entry.value())
-                .map_err(|e| {
-                error!("Failed to deserialize transfer {:?} ==> {:?}", entry, e);
-                e
-            })?;
+            let transfer: FundsTransfer =
+                BorshDeserialize::try_from_slice(entry.value()).map_err(|e| {
+                    error!("Failed to deserialize transfer {:?} ==> {:?}", entry, e);
+                    e
+                })?;
 
             if !transfer.from().is_minting_account() {
                 let amount = transfer.amount() + transfer.fee().unwrap_or_default();
@@ -316,7 +316,7 @@ pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{account_balance_get, reputations_clear, MINTING_ACCOUNT};
+    use crate::{account_balance_get, reputations_clear, IcrcCompatibleAccount, MINTING_ACCOUNT};
     use candid::Principal;
     use icrc_ledger_types::icrc1::account::Account;
     use ledger_map::{LedgerEntry, LedgerMap, Operation};
@@ -416,7 +416,7 @@ mod tests {
             process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
 
         assert!(result.is_ok());
-        assert_eq!(account_balance_get(&to), 1000);
+        assert_eq!(account_balance_get(&IcrcCompatibleAccount::from(to)), 1000);
     }
 
     #[test]
@@ -462,7 +462,7 @@ mod tests {
         let result = refresh_ledger_and_caches(&mut ledger);
 
         assert!(result.is_ok());
-        assert_eq!(account_balance_get(&to), 500);
+        assert_eq!(account_balance_get(&IcrcCompatibleAccount::from(to)), 500);
     }
 
     #[test]
