@@ -24,7 +24,7 @@ dc-agent/
 | Config schema | `src/config.rs` | What the runtime persists and reads |
 
 ## CONVENTIONS
-- `dc-agent` is the real runtime crate; `repo/agent/` is only the sandbox/container helper area.
+- `dc-agent` is the real runtime crate; `agent/` (in the outer workspace) is only the sandbox/container helper area.
 - `doctor` and `test-provision` are the fastest ways to verify setup-sensitive changes.
 - Provisioners implement the shared trait in `src/provisioner/mod.rs`; extend the trait instead of branching ad hoc.
 - API-facing structs must stay serializable and explicit; missing optional fields are represented as `Option`, not magical defaults.

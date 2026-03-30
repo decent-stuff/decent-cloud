@@ -96,7 +96,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 docker exec agent-postgres-1 pg_isready -U test
 ```
 - Inside the containerized local workflow, PostgreSQL is reachable via hostname `postgres`.
-- The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml`.
+- The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml` (in the outer workspace).
 
 ### Running The API Server Locally
 ```bash
@@ -143,6 +143,10 @@ DC_WEB_URL=http://localhost:5173 DC_API_URL=http://localhost:59011 \
 node scripts/dc-auth.js seed-contracts
 ```
 - `seed-ux-data` starts a heartbeat daemon to keep the provider online; stop it with `kill $(cat /tmp/dc-keepalive-*.pid)`.
+
+### Local Docker Stack
+- Inside the containerized local workflow, PostgreSQL is reachable via hostname `postgres`.
+- The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml` (in the outer workspace).
 
 ## PROJECT RULES
 - **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.

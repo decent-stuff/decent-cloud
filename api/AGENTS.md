@@ -34,7 +34,7 @@ api/
 ## ANTI-PATTERNS
 - Lazy config validation at request time.
 - Duplicating endpoint logic already present in `src/openapi/` or shared DB helpers.
-- Treating `repo/agent/` as the Rust agent; the actual runtime crate is `repo/dc-agent/`.
+- Treating `agent/` (outer workspace) as the Rust agent; the actual runtime crate is `repo/dc-agent/`.
 - Editing generated/offline artifacts (`.sqlx`, bindings, caches) without matching source changes.
 
 ## COMMANDS
