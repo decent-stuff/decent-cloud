@@ -64,77 +64,6 @@ impl Database {
         Ok(id)
     }
 
-    /// Update an existing reseller relationship by id.
-    /// Used in tests only; production code uses `update_reseller_relationship_by_pubkeys`.
-    #[cfg(test)]
-    pub async fn update_reseller_relationship(
-        &self,
-        id: i64,
-        commission_percent: Option<i64>,
-        status: Option<&str>,
-    ) -> Result<()> {
-        // Validate commission_percent if provided
-        if let Some(pct) = commission_percent {
-            if !(0..=50).contains(&pct) {
-                anyhow::bail!("commission_percent must be between 0 and 50, got {}", pct);
-            }
-        }
-
-        let updated_at_ns = crate::now_ns()?;
-
-        // Build dynamic update query based on provided fields
-        if let Some(pct) = commission_percent {
-            if let Some(st) = status {
-                sqlx::query!(
-                    "UPDATE reseller_relationships SET commission_percent = $1, status = $2, updated_at_ns = $3 WHERE id = $4",
-                    pct,
-                    st,
-                    updated_at_ns,
-                    id
-                )
-                .execute(&self.pool)
-                .await?;
-            } else {
-                sqlx::query!(
-                    "UPDATE reseller_relationships SET commission_percent = $1, updated_at_ns = $2 WHERE id = $3",
-                    pct,
-                    updated_at_ns,
-                    id
-                )
-                .execute(&self.pool)
-                .await?;
-            }
-        } else if let Some(st) = status {
-            sqlx::query!(
-                "UPDATE reseller_relationships SET status = $1, updated_at_ns = $2 WHERE id = $3",
-                st,
-                updated_at_ns,
-                id
-            )
-            .execute(&self.pool)
-            .await?;
-        } else {
-            anyhow::bail!("At least one of commission_percent or status must be provided");
-        }
-
-        Ok(())
-    }
-
-    /// Get a reseller relationship by id.
-    /// Used in tests only; production lookups are by pubkey.
-    #[cfg(test)]
-    pub async fn get_reseller_relationship(&self, id: i64) -> Result<Option<ResellerRelationship>> {
-        let relationship = sqlx::query_as!(
-            ResellerRelationship,
-            r#"SELECT id as "id!", reseller_pubkey, external_provider_pubkey, commission_percent as "commission_percent!", status as "status!", created_at_ns as "created_at_ns!", updated_at_ns FROM reseller_relationships WHERE id = $1"#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(relationship)
-    }
-
     /// Update a reseller relationship by reseller and external provider pubkeys
     pub async fn update_reseller_relationship_by_pubkeys(
         &self,
@@ -218,56 +147,6 @@ impl Database {
         .await?;
 
         Ok(relationships)
-    }
-
-    /// Delete a reseller relationship by id.
-    /// Used in tests only; production code uses `delete_reseller_relationship_by_pubkeys`.
-    #[cfg(test)]
-    pub async fn delete_reseller_relationship(&self, id: i64) -> Result<()> {
-        let result = sqlx::query!("DELETE FROM reseller_relationships WHERE id = $1", id)
-            .execute(&self.pool)
-            .await?;
-
-        if result.rows_affected() == 0 {
-            anyhow::bail!("Reseller relationship not found");
-        }
-
-        Ok(())
-    }
-
-    /// Create a new reseller order.
-    /// Gated to tests until the order API is wired into handlers.
-    #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
-    pub async fn create_reseller_order(
-        &self,
-        contract_id: &[u8],
-        reseller_pubkey: &[u8],
-        external_provider_pubkey: &[u8],
-        offering_id: i64,
-        base_price_e9s: i64,
-        commission_e9s: i64,
-        total_paid_e9s: i64,
-    ) -> Result<i64> {
-        let created_at_ns = crate::now_ns()?;
-
-        let id = sqlx::query_scalar!(
-            r#"INSERT INTO reseller_orders (contract_id, reseller_pubkey, external_provider_pubkey, offering_id, base_price_e9s, commission_e9s, total_paid_e9s, status, created_at_ns)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
-               RETURNING id"#,
-            contract_id,
-            reseller_pubkey,
-            external_provider_pubkey,
-            offering_id,
-            base_price_e9s,
-            commission_e9s,
-            total_paid_e9s,
-            created_at_ns
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(id)
     }
 
     /// Get a reseller order by contract_id
@@ -355,15 +234,18 @@ mod tests {
 
         assert!(id > 0);
 
-        // Verify created
-        let relationship = db.get_reseller_relationship(id).await.unwrap().unwrap();
-        assert_eq!(relationship.reseller_pubkey, reseller_pubkey);
+        let relationships = db
+            .list_reseller_relationships_for_provider(&reseller_pubkey)
+            .await
+            .unwrap();
+        assert_eq!(relationships.len(), 1);
+        assert_eq!(relationships[0].reseller_pubkey, reseller_pubkey);
         assert_eq!(
-            relationship.external_provider_pubkey,
+            relationships[0].external_provider_pubkey,
             external_provider_pubkey
         );
-        assert_eq!(relationship.commission_percent, 15);
-        assert_eq!(relationship.status, "active");
+        assert_eq!(relationships[0].commission_percent, 15);
+        assert_eq!(relationships[0].status, "active");
     }
 
     #[tokio::test]
@@ -383,36 +265,6 @@ mod tests {
             .create_reseller_relationship(&reseller_pubkey, &external_provider_pubkey, 51)
             .await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_update_reseller_relationship() {
-        let db = setup_test_db().await;
-        let reseller_pubkey = vec![1u8; 32];
-        let external_provider_pubkey = vec![2u8; 32];
-
-        let id = db
-            .create_reseller_relationship(&reseller_pubkey, &external_provider_pubkey, 15)
-            .await
-            .unwrap();
-
-        // Update commission
-        db.update_reseller_relationship(id, Some(20), None)
-            .await
-            .unwrap();
-
-        let relationship = db.get_reseller_relationship(id).await.unwrap().unwrap();
-        assert_eq!(relationship.commission_percent, 20);
-        assert_eq!(relationship.status, "active");
-
-        // Update status
-        db.update_reseller_relationship(id, None, Some("suspended"))
-            .await
-            .unwrap();
-
-        let relationship = db.get_reseller_relationship(id).await.unwrap().unwrap();
-        assert_eq!(relationship.commission_percent, 20);
-        assert_eq!(relationship.status, "suspended");
     }
 
     #[tokio::test]
@@ -440,160 +292,80 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_reseller_relationship() {
+    async fn test_update_reseller_relationship_by_pubkeys() {
         let db = setup_test_db().await;
         let reseller_pubkey = vec![1u8; 32];
         let external_provider_pubkey = vec![2u8; 32];
 
-        let id = db
-            .create_reseller_relationship(&reseller_pubkey, &external_provider_pubkey, 15)
+        db.create_reseller_relationship(&reseller_pubkey, &external_provider_pubkey, 15)
             .await
             .unwrap();
 
-        db.delete_reseller_relationship(id).await.unwrap();
+        // Update commission
+        db.update_reseller_relationship_by_pubkeys(
+            &reseller_pubkey,
+            &external_provider_pubkey,
+            Some(20),
+            None,
+        )
+        .await
+        .unwrap();
 
-        let relationship = db.get_reseller_relationship(id).await.unwrap();
-        assert!(relationship.is_none());
+        let relationships = db
+            .list_reseller_relationships_for_provider(&reseller_pubkey)
+            .await
+            .unwrap();
+        assert_eq!(relationships[0].commission_percent, 20);
+        assert_eq!(relationships[0].status, "active");
+
+        // Update status
+        db.update_reseller_relationship_by_pubkeys(
+            &reseller_pubkey,
+            &external_provider_pubkey,
+            None,
+            Some("suspended"),
+        )
+        .await
+        .unwrap();
+
+        let relationships = db
+            .list_reseller_relationships_for_provider(&reseller_pubkey)
+            .await
+            .unwrap();
+        assert_eq!(relationships[0].commission_percent, 20);
+        assert_eq!(relationships[0].status, "suspended");
     }
 
     #[tokio::test]
-    async fn test_delete_nonexistent_relationship() {
+    async fn test_delete_reseller_relationship_by_pubkeys() {
         let db = setup_test_db().await;
+        let reseller_pubkey = vec![1u8; 32];
+        let external_provider_pubkey = vec![2u8; 32];
 
-        let result = db.delete_reseller_relationship(999).await;
+        db.create_reseller_relationship(&reseller_pubkey, &external_provider_pubkey, 15)
+            .await
+            .unwrap();
+
+        db.delete_reseller_relationship_by_pubkeys(&reseller_pubkey, &external_provider_pubkey)
+            .await
+            .unwrap();
+
+        let relationships = db
+            .list_reseller_relationships_for_provider(&reseller_pubkey)
+            .await
+            .unwrap();
+        assert!(relationships.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_relationship_by_pubkeys() {
+        let db = setup_test_db().await;
+        let reseller_pubkey = vec![1u8; 32];
+        let external_provider_pubkey = vec![2u8; 32];
+
+        let result = db
+            .delete_reseller_relationship_by_pubkeys(&reseller_pubkey, &external_provider_pubkey)
+            .await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_create_reseller_order() {
-        let db = setup_test_db().await;
-        let contract_id = vec![1u8; 32];
-        let reseller_pubkey = vec![2u8; 32];
-        let external_provider_pubkey = vec![3u8; 32];
-
-        let id = db
-            .create_reseller_order(
-                &contract_id,
-                &reseller_pubkey,
-                &external_provider_pubkey,
-                100,
-                1_000_000_000,
-                150_000_000,
-                1_150_000_000,
-            )
-            .await
-            .unwrap();
-
-        assert!(id > 0);
-
-        // Verify created
-        let order = db.get_reseller_order(&contract_id).await.unwrap().unwrap();
-        assert_eq!(order.contract_id, contract_id);
-        assert_eq!(order.reseller_pubkey, reseller_pubkey);
-        assert_eq!(order.offering_id, 100);
-        assert_eq!(order.base_price_e9s, 1_000_000_000);
-        assert_eq!(order.commission_e9s, 150_000_000);
-        assert_eq!(order.total_paid_e9s, 1_150_000_000);
-        assert_eq!(order.status, "pending");
-        assert!(order.external_order_id.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_fulfill_reseller_order() {
-        let db = setup_test_db().await;
-        let contract_id = vec![1u8; 32];
-        let reseller_pubkey = vec![2u8; 32];
-        let external_provider_pubkey = vec![3u8; 32];
-
-        db.create_reseller_order(
-            &contract_id,
-            &reseller_pubkey,
-            &external_provider_pubkey,
-            100,
-            1_000_000_000,
-            150_000_000,
-            1_150_000_000,
-        )
-        .await
-        .unwrap();
-
-        // Fulfill order
-        db.fulfill_reseller_order(
-            &contract_id,
-            "ext-order-123",
-            r#"{"instance_id": "i-abc123"}"#,
-        )
-        .await
-        .unwrap();
-
-        let order = db.get_reseller_order(&contract_id).await.unwrap().unwrap();
-        assert_eq!(order.status, "fulfilled");
-        assert_eq!(order.external_order_id, Some("ext-order-123".to_string()));
-        assert_eq!(
-            order.external_order_details,
-            Some(r#"{"instance_id": "i-abc123"}"#.to_string())
-        );
-        assert!(order.fulfilled_at_ns.is_some());
-    }
-
-    #[tokio::test]
-    async fn test_list_reseller_orders_for_provider() {
-        let db = setup_test_db().await;
-        let reseller_pubkey = vec![1u8; 32];
-        let external_provider_pubkey = vec![2u8; 32];
-        let contract_id_1 = vec![10u8; 32];
-        let contract_id_2 = vec![20u8; 32];
-
-        db.create_reseller_order(
-            &contract_id_1,
-            &reseller_pubkey,
-            &external_provider_pubkey,
-            100,
-            1_000_000_000,
-            150_000_000,
-            1_150_000_000,
-        )
-        .await
-        .unwrap();
-
-        db.create_reseller_order(
-            &contract_id_2,
-            &reseller_pubkey,
-            &external_provider_pubkey,
-            101,
-            2_000_000_000,
-            300_000_000,
-            2_300_000_000,
-        )
-        .await
-        .unwrap();
-
-        // Fulfill one order
-        db.fulfill_reseller_order(&contract_id_1, "ext-123", r#"{}"#)
-            .await
-            .unwrap();
-
-        // List all orders
-        let all_orders = db
-            .list_reseller_orders_for_provider(&reseller_pubkey, None)
-            .await
-            .unwrap();
-        assert_eq!(all_orders.len(), 2);
-
-        // List pending orders only
-        let pending_orders = db
-            .list_reseller_orders_for_provider(&reseller_pubkey, Some("pending"))
-            .await
-            .unwrap();
-        assert_eq!(pending_orders.len(), 1);
-        assert_eq!(pending_orders[0].contract_id, contract_id_2);
-
-        // List fulfilled orders only
-        let fulfilled_orders = db
-            .list_reseller_orders_for_provider(&reseller_pubkey, Some("fulfilled"))
-            .await
-            .unwrap();
-        assert_eq!(fulfilled_orders.len(), 1);
-        assert_eq!(fulfilled_orders[0].contract_id, contract_id_1);
     }
 }
