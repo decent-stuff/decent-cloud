@@ -187,29 +187,46 @@ impl LedgerMap {
         self._insert_entry_into_next_block(label, key, Vec::new(), Operation::Delete)
     }
 
-    pub fn refresh_ledger(&mut self) -> anyhow::Result<()> {
-        self.metadata.borrow_mut().clear();
-        self.entries.clear();
+    /// Refresh ledger with an optional callback invoked for each entry during iteration.
+    /// This eliminates the need for a separate pass over the ledger data.
+    /// The callback returns `Result<()>` to enable fail-fast iteration on error.
+    /// The callback fires for ALL entries, not just those matching `labels_to_index`.
+    ///
+    /// Rebuild is atomic: on error, the ledger map is left unchanged.
+    pub fn refresh_ledger_with_callback<F>(&mut self, mut entry_callback: F) -> anyhow::Result<()>
+    where
+        F: FnMut(&LedgerEntry) -> anyhow::Result<()>,
+    {
         self.next_block_entries.clear();
 
         // If the backend is empty or non-existing, just return
         if persistent_storage_size_bytes() == 0 {
             warn!("Persistent storage is empty");
+            self.metadata.borrow_mut().clear();
+            self.entries.clear();
             return Ok(());
         }
 
         let data_part_entry = partition_table::get_data_partition();
         if persistent_storage_size_bytes() < data_part_entry.start_lba {
             warn!("No data found in persistent storage");
+            self.metadata.borrow_mut().clear();
+            self.entries.clear();
             return Ok(());
         }
 
-        let mut expected_parent_hash = Vec::new();
-        let mut updates = Vec::new();
-        // Step 1: Read all Ledger Blocks
-        for entry in self.iter_raw(0) {
-            let (block_header, ledger_block) = entry?;
+        // Collect all blocks into a Vec to release the immutable borrow on self
+        // (iter_raw borrows self, preventing mutation of self.entries/self.metadata).
+        let blocks: Vec<(LedgerBlockHeader, LedgerBlock)> =
+            self.iter_raw(0).collect::<anyhow::Result<_>>()?;
 
+        // Build into temporary locals for atomic rebuild.
+        // On error, self.metadata and self.entries remain untouched.
+        let mut new_metadata = Metadata::new();
+        let mut new_entries: IndexMap<String, IndexMap<EntryKey, LedgerEntry>> = IndexMap::new();
+        let mut expected_parent_hash = Vec::new();
+
+        for (block_header, ledger_block) in &blocks {
             if ledger_block.parent_hash() != expected_parent_hash {
                 return Err(anyhow::format_err!(
                     "Hash mismatch: expected parent hash {:?}, got {:?}",
@@ -224,35 +241,30 @@ impl LedgerMap {
                 ledger_block.timestamp(),
             )?;
 
-            let next_block_start_pos = self.metadata.borrow().next_block_start_pos()
-                + block_header.jump_bytes_next_block() as u64;
-            self.metadata.borrow_mut().update_from_appended_block(
+            let next_block_start_pos =
+                new_metadata.next_block_start_pos() + block_header.jump_bytes_next_block() as u64;
+            new_metadata.update_from_appended_block(
                 &new_chain_hash,
                 ledger_block.timestamp(),
                 next_block_start_pos,
             );
             expected_parent_hash = new_chain_hash;
 
-            updates.push(ledger_block);
-        }
-
-        // Step 2: Add ledger entries into the index (self.entries) for quick search
-        for ledger_block in updates {
             for ledger_entry in ledger_block.entries() {
-                // Skip entries that are not in the labels_to_index
+                entry_callback(ledger_entry)?;
+
                 if !match &self.labels_to_index {
                     Some(labels_to_index) => labels_to_index.contains(ledger_entry.label()),
                     None => true,
                 } {
                     continue;
                 }
-                let entries = match self.entries.get_mut(ledger_entry.label()) {
+                let entries = match new_entries.get_mut(ledger_entry.label()) {
                     Some(entries) => entries,
                     None => {
                         let new_map = IndexMap::new();
-                        self.entries
-                            .insert(ledger_entry.label().to_string(), new_map);
-                        self.entries.get_mut(ledger_entry.label()).ok_or_else(|| {
+                        new_entries.insert(ledger_entry.label().to_string(), new_map);
+                        new_entries.get_mut(ledger_entry.label()).ok_or_else(|| {
                             anyhow::format_err!("Entry label {:?} not found", ledger_entry.label())
                         })?
                     }
@@ -268,9 +280,18 @@ impl LedgerMap {
                 }
             }
         }
+
+        // Atomic swap on success
+        self.metadata = RefCell::new(new_metadata);
+        self.entries = new_entries;
         debug!("Ledger refreshed successfully");
 
         Ok(())
+    }
+
+    /// Refresh ledger index from persistent storage.
+    pub fn refresh_ledger(&mut self) -> anyhow::Result<()> {
+        self.refresh_ledger_with_callback(|_| Ok(()))
     }
 
     pub fn next_block_iter(&self, label: Option<&str>) -> impl Iterator<Item = &LedgerEntry> {

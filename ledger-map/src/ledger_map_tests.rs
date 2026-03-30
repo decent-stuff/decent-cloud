@@ -848,4 +848,67 @@ mod tests {
         let final_serialized = ledger_map.get_next_block_serialized_data();
         assert!(final_serialized.len() > serialized.len()); // Should grow
     }
+
+    #[test]
+    fn test_refresh_ledger_with_callback_visits_all_entries() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+        ledger_map.upsert("Label2", b"key2", b"value2").unwrap();
+        ledger_map.upsert("Label1", b"key3", b"value3").unwrap();
+        ledger_map.commit_block().unwrap();
+
+        let mut visited_labels: Vec<String> = Vec::new();
+        ledger_map
+            .refresh_ledger_with_callback(|entry| {
+                visited_labels.push(entry.label().to_string());
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(visited_labels.len(), 3);
+        assert!(visited_labels.contains(&"Label1".to_string()));
+        assert!(visited_labels.contains(&"Label2".to_string()));
+    }
+
+    #[test]
+    fn test_refresh_ledger_with_callback_short_circuits_on_error() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        ledger_map.upsert("Label1", b"key1", b"value1").unwrap();
+        ledger_map.upsert("Label1", b"key2", b"value2").unwrap();
+        ledger_map.upsert("Label1", b"key3", b"value3").unwrap();
+        ledger_map.commit_block().unwrap();
+
+        let mut call_count = 0u32;
+        let result = ledger_map.refresh_ledger_with_callback(|_entry| {
+            call_count += 1;
+            if call_count == 2 {
+                anyhow::bail!("simulated callback error");
+            }
+            Ok(())
+        });
+
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "simulated callback error"
+        );
+        assert_eq!(call_count, 2);
+    }
+
+    #[test]
+    fn test_refresh_ledger_with_callback_empty_ledger() {
+        let mut ledger_map = new_temp_ledger(None);
+
+        let mut call_count = 0u32;
+        ledger_map
+            .refresh_ledger_with_callback(|_entry| {
+                call_count += 1;
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(call_count, 0);
+    }
 }
