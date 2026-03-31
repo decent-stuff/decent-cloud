@@ -79,11 +79,71 @@ fn bulk_update_from_cf(operations: Vec<BulkOperation>) -> Vec<BulkResult> {
 }
 
 /// Query to get data for CF synchronization
+/// Returns ledger entries from committed blocks with timestamp >= from_timestamp_ns.
+/// If from_timestamp_ns is None, returns from the beginning.
+/// Limit caps the number of entries returned (default 1000).
 #[ic_cdk::query]
-fn cf_sync_data(_from_timestamp_ns: Option<u64>, _limit: Option<u32>) -> Vec<SyncDataEntry> {
-    // TODO: Implement this to return recent changes for CF sync
-    // This would query the ledger for changes since from_timestamp_ns
-    vec![]
+fn cf_sync_data(from_timestamp_ns: Option<u64>, limit: Option<u32>) -> Vec<SyncDataEntry> {
+    use crate::canister_backend::generic::LEDGER_MAP;
+    use ledger_map::ledger_entry::Operation;
+
+    let from_ts = from_timestamp_ns.unwrap_or(0);
+    let max_entries = limit.unwrap_or(1000) as usize;
+
+    LEDGER_MAP.with(|ledger| {
+        let ledger_ref = ledger.borrow();
+        let mut results = Vec::new();
+
+        if ledger_ref.get_blocks_count() == 0 {
+            return results;
+        }
+
+        // Quick check: if tip timestamp is older than from_ts, nothing to return
+        if from_ts > 0 && ledger_ref.get_latest_block_timestamp_ns() < from_ts {
+            return results;
+        }
+
+        for block_result in ledger_ref.iter_raw(0) {
+            match block_result {
+                Ok((_block_header, ledger_block)) => {
+                    let block_ts = ledger_block.timestamp();
+
+                    // Skip blocks older than the watermark
+                    if block_ts < from_ts {
+                        continue;
+                    }
+
+                    let block_offset = ledger_block.get_offset();
+
+                    for entry in ledger_block.entries() {
+                        if results.len() >= max_entries {
+                            return results;
+                        }
+
+                        let op_type = match entry.operation() {
+                            Operation::Upsert => "UPSERT",
+                            Operation::Delete => "DELETE",
+                        };
+
+                        results.push(SyncDataEntry {
+                            label: entry.label().to_string(),
+                            key: entry.key().to_vec(),
+                            value: entry.value().to_vec(),
+                            block_offset,
+                            timestamp_ns: block_ts,
+                            operation_type: op_type.to_string(),
+                        });
+                    }
+                }
+                Err(e) => {
+                    ic_cdk::println!("cf_sync_data: block read error: {:#}", e);
+                    break;
+                }
+            }
+        }
+
+        results
+    })
 }
 
 // Types for bulk operations
