@@ -4,6 +4,28 @@ use ed25519_dalek::Signature;
 use std::error::Error;
 use std::io::{self, BufRead, BufReader, Write};
 
+/// All supported BIP-39 languages for auto-detection.
+const ALL_LANGUAGES: &[Language] = &[
+    Language::English,
+    Language::ChineseSimplified,
+    Language::ChineseTraditional,
+    Language::French,
+    Language::Italian,
+    Language::Japanese,
+    Language::Korean,
+    Language::Spanish,
+];
+
+/// Try to parse a mnemonic phrase by testing all supported languages.
+fn detect_mnemonic(phrase: &str) -> Result<Mnemonic, Box<dyn Error>> {
+    for &lang in ALL_LANGUAGES {
+        if let Ok(mnemonic) = Mnemonic::from_phrase(phrase, lang) {
+            return Ok(mnemonic);
+        }
+    }
+    Err(format!("mnemonic phrase is not valid in any supported language: {phrase}").into())
+}
+
 #[allow(dead_code)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let reader = BufReader::new(io::stdin());
@@ -31,22 +53,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 pub fn mnemonic_from_strings(input_phrase: Vec<String>) -> Result<Mnemonic, Box<dyn Error>> {
     match input_phrase.len() {
-        12 => bip39::MnemonicType::Words12,
-        24 => bip39::MnemonicType::Words24,
-        _ => return Err(format!("mnemonic must be 12 or 24 words, got {:?}", input_phrase).into()),
-    };
-    let input_phrase = input_phrase.join(" ");
-    let input_phrase = input_phrase.trim();
-    // TODO: Add more languages
-    Mnemonic::from_phrase(input_phrase, Language::English).map_err(Into::into)
+        12 | 15 | 18 | 21 | 24 => {}
+        _ => {
+            return Err(
+                format!("mnemonic must be 12-24 words, got {:?}", input_phrase.len()).into(),
+            )
+        }
+    }
+    let phrase = input_phrase.join(" ");
+    let phrase = phrase.trim();
+    detect_mnemonic(phrase).map_err(Into::into)
 }
 
 pub fn mnemonic_from_stdin<R: BufRead, W: Write>(
     mut reader: R,
     mut writer: W,
 ) -> Result<Mnemonic, Box<dyn Error>> {
-    let lang = Language::English;
-    let mnemonic = Mnemonic::new(MnemonicType::Words12, lang);
+    let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
     let mnemonic = loop {
         write!(writer, "Please enter mnemonic [{}]: ", mnemonic)?;
         writer.flush()?;
@@ -56,9 +79,9 @@ pub fn mnemonic_from_stdin<R: BufRead, W: Write>(
         if input.is_empty() {
             break mnemonic;
         } else {
-            match Mnemonic::validate(input, lang) {
-                Ok(_) => break Mnemonic::from_phrase(input, lang)?,
-                Err(err) => writeln!(writer, "{}", err)?,
+            match detect_mnemonic(input) {
+                Ok(m) => break m,
+                Err(_) => writeln!(writer, "Invalid mnemonic in all supported languages")?,
             }
         }
     };
@@ -76,16 +99,12 @@ mod tests {
 
     #[test]
     fn test_get_mnemonic_with_mock_input() -> Result<(), Box<dyn Error>> {
-        let mock_input = "\n"; // Simulates the user just pressing Enter
-        let mock_output = Vec::new();
+        let mock_input = "\n";
         let reader = Cursor::new(mock_input);
-        let writer = Cursor::new(mock_output);
+        let writer = Cursor::new(Vec::new());
 
         let mnemonic = mnemonic_from_stdin(reader, writer)?;
-
-        // Validate the mnemonic
-        assert!(mnemonic.to_string().split_whitespace().count() == 12);
-
+        assert_eq!(mnemonic.to_string().split_whitespace().count(), 12);
         Ok(())
     }
 
@@ -93,19 +112,44 @@ mod tests {
     fn test_get_mnemonic_with_provided_input() -> Result<(), Box<dyn Error>> {
         let mock_input =
             "guilt faith betray uphold faint come scheme south venture visa carry stay\n";
-        let mock_output = Vec::new();
         let reader = Cursor::new(mock_input);
-        let writer = Cursor::new(mock_output);
+        let writer = Cursor::new(Vec::new());
 
         let mnemonic = mnemonic_from_stdin(reader, writer)?;
-
-        // Validate the mnemonic
-        assert!(mnemonic.to_string().split_whitespace().count() == 12);
+        assert_eq!(mnemonic.to_string().split_whitespace().count(), 12);
         assert_eq!(
             mnemonic.to_string(),
             "guilt faith betray uphold faint come scheme south venture visa carry stay"
         );
+        Ok(())
+    }
 
+    #[test]
+    fn test_detect_mnemonic_english() {
+        let phrase = "guilt faith betray uphold faint come scheme south venture visa carry stay";
+        let mnemonic = detect_mnemonic(phrase).unwrap();
+        assert_eq!(mnemonic.to_string(), phrase);
+    }
+
+    #[test]
+    fn test_detect_mnemonic_invalid() {
+        let phrase = "not valid mnemonic words here at all period done";
+        let result = detect_mnemonic(phrase);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mnemonic_from_strings_auto_detects() -> Result<(), Box<dyn Error>> {
+        let words: Vec<String> =
+            "guilt faith betray uphold faint come scheme south venture visa carry stay"
+                .split_whitespace()
+                .map(String::from)
+                .collect();
+        let mnemonic = mnemonic_from_strings(words)?;
+        assert_eq!(
+            mnemonic.to_string(),
+            "guilt faith betray uphold faint come scheme south venture visa carry stay"
+        );
         Ok(())
     }
 

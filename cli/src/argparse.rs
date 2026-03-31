@@ -61,6 +61,10 @@ pub struct KeygenArgs {
     /// Generate a random mnemonic
     #[arg(long, requires = "identity")]
     pub generate: bool,
+
+    /// Language for mnemonic generation (en, zh-hans, zh-hant, fr, it, ja, ko, es)
+    #[arg(long, default_value = "en")]
+    pub language: String,
 }
 
 #[derive(Args)]
