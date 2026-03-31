@@ -75,7 +75,15 @@ strum = { version = "0.27.2", features = ["derive"] }
 strum_macros = "0.27.2"
 tabular = "0.2"
 tempfile = "3.23"
-tiny-bip39 = "2.0"
+tiny-bip39 = { version = "2.0", features = [
+    "chinese-simplified",
+    "chinese-traditional",
+    "french",
+    "italian",
+    "japanese",
+    "korean",
+    "spanish",
+] }
 tokio = { version = "1.48", features = ["full"] }
 ts-rs = "11"
 tracing = "0.1"
