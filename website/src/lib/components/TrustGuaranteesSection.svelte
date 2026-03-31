@@ -18,13 +18,6 @@
 			icon: 'star'
 		},
 		{
-			fear: 'They ghost me when I need help',
-			solution: 'Response Time Tracking',
-			description:
-				'We track how fast providers respond. Slow responders get flagged. You see this BEFORE you buy.',
-			icon: 'clock'
-		},
-		{
 			fear: 'Hidden problems emerge later',
 			solution: 'Pattern Detection',
 			description:
@@ -37,13 +30,6 @@
 			description:
 				"Prorated refunds processed automatically. Cancel anytime, get back what you didn't use.",
 			icon: 'wallet'
-		},
-		{
-			fear: 'Other users got burned',
-			solution: 'Full Transparency',
-			description:
-				"See every provider's contract history, cancellation rates, and repeat customer count. Nothing hidden.",
-			icon: 'eye'
 		}
 	];
 </script>
@@ -62,7 +48,7 @@
 		</div>
 
 		<!-- Guarantees grid -->
-		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+		<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 			{#each guarantees as item, i}
 				<div
 					class="feature-card group"
