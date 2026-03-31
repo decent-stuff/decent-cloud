@@ -1275,9 +1275,13 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(180);
 
     let db_for_cleanup = ctx.database.clone();
+    let cleanup_stripe = crate::stripe_client::StripeClient::new()
+        .ok()
+        .map(Arc::new);
     let cleanup_task = tokio::spawn(async move {
         let cleanup_service = CleanupService::new(
             db_for_cleanup,
+            cleanup_stripe,
             cleanup_interval_hours,
             cleanup_retention_days,
         );
