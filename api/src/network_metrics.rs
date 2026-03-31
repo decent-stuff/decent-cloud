@@ -1,7 +1,7 @@
 use crate::ledger_path::ledger_file_path;
 use anyhow::{Context, Result};
 use dcc_common::{
-    blocks_until_next_halving, refresh_caches_from_ledger, reward_e9s_per_block,
+    blocks_until_next_halving, refresh_ledger_and_caches, reward_e9s_per_block,
     reward_e9s_per_block_recalculate, rewards_current_block_checked_in, rewards_pending_e9s,
 };
 use ledger_map::LedgerMap;
@@ -32,10 +32,10 @@ fn load_metrics_from_file(path: &Path) -> Result<LedgerMetrics> {
         ));
     }
 
-    let ledger =
+    let mut ledger =
         LedgerMap::new_with_path(None, Some(PathBuf::from(path))).context("Ledger open failed")?;
 
-    refresh_caches_from_ledger(&ledger).context("Failed to refresh ledger caches")?;
+    refresh_ledger_and_caches(&mut ledger).context("Failed to refresh ledger caches")?;
     reward_e9s_per_block_recalculate();
 
     Ok(LedgerMetrics {

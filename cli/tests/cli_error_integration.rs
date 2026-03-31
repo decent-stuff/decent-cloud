@@ -3,7 +3,7 @@
 //! These tests verify that the error handling paths in main() work correctly:
 //! 1. dirs::home_dir() failure triggers CliError::HomeDirNotFound
 //! 2. LedgerMap::new_with_path() failure triggers CliError::LedgerLoad
-//! 3. dcc_common::refresh_caches_from_ledger() failure triggers CliError::CacheRefresh
+//! 3. dcc_common::refresh_ledger_and_caches() failure triggers CliError::CacheRefresh
 
 use std::path::PathBuf;
 
