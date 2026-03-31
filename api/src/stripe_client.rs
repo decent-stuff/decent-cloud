@@ -457,6 +457,41 @@ impl StripeClient {
         })
     }
 
+    /// Finds the subscription item ID matching a specific metered price
+    ///
+    /// When a Stripe subscription contains metered pricing, we need the subscription
+    /// item ID (si_...) to report usage. This retrieves the subscription and finds
+    /// the item whose price matches `metered_price_id`.
+    ///
+    /// # Arguments
+    /// * `subscription_id` - Stripe Subscription ID (sub_...)
+    /// * `metered_price_id` - Stripe Price ID for the metered plan (price_...)
+    ///
+    /// # Returns
+    /// Subscription item ID (si_...) if found
+    pub async fn get_subscription_item_id(
+        &self,
+        subscription_id: &str,
+        metered_price_id: &str,
+    ) -> Result<String> {
+        let sub_id: SubscriptionId = subscription_id.parse()?;
+        let subscription = Subscription::retrieve(&self.client, &sub_id, &[]).await?;
+
+        for item in &subscription.items.data {
+            if let Some(price) = &item.price {
+                if price.id.as_str() == metered_price_id {
+                    return Ok(item.id.to_string());
+                }
+            }
+        }
+
+        anyhow::bail!(
+            "No subscription item found with price_id={} in subscription {}",
+            metered_price_id,
+            subscription_id
+        )
+    }
+
     /// Cancels a subscription
     ///
     /// # Arguments
@@ -508,7 +543,6 @@ impl StripeClient {
     /// * `quantity` - The usage quantity to report
     /// * `timestamp` - Unix timestamp when the usage occurred (optional, defaults to now)
     /// * `action` - "increment" to add to existing usage, "set" to overwrite
-    #[allow(dead_code)]
     pub async fn create_usage_record(
         &self,
         subscription_item_id: &str,

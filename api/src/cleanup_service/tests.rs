@@ -5,7 +5,7 @@ use std::time::Duration;
 #[tokio::test]
 async fn test_cleanup_service_creation() {
     let db = Arc::new(setup_test_db().await);
-    let service = CleanupService::new(db, 24, 180);
+    let service = CleanupService::new(db, None, 24, 180);
 
     assert_eq!(service.interval, Duration::from_secs(24 * 60 * 60));
     assert_eq!(service.retention_days, 180);
@@ -14,7 +14,7 @@ async fn test_cleanup_service_creation() {
 #[tokio::test]
 async fn test_cleanup_once() {
     let db = Arc::new(setup_test_db().await);
-    let service = CleanupService::new(db.clone(), 24, 180);
+    let service = CleanupService::new(db.clone(), None, 24, 180);
 
     // Insert old audit record (200 days old)
     let old_created_at =
@@ -59,6 +59,7 @@ async fn test_cleanup_service_runs_periodically() {
     // Use very short interval for testing (100ms)
     let service = CleanupService {
         database: db.clone(),
+        stripe_client: None,
         interval: Duration::from_millis(100),
         retention_days: 180,
     };
@@ -80,7 +81,7 @@ async fn test_cleanup_service_runs_periodically() {
 #[tokio::test]
 async fn test_cleanup_once_no_old_records() {
     let db = Arc::new(setup_test_db().await);
-    let service = CleanupService::new(db, 24, 180);
+    let service = CleanupService::new(db, None, 24, 180);
 
     // Run cleanup with no old records
     let result = service.cleanup_once().await;

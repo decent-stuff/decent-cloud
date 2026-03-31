@@ -1,18 +1,26 @@
 use crate::database::Database;
+use crate::stripe_client::StripeClient;
 use std::sync::Arc;
 use std::time::Duration;
 
 /// Background service for periodic cleanup tasks
 pub struct CleanupService {
     database: Arc<Database>,
+    stripe_client: Option<Arc<StripeClient>>,
     interval: Duration,
     retention_days: i64,
 }
 
 impl CleanupService {
-    pub fn new(database: Arc<Database>, interval_hours: u64, retention_days: i64) -> Self {
+    pub fn new(
+        database: Arc<Database>,
+        stripe_client: Option<Arc<StripeClient>>,
+        interval_hours: u64,
+        retention_days: i64,
+    ) -> Self {
         Self {
             database,
+            stripe_client,
             interval: Duration::from_secs(interval_hours * 60 * 60),
             retention_days,
         }
@@ -186,17 +194,136 @@ impl CleanupService {
                 continue;
             }
 
-            // Mark usage as reported.
-            // TODO: When Stripe subscription billing is integrated with contracts,
-            // fetch the subscription item ID and call stripe_client.create_usage_record()
-            if let Err(e) = self.database.mark_usage_reported(usage.id, "").await {
+            // Report usage to Stripe and mark as reported
+            let stripe_record_id = self
+                .report_usage_to_stripe(&contract_id_bytes, &usage)
+                .await;
+            if let Err(e) = self
+                .database
+                .mark_usage_reported(usage.id, stripe_record_id.as_deref().unwrap_or(""))
+                .await
+            {
                 tracing::error!("Failed to mark usage {} as reported: {:#}", usage.id, e);
             } else {
                 tracing::debug!(
-                    "Processed usage {} for contract {}",
+                    "Processed usage {} for contract {} (stripe_record: {})",
                     usage.id,
+                    usage.contract_id,
+                    stripe_record_id.as_deref().unwrap_or("none")
+                );
+            }
+        }
+    }
+
+    /// Attempt to report usage to Stripe for a single billing period.
+    ///
+    /// Returns `Some(stripe_usage_record_id)` on success, `None` if Stripe is not
+    /// configured or the contract has no subscription. Errors are logged and
+    /// converted to `None` so the usage is still marked as reported locally to
+    /// prevent reprocessing loops.
+    async fn report_usage_to_stripe(
+        &self,
+        contract_id_bytes: &[u8],
+        usage: &crate::database::contracts::ContractUsage,
+    ) -> Option<String> {
+        let stripe = self.stripe_client.as_ref()?;
+
+        let contract = match self.database.get_contract(contract_id_bytes).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                tracing::warn!(
+                    "Contract {} not found, skipping Stripe reporting",
                     usage.contract_id
                 );
+                return None;
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to fetch contract {}: {:#}",
+                    usage.contract_id,
+                    e
+                );
+                return None;
+            }
+        };
+
+        let subscription_id = match contract.stripe_subscription_id {
+            Some(ref id) if !id.is_empty() => id.clone(),
+            _ => return None,
+        };
+
+        let offering = match self.database.get_offering_by_id(&contract.offering_id).await {
+            Ok(Some(o)) => o,
+            Ok(None) => {
+                tracing::warn!(
+                    "Offering {} not found for contract {}, skipping Stripe reporting",
+                    contract.offering_id,
+                    usage.contract_id
+                );
+                return None;
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to fetch offering {} for contract {}: {:#}",
+                    contract.offering_id,
+                    usage.contract_id,
+                    e
+                );
+                return None;
+            }
+        };
+
+        let metered_price_id = match offering.stripe_metered_price_id {
+            Some(ref id) if !id.is_empty() => id.clone(),
+            _ => {
+                tracing::debug!(
+                    "Offering {} has no metered price, skipping Stripe reporting",
+                    contract.offering_id
+                );
+                return None;
+            }
+        };
+
+        // Find the subscription item ID matching the metered price
+        let sub_item_id = match stripe
+            .get_subscription_item_id(&subscription_id, &metered_price_id)
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::error!(
+                    "Failed to find subscription item for sub={} price={}: {:#}",
+                    subscription_id,
+                    metered_price_id,
+                    e
+                );
+                return None;
+            }
+        };
+
+        let quantity = usage.units_used.round() as i64;
+        let timestamp = Some(usage.billing_period_end);
+
+        match stripe
+            .create_usage_record(&sub_item_id, quantity, timestamp, "set")
+            .await
+        {
+            Ok(record) => {
+                tracing::info!(
+                    "Reported usage to Stripe: record_id={} quantity={} for contract {}",
+                    record.id,
+                    quantity,
+                    usage.contract_id
+                );
+                Some(record.id)
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to create Stripe usage record for contract {}: {:#}",
+                    usage.contract_id,
+                    e
+                );
+                None
             }
         }
     }
