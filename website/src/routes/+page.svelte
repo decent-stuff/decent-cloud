@@ -4,12 +4,8 @@
 	import { dashboardStore } from '$lib/stores/dashboard';
 	import Header from '$lib/components/Header.svelte';
 	import HeroSection from '$lib/components/HeroSection.svelte';
-	import FeaturesSection from '$lib/components/FeaturesSection.svelte';
 	import TrustGuaranteesSection from '$lib/components/TrustGuaranteesSection.svelte';
-	import BenefitsSection from '$lib/components/BenefitsSection.svelte';
-	import AIFeaturesSection from '$lib/components/AIFeaturesSection.svelte';
 	import DashboardSection from '$lib/components/DashboardSection.svelte';
-	import InfoSection from '$lib/components/InfoSection.svelte';
 	import Footer from '$lib/components/Footer.svelte';
 	import type { DashboardData } from '$lib/services/dashboard-data';
 
@@ -48,11 +44,7 @@
 <div class="min-h-screen bg-base text-white">
 	<Header />
 	<HeroSection />
-	<FeaturesSection />
 	<TrustGuaranteesSection />
-	<BenefitsSection />
-	<AIFeaturesSection />
 	<DashboardSection {dashboardData} {error} />
-	<InfoSection />
 	<Footer />
 </div>
