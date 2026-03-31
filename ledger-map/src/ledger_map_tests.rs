@@ -5,6 +5,7 @@ mod tests {
     use crate::info;
 
     use crate::ledger_entry::LedgerBlockHeader;
+    use crate::ledger_map::BlockLimits;
     use crate::{partition_table, LedgerBlock, LedgerEntry, LedgerError, LedgerMap, Operation};
 
     /// Helper function to compare entry fields (ignoring serialized field)
@@ -890,10 +891,7 @@ mod tests {
         });
 
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "simulated callback error"
-        );
+        assert_eq!(result.unwrap_err().to_string(), "simulated callback error");
         assert_eq!(call_count, 2);
     }
 
@@ -910,5 +908,88 @@ mod tests {
             .unwrap();
 
         assert_eq!(call_count, 0);
+    }
+
+    fn new_temp_ledger_with_limits(
+        labels_to_index: Option<Vec<String>>,
+        limits: BlockLimits,
+    ) -> LedgerMap {
+        log_init();
+        let file_path = tempfile::tempdir()
+            .unwrap()
+            .path()
+            .join("test_ledger_store.bin");
+
+        fn mock_get_timestamp_nanos() -> u64 {
+            0
+        }
+
+        LedgerMap::with_limits_path(labels_to_index, Some(file_path), limits)
+            .expect("Failed to create a temp ledger for the test")
+            .with_timestamp_fn(mock_get_timestamp_nanos)
+    }
+
+    #[test]
+    fn test_custom_block_size_limit_enforced() {
+        let limits = BlockLimits {
+            max_size_bytes: 200,
+            max_entries: 10_000,
+        };
+        let mut ledger = new_temp_ledger_with_limits(None, limits);
+
+        // Small entry should succeed
+        ledger.upsert("Label1", b"key1", b"val").unwrap();
+
+        // Large entry that exceeds the 200-byte limit
+        let big = vec![0u8; 300];
+        let result = ledger.upsert("Label1", b"big", big);
+        assert!(matches!(result, Err(LedgerError::BlockTooLarge(_))));
+    }
+
+    #[test]
+    fn test_custom_entry_count_limit_enforced() {
+        let limits = BlockLimits {
+            max_size_bytes: 2 * 1024 * 1024,
+            max_entries: 3,
+        };
+        let mut ledger = new_temp_ledger_with_limits(None, limits);
+
+        // First 3 entries should succeed
+        for i in 0..3 {
+            let key = format!("key{}", i);
+            ledger.upsert("Label1", key.as_bytes(), b"val").unwrap();
+        }
+
+        // 4th entry should fail
+        let result = ledger.upsert("Label1", b"overflow", b"val");
+        assert!(matches!(result, Err(LedgerError::TooManyEntriesInBlock(_))));
+    }
+
+    #[test]
+    fn test_custom_limits_reset_after_commit() {
+        let limits = BlockLimits {
+            max_size_bytes: 2 * 1024 * 1024,
+            max_entries: 2,
+        };
+        let mut ledger = new_temp_ledger_with_limits(None, limits);
+
+        ledger.upsert("Label1", b"k1", b"v1").unwrap();
+        ledger.upsert("Label1", b"k2", b"v2").unwrap();
+        ledger.commit_block().unwrap();
+
+        // After commit, counter resets — can add more entries
+        ledger.upsert("Label1", b"k3", b"v3").unwrap();
+        ledger.upsert("Label1", b"k4", b"v4").unwrap();
+
+        // But the 3rd entry in the new block should still fail
+        let result = ledger.upsert("Label1", b"overflow", b"v");
+        assert!(matches!(result, Err(LedgerError::TooManyEntriesInBlock(_))));
+    }
+
+    #[test]
+    fn test_default_block_limits_match_original_values() {
+        let limits = BlockLimits::default();
+        assert_eq!(limits.max_size_bytes, 2 * 1024 * 1024);
+        assert_eq!(limits.max_entries, 10_000);
     }
 }
