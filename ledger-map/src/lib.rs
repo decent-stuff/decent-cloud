@@ -82,6 +82,7 @@ pub mod partition_table;
 // Re-exports
 pub use errors::LedgerError;
 pub use ledger_entry::{EntryKey, EntryValue, LedgerBlock, LedgerEntry, Operation};
+pub use ledger_map::BlockLimits;
 pub use ledger_map::LedgerMap;
 pub use metadata::Metadata;
 

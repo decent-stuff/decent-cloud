@@ -16,9 +16,25 @@ use indexmap::IndexMap;
 use sha2::Digest;
 use std::{cell::RefCell, mem::size_of};
 
-// TODO: Make this configurable based on canister memory limits
-const MAX_NEXT_BLOCK_SIZE_BYTES: usize = 2 * 1024 * 1024; // 2MB limit
-const MAX_NEXT_BLOCK_ENTRIES: usize = 10000; // Safety limit for entry count
+/// Configurable limits for the next block being assembled.
+///
+/// Default values preserve the original hardcoded limits.
+#[derive(Debug, Clone)]
+pub struct BlockLimits {
+    /// Maximum serialized size of the next block in bytes.
+    pub max_size_bytes: usize,
+    /// Maximum number of entries allowed in the next block.
+    pub max_entries: usize,
+}
+
+impl Default for BlockLimits {
+    fn default() -> Self {
+        Self {
+            max_size_bytes: 2 * 1024 * 1024, // 2 MB
+            max_entries: 10_000,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct LedgerMap {
@@ -27,6 +43,7 @@ pub struct LedgerMap {
     entries: IndexMap<String, IndexMap<EntryKey, LedgerEntry>>,
     next_block_entries: IndexMap<String, IndexMap<EntryKey, LedgerEntry>>,
     current_timestamp_nanos: fn() -> u64,
+    block_limits: BlockLimits,
 }
 
 impl Default for LedgerMap {
@@ -40,12 +57,20 @@ impl LedgerMap {
     /// If `labels_to_index` is `None`, then all labels will be indexed.
     /// Note that iterating over non-indexed labels will not be possible through .iter()
     pub fn new(labels_to_index: Option<Vec<String>>) -> anyhow::Result<Self> {
+        Self::with_limits(labels_to_index, BlockLimits::default())
+    }
+
+    pub fn with_limits(
+        labels_to_index: Option<Vec<String>>,
+        block_limits: BlockLimits,
+    ) -> anyhow::Result<Self> {
         let mut result = LedgerMap {
             metadata: RefCell::new(Metadata::new()),
             labels_to_index: labels_to_index.map(AHashSet::from_iter),
             entries: IndexMap::new(),
             next_block_entries: IndexMap::new(),
             current_timestamp_nanos: platform_specific::get_timestamp_nanos,
+            block_limits,
         };
         result.refresh_ledger()?;
         Ok(result)
@@ -56,8 +81,17 @@ impl LedgerMap {
         labels_to_index: Option<Vec<String>>,
         path: Option<std::path::PathBuf>,
     ) -> anyhow::Result<Self> {
+        Self::with_limits_path(labels_to_index, path, BlockLimits::default())
+    }
+
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    pub fn with_limits_path(
+        labels_to_index: Option<Vec<String>>,
+        path: Option<std::path::PathBuf>,
+        block_limits: BlockLimits,
+    ) -> anyhow::Result<Self> {
         platform_specific::set_backing_file(path).map_err(|e| anyhow::format_err!("{:?}", e))?;
-        Self::new(labels_to_index)
+        Self::with_limits(labels_to_index, block_limits)
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -66,6 +100,15 @@ impl LedgerMap {
         _path: Option<std::path::PathBuf>,
     ) -> anyhow::Result<Self> {
         Self::new(labels_to_index)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn with_limits_path(
+        labels_to_index: Option<Vec<String>>,
+        _path: Option<std::path::PathBuf>,
+        block_limits: BlockLimits,
+    ) -> anyhow::Result<Self> {
+        Self::with_limits(labels_to_index, block_limits)
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
@@ -653,19 +696,19 @@ impl LedgerMap {
 
         // Check entry count limit
         let total_entries: usize = self.next_block_entries.values().map(|m| m.len()).sum();
-        if total_entries >= MAX_NEXT_BLOCK_ENTRIES {
+        if total_entries >= self.block_limits.max_entries {
             return Err(LedgerError::TooManyEntriesInBlock(format!(
                 "Block exceeds limit of {} entries",
-                MAX_NEXT_BLOCK_ENTRIES
+                self.block_limits.max_entries
             )));
         }
 
         // Check serialized size limit
         let current_size = self._get_next_block_serialized_size();
-        if current_size + serialized.len() > MAX_NEXT_BLOCK_SIZE_BYTES {
+        if current_size + serialized.len() > self.block_limits.max_size_bytes {
             return Err(LedgerError::BlockTooLarge(format!(
                 "Block exceeds {} bytes limit",
-                MAX_NEXT_BLOCK_SIZE_BYTES
+                self.block_limits.max_size_bytes
             )));
         }
 
