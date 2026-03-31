@@ -479,7 +479,7 @@ impl StripeClient {
 
         for item in &subscription.items.data {
             if let Some(price) = &item.price {
-                if price.id.to_string() == metered_price_id {
+                if price.id.as_str() == metered_price_id {
                     return Ok(item.id.to_string());
                 }
             }
