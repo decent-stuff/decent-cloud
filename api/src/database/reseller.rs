@@ -64,7 +64,9 @@ impl Database {
         Ok(id)
     }
 
-    /// Update an existing reseller relationship
+    /// Update an existing reseller relationship by id.
+    /// Used in tests only; production code uses `update_reseller_relationship_by_pubkeys`.
+    #[cfg(test)]
     pub async fn update_reseller_relationship(
         &self,
         id: i64,
@@ -118,7 +120,9 @@ impl Database {
         Ok(())
     }
 
-    /// Get a reseller relationship by id
+    /// Get a reseller relationship by id.
+    /// Used in tests only; production lookups are by pubkey.
+    #[cfg(test)]
     pub async fn get_reseller_relationship(&self, id: i64) -> Result<Option<ResellerRelationship>> {
         let relationship = sqlx::query_as!(
             ResellerRelationship,
@@ -216,7 +220,9 @@ impl Database {
         Ok(relationships)
     }
 
-    /// Delete a reseller relationship
+    /// Delete a reseller relationship by id.
+    /// Used in tests only; production code uses `delete_reseller_relationship_by_pubkeys`.
+    #[cfg(test)]
     pub async fn delete_reseller_relationship(&self, id: i64) -> Result<()> {
         let result = sqlx::query!("DELETE FROM reseller_relationships WHERE id = $1", id)
             .execute(&self.pool)
@@ -229,7 +235,9 @@ impl Database {
         Ok(())
     }
 
-    /// Create a new reseller order
+    /// Create a new reseller order.
+    /// Gated to tests until the order API is wired into handlers.
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub async fn create_reseller_order(
         &self,
