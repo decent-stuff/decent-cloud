@@ -23,10 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     .join("main.bin");
 
-    let ledger_local =
+    let mut ledger_local =
         LedgerMap::new_with_path(None, Some(ledger_path)).map_err(CliError::LedgerLoad)?;
 
-    dcc_common::refresh_caches_from_ledger(&ledger_local).map_err(CliError::CacheRefresh)?;
+    dcc_common::refresh_ledger_and_caches(&mut ledger_local).map_err(CliError::CacheRefresh)?;
 
     commands::handle_command(cli.command, ledger_local).await?;
 

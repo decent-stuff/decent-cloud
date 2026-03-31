@@ -119,3 +119,5 @@ dc-agent.toml
 .beads/
 .opencode/
 .runtime/
+.dolt/
+.beads-credential-key

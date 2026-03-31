@@ -128,35 +128,6 @@ pub fn refresh_ledger_and_caches(ledger: &mut LedgerMap) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn refresh_caches_from_ledger(ledger: &LedgerMap) -> anyhow::Result<()> {
-    if ledger.get_blocks_count() == 0 {
-        return Ok(());
-    }
-
-    account_balances_clear();
-    reputations_clear();
-
-    let mut num_providers = 0u64;
-    let mut num_users = 0u64;
-    let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
-
-    for block in ledger.iter_raw(0) {
-        let (_blk_head, block) = block?;
-        for entry in block.entries() {
-            process_entry_for_caches(entry, &mut num_providers, &mut num_users, &mut principals)?;
-        }
-    }
-
-    PRINCIPAL_MAP.with(|p| *p.borrow_mut() = principals);
-    set_num_providers(num_providers);
-    set_num_users(num_users);
-    debug!(
-        "Refreshed caches from ledger blocks, found {} transactions",
-        RecentCache::get_max_tx_num().unwrap_or_default()
-    );
-    Ok(())
-}
-
 #[derive(Serialize)]
 pub struct WasmLedgerEntry {
     pub label: String,
@@ -531,5 +502,157 @@ mod tests {
         let result = refresh_ledger_and_caches(&mut ledger);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_provider_register_increments_counter() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let dcc_id = DccIdentity::new_from_seed(b"test-provider").unwrap();
+        let pubkey_bytes = dcc_id.to_bytes_verifying();
+        let entry = LedgerEntry::new(
+            LABEL_PROV_REGISTER,
+            &pubkey_bytes,
+            b"signature_data",
+            Operation::Upsert,
+        );
+
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_ok());
+        assert_eq!(num_providers, 1);
+        assert_eq!(num_users, 0);
+        assert_eq!(principals.len(), 1);
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_user_register_increments_counter() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        let dcc_id = DccIdentity::new_from_seed(b"test-user").unwrap();
+        let pubkey_bytes = dcc_id.to_bytes_verifying();
+        let entry = LedgerEntry::new(
+            LABEL_USER_REGISTER,
+            &pubkey_bytes,
+            b"signature_data",
+            Operation::Upsert,
+        );
+
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        assert!(result.is_ok());
+        assert_eq!(num_providers, 0);
+        assert_eq!(num_users, 1);
+        assert_eq!(principals.len(), 1);
+    }
+
+    #[test]
+    fn test_process_entry_for_caches_register_bad_key_skipped() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut num_providers = 0u64;
+        let mut num_users = 0u64;
+        let mut principals: AHashMap<Principal, Vec<u8>> = HashMap::default();
+
+        // Key too short — not a valid ed25519 public key
+        let entry = LedgerEntry::new(
+            LABEL_PROV_REGISTER,
+            b"short",
+            b"signature_data",
+            Operation::Upsert,
+        );
+
+        let result =
+            process_entry_for_caches(&entry, &mut num_providers, &mut num_users, &mut principals);
+
+        // Should succeed but skip the entry (debug log, not error)
+        assert!(result.is_ok());
+        assert_eq!(num_providers, 0);
+        assert!(principals.is_empty());
+    }
+
+    #[test]
+    fn test_refresh_ledger_and_caches_multi_block() {
+        crate::account_balances_clear();
+        reputations_clear();
+
+        let mut ledger = new_temp_ledger();
+
+        // Block 1: mint to account A
+        let to_a = Account {
+            owner: Principal::from_slice(&[1u8; 29]),
+            subaccount: None,
+        };
+        let transfer_a = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to_a.clone()),
+            None,
+            None,
+            Some(0),
+            vec![],
+            1000,
+            0,
+            1000,
+        );
+        ledger
+            .upsert(
+                LABEL_DC_TOKEN_TRANSFER,
+                transfer_a.to_tx_id(),
+                borsh::to_vec(&transfer_a).unwrap(),
+            )
+            .unwrap();
+        ledger.commit_block().unwrap();
+
+        // Block 2: mint to account B
+        let to_b = Account {
+            owner: Principal::from_slice(&[2u8; 29]),
+            subaccount: None,
+        };
+        let transfer_b = crate::FundsTransfer::new(
+            MINTING_ACCOUNT,
+            crate::IcrcCompatibleAccount::from(to_b.clone()),
+            None,
+            None,
+            Some(1),
+            vec![],
+            2000,
+            0,
+            2000,
+        );
+        ledger
+            .upsert(
+                LABEL_DC_TOKEN_TRANSFER,
+                transfer_b.to_tx_id(),
+                borsh::to_vec(&transfer_b).unwrap(),
+            )
+            .unwrap();
+        ledger.commit_block().unwrap();
+
+        assert_eq!(ledger.get_blocks_count(), 2);
+
+        let result = refresh_ledger_and_caches(&mut ledger);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            account_balance_get(&IcrcCompatibleAccount::from(to_a)),
+            1000
+        );
+        assert_eq!(
+            account_balance_get(&IcrcCompatibleAccount::from(to_b)),
+            2000
+        );
     }
 }

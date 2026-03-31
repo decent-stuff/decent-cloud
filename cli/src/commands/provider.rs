@@ -81,7 +81,7 @@ pub async fn handle_provider_command(
                             .await?;
                     ledger_data_fetch(&canister, &mut ledger_local).await?;
 
-                    dcc_common::refresh_caches_from_ledger(&ledger_local).map_err(|e| {
+                    dcc_common::refresh_ledger_and_caches(&mut ledger_local).map_err(|e| {
                         anyhow::anyhow!("Failed to load balances from ledger: {}", e)
                     })?;
                 }
