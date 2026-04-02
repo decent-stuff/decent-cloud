@@ -3125,6 +3125,11 @@ struct ValidateRecipeRequest {
 }
 
 async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()> {
+    let format_severity = |severity: &str| match severity {
+        "error" => "ERROR",
+        _ => "WARN ",
+    };
+
     match action {
         RecipeAction::Validate { script, file } => {
             let script_content = match (script, file) {
@@ -3157,11 +3162,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
             if !result.issues.is_empty() {
                 println!("\nIssues:");
                 for issue in &result.issues {
-                    let icon = match issue.severity.as_str() {
-                        "error" => "ERROR",
-                        _ => "WARN ",
-                    };
-                    println!("  [{}] {}", icon, issue.message);
+                    println!("  [{}] {}", format_severity(&issue.severity), issue.message);
                 }
             } else {
                 println!("  No issues found.");
@@ -3248,11 +3249,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
                         println!("  Recipe validation: FAILED");
                     }
                     for issue in &validate_result.issues {
-                        let icon = match issue.severity.as_str() {
-                            "error" => "ERROR",
-                            _ => "WARN ",
-                        };
-                        println!("    [{}] {}", icon, issue.message);
+                        println!("    [{}] {}", format_severity(&issue.severity), issue.message);
                     }
 
                     if !validate_result.valid {

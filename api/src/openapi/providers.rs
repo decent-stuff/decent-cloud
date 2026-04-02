@@ -5825,4 +5825,25 @@ mod tests {
             "Providers API must keep get_provider_response_metrics handler"
         );
     }
+
+    // ── validate_recipe_if_present ──────────────────────────────────────
+
+    #[test]
+    fn test_validate_recipe_if_present_none_returns_ok() {
+        assert!(super::validate_recipe_if_present(None).is_ok());
+    }
+
+    #[test]
+    fn test_validate_recipe_if_present_valid_script_returns_ok() {
+        let script = "#!/bin/bash\necho hello".to_string();
+        assert!(super::validate_recipe_if_present(Some(&script)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_recipe_if_present_dangerous_script_returns_err() {
+        let script = "#!/bin/bash\nrm -rf /".to_string();
+        let result = super::validate_recipe_if_present(Some(&script));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Recipe validation failed"));
+    }
 }
