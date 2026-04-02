@@ -13,6 +13,7 @@ use super::common::{
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
+use dcc_common::ssh_exec::validate_recipe;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
@@ -1459,6 +1460,23 @@ impl ProvidersApi {
             });
         }
 
+        if let Some(script) = &params.post_provision_script {
+            let result = validate_recipe(script);
+            if !result.valid {
+                let errors: Vec<String> = result
+                    .issues
+                    .into_iter()
+                    .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
+                    .map(|i| i.message)
+                    .collect();
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Recipe validation failed: {}", errors.join("; "))),
+                });
+            }
+        }
+
         match db.create_offering(&pubkey_bytes, params).await {
             Ok(id) => {
                 // Note: Chatwoot resources (inbox/team/portal) are created when
@@ -1523,6 +1541,23 @@ impl ProvidersApi {
                 data: None,
                 error: Some(e),
             });
+        }
+
+        if let Some(script) = &params.post_provision_script {
+            let result = validate_recipe(script);
+            if !result.valid {
+                let errors: Vec<String> = result
+                    .issues
+                    .into_iter()
+                    .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
+                    .map(|i| i.message)
+                    .collect();
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Recipe validation failed: {}", errors.join("; "))),
+                });
+            }
         }
 
         match db.update_offering(&pubkey_bytes, id.0, params).await {

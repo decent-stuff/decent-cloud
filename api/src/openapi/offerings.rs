@@ -1,6 +1,9 @@
 use super::common::{default_false, default_limit, ApiResponse, ApiTags, EmptyResponse};
 use crate::auth::{ApiAuthenticatedUser, OptionalApiAuth};
 use crate::database::Database;
+use dcc_common::ssh_exec::{
+    validate_recipe, RecipeValidationIssue, RecipeValidationResult, RecipeValidationSeverity,
+};
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::{Deserialize, Serialize};
@@ -88,6 +91,46 @@ pub struct BulkPublishResponse {
     pub published_ids: Vec<i64>,
 }
 
+/// Request body for validating a recipe script
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct ValidateRecipeRequest {
+    /// The recipe script content to validate
+    pub script: String,
+}
+
+/// A single issue found during recipe validation
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct RecipeValidationIssueResponse {
+    pub severity: String,
+    pub message: String,
+}
+
+/// Response body for recipe validation
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct ValidateRecipeResponse {
+    pub valid: bool,
+    pub issues: Vec<RecipeValidationIssueResponse>,
+}
+
+impl From<RecipeValidationResult> for ValidateRecipeResponse {
+    fn from(result: RecipeValidationResult) -> Self {
+        Self {
+            valid: result.valid,
+            issues: result
+                .issues
+                .into_iter()
+                .map(|i: RecipeValidationIssue| RecipeValidationIssueResponse {
+                    severity: match i.severity {
+                        RecipeValidationSeverity::Error => "error".to_string(),
+                        RecipeValidationSeverity::Warning => "warning".to_string(),
+                    },
+                    message: i.message,
+                })
+                .collect(),
+        }
+    }
+}
+
 pub struct OfferingsApi;
 
 fn default_trending_limit() -> i64 {
@@ -100,6 +143,24 @@ fn default_trend_days() -> i64 {
 
 #[OpenApi]
 impl OfferingsApi {
+    /// Validate a recipe script
+    ///
+    /// Validates a post-provision script (recipe) without executing it.
+    /// Checks for syntax issues, dangerous patterns, and size limits.
+    /// Public endpoint — no auth required.
+    #[oai(path = "/recipes/validate", method = "post", tag = "ApiTags::Offerings")]
+    async fn validate_recipe(
+        &self,
+        body: Json<ValidateRecipeRequest>,
+    ) -> Json<ApiResponse<ValidateRecipeResponse>> {
+        let result = validate_recipe(&body.script);
+        Json(ApiResponse {
+            success: true,
+            data: Some(ValidateRecipeResponse::from(result)),
+            error: None,
+        })
+    }
+
     /// Get pricing statistics for offerings
     ///
     /// Returns price statistics (min, max, avg, median) for a given product type and optional country
