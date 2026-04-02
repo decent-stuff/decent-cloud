@@ -18,6 +18,22 @@ use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
 
+fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
+    if let Some(script) = script {
+        let result = validate_recipe(script);
+        if !result.valid {
+            let errors: Vec<String> = result
+                .issues
+                .into_iter()
+                .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
+                .map(|i| i.message)
+                .collect();
+            return Err(format!("Recipe validation failed: {}", errors.join("; ")));
+        }
+    }
+    Ok(())
+}
+
 /// SSE handler: streams pending password reset count changes every 5 seconds.
 ///
 /// Authenticates via provider or agent auth headers/query params.
@@ -1460,21 +1476,12 @@ impl ProvidersApi {
             });
         }
 
-        if let Some(script) = &params.post_provision_script {
-            let result = validate_recipe(script);
-            if !result.valid {
-                let errors: Vec<String> = result
-                    .issues
-                    .into_iter()
-                    .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
-                    .map(|i| i.message)
-                    .collect();
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Recipe validation failed: {}", errors.join("; "))),
-                });
-            }
+        if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
         }
 
         match db.create_offering(&pubkey_bytes, params).await {
@@ -1543,21 +1550,12 @@ impl ProvidersApi {
             });
         }
 
-        if let Some(script) = &params.post_provision_script {
-            let result = validate_recipe(script);
-            if !result.valid {
-                let errors: Vec<String> = result
-                    .issues
-                    .into_iter()
-                    .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
-                    .map(|i| i.message)
-                    .collect();
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(format!("Recipe validation failed: {}", errors.join("; "))),
-                });
-            }
+        if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
         }
 
         match db.update_offering(&pubkey_bytes, id.0, params).await {
