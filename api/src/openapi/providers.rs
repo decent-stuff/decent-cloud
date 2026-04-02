@@ -13,9 +13,26 @@ use super::common::{
 };
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentAuth};
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
+use dcc_common::ssh_exec::validate_recipe;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, OpenApi};
 use std::sync::Arc;
+
+fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
+    if let Some(script) = script {
+        let result = validate_recipe(script);
+        if !result.valid {
+            let errors: Vec<String> = result
+                .issues
+                .into_iter()
+                .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
+                .map(|i| i.message)
+                .collect();
+            return Err(format!("Recipe validation failed: {}", errors.join("; ")));
+        }
+    }
+    Ok(())
+}
 
 /// SSE handler: streams pending password reset count changes every 5 seconds.
 ///
@@ -1459,6 +1476,14 @@ impl ProvidersApi {
             });
         }
 
+        if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
         match db.create_offering(&pubkey_bytes, params).await {
             Ok(id) => {
                 // Note: Chatwoot resources (inbox/team/portal) are created when
@@ -1518,6 +1543,14 @@ impl ProvidersApi {
         params.pubkey = hex::encode(&pubkey_bytes);
 
         if let Err(e) = validate_hetzner_offering(&db, &params, &pubkey_bytes).await {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
             return Json(ApiResponse {
                 success: false,
                 data: None,
@@ -5791,5 +5824,26 @@ mod tests {
             PROVIDERS_RS.contains("async fn get_provider_response_metrics"),
             "Providers API must keep get_provider_response_metrics handler"
         );
+    }
+
+    // ── validate_recipe_if_present ──────────────────────────────────────
+
+    #[test]
+    fn test_validate_recipe_if_present_none_returns_ok() {
+        assert!(super::validate_recipe_if_present(None).is_ok());
+    }
+
+    #[test]
+    fn test_validate_recipe_if_present_valid_script_returns_ok() {
+        let script = "#!/bin/bash\necho hello".to_string();
+        assert!(super::validate_recipe_if_present(Some(&script)).is_ok());
+    }
+
+    #[test]
+    fn test_validate_recipe_if_present_dangerous_script_returns_err() {
+        let script = "#!/bin/bash\nrm -rf /".to_string();
+        let result = super::validate_recipe_if_present(Some(&script));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Recipe validation failed"));
     }
 }

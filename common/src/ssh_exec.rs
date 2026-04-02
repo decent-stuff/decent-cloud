@@ -19,6 +19,131 @@ const SCRIPT_TIMEOUT: Duration = Duration::from_secs(300);
 /// Maximum password reset execution time
 const PASSWORD_RESET_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Maximum allowed recipe script size (64 KiB).
+pub const RECIPE_MAX_SIZE_BYTES: usize = 64 * 1024;
+
+/// Severity of a recipe validation issue.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecipeValidationSeverity {
+    Error,
+    Warning,
+}
+
+/// A single issue found during recipe validation.
+#[derive(Debug, Clone)]
+pub struct RecipeValidationIssue {
+    pub severity: RecipeValidationSeverity,
+    pub message: String,
+}
+
+/// Result of validating a recipe script.
+#[derive(Debug, Clone)]
+pub struct RecipeValidationResult {
+    pub valid: bool,
+    pub issues: Vec<RecipeValidationIssue>,
+}
+
+impl RecipeValidationResult {
+    fn error(msg: impl Into<String>) -> Self {
+        Self {
+            valid: false,
+            issues: vec![RecipeValidationIssue {
+                severity: RecipeValidationSeverity::Error,
+                message: msg.into(),
+            }],
+        }
+    }
+
+    fn warn(issues: &mut Vec<RecipeValidationIssue>, msg: impl Into<String>) {
+        issues.push(RecipeValidationIssue {
+            severity: RecipeValidationSeverity::Warning,
+            message: msg.into(),
+        });
+    }
+}
+
+/// Dangerous shell patterns that should never appear in a recipe.
+const DANGEROUS_PATTERNS: &[&str] = &[
+    "rm -rf /",
+    "rm -rf /*",
+    "mkfs.",
+    "dd if=/dev/zero of=/dev/",
+    "dd if=/dev/urandom of=/dev/",
+    ":(){ :|:& };:",
+    "> /dev/sda",
+];
+
+/// Validate a recipe script without executing it.
+///
+/// Checks for:
+/// - Non-empty script
+/// - Size within limits
+/// - Recognised shebang line
+/// - Dangerous command patterns
+///
+/// Returns a `RecipeValidationResult` with `valid: true` if no errors were found
+/// (warnings are allowed on valid scripts).
+pub fn validate_recipe(script: &str) -> RecipeValidationResult {
+    if script.trim().is_empty() {
+        return RecipeValidationResult::error("Recipe script is empty");
+    }
+
+    if script.len() > RECIPE_MAX_SIZE_BYTES {
+        return RecipeValidationResult::error(format!(
+            "Recipe script exceeds maximum size ({} bytes, limit is {} bytes)",
+            script.len(),
+            RECIPE_MAX_SIZE_BYTES
+        ));
+    }
+
+    let mut issues: Vec<RecipeValidationIssue> = Vec::new();
+
+    let has_shebang = script.starts_with("#!");
+    if !has_shebang {
+        RecipeValidationResult::warn(
+            &mut issues,
+            "No shebang line found — /bin/sh will be used as the default interpreter",
+        );
+    } else {
+        let first_line = script.lines().next().unwrap_or("");
+        let valid_interpreters = [
+            "#!/bin/sh",
+            "#!/bin/bash",
+            "#!/usr/bin/env sh",
+            "#!/usr/bin/env bash",
+            "#!/usr/bin/env python",
+            "#!/usr/bin/env python3",
+            "#!/usr/bin/env node",
+            "#!/usr/bin/perl",
+            "#!/usr/bin/env ruby",
+        ];
+        if !valid_interpreters.iter().any(|i| first_line.starts_with(i)) {
+            RecipeValidationResult::warn(
+                &mut issues,
+                format!("Unusual shebang '{}'. Supported interpreters: sh, bash, python3, node, perl, ruby", first_line),
+            );
+        }
+    }
+
+    for pattern in DANGEROUS_PATTERNS {
+        if script.contains(pattern) {
+            issues.push(RecipeValidationIssue {
+                severity: RecipeValidationSeverity::Error,
+                message: format!("Dangerous pattern detected: '{}'", pattern),
+            });
+        }
+    }
+
+    let has_errors = issues
+        .iter()
+        .any(|i| i.severity == RecipeValidationSeverity::Error);
+
+    RecipeValidationResult {
+        valid: !has_errors,
+        issues,
+    }
+}
+
 /// Result of executing a script on a remote VM.
 ///
 /// `Ok(ScriptResult)` means SSH and script execution infrastructure worked.
@@ -383,5 +508,71 @@ mod tests {
         assert_eq!(result.exit_code, 2);
         assert!(result.log.starts_with("--- stderr ---"));
         assert!(result.log.contains("error only"));
+    }
+
+    #[test]
+    fn test_validate_recipe_empty_script() {
+        let result = validate_recipe("");
+        assert!(!result.valid);
+        assert!(result.issues[0].message.contains("empty"));
+    }
+
+    #[test]
+    fn test_validate_recipe_whitespace_only() {
+        let result = validate_recipe("   \n\t\n  ");
+        assert!(!result.valid);
+    }
+
+    #[test]
+    fn test_validate_recipe_valid_script() {
+        let script = "#!/bin/sh\necho hello\napt-get update";
+        let result = validate_recipe(script);
+        assert!(result.valid);
+        assert!(result.issues.is_empty());
+    }
+
+    #[test]
+    fn test_validate_recipe_missing_shebang_warning() {
+        let result = validate_recipe("echo hello");
+        assert!(result.valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].message.contains("shebang"));
+    }
+
+    #[test]
+    fn test_validate_recipe_dangerous_rm_rf() {
+        let result = validate_recipe("#!/bin/sh\nrm -rf /");
+        assert!(!result.valid);
+        assert!(result.issues.iter().any(|i| i.message.contains("rm -rf /")));
+    }
+
+    #[test]
+    fn test_validate_recipe_dangerous_dd() {
+        let result = validate_recipe("#!/bin/sh\ndd if=/dev/zero of=/dev/sda");
+        assert!(!result.valid);
+        assert!(result.issues.iter().any(|i| i.message.contains("dd")));
+    }
+
+    #[test]
+    fn test_validate_recipe_oversized() {
+        let big = "#!/bin/sh\n".to_string() + &"x".repeat(RECIPE_MAX_SIZE_BYTES);
+        let result = validate_recipe(&big);
+        assert!(!result.valid);
+        assert!(result.issues[0].message.contains("maximum size"));
+    }
+
+    #[test]
+    fn test_validate_recipe_python_shebang() {
+        let result = validate_recipe("#!/usr/bin/env python3\nprint('hello')");
+        assert!(result.valid);
+        assert!(result.issues.is_empty());
+    }
+
+    #[test]
+    fn test_validate_recipe_unusual_shebang() {
+        let result = validate_recipe("#!/usr/bin/ruby\nputs 'hello'");
+        assert!(result.valid);
+        assert_eq!(result.issues.len(), 1);
+        assert!(result.issues[0].message.contains("Unusual shebang"));
     }
 }
