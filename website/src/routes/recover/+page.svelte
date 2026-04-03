@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { requestRecovery, completeRecovery } from '$lib/services/account-api';
 	import { identityFromSeed, bytesToHex } from '$lib/utils/identity';
+	import { authStore } from '$lib/stores/auth';
 	import SeedPhraseStep from '$lib/components/SeedPhraseStep.svelte';
 	import Icon from '$lib/components/Icons.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -64,6 +65,9 @@
 
 			await completeRecovery(token, publicKeyHex);
 
+			// Auto-login with the new seed phrase so the user is immediately authenticated
+			await authStore.loginWithSeedPhrase(seedPhrase);
+
 			currentState = 'success';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Recovery completion failed';
@@ -77,8 +81,8 @@
 		error = null;
 	}
 
-	function handleGoToLogin() {
-		goto('/login');
+	function handleGoToDashboard() {
+		goto('/dashboard/marketplace');
 	}
 </script>
 
@@ -197,12 +201,12 @@
 					</div>
 					<h3 class="text-xl font-semibold text-white">Recovery Complete!</h3>
 					<p class="text-neutral-500 text-sm">
-						Your account has been recovered. You can now login with your new seed phrase.
+						Your account has been recovered and you are now signed in.
 					</p>
 
 					<div class="pt-4">
-						<Button variant="primary" type="button" onclick={handleGoToLogin}>
-							Go to Login
+						<Button variant="primary" type="button" onclick={handleGoToDashboard}>
+							Go to Dashboard
 						</Button>
 					</div>
 				</div>

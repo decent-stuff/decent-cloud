@@ -33,7 +33,9 @@ function ed25519SecretToX25519(ed25519Secret: Uint8Array): Uint8Array {
 }
 
 /**
- * Decrypt credentials using the user's Ed25519 private key
+ * Decrypt credentials using the user's Ed25519 private key.
+ *
+ * Supports version 1 (no AAD) and version 2 (AAD = contract_id bytes).
  *
  * @param encryptedJson - JSON string containing encrypted credentials
  * @param ed25519SecretKey - User's Ed25519 secret key (32 or 64 bytes)
@@ -43,35 +45,28 @@ export async function decryptCredentials(
 	encryptedJson: string,
 	ed25519SecretKey: Uint8Array
 ): Promise<string> {
-	// Parse encrypted credentials
 	const encrypted: EncryptedCredentials = JSON.parse(encryptedJson);
 
-	if (encrypted.version !== 1) {
+	if (encrypted.version !== 1 && encrypted.version !== 2) {
 		throw new Error(`Unsupported encryption version: ${encrypted.version}`);
 	}
 
-	// Decode base64 fields
 	const ephemeralPubkey = base64ToBytes(encrypted.ephemeral_pubkey);
 	const nonce = base64ToBytes(encrypted.nonce);
 	const ciphertext = base64ToBytes(encrypted.ciphertext);
 
-	// Convert Ed25519 secret to X25519
 	const x25519Secret = ed25519SecretToX25519(ed25519SecretKey);
-
-	// Perform X25519 key exchange
 	const sharedSecret = x25519.getSharedSecret(x25519Secret, ephemeralPubkey);
 
-	// Derive decryption key using SHA-512 (same as Rust implementation)
+	const domainSeparator =
+		encrypted.version === 2 ? 'credential-encryption-v2-aad' : 'credential-encryption-v1';
 	const keyMaterial = sha512(
-		new Uint8Array([
-			...new TextEncoder().encode('credential-encryption-v1'),
-			...sharedSecret
-		])
+		new Uint8Array([...new TextEncoder().encode(domainSeparator), ...sharedSecret])
 	);
 	const decryptionKey = keyMaterial.slice(0, 32);
 
-	// Decrypt with XChaCha20Poly1305
-	const cipher = xchacha20poly1305(decryptionKey, nonce);
+	const aad = encrypted.version === 2 && encrypted.aad ? base64ToBytes(encrypted.aad) : undefined;
+	const cipher = xchacha20poly1305(decryptionKey, nonce, aad);
 	const plaintext = cipher.decrypt(ciphertext);
 
 	return new TextDecoder().decode(plaintext);

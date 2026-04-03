@@ -106,18 +106,29 @@ describe('authStore', () => {
 		expect(currentIdentity?.displayName).toBeUndefined();
 	});
 
-	it('should handle fetch errors gracefully', async () => {
+	it('should throw on network error during account lookup', async () => {
 		const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
 		vi.stubGlobal('fetch', mockFetch);
 
 		const seedPhrase =
 			'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-		await authStore.loginWithSeedPhrase(seedPhrase, '/test');
+		await expect(authStore.loginWithSeedPhrase(seedPhrase, '/test')).rejects.toThrow(
+			'Network error'
+		);
+	});
 
-		await expect(authStore.updateDisplayName()).resolves.not.toThrow();
+	it('should throw when account not found for seed phrase', async () => {
+		const mockFetch = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			json: async () => ({ success: false, data: null, error: null })
+		});
+		vi.stubGlobal('fetch', mockFetch);
 
-		const currentIdentity = get(authStore.currentIdentity);
-
-		expect(currentIdentity?.displayName).toBeUndefined();
+		const seedPhrase =
+			'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+		await expect(authStore.loginWithSeedPhrase(seedPhrase, '/test')).rejects.toThrow(
+			'Account not found for this seed phrase'
+		);
 	});
 });

@@ -170,16 +170,9 @@ function createAuthStore() {
 	async function loadAccountForIdentity(identityInfo: IdentityInfo): Promise<AccountInfo | null> {
 		if (!identityInfo.publicKeyBytes) return null;
 
-		try {
-			const { getAccountByPublicKey } = await import('../services/account-api');
-			const publicKeyHex = bytesToHex(identityInfo.publicKeyBytes);
-
-			const account = await getAccountByPublicKey(publicKeyHex);
-			return account;
-		} catch (error) {
-			console.error('Failed to load account:', error);
-			return null;
-		}
+		const { getAccountByPublicKey } = await import('../services/account-api');
+		const publicKeyHex = bytesToHex(identityInfo.publicKeyBytes);
+		return getAccountByPublicKey(publicKeyHex);
 	}
 
 	async function registerNewAccount(
@@ -311,22 +304,31 @@ function createAuthStore() {
 			const phrasesWithAccounts: string[] = [];
 
 			for (const identityInfo of identitiesList) {
-				const account = await loadAccountForIdentity(identityInfo);
-				if (account) {
-					// Update the identity with account info
-					identities.update((prev) =>
-						prev.map((id) =>
-							id.principal.toString() === identityInfo.principal.toString()
-								? { ...id, account }
-								: id
-						)
-					);
-					// Update activeIdentity if this is the current one
-					const current = get(activeIdentity);
-					if (current?.principal.toString() === identityInfo.principal.toString()) {
-						activeIdentity.set({ ...identityInfo, account });
+				try {
+					const account = await loadAccountForIdentity(identityInfo);
+					if (account) {
+						// Update the identity with account info
+						identities.update((prev) =>
+							prev.map((id) =>
+								id.principal.toString() === identityInfo.principal.toString()
+									? { ...id, account }
+									: id
+							)
+						);
+						// Update activeIdentity if this is the current one
+						const current = get(activeIdentity);
+						if (current?.principal.toString() === identityInfo.principal.toString()) {
+							activeIdentity.set({ ...identityInfo, account });
+						}
+						// Keep this seed phrase (only for seedPhrase-type identities)
+						if (identityInfo.type === 'seedPhrase' && identityInfo.seedPhrase) {
+							phrasesWithAccounts.push(identityInfo.seedPhrase);
+						}
 					}
-					// Keep this seed phrase (only for seedPhrase-type identities)
+					// else: null means key definitively not in DB → seed phrase will be removed
+				} catch (error) {
+					console.error('Failed to load account for identity:', error);
+					// Network error: preserve seed phrase so the user is not permanently locked out
 					if (identityInfo.type === 'seedPhrase' && identityInfo.seedPhrase) {
 						phrasesWithAccounts.push(identityInfo.seedPhrase);
 					}
@@ -424,15 +426,15 @@ function createAuthStore() {
 					seedPhrase: existingSeedPhrase
 				});
 
-				if (account) {
-					// Update activeIdentity with account data
-					activeIdentity.update((current) => {
-						if (current && current.seedPhrase === existingSeedPhrase) {
-							return { ...current, account };
-						}
-						return current;
-					});
+				if (!account) {
+					throw new Error('Account not found for this seed phrase');
 				}
+				activeIdentity.update((current) => {
+					if (current && current.seedPhrase === existingSeedPhrase) {
+						return { ...current, account };
+					}
+					return current;
+				});
 			} catch (error) {
 				console.error('Failed to login with seed phrase:', error);
 				throw error;
