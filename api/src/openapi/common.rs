@@ -205,6 +205,13 @@ pub struct UpdatePasswordRequest {
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
+pub struct RotateSshKeyRequest {
+    pub new_ssh_pubkey: String,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ExtendContractRequest {
     pub extension_hours: i64,
     pub memo: Option<String>,

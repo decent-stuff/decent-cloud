@@ -1,7 +1,8 @@
 use super::common::{
     default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
-    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, SetAutoRenewRequest,
-    UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest, VerifyCheckoutSessionResponse,
+    ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, RotateSshKeyRequest,
+    SetAutoRenewRequest, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
+    VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
 use crate::database::Database;
@@ -391,6 +392,119 @@ impl ContractsApi {
                     error: None,
                 })
             }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Rotate SSH key for a contract
+    ///
+    /// Replaces the SSH public key on an active contract. The provider's agent
+    /// will inject the new key into the running VM. Requires authentication -
+    /// only the contract requester can rotate their SSH key.
+    #[oai(
+        path = "/contracts/:id/rotate-ssh-key",
+        method = "post",
+        tag = "ApiTags::Contracts"
+    )]
+    async fn rotate_ssh_key(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        id: Path<String>,
+        req: Json<RotateSshKeyRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        let contract = match db.get_contract(&contract_id).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let user_pubkey = hex::encode(&auth.pubkey);
+        if contract.requester_pubkey != user_pubkey {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: only the contract requester can rotate SSH keys".to_string(),
+                ),
+            });
+        }
+
+        let status = contract.status.to_lowercase();
+        if status != "provisioned" && status != "active" {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "SSH key rotation can only be requested for provisioned or active contracts"
+                        .to_string(),
+                ),
+            });
+        }
+
+        let new_key = req.0.new_ssh_pubkey.trim().to_string();
+        if new_key.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("new_ssh_pubkey cannot be empty".to_string()),
+            });
+        }
+
+        let ssh_key_pattern = regex::Regex::new(
+            r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$",
+        )
+        .unwrap();
+        if !ssh_key_pattern.is_match(&new_key) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Invalid SSH public key format. Expected: ssh-(rsa|ed25519|ecdsa|dss) <base64> [comment]"
+                        .to_string(),
+                ),
+            });
+        }
+
+        match db
+            .request_ssh_key_rotation(&contract_id, &new_key)
+            .await
+        {
+            Ok(_) => Json(ApiResponse {
+                success: true,
+                data: Some(
+                    "SSH key rotation requested. The provider will inject the new key shortly."
+                        .to_string(),
+                ),
+                error: None,
+            }),
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,
@@ -1764,6 +1878,7 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            ssh_key_rotation_requested_at_ns: None,
             offering_name: None,
             operating_system: None,
         }

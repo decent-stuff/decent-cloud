@@ -411,8 +411,6 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<Contract>> {
-        let provider_hex = hex::encode(provider_pubkey);
-
         let rows = sqlx::query_as::<_, Contract>(
             r#"SELECT c.* FROM contract_sign_requests c
                INNER JOIN contract_provisioning_details pd ON c.contract_id = pd.contract_id
@@ -421,7 +419,114 @@ impl Database {
                AND pd.password_reset_requested_at_ns IS NOT NULL
                ORDER BY pd.password_reset_requested_at_ns ASC"#,
         )
-        .bind(provider_hex)
+        .bind(provider_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    pub async fn request_ssh_key_rotation(
+        &self,
+        contract_id: &[u8],
+        new_ssh_pubkey: &str,
+    ) -> Result<()> {
+        let now_ns = crate::now_ns()?;
+
+        let mut tx = self.pool.begin().await?;
+
+        let result = sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET pending_requester_ssh_pubkey = $1,
+                   ssh_key_rotation_requested_at_ns = $2
+               WHERE contract_id = $3"#,
+        )
+        .bind(new_ssh_pubkey)
+        .bind(now_ns)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            anyhow::bail!(
+                "No provisioning details found for contract {}",
+                hex::encode(contract_id)
+            );
+        }
+
+        tx.commit().await?;
+
+        self.insert_contract_event(
+            contract_id,
+            "ssh_key_rotation",
+            None,
+            None,
+            "tenant",
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn complete_ssh_key_rotation(&self, contract_id: &[u8]) -> Result<String> {
+        let mut tx = self.pool.begin().await?;
+
+        let pending_key: Option<String> = sqlx::query_scalar(
+            r#"SELECT pending_requester_ssh_pubkey
+               FROM contract_provisioning_details
+               WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+
+        let pending_key = pending_key
+            .filter(|key| !key.trim().is_empty())
+            .ok_or_else(|| anyhow::anyhow!("No pending SSH key rotation found"))?;
+
+        sqlx::query(
+            r#"UPDATE contract_sign_requests
+               SET requester_ssh_pubkey = $1
+               WHERE contract_id = $2"#,
+        )
+        .bind(&pending_key)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET pending_requester_ssh_pubkey = NULL,
+                   ssh_key_rotation_requested_at_ns = NULL
+               WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(pending_key)
+    }
+
+    pub async fn get_pending_ssh_key_rotations(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Vec<ContractPendingSshKeyRotation>> {
+        let rows = sqlx::query_as::<_, ContractPendingSshKeyRotation>(
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as contract_id,
+                      pd.pending_requester_ssh_pubkey as requester_ssh_pubkey
+               FROM contract_sign_requests c
+               INNER JOIN contract_provisioning_details pd ON c.contract_id = pd.contract_id
+               WHERE c.provider_pubkey = $1
+               AND c.status IN ('provisioned', 'active')
+               AND pd.pending_requester_ssh_pubkey IS NOT NULL
+               AND pd.ssh_key_rotation_requested_at_ns IS NOT NULL
+               ORDER BY pd.ssh_key_rotation_requested_at_ns ASC"#,
+        )
+        .bind(provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 

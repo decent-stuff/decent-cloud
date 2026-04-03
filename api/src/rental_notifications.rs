@@ -1271,6 +1271,7 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            ssh_key_rotation_requested_at_ns: None,
             offering_name: None,
             operating_system: None,
         };
@@ -1346,6 +1347,7 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            ssh_key_rotation_requested_at_ns: None,
             offering_name: None,
             operating_system: None,
         };
@@ -1422,6 +1424,7 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            ssh_key_rotation_requested_at_ns: None,
             offering_name: None,
             operating_system: None,
         };
@@ -1510,6 +1513,7 @@ mod tests {
             gateway_port_range_start: None,
             gateway_port_range_end: None,
             password_reset_requested_at_ns: None,
+            ssh_key_rotation_requested_at_ns: None,
             offering_name: None,
             operating_system: None,
         }

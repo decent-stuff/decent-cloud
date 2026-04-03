@@ -1299,6 +1299,149 @@ impl ProvidersApi {
         }
     }
 
+    /// Get contracts pending SSH key rotation
+    ///
+    /// Returns active contracts where the user has requested an SSH key rotation.
+    /// The agent should inject the new key into the VM via SSH and call the
+    /// complete-ssh-key-rotation endpoint.
+    /// Requires agent authentication - agent can only access their delegated provider's contracts.
+    #[oai(
+        path = "/providers/:pubkey/contracts/pending-ssh-key-rotation",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_pending_ssh_key_rotation_contracts(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: AgentAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingSshKeyRotation>>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        if auth.provider_pubkey != pubkey_bytes {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(
+                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
+                ),
+            });
+        }
+
+        match db.get_pending_ssh_key_rotations(&pubkey_bytes).await {
+            Ok(contracts) => Json(ApiResponse {
+                success: true,
+                data: Some(contracts),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Complete SSH key rotation
+    ///
+    /// Called by dc-agent after successfully injecting the new SSH key into a VM.
+    /// Clears the pending rotation flag and records the event.
+    /// Accepts either provider authentication (X-Public-Key) or agent authentication (X-Agent-Pubkey).
+    #[oai(
+        path = "/provider/rental-requests/:id/ssh-key-rotation",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn complete_ssh_key_rotation(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ProviderOrAgentAuth,
+        id: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        let contract_id = match hex::decode(&id.0) {
+            Ok(id) => id,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid contract ID format".to_string()),
+                })
+            }
+        };
+
+        match db.get_contract(&contract_id).await {
+            Ok(Some(contract)) => {
+                if contract.provider_pubkey != hex::encode(&auth.provider_pubkey) {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(
+                            "Unauthorized: you are not the provider for this contract".to_string(),
+                        ),
+                    });
+                }
+            }
+            Ok(None) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Contract not found".to_string()),
+                })
+            }
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        match db.complete_ssh_key_rotation(&contract_id).await {
+            Ok(new_ssh_pubkey) => {
+                if let Err(e) = db
+                    .insert_contract_event(
+                        &contract_id,
+                        "ssh_key_rotation_complete",
+                        None,
+                        None,
+                        "provider",
+                        Some(&format!(
+                            "SSH key rotated to {}... by agent",
+                            &new_ssh_pubkey[..20.min(new_ssh_pubkey.len())]
+                        )),
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        contract_id = %hex::encode(&contract_id),
+                        "Failed to insert ssh_key_rotation_complete event: {:#}",
+                        e
+                    );
+                }
+                Json(ApiResponse {
+                    success: true,
+                    data: Some("SSH key rotation completed successfully".to_string()),
+                    error: None,
+                })
+            }
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Mark a contract as terminated
     ///
     /// Called by dc-agent after successfully terminating a VM for a cancelled contract.

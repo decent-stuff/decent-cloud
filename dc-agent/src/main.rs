@@ -2265,6 +2265,100 @@ async fn reconcile_instances(
         }
     }
 
+    // Process SSH key rotation requests
+    match api_client.get_pending_ssh_key_rotations().await {
+        Ok(rotation_requests) => {
+            if !rotation_requests.is_empty() {
+                info!(
+                    count = rotation_requests.len(),
+                    "Processing SSH key rotation requests"
+                );
+
+                for rot_req in &rotation_requests {
+                    let contract_id = &rot_req.contract_id;
+                    let new_ssh_key = &rot_req.requester_ssh_pubkey;
+                    let external_id = format!("dc-{}", contract_id);
+                    info!(contract_id = %contract_id, "Processing SSH key rotation request");
+
+                    let mut rotation_done = false;
+                    for (ptype, provisioner) in provisioners {
+                        match provisioner.get_instance(&external_id).await {
+                            Ok(Some(instance)) => {
+                                if let Some(ref ip) = instance.ip_address {
+                                    let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
+
+                                    match dc_agent::post_provision::inject_ssh_key_via_ssh(
+                                        ip,
+                                        ssh_port,
+                                        "ubuntu",
+                                        true,
+                                        new_ssh_key,
+                                        contract_id,
+                                    )
+                                    .await
+                                    {
+                                        Ok(()) => {
+                                            info!(
+                                                contract_id = %contract_id,
+                                                provisioner_type = %ptype,
+                                                "SSH key injection successful"
+                                            );
+
+                                            if let Err(e) = api_client
+                                                .complete_ssh_key_rotation(contract_id)
+                                                .await
+                                            {
+                                                error!(
+                                                    contract_id = %contract_id,
+                                                    error = ?e,
+                                                    "Failed to report SSH key rotation completion to API"
+                                                );
+                                            }
+                                            rotation_done = true;
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                contract_id = %contract_id,
+                                                provisioner_type = %ptype,
+                                                error = ?e,
+                                                "SSH key injection failed"
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    warn!(
+                                        contract_id = %contract_id,
+                                        "VM has no IP address, cannot inject SSH key"
+                                    );
+                                }
+                            }
+                            Ok(None) => continue,
+                            Err(e) => {
+                                warn!(
+                                    contract_id = %contract_id,
+                                    provisioner_type = %ptype,
+                                    error = ?e,
+                                    "Failed to get instance info"
+                                );
+                            }
+                        }
+                    }
+
+                    if !rotation_done {
+                        warn!(
+                            contract_id = %contract_id,
+                            "SSH key rotation failed - VM not found or SSH failed"
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            warn!(error = ?e, "Failed to get pending SSH key rotations");
+        }
+    }
+
     // Track and prune orphan VMs after grace period
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
