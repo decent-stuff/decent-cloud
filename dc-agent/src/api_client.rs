@@ -76,6 +76,14 @@ pub struct ContractPendingPasswordReset {
     pub contract_id: String,
 }
 
+/// Contract pending SSH key rotation
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPendingSshKeyRotation {
+    pub contract_id: String,
+    pub requester_ssh_pubkey: String,
+}
+
 impl PendingContract {
     /// Parse memory amount string to MB
     /// Handles formats like "16 GB", "2048 MB", "16GB", "2048MB"
@@ -523,6 +531,30 @@ impl ApiClient {
         let response: ApiResponse<Vec<ContractPendingPasswordReset>> =
             self.request(Method::Get, &path, None).await?;
         Self::unwrap_response(response, "API error")
+    }
+
+    /// Get contracts pending SSH key rotation.
+    pub async fn get_pending_ssh_key_rotations(
+        &self,
+    ) -> Result<Vec<ContractPendingSshKeyRotation>> {
+        let path = format!(
+            "/api/v1/providers/{}/contracts/pending-ssh-key-rotation",
+            self.provider_pubkey
+        );
+        let response: ApiResponse<Vec<ContractPendingSshKeyRotation>> =
+            self.request(Method::Get, &path, None).await?;
+        Self::unwrap_response(response, "API error")
+    }
+
+    /// Complete SSH key rotation after injecting the new key into the VM.
+    pub async fn complete_ssh_key_rotation(&self, contract_id: &str) -> Result<()> {
+        let path = format!(
+            "/api/v1/provider/rental-requests/{}/ssh-key-rotation",
+            contract_id
+        );
+        let response: ApiResponse<serde_json::Value> =
+            self.request(Method::Put, &path, None).await?;
+        Self::unwrap_response(response, "Failed to complete SSH key rotation").map(|_| ())
     }
 
     /// Report successful termination.

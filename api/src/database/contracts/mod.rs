@@ -181,6 +181,10 @@ pub struct Contract {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub password_reset_requested_at_ns: Option<i64>,
+    #[ts(type = "number | undefined")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    pub ssh_key_rotation_requested_at_ns: Option<i64>,
     /// Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
     #[ts(type = "string | undefined")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -319,7 +323,7 @@ impl Database {
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
                c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
-               pd.password_reset_requested_at_ns, c.operating_system
+               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system
                FROM contract_sign_requests c
                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
                LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey
@@ -345,7 +349,7 @@ impl Database {
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
                c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
-               pd.password_reset_requested_at_ns, c.operating_system
+               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system
                FROM contract_sign_requests c
                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
                LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey
@@ -371,7 +375,7 @@ impl Database {
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
                c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
-               pd.password_reset_requested_at_ns, c.operating_system
+               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system
                FROM contract_sign_requests c
                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
                LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey
@@ -446,7 +450,7 @@ impl Database {
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
                c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
-               pd.password_reset_requested_at_ns, c.operating_system
+               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system
                FROM contract_sign_requests c
                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
                LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey
@@ -472,7 +476,7 @@ impl Database {
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",
                COALESCE(c.auto_renew, FALSE) as "auto_renew!: bool",
                c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,
-               pd.password_reset_requested_at_ns, c.operating_system
+               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system
                FROM contract_sign_requests c
                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
                LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey

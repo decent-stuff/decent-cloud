@@ -18,6 +18,8 @@ const SSH_RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const SCRIPT_TIMEOUT: Duration = Duration::from_secs(300);
 /// Maximum password reset execution time
 const PASSWORD_RESET_TIMEOUT: Duration = Duration::from_secs(30);
+/// Maximum SSH key injection execution time
+const SSH_KEY_INJECTION_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Maximum allowed recipe script size (64 KiB).
 pub const RECIPE_MAX_SIZE_BYTES: usize = 64 * 1024;
@@ -449,6 +451,93 @@ pub async fn reset_password_via_ssh(
             "Password reset failed"
         );
         anyhow::bail!("Password reset exited with code {}: {}", exit_code, stderr)
+    }
+}
+
+/// Inject a new SSH public key into a remote VM via SSH.
+///
+/// Appends the key to the root user's `~/.ssh/authorized_keys`.
+/// Idempotent: skips if the key already exists.
+///
+/// # Arguments
+/// * `ip_address` - IP address of the VM
+/// * `ssh_port` - SSH port (usually 22)
+/// * `ssh_user` - SSH user to connect as (e.g., "ubuntu")
+/// * `use_sudo` - Whether to use sudo for the command
+/// * `new_ssh_pubkey` - The new SSH public key to inject
+/// * `context_id` - For logging purposes
+pub async fn inject_ssh_key_via_ssh(
+    ip_address: &str,
+    ssh_port: u16,
+    ssh_user: &str,
+    use_sudo: bool,
+    new_ssh_pubkey: &str,
+    context_id: &str,
+) -> Result<()> {
+    info!(
+        context_id = %context_id,
+        ip_address = %ip_address,
+        ssh_user = %ssh_user,
+        "Injecting new SSH public key via SSH"
+    );
+
+    let escaped_key = new_ssh_pubkey.replace('\'', "'\\''");
+    let cmd = format!(
+        "mkdir -p /root/.ssh && chmod 700 /root/.ssh && \
+         grep -qF '{escaped_key}' /root/.ssh/authorized_keys 2>/dev/null || \
+         echo '{escaped_key}' >> /root/.ssh/authorized_keys && \
+         chmod 600 /root/.ssh/authorized_keys"
+    );
+    let full_cmd = if use_sudo {
+        format!("sudo sh -c \"{}\"", cmd.replace('"', "\\\""))
+    } else {
+        cmd
+    };
+
+    let output = tokio::time::timeout(
+        SSH_KEY_INJECTION_TIMEOUT,
+        Command::new("ssh")
+            .args([
+                "-o",
+                "StrictHostKeyChecking=no",
+                "-o",
+                "UserKnownHostsFile=/dev/null",
+                "-o",
+                "ConnectTimeout=10",
+                "-o",
+                "BatchMode=yes",
+                "-p",
+                &ssh_port.to_string(),
+                &format!("{}@{}", ssh_user, ip_address),
+                &full_cmd,
+            ])
+            .output(),
+    )
+    .await
+    .context("SSH key injection timed out")?
+    .context("Failed to execute SSH command")?;
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if output.status.success() {
+        info!(
+            context_id = %context_id,
+            "SSH key injection completed successfully"
+        );
+        Ok(())
+    } else {
+        let exit_code = output.status.code().unwrap_or(-1);
+        warn!(
+            context_id = %context_id,
+            exit_code = exit_code,
+            stderr = %stderr,
+            "SSH key injection failed"
+        );
+        anyhow::bail!(
+            "SSH key injection exited with code {}: {}",
+            exit_code,
+            stderr
+        )
     }
 }
 
