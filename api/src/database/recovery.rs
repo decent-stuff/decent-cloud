@@ -1,7 +1,7 @@
 use super::types::Database;
 use anyhow::{bail, Context, Result};
 
-const RECOVERY_TOKEN_EXPIRY_HOURS: i64 = 24;
+const RECOVERY_TOKEN_EXPIRY_NS: i64 = 24 * 3600 * 1_000_000_000;
 
 impl Database {
     /// Create a recovery token for an account by email
@@ -24,10 +24,10 @@ impl Database {
             bail!("No account found with email: {}", email);
         };
 
-        // Generate secure random token (32 bytes = 256 bits)
+        // Generate secure random token (16 bytes = 128 bits via UUID v4)
         let token = uuid::Uuid::new_v4().as_bytes().to_vec();
-        let now = chrono::Utc::now().timestamp();
-        let expires_at = now + (RECOVERY_TOKEN_EXPIRY_HOURS * 3600);
+        let now = crate::now_ns()?;
+        let expires_at = now + RECOVERY_TOKEN_EXPIRY_NS;
 
         // Store token
         sqlx::query!(
@@ -51,7 +51,7 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Verify token (recheck within transaction)
-        let now = chrono::Utc::now().timestamp();
+        let now = crate::now_ns()?;
         let result = sqlx::query!(
             r#"SELECT account_id, expires_at, used_at
                FROM recovery_tokens

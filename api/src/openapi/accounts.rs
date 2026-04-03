@@ -1946,12 +1946,21 @@ impl AccountsApi {
         };
 
         // Check rate limit
-        let now = chrono::Utc::now().timestamp();
+        let now = match crate::now_ns() {
+            Ok(ns) => ns,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
         match db.get_latest_verification_token_time(&account.id).await {
             Ok(Some(last_time)) => {
-                let elapsed = now - last_time;
-                if elapsed < 60 {
-                    let remaining = 60 - elapsed;
+                let elapsed_secs = (now - last_time) / 1_000_000_000;
+                if elapsed_secs < 60 {
+                    let remaining = 60 - elapsed_secs;
                     return Json(ApiResponse {
                         success: false,
                         data: None,

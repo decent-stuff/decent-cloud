@@ -201,10 +201,10 @@ impl Database {
         account_id: &[u8],
         email: &str,
     ) -> Result<Vec<u8>> {
-        // Generate secure random token (32 bytes = 256 bits)
+        // Generate secure random token (16 bytes = 128 bits via UUID v4)
         let token = uuid::Uuid::new_v4().as_bytes().to_vec();
-        let now = chrono::Utc::now().timestamp();
-        let expires_at = now + (24 * 3600); // 24 hours expiry
+        let now = crate::now_ns()?;
+        let expires_at = now + 24 * 3600 * 1_000_000_000; // 24 hours in nanoseconds
 
         // Store token
         sqlx::query(
@@ -244,7 +244,7 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Verify token (within transaction)
-        let now = chrono::Utc::now().timestamp();
+        let now = crate::now_ns()?;
         let result = sqlx::query!(
             r#"SELECT account_id, expires_at, used_at
                FROM email_verification_tokens

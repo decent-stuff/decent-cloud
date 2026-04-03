@@ -70,6 +70,40 @@ async fn test_complete_recovery() {
 }
 
 #[tokio::test]
+async fn test_login_with_recovery_key() {
+    let db = setup_test_db().await;
+
+    // Create account
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
+    db.create_oauth_account(
+        &account.id,
+        "google_oauth",
+        "google_123",
+        Some("test@example.com"),
+    )
+    .await
+    .unwrap();
+
+    // Perform recovery with new key
+    let token = db.create_recovery_token("test@example.com").await.unwrap();
+    let new_key = [2u8; 32];
+    db.complete_recovery(&token, &new_key).await.unwrap();
+
+    // Login with recovery key (simulates frontend getAccountByPublicKey call)
+    let found = db
+        .get_account_with_keys_by_public_key(&new_key)
+        .await
+        .unwrap();
+    assert!(found.is_some(), "Must find account by recovery key");
+    let found = found.unwrap();
+    assert_eq!(found.username, "testuser");
+    assert_eq!(found.public_keys.len(), 2);
+}
+
+#[tokio::test]
 async fn test_complete_recovery_token_used_twice() {
     let db = setup_test_db().await;
 
@@ -98,4 +132,39 @@ async fn test_complete_recovery_token_used_twice() {
         .unwrap_err()
         .to_string()
         .contains("already been used"));
+}
+
+#[tokio::test]
+async fn test_recovery_token_expired() {
+    let db = setup_test_db().await;
+
+    let account = db
+        .create_account("testuser", &[1u8; 32], "test@example.com")
+        .await
+        .unwrap();
+    db.create_oauth_account(
+        &account.id,
+        "google_oauth",
+        "google_123",
+        Some("test@example.com"),
+    )
+    .await
+    .unwrap();
+
+    let token = db.create_recovery_token("test@example.com").await.unwrap();
+
+    // Manually expire the token
+    let past: i64 = crate::now_ns().unwrap() - 25 * 3600 * 1_000_000_000_i64;
+    sqlx::query!(
+        "UPDATE recovery_tokens SET expires_at = $1 WHERE token = $2",
+        past,
+        token
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let result = db.complete_recovery(&token, &[2u8; 32]).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("expired"));
 }

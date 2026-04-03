@@ -826,7 +826,7 @@ async fn test_verify_email_token_expired() {
         .expect("Failed to create account");
 
     // Manually expire the token by updating expires_at to past
-    let past = chrono::Utc::now().timestamp() - 3600;
+    let past = crate::now_ns().unwrap() - 3600 * 1_000_000_000;
     sqlx::query!(
         "UPDATE email_verification_tokens SET expires_at = $1 WHERE token = $2",
         past,
@@ -1446,11 +1446,11 @@ async fn test_resend_verification_rate_limit() {
         .await
         .expect("Failed to create account")
         .unwrap();
-    let now = chrono::Utc::now().timestamp();
+    let now = crate::now_ns().unwrap();
 
     // Should be within 60 seconds
-    let elapsed = now - time;
-    assert!(elapsed < 60);
+    let elapsed_secs = (now - time) / 1_000_000_000;
+    assert!(elapsed_secs < 60);
 }
 
 #[tokio::test]
