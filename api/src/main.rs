@@ -639,6 +639,17 @@ pub async fn check_schema_applied(database_url: &str) -> Result<bool, sqlx::Erro
     Ok(result > 0)
 }
 
+fn has_llm_config_env() -> bool {
+    [
+        "LLM_API_KEY",
+        "LLM_API_URL",
+        "LLM_API_MODEL",
+        "LLM_PROVIDER",
+    ]
+    .into_iter()
+    .any(|name| env::var(name).is_ok())
+}
+
 /// Check configuration and external service connectivity
 async fn doctor_command() -> Result<(), std::io::Error> {
     println!("=== Decent Cloud API Doctor ===\n");
@@ -838,6 +849,30 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     // === LLM/AI Bot ===
     println!("\nAI Features:");
     check_env!("LLM_API_KEY", optional, "LLM-backed features disabled");
+    check_env!("LLM_API_URL", optional, "uses provider default endpoint");
+    check_env!("LLM_API_MODEL", optional, "uses default model");
+    check_env!("LLM_PROVIDER", optional, "auto-detected from URL");
+
+    match crate::llm_client::load_llm_config() {
+        Ok(Some(config)) => {
+            println!(
+                "  [OK] LLM config valid (provider={}, model={}, url={})",
+                config.provider, config.api_model, config.api_url
+            );
+        }
+        Ok(None) => {
+            if has_llm_config_env() {
+                println!(
+                    "  [WARN] LLM_API_URL / LLM_API_MODEL / LLM_PROVIDER set without LLM_API_KEY - LLM-backed features disabled"
+                );
+                warnings += 1;
+            }
+        }
+        Err(e) => {
+            println!("  [ERROR] invalid LLM configuration: {:#}", e);
+            errors += 1;
+        }
+    }
 
     // === Stripe Integration ===
     println!("\nStripe Payments:");
@@ -1058,6 +1093,34 @@ async fn serve_command() -> Result<(), std::io::Error> {
                 "CREDENTIAL_ENCRYPTION_KEY not set — cloud account management (Hetzner/Proxmox) will NOT work! \
                  Generate with: openssl rand -hex 32"
             );
+        }
+    }
+
+    match crate::llm_client::load_llm_config() {
+        Ok(Some(config)) => {
+            tracing::info!(
+                "LLM config validated — provider={}, model={}, url={}",
+                config.provider,
+                config.api_model,
+                config.api_url
+            );
+        }
+        Ok(None) => {
+            if has_llm_config_env() {
+                tracing::warn!(
+                    "LLM_API_URL / LLM_API_MODEL / LLM_PROVIDER set without LLM_API_KEY — LLM-backed features disabled! Set LLM_API_KEY to enable."
+                );
+            } else {
+                tracing::warn!(
+                    "LLM_API_KEY not set — LLM-backed features disabled! Set LLM_API_KEY to enable recipe and support-bot reviews."
+                );
+            }
+        }
+        Err(e) => {
+            return Err(std::io::Error::other(format!(
+                "LLM configuration is invalid: {:#}",
+                e
+            )));
         }
     }
 

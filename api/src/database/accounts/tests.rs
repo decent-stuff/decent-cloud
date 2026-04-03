@@ -715,7 +715,7 @@ async fn test_create_email_verification_token_expires() {
 
     assert!(result.is_some());
     let (created_at, expires_at) = result.unwrap();
-    let expected_expiry = created_at + (24 * 3600);
+    let expected_expiry = created_at + (24 * 3600 * 1_000_000_000i64);
     assert_eq!(expires_at, expected_expiry);
 }
 
