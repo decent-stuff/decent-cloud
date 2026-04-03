@@ -1,5 +1,6 @@
 use super::*;
 use crate::database::test_helpers::setup_test_db;
+use sqlx::Row;
 
 async fn insert_contract_request(
     db: &Database,
@@ -740,6 +741,87 @@ async fn test_add_provisioning_details_handles_missing_gateway_fields() {
     assert_eq!(contract.gateway_ssh_port, None);
     assert_eq!(contract.gateway_port_range_start, None);
     assert_eq!(contract.gateway_port_range_end, None);
+}
+
+#[tokio::test]
+async fn test_request_ssh_key_rotation_stages_pending_key_until_completion() {
+    let db = setup_test_db().await;
+    let contract_id = vec![79u8; 32];
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let new_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINewKey staged@test";
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-rotate",
+        0,
+        "active",
+    )
+    .await;
+
+    db.add_provisioning_details(&contract_id, "ip:1.2.3.4\nuser:root")
+        .await
+        .unwrap();
+
+    db.request_ssh_key_rotation(&contract_id, new_key)
+        .await
+        .unwrap();
+
+    let staged = sqlx::query(
+        r#"SELECT c.requester_ssh_pubkey,
+                  pd.pending_requester_ssh_pubkey,
+                  pd.ssh_key_rotation_requested_at_ns
+           FROM contract_sign_requests c
+           INNER JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+           WHERE c.contract_id = $1"#,
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    assert_eq!(staged.get::<String, _>("requester_ssh_pubkey"), "ssh-key");
+    assert_eq!(
+        staged
+            .get::<Option<String>, _>("pending_requester_ssh_pubkey")
+            .as_deref(),
+        Some(new_key)
+    );
+    assert!(staged
+        .get::<Option<i64>, _>("ssh_key_rotation_requested_at_ns")
+        .is_some());
+
+    let pending = db.get_pending_ssh_key_rotations(&provider_pk).await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].contract_id, hex::encode(&contract_id));
+    assert_eq!(pending[0].requester_ssh_pubkey, new_key);
+
+    let completed_key = db.complete_ssh_key_rotation(&contract_id).await.unwrap();
+    assert_eq!(completed_key, new_key);
+
+    let applied = sqlx::query(
+        r#"SELECT c.requester_ssh_pubkey,
+                  pd.pending_requester_ssh_pubkey,
+                  pd.ssh_key_rotation_requested_at_ns
+           FROM contract_sign_requests c
+           INNER JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id
+           WHERE c.contract_id = $1"#,
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    assert_eq!(applied.get::<String, _>("requester_ssh_pubkey"), new_key);
+    assert!(applied
+        .get::<Option<String>, _>("pending_requester_ssh_pubkey")
+        .is_none());
+    assert!(applied
+        .get::<Option<i64>, _>("ssh_key_rotation_requested_at_ns")
+        .is_none());
 }
 
 #[tokio::test]

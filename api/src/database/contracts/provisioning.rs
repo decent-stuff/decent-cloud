@@ -435,31 +435,15 @@ impl Database {
     ) -> Result<()> {
         let now_ns = crate::now_ns()?;
 
-        let old_ssh_pubkey: Option<String> = sqlx::query_scalar(
-            "SELECT requester_ssh_pubkey FROM contract_sign_requests WHERE contract_id = $1",
-        )
-        .bind(contract_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .flatten();
-
         let mut tx = self.pool.begin().await?;
-
-        sqlx::query(
-            r#"UPDATE contract_sign_requests
-               SET requester_ssh_pubkey = $1
-               WHERE contract_id = $2"#,
-        )
-        .bind(new_ssh_pubkey)
-        .bind(contract_id)
-        .execute(&mut *tx)
-        .await?;
 
         let result = sqlx::query(
             r#"UPDATE contract_provisioning_details
-               SET ssh_key_rotation_requested_at_ns = $1
-               WHERE contract_id = $2"#,
+               SET pending_requester_ssh_pubkey = $1,
+                   ssh_key_rotation_requested_at_ns = $2
+               WHERE contract_id = $3"#,
         )
+        .bind(new_ssh_pubkey)
         .bind(now_ns)
         .bind(contract_id)
         .execute(&mut *tx)
@@ -474,48 +458,75 @@ impl Database {
 
         tx.commit().await?;
 
-        let details = old_ssh_pubkey.as_deref().map(|k| {
-            let truncated = &k[..k.len().min(20)];
-            format!("old_key_prefix: {}", truncated)
-        });
-
         self.insert_contract_event(
             contract_id,
             "ssh_key_rotation",
             None,
             None,
             "tenant",
-            details.as_deref(),
+            None,
         )
         .await?;
 
         Ok(())
     }
 
-    pub async fn clear_ssh_key_rotation_request(&self, contract_id: &[u8]) -> Result<()> {
-        sqlx::query(
-            r#"UPDATE contract_provisioning_details
-               SET ssh_key_rotation_requested_at_ns = NULL
+    pub async fn complete_ssh_key_rotation(&self, contract_id: &[u8]) -> Result<String> {
+        let mut tx = self.pool.begin().await?;
+
+        let pending_key: Option<String> = sqlx::query_scalar(
+            r#"SELECT pending_requester_ssh_pubkey
+               FROM contract_provisioning_details
                WHERE contract_id = $1"#,
         )
         .bind(contract_id)
-        .execute(&self.pool)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+
+        let pending_key = pending_key
+            .filter(|key| !key.trim().is_empty())
+            .ok_or_else(|| anyhow::anyhow!("No pending SSH key rotation found"))?;
+
+        sqlx::query(
+            r#"UPDATE contract_sign_requests
+               SET requester_ssh_pubkey = $1
+               WHERE contract_id = $2"#,
+        )
+        .bind(&pending_key)
+        .bind(contract_id)
+        .execute(&mut *tx)
         .await?;
 
-        Ok(())
+        sqlx::query(
+            r#"UPDATE contract_provisioning_details
+               SET pending_requester_ssh_pubkey = NULL,
+                   ssh_key_rotation_requested_at_ns = NULL
+               WHERE contract_id = $1"#,
+        )
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(pending_key)
     }
 
     pub async fn get_pending_ssh_key_rotations(
         &self,
         provider_pubkey: &[u8],
-    ) -> Result<Vec<Contract>> {
+    ) -> Result<Vec<ContractPendingSshKeyRotation>> {
         let provider_hex = hex::encode(provider_pubkey);
 
-        let rows = sqlx::query_as::<_, Contract>(
-            r#"SELECT c.* FROM contract_sign_requests c
+        let rows = sqlx::query_as::<_, ContractPendingSshKeyRotation>(
+            r#"SELECT lower(encode(c.contract_id, 'hex')) as contract_id,
+                      pd.pending_requester_ssh_pubkey as requester_ssh_pubkey
+               FROM contract_sign_requests c
                INNER JOIN contract_provisioning_details pd ON c.contract_id = pd.contract_id
                WHERE c.provider_pubkey = $1
                AND c.status IN ('provisioned', 'active')
+               AND pd.pending_requester_ssh_pubkey IS NOT NULL
                AND pd.ssh_key_rotation_requested_at_ns IS NOT NULL
                ORDER BY pd.ssh_key_rotation_requested_at_ns ASC"#,
         )

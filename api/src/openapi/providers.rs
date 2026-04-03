@@ -1315,7 +1315,7 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
-    ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
+    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingSshKeyRotation>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
             Ok(pk) => pk,
             Err(_) => {
@@ -1378,7 +1378,7 @@ impl ProvidersApi {
             }
         };
 
-        let contract = match db.get_contract(&contract_id).await {
+        match db.get_contract(&contract_id).await {
             Ok(Some(contract)) => {
                 if contract.provider_pubkey != hex::encode(&auth.provider_pubkey) {
                     return Json(ApiResponse {
@@ -1389,7 +1389,6 @@ impl ProvidersApi {
                         ),
                     });
                 }
-                contract
             }
             Ok(None) => {
                 return Json(ApiResponse {
@@ -1407,8 +1406,8 @@ impl ProvidersApi {
             }
         };
 
-        match db.clear_ssh_key_rotation_request(&contract_id).await {
-            Ok(_) => {
+        match db.complete_ssh_key_rotation(&contract_id).await {
+            Ok(new_ssh_pubkey) => {
                 if let Err(e) = db
                     .insert_contract_event(
                         &contract_id,
@@ -1418,7 +1417,7 @@ impl ProvidersApi {
                         "provider",
                         Some(&format!(
                             "SSH key rotated to {}... by agent",
-                            &contract.requester_ssh_pubkey[..20.min(contract.requester_ssh_pubkey.len())]
+                            &new_ssh_pubkey[..20.min(new_ssh_pubkey.len())]
                         )),
                     )
                     .await

@@ -5,6 +5,9 @@
 ALTER TABLE contract_provisioning_details
     ADD COLUMN IF NOT EXISTS ssh_key_rotation_requested_at_ns BIGINT;
 
+ALTER TABLE contract_provisioning_details
+    ADD COLUMN IF NOT EXISTS pending_requester_ssh_pubkey TEXT;
+
 -- Index for efficient querying of pending rotations
 CREATE INDEX IF NOT EXISTS idx_contract_provisioning_details_ssh_key_rotation_pending
     ON contract_provisioning_details(ssh_key_rotation_requested_at_ns)
@@ -12,3 +15,6 @@ CREATE INDEX IF NOT EXISTS idx_contract_provisioning_details_ssh_key_rotation_pe
 
 COMMENT ON COLUMN contract_provisioning_details.ssh_key_rotation_requested_at_ns IS
     'Timestamp (nanoseconds) when user requested an SSH key rotation. Agent clears this after injecting the new key.';
+
+COMMENT ON COLUMN contract_provisioning_details.pending_requester_ssh_pubkey IS
+    'New SSH public key staged for rotation. Promoted to requester_ssh_pubkey only after the agent confirms VM access was updated.';

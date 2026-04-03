@@ -309,6 +309,14 @@ pub struct ContractPendingTermination {
     pub instance_details: String,
 }
 
+/// Contract pending SSH key rotation for dc-agent.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractPendingSshKeyRotation {
+    pub contract_id: String,
+    pub requester_ssh_pubkey: String,
+}
+
 impl Database {
     /// Get contracts for a user (as requester)
     pub async fn get_user_contracts(&self, pubkey: &[u8]) -> Result<Vec<Contract>> {
