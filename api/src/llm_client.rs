@@ -9,18 +9,47 @@ enum LlmProvider {
 }
 
 fn detect_provider(url: &str) -> LlmProvider {
+    let url = url.to_lowercase();
     let env_override = std::env::var("LLM_PROVIDER").unwrap_or_default();
     match env_override.to_lowercase().as_str() {
         "openai" => LlmProvider::OpenAi,
         "anthropic" => LlmProvider::Anthropic,
         _ => {
-            if url.contains("openai.com") || url.contains("/chat/completions") {
+            if url.contains("openai.com")
+                || url.contains("/chat/completions")
+                || url.contains("/openai/deployments/")
+            {
                 LlmProvider::OpenAi
             } else {
                 LlmProvider::Anthropic
             }
         }
     }
+}
+
+fn normalize_api_url(url: &str, provider: LlmProvider) -> String {
+    let trimmed = url.trim_end_matches('/');
+    let lowercase = trimmed.to_lowercase();
+
+    if lowercase.contains("/messages") || lowercase.contains("/chat/completions") {
+        return trimmed.to_string();
+    }
+
+    let suffix = if lowercase.ends_with("/v1") {
+        match provider {
+            LlmProvider::Anthropic => "/messages",
+            LlmProvider::OpenAi => "/chat/completions",
+        }
+    } else if lowercase.contains("/openai/deployments/") {
+        "/chat/completions"
+    } else {
+        match provider {
+            LlmProvider::Anthropic => "/v1/messages",
+            LlmProvider::OpenAi => "/v1/chat/completions",
+        }
+    };
+
+    format!("{trimmed}{suffix}")
 }
 
 #[derive(Debug, Serialize)]
@@ -79,6 +108,7 @@ pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
         std::env::var("LLM_API_MODEL").unwrap_or_else(|_| "claude-4.5-sonnet".to_string());
 
     let provider = detect_provider(&api_url);
+    let api_url = normalize_api_url(&api_url, provider);
 
     let message = LlmMessage {
         role: "user".to_string(),
@@ -116,10 +146,7 @@ pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
         }
     }
 
-    let resp = req
-        .send()
-        .await
-        .context("Failed to send LLM API request")?;
+    let resp = req.send().await.context("Failed to send LLM API request")?;
 
     if !resp.status().is_success() {
         let status = resp.status();
@@ -206,6 +233,60 @@ mod tests {
         assert_eq!(
             detect_provider("https://my-llm-proxy.example.com/v1/messages"),
             LlmProvider::Anthropic
+        );
+    }
+
+    #[test]
+    fn test_detect_provider_openai_deployment_path() {
+        assert_eq!(
+            detect_provider("https://example.openai.azure.com/openai/deployments/gpt-4o"),
+            LlmProvider::OpenAi
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_appends_openai_endpoint_to_base_url() {
+        assert_eq!(
+            normalize_api_url("https://api.openai.com", LlmProvider::OpenAi),
+            "https://api.openai.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_appends_openai_endpoint_to_v1_base_url() {
+        assert_eq!(
+            normalize_api_url("https://api.openai.com/v1", LlmProvider::OpenAi),
+            "https://api.openai.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_appends_openai_endpoint_to_deployment_base_url() {
+        assert_eq!(
+            normalize_api_url(
+                "https://example.openai.azure.com/openai/deployments/gpt-4o",
+                LlmProvider::OpenAi
+            ),
+            "https://example.openai.azure.com/openai/deployments/gpt-4o/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_appends_anthropic_endpoint_to_base_url() {
+        assert_eq!(
+            normalize_api_url("https://api.anthropic.com", LlmProvider::Anthropic),
+            "https://api.anthropic.com/v1/messages"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_preserves_existing_endpoint() {
+        assert_eq!(
+            normalize_api_url(
+                "https://my-llm-proxy.example.com/v1/chat/completions",
+                LlmProvider::OpenAi
+            ),
+            "https://my-llm-proxy.example.com/v1/chat/completions"
         );
     }
 
