@@ -2183,7 +2183,7 @@ async fn reconcile_instances(
                         match provisioner.get_instance(&external_id).await {
                             Ok(Some(instance)) => {
                                 if let Some(ref ip) = instance.ip_address {
-                                    let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
+                                    let ssh_port = instance.ssh_port;
                                     let new_password =
                                         dc_agent::provisioner::proxmox::generate_secure_password(
                                             24,
@@ -2919,7 +2919,7 @@ async fn run_reset_password(
         .ip_address
         .ok_or_else(|| anyhow::anyhow!("VM has no IP address assigned"))?;
 
-    let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
+    let ssh_port = instance.ssh_port;
 
     println!("Found VM at {} (port {})", ip_address, ssh_port);
 
@@ -3125,6 +3125,39 @@ WantedBy=multi-user.target
         assert!(
             !result,
             "dc-agent.service should not be installed in test environment"
+        );
+    }
+
+    #[test]
+    fn test_agent_ssh_uses_direct_port_not_gateway_port() {
+        // Verifies that for agent-side SSH operations (password reset, SSH key rotation),
+        // the direct VM port is used, not the gateway port.
+        // The gateway port is an external port on the Proxmox host for tenant access;
+        // it does not exist on the VM's internal IP.
+        use dc_agent::provisioner::Instance;
+        let instance = Instance {
+            external_id: "dc-test-contract".to_string(),
+            ip_address: Some("192.168.1.100".to_string()),
+            ipv6_address: None,
+            public_ip: None,
+            ssh_port: 22,
+            root_password: None,
+            additional_details: None,
+            gateway_slug: Some("k7m2p4".to_string()),
+            gateway_subdomain: Some("k7m2p4.dc-lk.gw.decent-cloud.org".to_string()),
+            gateway_ssh_port: Some(20000),
+            gateway_port_range_start: Some(20000),
+            gateway_port_range_end: Some(20009),
+        };
+
+        // The SSH port for agent operations must be the direct VM port (22),
+        // not the gateway port (20000) which is only reachable externally.
+        let agent_ssh_port = instance.ssh_port;
+        assert_eq!(agent_ssh_port, 22, "Agent must use direct VM port for SSH");
+        assert_ne!(
+            agent_ssh_port,
+            instance.gateway_ssh_port.unwrap(),
+            "Agent must not use gateway port for direct VM SSH"
         );
     }
 }
