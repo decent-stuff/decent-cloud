@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import {
 		getOffering,
+		reviewRecipe,
 		searchOfferings,
 		fetchIcpPrice,
 		getProviderTrustMetrics,
@@ -15,6 +16,7 @@
 		trackOfferingView,
 		hexEncode,
 		type Offering,
+		type RecipeReview,
 		type ProviderTrustMetrics,
 		type ProviderProfile
 	} from '$lib/services/api';
@@ -49,6 +51,9 @@
 	let similarOfferings = $state<Offering[]>([]);
 	let showOptionsMenu = $state(false);
 	let optionsMenuEl = $state<HTMLDivElement | null>(null);
+	let recipeReview = $state<RecipeReview | null>(null);
+	let recipeReviewLoading = $state(false);
+	let recipeReviewError = $state<string | null>(null);
 
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
@@ -61,6 +66,20 @@
 				recordView(offeringId);
 				// Fire-and-forget: log a view on the backend for analytics (errors are non-fatal)
 				trackOfferingView(offeringId).catch((err) => console.warn('Failed to track offering view:', err));
+				if (offering.post_provision_script) {
+					recipeReviewLoading = true;
+					recipeReviewError = null;
+					reviewRecipe(offering.post_provision_script)
+						.then((result) => {
+							recipeReview = result;
+						})
+						.catch((err) => {
+							recipeReviewError = err instanceof Error ? err.message : 'Recipe review unavailable';
+						})
+						.finally(() => {
+							recipeReviewLoading = false;
+						});
+				}
 				[trustMetrics, providerProfile] = await Promise.all([
 					getProviderTrustMetrics(offering.pubkey).catch(() => null),
 					getProviderProfile(offering.pubkey).catch(() => null)
@@ -240,6 +259,18 @@
 		if (hours < 1) return `~${Math.round(hours * 60)} min`;
 		if (hours < 24) return `~${hours.toFixed(1)}h`;
 		return `~${Math.round(hours / 24)}d`;
+	}
+
+	function reviewTone(value: number, inverse = false): string {
+		if (inverse) {
+			if (value >= 8) return 'text-red-300 border-red-500/40 bg-red-500/10';
+			if (value >= 5) return 'text-yellow-300 border-yellow-500/40 bg-yellow-500/10';
+			return 'text-green-300 border-green-500/40 bg-green-500/10';
+		}
+
+		if (value >= 8) return 'text-green-300 border-green-500/40 bg-green-500/10';
+		if (value >= 5) return 'text-yellow-300 border-yellow-500/40 bg-yellow-500/10';
+		return 'text-red-300 border-red-500/40 bg-red-500/10';
 	}
 
 	const DURATION_PRESETS = [
@@ -624,6 +655,42 @@
 				<p class="text-neutral-500 text-xs mb-3">
 					This script runs as root via SSH after the VM boots. Review it before renting.
 				</p>
+				<div class="mb-4 rounded-lg border border-neutral-800 bg-base/40 p-4">
+					<div class="flex items-center justify-between gap-3 mb-3">
+						<h3 class="text-xs font-medium text-neutral-400 uppercase tracking-wide">AI Recipe Review</h3>
+						{#if recipeReviewLoading}
+							<span class="text-xs text-neutral-500">Analyzing...</span>
+						{/if}
+					</div>
+					{#if recipeReview}
+						<div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3 text-sm">
+							<div class={`rounded border px-3 py-2 ${reviewTone(recipeReview.security_risk, true)}`}>
+								<div class="text-xs uppercase tracking-wide opacity-80 mb-1">Security Risk</div>
+								<div class="font-semibold">{recipeReview.security_risk}/10</div>
+							</div>
+							<div class={`rounded border px-3 py-2 ${reviewTone(recipeReview.completeness)}`}>
+								<div class="text-xs uppercase tracking-wide opacity-80 mb-1">Completeness</div>
+								<div class="font-semibold">{recipeReview.completeness}/10</div>
+							</div>
+							<div class={`rounded border px-3 py-2 ${reviewTone(recipeReview.user_value)}`}>
+								<div class="text-xs uppercase tracking-wide opacity-80 mb-1">User Value</div>
+								<div class="font-semibold">{recipeReview.user_value}/10</div>
+							</div>
+						</div>
+						<p class="text-sm text-neutral-300 mb-3">{recipeReview.summary}</p>
+						{#if recipeReview.concerns.length > 0}
+							<ul class="space-y-1 text-xs text-neutral-400">
+								{#each recipeReview.concerns as concern}
+									<li>{concern}</li>
+								{/each}
+							</ul>
+						{/if}
+					{:else if recipeReviewError}
+						<p class="text-xs text-neutral-500">AI review unavailable: {recipeReviewError}</p>
+					{:else}
+						<p class="text-xs text-neutral-500">AI review will appear here when available.</p>
+					{/if}
+				</div>
 				<pre class="p-4 bg-base/50 border border-neutral-800 text-sm text-neutral-300 font-mono overflow-x-auto max-h-96 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
 			</div>
 		{/if}

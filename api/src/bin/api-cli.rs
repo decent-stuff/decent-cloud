@@ -706,6 +706,15 @@ enum RecipeAction {
         #[arg(long, group = "input")]
         file: Option<String>,
     },
+    /// Review a recipe script with the configured LLM
+    Review {
+        /// Recipe script content (use --file for file input)
+        #[arg(long, group = "input")]
+        script: Option<String>,
+        /// Read recipe script from file
+        #[arg(long, group = "input")]
+        file: Option<String>,
+    },
     /// Dry-run a contract: validate offering recipe and show what would happen
     DryRun {
         /// Offering database ID
@@ -3124,6 +3133,25 @@ struct ValidateRecipeRequest {
     script: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecipeReviewResponse {
+    security_risk: u8,
+    completeness: u8,
+    user_value: u8,
+    summary: String,
+    concerns: Vec<String>,
+}
+
+fn load_recipe_input(script: Option<String>, file: Option<String>) -> Result<String> {
+    match (script, file) {
+        (Some(s), None) => Ok(s),
+        (None, Some(path)) => std::fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read recipe file: {}", path)),
+        _ => anyhow::bail!("Provide exactly one of --script or --file"),
+    }
+}
+
 async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()> {
     let format_severity = |severity: &str| match severity {
         "error" => "ERROR",
@@ -3132,12 +3160,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
 
     match action {
         RecipeAction::Validate { script, file } => {
-            let script_content = match (script, file) {
-                (Some(s), None) => s,
-                (None, Some(path)) => std::fs::read_to_string(&path)
-                    .with_context(|| format!("Failed to read recipe file: {}", path))?,
-                _ => anyhow::bail!("Provide exactly one of --script or --file"),
-            };
+            let script_content = load_recipe_input(script, file)?;
 
             let http = reqwest::Client::new();
             let url = format!("{}/api/v1/recipes/validate", api_url);
@@ -3172,6 +3195,37 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
                 anyhow::bail!("Recipe validation failed");
             }
         }
+        RecipeAction::Review { script, file } => {
+            let script_content = load_recipe_input(script, file)?;
+
+            let http = reqwest::Client::new();
+            let url = format!("{}/api/v1/recipes/review", api_url);
+            let response = http
+                .post(&url)
+                .json(&ValidateRecipeRequest {
+                    script: script_content,
+                })
+                .send()
+                .await?;
+            let text = response.text().await?;
+            let api_response: api_cli::client::ApiResponse<RecipeReviewResponse> =
+                serde_json::from_str(&text)?;
+            let result = api_response.into_result()?;
+
+            println!("Recipe LLM review:");
+            println!("  Security risk: {}/10", result.security_risk);
+            println!("  Completeness: {}/10", result.completeness);
+            println!("  User value:   {}/10", result.user_value);
+            println!("\nSummary:");
+            println!("  {}", result.summary);
+
+            if !result.concerns.is_empty() {
+                println!("\nConcerns:");
+                for concern in &result.concerns {
+                    println!("  - {}", concern);
+                }
+            }
+        }
         RecipeAction::DryRun {
             offering_id,
             ssh_pubkey,
@@ -3187,24 +3241,15 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
                 serde_json::from_str(&text)?;
             let offering = api_response.into_result()?;
 
-            let name = offering["offerName"]
-                .as_str()
-                .unwrap_or("N/A");
+            let name = offering["offerName"].as_str().unwrap_or("N/A");
             let price = offering["monthlyPrice"]
                 .as_f64()
                 .map(|p| format!("${:.2}/mo", p))
                 .unwrap_or_else(|| "N/A".to_string());
-            let ptype = offering["productType"]
-                .as_str()
-                .unwrap_or("N/A");
-            let country = offering["datacenterCountry"]
-                .as_str()
-                .unwrap_or("N/A");
-            let stock = offering["stockStatus"]
-                .as_str()
-                .unwrap_or("N/A");
-            let script = offering["postProvisionScript"]
-                .as_str();
+            let ptype = offering["productType"].as_str().unwrap_or("N/A");
+            let country = offering["datacenterCountry"].as_str().unwrap_or("N/A");
+            let stock = offering["stockStatus"].as_str().unwrap_or("N/A");
+            let script = offering["postProvisionScript"].as_str();
 
             println!("\n  Offering: {}", name);
             println!("  Type: {}", ptype);
@@ -3216,7 +3261,11 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
             }
 
             if let Some(script_content) = script {
-                println!("\n  Recipe: {} bytes, {} lines", script_content.len(), script_content.lines().count());
+                println!(
+                    "\n  Recipe: {} bytes, {} lines",
+                    script_content.len(),
+                    script_content.lines().count()
+                );
 
                 if !script_content.trim().is_empty() {
                     let preview_lines: Vec<&str> = script_content.lines().take(5).collect();
@@ -3249,12 +3298,35 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
                         println!("  Recipe validation: FAILED");
                     }
                     for issue in &validate_result.issues {
-                        println!("    [{}] {}", format_severity(&issue.severity), issue.message);
+                        println!(
+                            "    [{}] {}",
+                            format_severity(&issue.severity),
+                            issue.message
+                        );
                     }
 
                     if !validate_result.valid {
                         anyhow::bail!("Dry-run aborted: recipe validation failed");
                     }
+
+                    println!("\n  Requesting LLM review...");
+                    let review_url = format!("{}/api/v1/recipes/review", api_url);
+                    let review_response = http
+                        .post(&review_url)
+                        .json(&ValidateRecipeRequest {
+                            script: script_content.to_string(),
+                        })
+                        .send()
+                        .await?;
+                    let review_text = review_response.text().await?;
+                    let review_api: api_cli::client::ApiResponse<RecipeReviewResponse> =
+                        serde_json::from_str(&review_text)?;
+                    let review_result = review_api.into_result()?;
+
+                    println!("  LLM security risk: {}/10", review_result.security_risk);
+                    println!("  LLM completeness: {}/10", review_result.completeness);
+                    println!("  LLM user value:   {}/10", review_result.user_value);
+                    println!("  LLM summary: {}", review_result.summary);
                 }
             } else {
                 println!("\n  Recipe: (none)");

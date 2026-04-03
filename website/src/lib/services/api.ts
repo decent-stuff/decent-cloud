@@ -42,6 +42,14 @@ export interface ApiResponse<T> {
 	error?: string | null;
 }
 
+export interface RecipeReview {
+	security_risk: number;
+	completeness: number;
+	user_value: number;
+	summary: string;
+	concerns: string[];
+}
+
 // Offering search parameters
 export interface OfferingSearchParams {
 	limit?: number | null;
@@ -362,6 +370,26 @@ export async function getOffering(id: number): Promise<Offering> {
 	}
 
 	return { ...payload.data, pubkey: normalizePubkey(payload.data.pubkey) } as unknown as Offering;
+}
+
+export async function reviewRecipe(script: string): Promise<RecipeReview> {
+	const url = `${API_BASE_URL}/api/v1/recipes/review`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ script })
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to review recipe: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<RecipeReview>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Recipe review failed');
+	}
+
+	return payload.data;
 }
 
 export async function getProviderOfferings(pubkey: string | Uint8Array): Promise<Offering[]> {
@@ -757,6 +785,7 @@ export interface EncryptedCredentials {
 	ephemeral_pubkey: string;
 	nonce: string;
 	ciphertext: string;
+	aad?: string;
 }
 
 export async function getContractCredentials(

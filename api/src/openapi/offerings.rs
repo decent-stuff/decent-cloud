@@ -1,6 +1,7 @@
 use super::common::{default_false, default_limit, ApiResponse, ApiTags, EmptyResponse};
 use crate::auth::{ApiAuthenticatedUser, OptionalApiAuth};
 use crate::database::Database;
+use crate::recipe_review::{review_recipe, RecipeReview};
 use dcc_common::ssh_exec::{
     validate_recipe, RecipeValidationIssue, RecipeValidationResult, RecipeValidationSeverity,
 };
@@ -112,6 +113,28 @@ pub struct ValidateRecipeResponse {
     pub issues: Vec<RecipeValidationIssueResponse>,
 }
 
+/// Response body for LLM recipe review
+#[derive(Debug, Serialize, Deserialize, Object)]
+pub struct ReviewRecipeResponse {
+    pub security_risk: u8,
+    pub completeness: u8,
+    pub user_value: u8,
+    pub summary: String,
+    pub concerns: Vec<String>,
+}
+
+impl From<RecipeReview> for ReviewRecipeResponse {
+    fn from(review: RecipeReview) -> Self {
+        Self {
+            security_risk: review.security_risk,
+            completeness: review.completeness,
+            user_value: review.user_value,
+            summary: review.summary,
+            concerns: review.concerns,
+        }
+    }
+}
+
 impl From<RecipeValidationResult> for ValidateRecipeResponse {
     fn from(result: RecipeValidationResult) -> Self {
         Self {
@@ -148,7 +171,11 @@ impl OfferingsApi {
     /// Validates a post-provision script (recipe) without executing it.
     /// Checks for syntax issues, dangerous patterns, and size limits.
     /// Public endpoint — no auth required.
-    #[oai(path = "/recipes/validate", method = "post", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/recipes/validate",
+        method = "post",
+        tag = "ApiTags::Offerings"
+    )]
     async fn validate_recipe(
         &self,
         body: Json<ValidateRecipeRequest>,
@@ -159,6 +186,26 @@ impl OfferingsApi {
             data: Some(ValidateRecipeResponse::from(result)),
             error: None,
         })
+    }
+
+    /// Review a recipe script with the configured LLM
+    #[oai(path = "/recipes/review", method = "post", tag = "ApiTags::Offerings")]
+    async fn review_recipe(
+        &self,
+        body: Json<ValidateRecipeRequest>,
+    ) -> Json<ApiResponse<ReviewRecipeResponse>> {
+        match review_recipe(&body.script).await {
+            Ok(result) => Json(ApiResponse {
+                success: true,
+                data: Some(ReviewRecipeResponse::from(result)),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(format!("Failed to review recipe: {e:#}")),
+            }),
+        }
     }
 
     /// Get pricing statistics for offerings

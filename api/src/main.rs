@@ -16,6 +16,7 @@ mod invoice_storage;
 mod invoices;
 mod ledger_client;
 mod ledger_path;
+mod llm_client;
 mod metadata_cache;
 mod network_metrics;
 mod notifications;
@@ -24,8 +25,9 @@ mod openapi;
 mod payment_release_service;
 mod price_cache;
 mod publish_scheduled_service;
-mod receipts;
 mod rate_limit;
+mod receipts;
+mod recipe_review;
 mod regions;
 mod rental_notifications;
 mod request_logging;
@@ -834,8 +836,8 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     check_env!("DKIM_PRIVATE_KEY", optional, "DKIM signing disabled");
 
     // === LLM/AI Bot ===
-    println!("\nAI Bot Service:");
-    check_env!("LLM_API_KEY", optional, "AI responses disabled");
+    println!("\nAI Features:");
+    check_env!("LLM_API_KEY", optional, "LLM-backed features disabled");
 
     // === Stripe Integration ===
     println!("\nStripe Payments:");
