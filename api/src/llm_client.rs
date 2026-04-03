@@ -8,6 +8,23 @@ enum LlmProvider {
     OpenAi,
 }
 
+impl LlmProvider {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Anthropic => "anthropic",
+            Self::OpenAi => "openai",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LlmConfig {
+    pub(crate) provider: &'static str,
+    pub(crate) api_url: String,
+    pub(crate) api_model: String,
+    api_key: String,
+}
+
 fn detect_provider(url: &str) -> LlmProvider {
     let url = url.to_lowercase();
     let env_override = std::env::var("LLM_PROVIDER").unwrap_or_default();
@@ -24,6 +41,21 @@ fn detect_provider(url: &str) -> LlmProvider {
                 LlmProvider::Anthropic
             }
         }
+    }
+}
+
+fn resolve_provider(url: &str) -> Result<LlmProvider> {
+    let env_override = std::env::var("LLM_PROVIDER").unwrap_or_default();
+    let env_override = env_override.trim();
+
+    match env_override.to_lowercase().as_str() {
+        "" => Ok(detect_provider(url)),
+        "openai" => Ok(LlmProvider::OpenAi),
+        "anthropic" => Ok(LlmProvider::Anthropic),
+        other => anyhow::bail!(
+            "LLM_PROVIDER must be 'anthropic' or 'openai', got '{}'",
+            other
+        ),
     }
 }
 
@@ -98,17 +130,40 @@ struct OpenAiMessage {
     content: String,
 }
 
-pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
-    let api_key = std::env::var("LLM_API_KEY").context("LLM_API_KEY not set")?;
+pub(crate) fn load_llm_config() -> Result<Option<LlmConfig>> {
+    let api_key = match std::env::var("LLM_API_KEY") {
+        Ok(value) => value,
+        Err(_) => return Ok(None),
+    };
+
+    if api_key.trim().is_empty() {
+        anyhow::bail!("LLM_API_KEY is set but empty");
+    }
 
     let api_url = std::env::var("LLM_API_URL")
         .unwrap_or_else(|_| "https://api.anthropic.com/v1/messages".to_string());
+    let provider = resolve_provider(&api_url)?;
+    let api_url = normalize_api_url(&api_url, provider);
+    reqwest::Url::parse(&api_url)
+        .with_context(|| format!("LLM_API_URL is invalid after normalization: {}", api_url))?;
 
     let api_model =
         std::env::var("LLM_API_MODEL").unwrap_or_else(|_| "claude-4.5-sonnet".to_string());
+    if api_model.trim().is_empty() {
+        anyhow::bail!("LLM_API_MODEL is set but empty");
+    }
 
-    let provider = detect_provider(&api_url);
-    let api_url = normalize_api_url(&api_url, provider);
+    Ok(Some(LlmConfig {
+        provider: provider.as_str(),
+        api_url,
+        api_model,
+        api_key,
+    }))
+}
+
+pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
+    let config = load_llm_config()?.context("LLM_API_KEY not set")?;
+    let provider = resolve_provider(&config.api_url)?;
 
     let message = LlmMessage {
         role: "user".to_string(),
@@ -119,30 +174,30 @@ pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
 
     let request = match provider {
         LlmProvider::Anthropic => LlmRequest::Anthropic {
-            model: api_model,
+            model: config.api_model.clone(),
             max_tokens,
             messages: vec![message],
         },
         LlmProvider::OpenAi => LlmRequest::OpenAi {
-            model: api_model,
+            model: config.api_model.clone(),
             max_tokens,
             messages: vec![message],
         },
     };
 
     let mut req = client
-        .post(&api_url)
+        .post(&config.api_url)
         .header("content-type", "application/json")
         .json(&request);
 
     match provider {
         LlmProvider::Anthropic => {
             req = req
-                .header("x-api-key", &api_key)
+                .header("x-api-key", &config.api_key)
                 .header("anthropic-version", "2023-06-01");
         }
         LlmProvider::OpenAi => {
-            req = req.header("authorization", format!("Bearer {}", api_key));
+            req = req.header("authorization", format!("Bearer {}", config.api_key));
         }
     }
 
@@ -203,6 +258,14 @@ pub(crate) fn truncate(s: &str, max_len: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
+    fn clear_llm_env() {
+        std::env::remove_var("LLM_API_KEY");
+        std::env::remove_var("LLM_API_URL");
+        std::env::remove_var("LLM_API_MODEL");
+        std::env::remove_var("LLM_PROVIDER");
+    }
 
     #[test]
     fn test_detect_provider_anthropic_default() {
@@ -317,5 +380,36 @@ mod tests {
         let body = r#"{"choices":[{"message":{"content":"Hello from GPT"}}]}"#;
         let response: OpenAiResponse = serde_json::from_str(body).unwrap();
         assert_eq!(response.choices[0].message.content, "Hello from GPT");
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_llm_config_normalizes_openai_base_url() {
+        clear_llm_env();
+        std::env::set_var("LLM_API_KEY", "test-key");
+        std::env::set_var("LLM_API_URL", "https://api.openai.com/v1");
+        std::env::set_var("LLM_API_MODEL", "gpt-4.1-mini");
+
+        let config = load_llm_config().unwrap().unwrap();
+
+        assert_eq!(config.provider, "openai");
+        assert_eq!(config.api_url, "https://api.openai.com/v1/chat/completions");
+        assert_eq!(config.api_model, "gpt-4.1-mini");
+
+        clear_llm_env();
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_llm_config_rejects_invalid_provider_override() {
+        clear_llm_env();
+        std::env::set_var("LLM_API_KEY", "test-key");
+        std::env::set_var("LLM_PROVIDER", "azure");
+
+        let error = load_llm_config().unwrap_err().to_string();
+
+        assert!(error.contains("LLM_PROVIDER must be 'anthropic' or 'openai'"));
+
+        clear_llm_env();
     }
 }
