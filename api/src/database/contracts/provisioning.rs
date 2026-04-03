@@ -411,8 +411,6 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<Contract>> {
-        let provider_hex = hex::encode(provider_pubkey);
-
         let rows = sqlx::query_as::<_, Contract>(
             r#"SELECT c.* FROM contract_sign_requests c
                INNER JOIN contract_provisioning_details pd ON c.contract_id = pd.contract_id
@@ -421,7 +419,7 @@ impl Database {
                AND pd.password_reset_requested_at_ns IS NOT NULL
                ORDER BY pd.password_reset_requested_at_ns ASC"#,
         )
-        .bind(provider_hex)
+        .bind(provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 
@@ -517,8 +515,6 @@ impl Database {
         &self,
         provider_pubkey: &[u8],
     ) -> Result<Vec<ContractPendingSshKeyRotation>> {
-        let provider_hex = hex::encode(provider_pubkey);
-
         let rows = sqlx::query_as::<_, ContractPendingSshKeyRotation>(
             r#"SELECT lower(encode(c.contract_id, 'hex')) as contract_id,
                       pd.pending_requester_ssh_pubkey as requester_ssh_pubkey
@@ -530,7 +526,7 @@ impl Database {
                AND pd.ssh_key_rotation_requested_at_ns IS NOT NULL
                ORDER BY pd.ssh_key_rotation_requested_at_ns ASC"#,
         )
-        .bind(provider_hex)
+        .bind(provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
 
