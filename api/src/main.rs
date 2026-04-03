@@ -25,6 +25,7 @@ mod payment_release_service;
 mod price_cache;
 mod publish_scheduled_service;
 mod receipts;
+mod rate_limit;
 mod regions;
 mod rental_notifications;
 mod request_logging;
@@ -1255,6 +1256,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .data(ctx.email_service.clone())
         .data(ctx.cloudflare_dns.clone())
         .with(CookieJarManager::new())
+        .with(rate_limit::RateLimiter::new())
         .with(request_logging::RequestLogging)
         .with(cors);
 
