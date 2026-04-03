@@ -25,7 +25,12 @@ fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
             let errors: Vec<String> = result
                 .issues
                 .into_iter()
-                .filter(|i| matches!(i.severity, dcc_common::ssh_exec::RecipeValidationSeverity::Error))
+                .filter(|i| {
+                    matches!(
+                        i.severity,
+                        dcc_common::ssh_exec::RecipeValidationSeverity::Error
+                    )
+                })
                 .map(|i| i.message)
                 .collect();
             return Err(format!("Recipe validation failed: {}", errors.join("; ")));

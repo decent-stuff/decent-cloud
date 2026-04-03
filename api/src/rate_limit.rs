@@ -116,7 +116,9 @@ impl<E: Endpoint> Endpoint for RateLimitEndpoint<E> {
             state.request_count += 1;
             if state.request_count >= CLEANUP_INTERVAL {
                 state.request_count = 0;
-                state.entries.retain(|_, e| now.duration_since(e.window_start).as_secs() < window_secs);
+                state
+                    .entries
+                    .retain(|_, e| now.duration_since(e.window_start).as_secs() < window_secs);
             }
             if state.entries.len() > MAX_ENTRIES {
                 let oldest_keys: Vec<String> = state
@@ -237,10 +239,7 @@ mod tests {
 
     #[test]
     fn test_classify_strict_tier() {
-        assert!(matches!(
-            classify("/api/v1/accounts", "POST"),
-            Tier::Strict
-        ));
+        assert!(matches!(classify("/api/v1/accounts", "POST"), Tier::Strict));
         assert!(matches!(
             classify("/api/v1/accounts/recovery/request", "POST"),
             Tier::Strict
@@ -277,10 +276,7 @@ mod tests {
             classify("/api/v1/offerings", "GET"),
             Tier::Relaxed
         ));
-        assert!(matches!(
-            classify("/api/v1/stats", "GET"),
-            Tier::Relaxed
-        ));
+        assert!(matches!(classify("/api/v1/stats", "GET"), Tier::Relaxed));
         assert!(matches!(
             classify("/api/v1/accounts/username/profile", "GET"),
             Tier::Relaxed
@@ -320,10 +316,7 @@ mod tests {
 
     #[test]
     fn test_accounts_get_is_relaxed_not_strict() {
-        assert!(matches!(
-            classify("/api/v1/accounts", "GET"),
-            Tier::Relaxed
-        ));
+        assert!(matches!(classify("/api/v1/accounts", "GET"), Tier::Relaxed));
         assert!(matches!(
             classify("/api/v1/accounts/someuser/profile", "GET"),
             Tier::Relaxed
@@ -369,10 +362,13 @@ mod tests {
         {
             let mut s = state.lock().unwrap();
             let now = Instant::now();
-            s.entries.insert(key.clone(), Entry {
-                count: max,
-                window_start: now,
-            });
+            s.entries.insert(
+                key.clone(),
+                Entry {
+                    count: max,
+                    window_start: now,
+                },
+            );
         }
 
         let mut s = state.lock().unwrap();
