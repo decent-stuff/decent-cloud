@@ -164,6 +164,54 @@ impl Database {
             .ensure_account_for_pubkey(&offering_pubkey_bytes)
             .await?;
 
+        let is_self_provisioned = offering.offering_source.as_deref() == Some("self_provisioned");
+        let mut tx = self.pool.begin().await?;
+
+        if is_self_provisioned {
+            let reserved: Option<(i64,)> = sqlx::query_as(
+                r#"
+                UPDATE cloud_resources
+                SET contract_id = $1,
+                    updated_at = NOW()
+                WHERE id = (
+                    SELECT id
+                    FROM cloud_resources
+                    WHERE offering_id = $2
+                      AND listing_mode = 'marketplace'
+                      AND status = 'running'
+                      AND terminated_at IS NULL
+                      AND contract_id IS NULL
+                    ORDER BY created_at ASC
+                    LIMIT 1
+                )
+                RETURNING offering_id
+                "#,
+            )
+            .bind(&contract_id)
+            .bind(params.offering_db_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if reserved.is_none() {
+                tx.rollback().await?;
+                return Err(anyhow::anyhow!(
+                    "Self-provisioned offering {} is out of stock",
+                    offering.offer_name
+                ));
+            }
+
+            sqlx::query(
+                r#"
+                UPDATE provider_offerings
+                SET stock_status = 'out_of_stock'
+                WHERE id = $1
+                "#,
+            )
+            .bind(params.offering_db_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
         sqlx::query!(
             r#"INSERT INTO contract_sign_requests (
                 contract_id, requester_pubkey, requester_ssh_pubkey,
@@ -197,18 +245,20 @@ impl Database {
             provider_account_id,
             params.operating_system
         )
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
 
-        self.insert_contract_event(
-            &contract_id,
-            "status_change",
-            None,
-            Some(&requested_status),
-            "tenant",
-            None,
+        sqlx::query(
+            r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)
+               VALUES ($1, 'status_change', NULL, $2, 'tenant', NULL, $3)"#,
         )
+        .bind(&contract_id)
+        .bind(&requested_status)
+        .bind(created_at_ns)
+        .execute(&mut *tx)
         .await?;
+
+        tx.commit().await?;
 
         Ok(contract_id)
     }
@@ -474,6 +524,15 @@ impl Database {
         .await?;
 
         tx.commit().await?;
+
+        if let Err(e) = self.release_self_provisioned_resource(contract_id).await {
+            tracing::warn!(
+                "Failed to release self-provisioned resource for rejected contract {}: {:#}",
+                hex::encode(contract_id),
+                e
+            );
+        }
+
         Ok(())
     }
 
@@ -654,6 +713,10 @@ impl Database {
         .await?;
 
         tx.commit().await?;
+
+        if self.release_self_provisioned_resource(contract_id).await? {
+            return Ok(());
+        }
 
         // Trigger cloud_resource deletion if this contract has a linked resource
         if let Err(e) = self.mark_contract_resource_for_deletion(contract_id).await {

@@ -3047,6 +3047,202 @@ async fn test_update_contract_provisioned_by_cloud_resource_sets_gateway_fields(
         Some("abc123.hz-nbg1.dev-gw.decent-cloud.org")
     );
     assert_eq!(row.2, Some(22));
+
+    let provisioning_row: (Option<String>,) = sqlx::query_as(
+        "SELECT connection_instructions FROM contract_provisioning_details WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(provisioning_row.0.as_deref(), Some(instance_details));
+}
+
+#[tokio::test]
+async fn test_create_rental_request_reserves_self_provisioned_resource() {
+    let db = setup_test_db().await;
+    let requester = vec![1u8; 32];
+    let provider = vec![2u8; 32];
+
+    let account = db
+        .create_account("selfprov_provider", &provider, "selfprov@example.com")
+        .await
+        .unwrap();
+    let cloud_account = db
+        .create_cloud_account(
+            &account.id,
+            crate::cloud::types::BackendType::Hetzner,
+            "selfprov-hetzner",
+            "encrypted",
+            None,
+        )
+        .await
+        .unwrap();
+    let cloud_account_id: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+    let resource = db
+        .create_cloud_resource(
+            &cloud_account_id,
+            "selfprov-ext",
+            "selfprov-vm",
+            "cx22",
+            "nbg1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA owner",
+        )
+        .await
+        .unwrap();
+    let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+    db.update_cloud_resource_status(&resource_id, "running")
+        .await
+        .unwrap();
+
+    let offering_id: i64 = sqlx::query_scalar(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, offering_source, created_at_ns) VALUES ($1, 'off-self-prov', 'Self Prov', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 'self_provisioned', 0) RETURNING id",
+    )
+    .bind(&provider)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    db.list_on_marketplace(&resource_id, &account.id, offering_id)
+        .await
+        .unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-ed25519 AAAA tenant".to_string()),
+        contact_method: Some("email:tenant@example.com".to_string()),
+        request_memo: Some("Rent self-provisioned VM".to_string()),
+        duration_hours: Some(24),
+        payment_method: Some("icpay".to_string()),
+        buyer_address: None,
+        operating_system: Some("Ubuntu 24.04".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&requester, params).await.unwrap();
+
+    let stock_status: (String,) =
+        sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+            .bind(offering_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(stock_status.0, "out_of_stock");
+
+    let linked_contract: (Option<Vec<u8>>,) =
+        sqlx::query_as("SELECT contract_id FROM cloud_resources WHERE id = $1")
+            .bind(resource_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(linked_contract.0, Some(contract_id));
+}
+
+#[tokio::test]
+async fn test_try_activate_self_provisioned_contract_promotes_reserved_contract_to_active() {
+    let db = setup_test_db().await;
+    let requester = vec![3u8; 32];
+    let provider = vec![4u8; 32];
+    let contract_id = vec![0x90u8; 32];
+
+    let account = db
+        .create_account("activate_provider", &provider, "activate@example.com")
+        .await
+        .unwrap();
+    let cloud_account = db
+        .create_cloud_account(
+            &account.id,
+            crate::cloud::types::BackendType::Hetzner,
+            "activate-hetzner",
+            "encrypted",
+            None,
+        )
+        .await
+        .unwrap();
+    let cloud_account_id: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+    let resource = db
+        .create_cloud_resource(
+            &cloud_account_id,
+            "activate-ext",
+            "activate-vm",
+            "cx22",
+            "nbg1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA owner",
+        )
+        .await
+        .unwrap();
+    let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+    db.update_cloud_resource_provisioned(
+        &resource_id,
+        "activate-ext",
+        "203.0.113.10",
+        "ssh-key-id",
+        "gwslug",
+        Some("gwslug.dc-lk.dev-gw.decent-cloud.org"),
+        2201,
+        2201,
+        2210,
+    )
+    .await
+    .unwrap();
+
+    let offering_id: i64 = sqlx::query_scalar(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, offering_source, created_at_ns) VALUES ($1, 'off-activate-self', 'Self Prov', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'out_of_stock', 'US', 'NYC', FALSE, 'self_provisioned', 0) RETURNING id",
+    )
+    .bind(&provider)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    db.list_on_marketplace(&resource_id, &account.id, offering_id)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE cloud_resources SET contract_id = $1 WHERE id = $2")
+        .bind(&contract_id)
+        .bind(resource_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester,
+        &provider,
+        &offering_id.to_string(),
+        0,
+        "accepted",
+    )
+    .await;
+
+    assert!(db
+        .try_activate_self_provisioned_contract(&contract_id)
+        .await
+        .unwrap());
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "active");
+    assert!(contract
+        .provisioning_instance_details
+        .as_deref()
+        .unwrap()
+        .contains("203.0.113.10"));
+
+    let provisioning_row: (Option<String>,) = sqlx::query_as(
+        "SELECT connection_instructions FROM contract_provisioning_details WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(provisioning_row
+        .0
+        .as_deref()
+        .unwrap()
+        .contains("gwslug.dc-lk.dev-gw.decent-cloud.org"));
 }
 
 // --- purge_terminal_contracts tests ---

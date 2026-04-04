@@ -151,6 +151,124 @@ impl From<CloudResourceWithAccountRow> for CloudResourceWithDetails {
 }
 
 impl Database {
+    pub async fn reserve_self_provisioned_resource(
+        &self,
+        offering_id: i64,
+        contract_id: &[u8],
+    ) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+
+        let reserved: Option<(i64,)> = sqlx::query_as(
+            r#"
+            UPDATE cloud_resources
+            SET contract_id = $1,
+                updated_at = NOW()
+            WHERE id = (
+                SELECT id
+                FROM cloud_resources
+                WHERE offering_id = $2
+                  AND listing_mode = 'marketplace'
+                  AND status = 'running'
+                  AND terminated_at IS NULL
+                  AND contract_id IS NULL
+                ORDER BY created_at ASC
+                LIMIT 1
+            )
+            RETURNING offering_id
+            "#,
+        )
+        .bind(contract_id)
+        .bind(offering_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if reserved.is_none() {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE provider_offerings
+            SET stock_status = 'out_of_stock'
+            WHERE id = $1
+            "#,
+        )
+        .bind(offering_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    pub async fn release_self_provisioned_resource(&self, contract_id: &[u8]) -> Result<bool> {
+        let mut tx = self.pool.begin().await?;
+
+        let released: Option<(i64,)> = sqlx::query_as(
+            r#"
+            UPDATE cloud_resources
+            SET contract_id = NULL,
+                updated_at = NOW()
+            WHERE contract_id = $1
+              AND listing_mode = 'marketplace'
+              AND offering_id IS NOT NULL
+              AND terminated_at IS NULL
+            RETURNING offering_id
+            "#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some((offering_id,)) = released else {
+            tx.rollback().await?;
+            return Ok(false);
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE provider_offerings
+            SET stock_status = 'in_stock'
+            WHERE id = $1
+            "#,
+        )
+        .bind(offering_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    pub async fn get_reserved_self_provisioned_resource(
+        &self,
+        contract_id: &[u8],
+    ) -> Result<Option<CloudResource>> {
+        let row: Option<CloudResourceRow> = sqlx::query_as(
+            r#"
+            SELECT
+                id, cloud_account_id, external_id, name,
+                server_type, location, image, ssh_pubkey, status,
+                public_ip, ssh_port, ssh_username, external_ssh_key_id,
+                gateway_slug, gateway_subdomain, gateway_ssh_port, gateway_port_range_start, gateway_port_range_end,
+                offering_id, listing_mode, error_message,
+                created_at, updated_at, terminated_at
+            FROM cloud_resources
+            WHERE contract_id = $1
+              AND listing_mode = 'marketplace'
+              AND offering_id IS NOT NULL
+              AND terminated_at IS NULL
+            LIMIT 1
+            "#,
+        )
+        .bind(contract_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(CloudResource::from))
+    }
+
     pub async fn list_cloud_resources(
         &self,
         account_id: &[u8],
@@ -677,17 +795,49 @@ impl Database {
             .execute(&mut *tx)
             .await?;
 
-            // Mark cloud resource for deletion
-            sqlx::query(
-                r#"UPDATE cloud_resources
-                   SET status = 'deleting', updated_at = NOW()
+            let resource_mode: Option<(String, Option<i64>)> = sqlx::query_as(
+                r#"SELECT listing_mode, offering_id
+                   FROM cloud_resources
                    WHERE contract_id = $1
-                     AND status NOT IN ('deleting', 'deleted', 'failed')
-                     AND terminated_at IS NULL"#,
+                   LIMIT 1"#,
             )
             .bind(contract_id)
-            .execute(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await?;
+
+            match resource_mode {
+                Some((listing_mode, Some(offering_id))) if listing_mode == "marketplace" => {
+                    sqlx::query(
+                        r#"UPDATE cloud_resources
+                           SET contract_id = NULL, updated_at = NOW()
+                           WHERE contract_id = $1"#,
+                    )
+                    .bind(contract_id)
+                    .execute(&mut *tx)
+                    .await?;
+
+                    sqlx::query(
+                        r#"UPDATE provider_offerings
+                           SET stock_status = 'in_stock'
+                           WHERE id = $1"#,
+                    )
+                    .bind(offering_id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+                _ => {
+                    sqlx::query(
+                        r#"UPDATE cloud_resources
+                           SET status = 'deleting', updated_at = NOW()
+                           WHERE contract_id = $1
+                             AND status NOT IN ('deleting', 'deleted', 'failed')
+                             AND terminated_at IS NULL"#,
+                    )
+                    .bind(contract_id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
 
             tx.commit().await?;
 
@@ -823,6 +973,7 @@ impl Database {
             WHERE cr.id = $1
               AND ca.account_id = $2
               AND cr.listing_mode = 'marketplace'
+              AND cr.contract_id IS NULL
               AND cr.terminated_at IS NULL
             "#,
         )
@@ -838,7 +989,11 @@ impl Database {
                     "Resource is listed on marketplace but has no offering_id"
                 ))
             }
-            None => return Err(anyhow!("Resource not found or not listed on marketplace")),
+            None => {
+                return Err(anyhow!(
+                    "Resource not found, not listed on marketplace, or currently rented"
+                ))
+            }
         };
 
         sqlx::query(
@@ -1343,6 +1498,109 @@ mod tests {
 
         let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
         assert_eq!(count, 0, "Should not expire future contracts");
+    }
+
+    #[tokio::test]
+    async fn test_expire_releases_marketplace_self_provisioned_resource() {
+        let db = setup_test_db().await;
+
+        let provider = [14u8; 32];
+        let account = db
+            .create_account(
+                "marketplace_expire_test",
+                &provider,
+                "marketplace-expire@example.com",
+            )
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "marketplace-expire-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &cloud_account_uuid,
+                "marketplace-expire-ext",
+                "marketplace-expire-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+        db.update_cloud_resource_provisioned(
+            &resource_id,
+            "marketplace-expire-ext",
+            "203.0.113.20",
+            "key-2",
+            "selfgw",
+            Some("selfgw.dc-lk.dev-gw.decent-cloud.org"),
+            2202,
+            2202,
+            2211,
+        )
+        .await
+        .unwrap();
+
+        let offering_id = create_test_offering(&db, &provider).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
+
+        let contract_id = vec![0x85u8; 32];
+        db.reserve_self_provisioned_resource(offering_id, &contract_id)
+            .await
+            .unwrap();
+
+        let past_end_ns = 1_000_000i64;
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, $4, 0, 1, $5, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[15u8; 32][..])
+        .bind(&provider[..])
+        .bind(offering_id.to_string())
+        .bind(past_end_ns)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
+        assert_eq!(count, 1);
+
+        let refreshed = db
+            .get_cloud_resource(&resource_id, &account.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(refreshed.resource.status, "running");
+        assert!(refreshed.resource.offering_id.is_some());
+
+        let linked_contract: (Option<Vec<u8>>,) =
+            sqlx::query_as("SELECT contract_id FROM cloud_resources WHERE id = $1")
+                .bind(resource_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(linked_contract.0, None);
+
+        let stock_status: (String,) =
+            sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+                .bind(offering_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(stock_status.0, "in_stock");
     }
 
     #[tokio::test]
@@ -1894,5 +2152,246 @@ mod tests {
             err.to_string().contains("not listed"),
             "Expected not-listed error, got: {err}"
         );
+    }
+
+    #[tokio::test]
+    async fn test_unlist_from_marketplace_rejects_reserved_resource() {
+        let db = setup_test_db().await;
+
+        let pubkey = [48u8; 32];
+        let account = db
+            .create_account("unlist_reserved_test", &pubkey, "unlist-reserved@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "unlist-reserved-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-unlist-reserved",
+                "unlist-reserved-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
+        db.reserve_self_provisioned_resource(offering_id, &[0x86u8; 32])
+            .await
+            .unwrap();
+
+        let err = db
+            .unlist_from_marketplace(&resource_id, &account.id)
+            .await
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("currently rented"),
+            "Expected currently-rented error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_reserve_self_provisioned_resource_marks_offering_out_of_stock() {
+        let db = setup_test_db().await;
+
+        let pubkey = [45u8; 32];
+        let account = db
+            .create_account("reserve_test", &pubkey, "reserve@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "reserve-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-reserve",
+                "reserve-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
+
+        let contract_id = vec![0x81u8; 32];
+        assert!(db
+            .reserve_self_provisioned_resource(offering_id, &contract_id)
+            .await
+            .unwrap());
+
+        let reserved = db
+            .get_reserved_self_provisioned_resource(&contract_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reserved.id, resource.id);
+
+        let stock_status: (String,) =
+            sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+                .bind(offering_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(stock_status.0, "out_of_stock");
+    }
+
+    #[tokio::test]
+    async fn test_reserve_self_provisioned_resource_rejects_already_reserved_resource() {
+        let db = setup_test_db().await;
+
+        let pubkey = [46u8; 32];
+        let account = db
+            .create_account("reserve_busy_test", &pubkey, "reserve-busy@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "reserve-busy-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-reserve-busy",
+                "reserve-busy-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
+
+        assert!(db
+            .reserve_self_provisioned_resource(offering_id, &[0x82u8; 32])
+            .await
+            .unwrap());
+        assert!(!db
+            .reserve_self_provisioned_resource(offering_id, &[0x83u8; 32])
+            .await
+            .unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_release_self_provisioned_resource_restocks_offering() {
+        let db = setup_test_db().await;
+
+        let pubkey = [47u8; 32];
+        let account = db
+            .create_account("release_test", &pubkey, "release@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "release-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-release",
+                "release-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+        let offering_id = create_test_offering(&db, &pubkey).await;
+        db.list_on_marketplace(&resource_id, &account.id, offering_id)
+            .await
+            .unwrap();
+
+        let contract_id = vec![0x84u8; 32];
+        db.reserve_self_provisioned_resource(offering_id, &contract_id)
+            .await
+            .unwrap();
+
+        assert!(db
+            .release_self_provisioned_resource(&contract_id)
+            .await
+            .unwrap());
+        assert!(db
+            .get_reserved_self_provisioned_resource(&contract_id)
+            .await
+            .unwrap()
+            .is_none());
+
+        let stock_status: (String,) =
+            sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+                .bind(offering_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(stock_status.0, "in_stock");
     }
 }

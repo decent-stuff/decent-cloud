@@ -715,6 +715,17 @@ impl ContractsApi {
                     // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
                     match db.try_auto_accept_contract(&contract_id).await {
                         Ok(true) => {
+                            if let Err(e) = db
+                                .try_activate_self_provisioned_contract(&contract_id)
+                                .await
+                            {
+                                tracing::warn!(
+                                    "Self-provisioned fulfillment failed for contract {}: {:#}",
+                                    hex::encode(&contract_id),
+                                    e
+                                );
+                            }
+
                             // Auto-accepted, try to trigger Hetzner provisioning
                             if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id).await
                             {
