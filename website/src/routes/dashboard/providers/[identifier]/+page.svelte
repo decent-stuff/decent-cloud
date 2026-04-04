@@ -7,10 +7,14 @@
 		getProviderOfferings,
 		getProviderTrustMetrics,
 		getProviderHealthSummary,
+		getProviderFeedbackStats,
+		getProviderContacts,
 		fetchIcpPrice,
 		type ProviderProfile,
 		type ProviderTrustMetrics,
 		type ProviderHealthSummary,
+		type ProviderFeedbackStats,
+		type ProviderContact,
 		type Offering
 	} from '$lib/services/api';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
@@ -28,6 +32,8 @@
 	let offerings = $state<Offering[]>([]);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let healthSummary = $state<ProviderHealthSummary | null>(null);
+	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
+	let contacts = $state<ProviderContact[]>([]);
 	let icpPriceUsd = $state<number | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -40,6 +46,15 @@
 		isAuthenticated = value;
 	});
 
+	function parseJsonField<T>(field: string | undefined | null): T[] {
+		if (!field) return [];
+		try {
+			return JSON.parse(field) as T[];
+		} catch {
+			return [];
+		}
+	}
+
 	onMount(async () => {
 		try {
 			const resolved = await resolveIdentifierToPubkey(identifier);
@@ -50,11 +65,13 @@
 			}
 			pubkey = resolved;
 
-			const [profileData, offeringsData, trustData, healthData, icp] = await Promise.all([
+			const [profileData, offeringsData, trustData, healthData, feedbackData, contactsData, icp] = await Promise.all([
 				getProviderProfile(pubkey).catch(() => null),
 				getProviderOfferings(pubkey).catch(() => []),
 				getProviderTrustMetrics(pubkey).catch(() => null),
 				getProviderHealthSummary(pubkey, 30).catch(() => null),
+				getProviderFeedbackStats(pubkey).catch(() => null),
+				getProviderContacts(pubkey).catch(() => []),
 				fetchIcpPrice()
 			]);
 
@@ -62,6 +79,8 @@
 			offerings = offeringsData;
 			trustMetrics = trustData;
 			healthSummary = healthData;
+			feedbackStats = feedbackData;
+			contacts = contactsData;
 			icpPriceUsd = icp;
 
 			if (!profile && offerings.length === 0 && !trustMetrics) {
@@ -85,7 +104,6 @@
 
 	function handleRentalSuccess(contractId: string) {
 		selectedOffering = null;
-		// Navigate to contract detail page with welcome state
 		goto(`/dashboard/rentals/${contractId}?welcome=true`);
 	}
 
@@ -143,6 +161,10 @@
 	const displayName = $derived(
 		profile?.name || (offerings[0]?.owner_username ? `@${offerings[0].owner_username}` : truncatePubkey(pubkey))
 	);
+
+	const sellingPoints = $derived(parseJsonField<string>(profile?.unique_selling_points));
+	const supportChannels = $derived(parseJsonField<string>(profile?.support_channels));
+	const paymentMethods = $derived(parseJsonField<string>(profile?.payment_methods));
 </script>
 
 <div class="space-y-6 max-w-5xl">
@@ -193,6 +215,11 @@
 								hasFlags={trustMetrics.has_critical_flags}
 								compact={false}
 							/>
+							{#if trustMetrics.provider_tenure}
+								<span class="px-2 py-0.5 text-xs border border-neutral-700 text-neutral-400 rounded">
+									{trustMetrics.provider_tenure}
+								</span>
+							{/if}
 						{/if}
 					</div>
 
@@ -219,6 +246,15 @@
 								{profile.regions}
 							</span>
 						{/if}
+						{#if contacts.length > 0}
+							{#each contacts as contact}
+								<span class="inline-flex items-center gap-1.5 text-sm text-neutral-400">
+									<Icon name="mail" size={16} />
+									<span class="capitalize">{contact.contactType}:</span>
+									<span>{contact.contactValue}</span>
+								</span>
+							{/each}
+						{/if}
 					</div>
 				</div>
 
@@ -236,15 +272,23 @@
 			</div>
 		</div>
 
-		<!-- Trust Summary -->
+		<!-- Trust & Reliability Summary -->
 		{#if trustMetrics || healthSummary}
-			<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
 				{#if trustMetrics}
 					<div class="metric-card">
 						<div class="metric-label">Trust Score</div>
 						<div class="metric-value">{trustMetrics.trust_score}</div>
 						<div class="metric-subtext">{trustMetrics.provider_tenure}</div>
 					</div>
+
+					{#if trustMetrics.reliability_score != null}
+						<div class="metric-card">
+							<div class="metric-label">Reliability</div>
+							<div class="metric-value">{trustMetrics.reliability_score.toFixed(1)}</div>
+							<div class="metric-subtext">uptime + completion</div>
+						</div>
+					{/if}
 
 					<div class="metric-card">
 						<div class="metric-label">Contracts</div>
@@ -270,6 +314,132 @@
 						<div class="metric-value text-base">{trustMetrics.days_since_last_checkin}d ago</div>
 					</div>
 				{/if}
+			</div>
+		{/if}
+
+		<!-- Feedback Section -->
+		{#if feedbackStats && feedbackStats.total_responses > 0}
+			<div class="card p-5 border border-neutral-800">
+				<h2 class="text-lg font-semibold text-white mb-4">Renter Feedback</h2>
+				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+					<div>
+						<div class="data-label mb-1">Total Responses</div>
+						<div class="text-2xl font-semibold text-white">{feedbackStats.total_responses}</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Service Matched Description</div>
+						<div class="text-2xl font-semibold {feedbackStats.service_match_rate_pct >= 80 ? 'text-green-400' : feedbackStats.service_match_rate_pct >= 60 ? 'text-yellow-400' : 'text-red-400'}">
+							{feedbackStats.service_match_rate_pct.toFixed(0)}%
+						</div>
+						<div class="text-xs text-neutral-500 mt-1">
+							{feedbackStats.service_matched_yes} yes / {feedbackStats.service_matched_no} no
+						</div>
+						<div class="mt-2 h-2 bg-neutral-800 rounded-full overflow-hidden">
+							<div
+								class="h-full bg-green-500 rounded-full transition-all"
+								style="width: {feedbackStats.service_match_rate_pct}%"
+							></div>
+						</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Would Rent Again</div>
+						<div class="text-2xl font-semibold {feedbackStats.would_rent_again_rate_pct >= 80 ? 'text-green-400' : feedbackStats.would_rent_again_rate_pct >= 60 ? 'text-yellow-400' : 'text-red-400'}">
+							{feedbackStats.would_rent_again_rate_pct.toFixed(0)}%
+						</div>
+						<div class="text-xs text-neutral-500 mt-1">
+							{feedbackStats.would_rent_again_yes} yes / {feedbackStats.would_rent_again_no} no
+						</div>
+						<div class="mt-2 h-2 bg-neutral-800 rounded-full overflow-hidden">
+							<div
+								class="h-full bg-green-500 rounded-full transition-all"
+								style="width: {feedbackStats.would_rent_again_rate_pct}%"
+							></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Why Choose Us / Selling Points -->
+		{#if profile?.why_choose_us || sellingPoints.length > 0}
+			<div class="card p-5 border border-neutral-800">
+				<h2 class="text-lg font-semibold text-white mb-3">Why Choose This Provider</h2>
+				{#if profile?.why_choose_us}
+					<p class="text-neutral-400 text-sm leading-relaxed">{profile.why_choose_us}</p>
+				{/if}
+				{#if sellingPoints.length > 0}
+					<ul class="mt-3 space-y-1.5">
+						{#each sellingPoints as point}
+							<li class="flex items-start gap-2 text-sm text-neutral-300">
+								<Icon name="check" size={16} class="text-green-400 mt-0.5 shrink-0" />
+								{point}
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
+		{/if}
+
+		<!-- Support & SLA Section -->
+		{#if profile?.support_email || profile?.support_hours || profile?.support_channels || profile?.sla_guarantee || profile?.refund_policy || profile?.payment_methods}
+			<div class="card p-5 border border-neutral-800">
+				<h2 class="text-lg font-semibold text-white mb-4">Support & Policies</h2>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+					{#if profile.support_email || profile.support_hours || profile.support_channels}
+						<div>
+							<h3 class="data-label mb-2">Support</h3>
+							<div class="space-y-1.5">
+								{#if profile.support_email}
+									<div class="flex items-center gap-2 text-sm">
+										<Icon name="mail" size={16} class="text-neutral-500" />
+										<span class="text-neutral-300">{profile.support_email}</span>
+									</div>
+								{/if}
+								{#if profile.support_hours}
+									<div class="flex items-center gap-2 text-sm">
+										<Icon name="clock" size={16} class="text-neutral-500" />
+										<span class="text-neutral-300">{profile.support_hours}</span>
+									</div>
+								{/if}
+								{#if profile.support_channels}
+									{#if supportChannels.length > 0}
+										<div class="flex items-center gap-2 text-sm flex-wrap">
+											<Icon name="mail" size={16} class="text-neutral-500" />
+											{#each supportChannels as channel}
+												<span class="px-2 py-0.5 text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 rounded">{channel}</span>
+											{/each}
+										</div>
+									{/if}
+								{/if}
+							</div>
+						</div>
+					{/if}
+
+					{#if profile.sla_guarantee}
+						<div>
+							<h3 class="data-label mb-2">SLA Guarantee</h3>
+							<p class="text-sm text-neutral-300 leading-relaxed">{profile.sla_guarantee}</p>
+						</div>
+					{/if}
+
+					{#if profile.payment_methods}
+						<div>
+							<h3 class="data-label mb-2">Payment Methods</h3>
+							<div class="flex flex-wrap gap-1.5">
+								{#each paymentMethods as method}
+									<span class="px-2 py-0.5 text-xs bg-neutral-800 border border-neutral-700 text-neutral-300 rounded">{method}</span>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
+					{#if profile.refund_policy}
+						<div>
+							<h3 class="data-label mb-2">Refund Policy</h3>
+							<p class="text-sm text-neutral-300 leading-relaxed">{profile.refund_policy}</p>
+						</div>
+					{/if}
+				</div>
 			</div>
 		{/if}
 

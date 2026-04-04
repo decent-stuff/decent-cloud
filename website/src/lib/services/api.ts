@@ -392,6 +392,24 @@ export async function reviewRecipe(script: string): Promise<RecipeReview> {
 	return payload.data;
 }
 
+export async function getProviderContacts(pubkey: string | Uint8Array): Promise<ProviderContact[]> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/contacts`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch provider contacts: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderContact[]>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to fetch provider contacts');
+	}
+
+	return payload.data ?? [];
+}
+
 export async function getProviderOfferings(pubkey: string | Uint8Array): Promise<Offering[]> {
 	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
 	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings`;
@@ -2726,8 +2744,10 @@ export async function cancelSubscription(
 // ==================== Provider Stats & Feedback API ====================
 
 import type { ProviderFeedbackStats as ProviderFeedbackStatsRaw } from '$lib/types/generated/ProviderFeedbackStats';
+import type { ProviderContact as ProviderContactRaw } from '$lib/types/generated/ProviderContact';
 
 export type ProviderFeedbackStats = ConvertNullToUndefined<ProviderFeedbackStatsRaw>;
+export type ProviderContact = ConvertNullToUndefined<ProviderContactRaw>;
 
 export interface ProviderStats {
 	total_contracts: number;
