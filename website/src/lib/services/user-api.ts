@@ -184,4 +184,45 @@ export class UserApiClient {
 			throw new Error(data.error || 'Failed to revoke API token');
 		}
 	}
+
+	// TOTP 2FA (ticket #80)
+
+	async getTotpStatus(): Promise<{ enabled: boolean; hasBackupCodes: boolean }> {
+		const res = await this.authenticatedFetch('GET', '/api/v1/accounts/me/totp');
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) throw new Error(data.error || 'Failed to get TOTP status');
+		return data.data;
+	}
+
+	async setupTotp(): Promise<{ secret: string; otpauthUri: string }> {
+		const res = await this.authenticatedFetch('POST', '/api/v1/accounts/me/totp/setup');
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) throw new Error(data.error || 'Failed to set up TOTP');
+		return data.data;
+	}
+
+	async enableTotp(code: string): Promise<{ backupCodes: string[] }> {
+		const res = await this.authenticatedFetch('POST', '/api/v1/accounts/me/totp/enable', { code });
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) throw new Error(data.error || 'Failed to enable TOTP');
+		return data.data;
+	}
+
+	async disableTotp(code: string): Promise<void> {
+		const res = await this.authenticatedFetch('DELETE', '/api/v1/accounts/me/totp', { code });
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) throw new Error(data.error || 'Failed to disable TOTP');
+	}
+
+	async regenerateBackupCodes(code: string): Promise<{ backupCodes: string[] }> {
+		const res = await this.authenticatedFetch('POST', '/api/v1/accounts/me/totp/backup-codes', { code });
+		await handleApiResponse(res);
+		const data = await res.json();
+		if (!data.success) throw new Error(data.error || 'Failed to regenerate backup codes');
+		return data.data;
+	}
 }

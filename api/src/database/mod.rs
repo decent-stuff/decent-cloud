@@ -26,6 +26,7 @@ pub mod stats;
 pub mod subscriptions;
 pub mod telegram_tracking;
 pub mod tokens;
+pub mod totp;
 pub mod types;
 pub mod user_notifications;
 pub mod users;

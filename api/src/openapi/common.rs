@@ -773,6 +773,55 @@ pub struct UpdateSlaUptimeConfigRequest {
     pub sla_alert_window_hours: i32,
 }
 
+// ── TOTP 2FA types (ticket #80) ──────────────────────────────────────────
+
+/// Response from TOTP setup — contains the secret and QR code URI.
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TotpSetupResponse {
+    /// Base32-encoded secret for manual entry in authenticator apps.
+    pub secret: String,
+    /// otpauth:// URI suitable for rendering as a QR code.
+    pub otpauth_uri: String,
+}
+
+/// Request to confirm TOTP enrollment with the first code.
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TotpEnableRequest {
+    /// 6-digit TOTP code from the authenticator app.
+    pub code: String,
+}
+
+/// Response from TOTP enable — contains one-time backup codes.
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TotpEnableResponse {
+    /// Backup codes for account recovery.  Store securely — shown once.
+    pub backup_codes: Vec<String>,
+}
+
+/// Request to disable TOTP or regenerate backup codes.
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TotpCodeRequest {
+    /// 6-digit TOTP code (or backup code when disabling TOTP).
+    pub code: String,
+}
+
+/// Current TOTP status for the account.
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct TotpStatusResponse {
+    pub enabled: bool,
+    pub has_backup_codes: bool,
+}
+
 #[derive(poem_openapi::Tags)]
 pub enum ApiTags {
     /// System endpoints
