@@ -288,6 +288,39 @@ export interface ProviderResponseMetrics {
 	distribution: ResponseTimeDistribution;
 }
 
+export interface OfferingSlaTimelineDay {
+	date: string;
+	uptimePercent: number;
+	responseSliPercent?: number;
+	incidentCount: number;
+	breached: boolean;
+}
+
+export interface OfferingSlaSummary {
+	offeringId: number;
+	slaTargetPercent?: number;
+	reports30d: number;
+	breachDays30d: number;
+	compliance30dPercent?: number;
+	averageUptime30d?: number;
+	latestReportDate?: string;
+	latestUptimePercent?: number;
+	latestResponseSliPercent?: number;
+	timeline: OfferingSlaTimelineDay[];
+}
+
+export interface ProviderSlaSummary {
+	offeringsTracked: number;
+	reports30d: number;
+	breachDays30d: number;
+	compliance30dPercent?: number;
+	averageUptime30d?: number;
+	averageSlaTargetPercent?: number;
+	latestReportDate?: string;
+	latestUptimePercent?: number;
+	penaltyPoints: number;
+}
+
 /**
  * Fetch contract request response metrics for a provider.
  */
@@ -309,6 +342,77 @@ export async function getProviderResponseMetrics(
 	}
 
 	return payload.data;
+}
+
+export async function getOfferingSlaSummary(
+	offeringId: number,
+	days: number = 30
+): Promise<OfferingSlaSummary> {
+	const url = `${API_BASE_URL}/api/v1/offerings/${offeringId}/sla-summary?days=${days}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch offering SLA summary: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<OfferingSlaSummary>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch offering SLA summary');
+	}
+
+	return payload.data;
+}
+
+export async function getProviderSlaSummary(
+	pubkey: string | Uint8Array,
+	days: number = 30
+): Promise<ProviderSlaSummary> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/sla-summary?days=${days}`;
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch provider SLA summary: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderSlaSummary>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider SLA summary');
+	}
+
+	return payload.data;
+}
+
+export interface OfferingSliReportInput {
+	reportDate: string;
+	uptimePercent: number;
+	responseSliPercent?: number;
+	incidentCount: number;
+	notes?: string;
+}
+
+export async function upsertProviderOfferingSliReports(
+	pubkey: string | Uint8Array,
+	offeringId: number,
+	slaTargetPercent: number,
+	reports: OfferingSliReportInput[],
+	headers: Record<string, string>
+): Promise<void> {
+	const pubkeyHex = typeof pubkey === 'string' ? pubkey : hexEncode(pubkey);
+	const url = `${API_BASE_URL}/api/v1/providers/${pubkeyHex}/offerings/${offeringId}/sli-reports`;
+	const body = { slaTargetPercent, reports };
+	const response = await fetch(url, {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json', ...headers },
+		body: JSON.stringify(body)
+	});
+	if (!response.ok) {
+		throw new Error(`Failed to submit SLI reports: ${response.status} ${response.statusText}`);
+	}
+	const payload = (await response.json()) as ApiResponse<string>;
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to submit SLI reports');
+	}
 }
 
 export async function getProviderHealthSummary(

@@ -248,9 +248,9 @@
 		// Sort by selected field
 		result.sort((a, b) => {
 			if (sortField === "trust") {
-				const ta = a.trust_score ?? -1;
-				const tb = b.trust_score ?? -1;
-				return tb - ta; // descending always (highest trust first)
+				const ta = a.reliability_score ?? a.trust_score ?? -1;
+				const tb = b.reliability_score ?? b.trust_score ?? -1;
+				return tb - ta; // descending always (highest reliability first)
 			}
 			if (sortField === "newest") {
 				const ta = a.created_at_ns ?? 0;
@@ -1179,7 +1179,7 @@
 					<button
 						onclick={setSortTrust}
 						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
-					>Trust ↓</button>
+					>Reliability ↓</button>
 				</div>
 			</div>
 
@@ -1293,6 +1293,7 @@
 								<th class="pb-3 font-medium">
 									<span class="inline-flex items-center gap-1">Price</span>
 								</th>
+								<th class="pb-3 font-medium text-right">Reliability</th>
 								<th class="pb-3 font-medium"></th>
 								<th class="pb-3 font-medium text-right text-neutral-500"></th>
 								<th class="pb-3 font-medium text-right text-neutral-500">Compare</th>
@@ -1358,6 +1359,15 @@
 										<div class="font-medium text-white">{formatPrice(offering)}</div>
 										{#if formatUsdEquivalent(offering)}
 											<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
+										{/if}
+									</td>
+									<td class="py-3 pr-4 text-right">
+										{#if offering.reliability_score !== undefined && offering.reliability_score !== null}
+											<span class="text-xs font-medium {offering.reliability_score >= 80 ? 'text-emerald-400' : offering.reliability_score >= 60 ? 'text-yellow-400' : 'text-red-400'}" title="Reliability score: uptime, contract completion rate, and SLA compliance combined">
+												{offering.reliability_score.toFixed(0)}%
+											</span>
+										{:else}
+											<span class="text-xs text-neutral-600">—</span>
 										{/if}
 									</td>
 									<td class="py-3">

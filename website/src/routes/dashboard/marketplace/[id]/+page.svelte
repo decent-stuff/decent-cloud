@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import {
 		getOffering,
+		getOfferingSlaSummary,
 		reviewRecipe,
 		searchOfferings,
 		fetchIcpPrice,
@@ -18,7 +19,8 @@
 		type Offering,
 		type RecipeReview,
 		type ProviderTrustMetrics,
-		type ProviderProfile
+		type ProviderProfile,
+		type OfferingSlaSummary
 	} from '$lib/services/api';
 	import { toggleSavedId } from '$lib/services/saved-offerings';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
@@ -31,6 +33,7 @@
 	import { truncatePubkey } from '$lib/utils/identity';
 	import { recordView } from '$lib/utils/recently-viewed';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
+	import SlaBreachTimeline from '$lib/components/SlaBreachTimeline.svelte';
 	import { filterSimilarOfferings } from './similar-offerings';
 
 	const offeringId = parseInt($page.params.id ?? '', 10);
@@ -38,6 +41,7 @@
 	let offering = $state<Offering | null>(null);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let providerProfile = $state<ProviderProfile | null>(null);
+	let offeringSlaSummary = $state<OfferingSlaSummary | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
@@ -80,9 +84,10 @@
 							recipeReviewLoading = false;
 						});
 				}
-				[trustMetrics, providerProfile] = await Promise.all([
+				[trustMetrics, providerProfile, offeringSlaSummary] = await Promise.all([
 					getProviderTrustMetrics(offering.pubkey).catch(() => null),
-					getProviderProfile(offering.pubkey).catch(() => null)
+					getProviderProfile(offering.pubkey).catch(() => null),
+					getOfferingSlaSummary(offering.id!, 30).catch(() => null)
 				]);
 				try {
 					const all = await searchOfferings({ limit: 10, in_stock_only: true });
@@ -295,6 +300,13 @@
 	let contactError = $state<string | null>(null);
 	let contactSuccess = $state(false);
 
+	function slaTone(value: number | undefined): string {
+		if (value === undefined || value === null) return 'text-neutral-300';
+		if (value >= 99) return 'text-emerald-400';
+		if (value >= 95) return 'text-yellow-300';
+		return 'text-red-400';
+	}
+
 	async function handleContactSubmit() {
 		if (!isAuthenticated) {
 			showAuthModal = true;
@@ -499,6 +511,49 @@
 				{/if}
 			</div>
 		</div>
+
+		{#if offeringSlaSummary && (offeringSlaSummary.slaTargetPercent !== undefined || offeringSlaSummary.reports30d > 0)}
+			<div class="card p-5 border border-neutral-800 space-y-4">
+				<div class="flex items-start justify-between gap-4">
+					<div>
+						<h2 class="text-lg font-semibold text-white">SLA & Reported Reliability</h2>
+						<p class="text-sm text-neutral-400 mt-1">
+							Provider-submitted SLI data for this offering. Breach markers show days that missed the stated SLA.
+						</p>
+					</div>
+					<div class="text-right shrink-0">
+						<div class="text-xs uppercase tracking-wide text-neutral-500">Promised SLA</div>
+						<div class="text-3xl font-semibold text-white">{offeringSlaSummary.slaTargetPercent?.toFixed(2) ?? '—'}%</div>
+					</div>
+				</div>
+
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+					<div>
+						<div class="data-label mb-1">30d Compliance</div>
+						<div class="text-2xl font-semibold {slaTone(offeringSlaSummary.compliance30dPercent)}">
+							{offeringSlaSummary.compliance30dPercent?.toFixed(1) ?? '—'}%
+						</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Average Uptime</div>
+						<div class="text-2xl font-semibold text-white">{offeringSlaSummary.averageUptime30d?.toFixed(2) ?? '—'}%</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Breach Days</div>
+						<div class="text-2xl font-semibold {offeringSlaSummary.breachDays30d > 0 ? 'text-red-400' : 'text-emerald-400'}">{offeringSlaSummary.breachDays30d}</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Latest Report</div>
+						<div class="text-sm font-medium text-white">{offeringSlaSummary.latestReportDate ?? 'No report yet'}</div>
+						{#if offeringSlaSummary.latestUptimePercent !== undefined}
+							<div class="text-xs text-neutral-500 mt-1">{offeringSlaSummary.latestUptimePercent.toFixed(2)}% uptime</div>
+						{/if}
+					</div>
+				</div>
+
+				<SlaBreachTimeline timeline={offeringSlaSummary.timeline} days={30} />
+			</div>
+		{/if}
 
 		<!-- Price card -->
 		<div class="card p-6 border border-neutral-800">

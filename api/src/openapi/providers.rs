@@ -15,7 +15,8 @@ use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser, ProviderOrAgentA
 use crate::database::{AgentPoolWithStats, Database, SetupToken};
 use dcc_common::ssh_exec::validate_recipe;
 use poem::web::Data;
-use poem_openapi::{param::Path, payload::Json, OpenApi};
+use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
+use serde::Deserialize;
 use std::sync::Arc;
 
 fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
@@ -37,6 +38,29 @@ fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn default_sla_days() -> i64 {
+    30
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OfferingSliReportRequest {
+    pub report_date: String,
+    pub uptime_percent: f64,
+    pub response_sli_percent: Option<f64>,
+    pub incident_count: i32,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateOfferingSliReportsRequest {
+    pub sla_target_percent: f64,
+    pub reports: Vec<OfferingSliReportRequest>,
 }
 
 /// SSE handler: streams pending password reset count changes every 5 seconds.
@@ -3037,6 +3061,167 @@ impl ProvidersApi {
                 data: Some("SLA uptime configuration updated successfully".to_string()),
                 error: None,
             }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get provider-reported SLA summary across all tracked offerings
+    #[oai(
+        path = "/providers/:pubkey/sla-summary",
+        method = "get",
+        tag = "ApiTags::Providers"
+    )]
+    async fn get_provider_sla_summary(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+        #[oai(default = "default_sla_days")] days: poem_openapi::param::Query<i64>,
+    ) -> Json<ApiResponse<crate::database::offering_sla::ProviderSlaSummary>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        match db.get_provider_sla_summary(&pubkey_bytes, days.0.clamp(1, 90)).await {
+            Ok(summary) => Json(ApiResponse {
+                success: true,
+                data: Some(summary),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Upsert provider-reported daily SLI reports for an offering
+    #[oai(
+        path = "/providers/:pubkey/offerings/:id/sli-reports",
+        method = "put",
+        tag = "ApiTags::Providers"
+    )]
+    async fn upsert_provider_offering_sli_reports(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        id: Path<i64>,
+        req: Json<UpdateOfferingSliReportsRequest>,
+    ) -> Json<ApiResponse<String>> {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                })
+            }
+        };
+
+        if let Err(e) = check_authorization(&pubkey_bytes, &auth) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
+        if !(1.0..=100.0).contains(&req.sla_target_percent) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("sla_target_percent must be between 1 and 100".to_string()),
+            });
+        }
+
+        if req.reports.is_empty() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("At least one SLI report is required".to_string()),
+            });
+        }
+
+        let mut reports = Vec::with_capacity(req.reports.len());
+        for report in &req.reports {
+            if chrono::NaiveDate::parse_from_str(&report.report_date, "%Y-%m-%d").is_err() {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!(
+                        "Invalid report_date '{}' - expected YYYY-MM-DD",
+                        report.report_date
+                    )),
+                });
+            }
+            if !(0.0..=100.0).contains(&report.uptime_percent) {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("uptime_percent must be between 0 and 100".to_string()),
+                });
+            }
+            if report
+                .response_sli_percent
+                .is_some_and(|value| !(0.0..=100.0).contains(&value))
+            {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("response_sli_percent must be between 0 and 100".to_string()),
+                });
+            }
+            if report.incident_count < 0 {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("incident_count must be zero or greater".to_string()),
+                });
+            }
+
+            reports.push(crate::database::offering_sla::UpsertOfferingSliReport {
+                report_date: report.report_date.clone(),
+                uptime_percent: report.uptime_percent,
+                response_sli_percent: report.response_sli_percent,
+                incident_count: report.incident_count,
+                notes: report.notes.clone(),
+            });
+        }
+
+        match db
+            .upsert_provider_offering_sli_reports(&pubkey_bytes, id.0, req.sla_target_percent, &reports)
+            .await
+        {
+            Ok(()) => {
+                if let Err(e) = db.get_provider_trust_metrics(&pubkey_bytes).await {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!(
+                            "SLI reports stored but provider trust cache refresh failed: {e:#}"
+                        )),
+                    });
+                }
+
+                Json(ApiResponse {
+                    success: true,
+                    data: Some("SLI reports updated successfully".to_string()),
+                    error: None,
+                })
+            }
             Err(e) => Json(ApiResponse {
                 success: false,
                 data: None,

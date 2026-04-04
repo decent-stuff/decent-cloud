@@ -585,7 +585,7 @@ impl Database {
         idx += 1;
         let offset_idx = idx;
         query.push_str(&format!(
-            " ORDER BY o.monthly_price ASC LIMIT ${} OFFSET ${}",
+            " ORDER BY p.reliability_score DESC NULLS LAST, p.trust_score DESC NULLS LAST, o.monthly_price ASC, o.id ASC LIMIT ${} OFFSET ${}",
             limit_idx, offset_idx
         ));
 
@@ -646,12 +646,12 @@ impl Database {
         offerings: Vec<Offering>,
     ) -> Result<Vec<Offering>> {
         // Group offerings by provider to minimize database queries
-        let mut by_provider: HashMap<String, Vec<Offering>> = HashMap::new();
-        for offering in offerings {
+        let mut by_provider: HashMap<String, Vec<(usize, Offering)>> = HashMap::new();
+        for (index, offering) in offerings.into_iter().enumerate() {
             by_provider
                 .entry(offering.pubkey.clone())
                 .or_default()
-                .push(offering);
+                .push((index, offering));
         }
 
         let mut result = Vec::new();
@@ -695,11 +695,11 @@ impl Database {
             });
 
             // Update all offerings with pool-specific online status
-            for mut offering in provider_offerings {
+            for (original_index, mut offering) in provider_offerings {
                 // Self-provisioned offerings are always "online" — the VM is already running
                 if offering.offering_source.as_deref() == Some("self_provisioned") {
                     offering.provider_online = Some(true);
-                    result.push(offering);
+                    result.push((original_index, offering));
                     continue;
                 }
 
@@ -737,18 +737,13 @@ impl Database {
                     offering.resolved_pool_name = Some(pool.name.clone());
                 }
 
-                result.push(offering);
+                result.push((original_index, offering));
             }
         }
 
-        // Re-sort by price to maintain original order
-        result.sort_by(|a, b| {
-            a.monthly_price
-                .partial_cmp(&b.monthly_price)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        result.sort_by_key(|(original_index, _)| *original_index);
 
-        Ok(result)
+        Ok(result.into_iter().map(|(_, offering)| offering).collect())
     }
 
     /// Get offerings by provider with resolved pool information and online status
@@ -959,7 +954,7 @@ impl Database {
 
         // Complete query with ORDER BY and pagination
         let query_sql = format!(
-            "{} {} ORDER BY o.monthly_price ASC LIMIT ${} OFFSET ${}",
+            "{} {} ORDER BY p.reliability_score DESC NULLS LAST, p.trust_score DESC NULLS LAST, o.monthly_price ASC, o.id ASC LIMIT ${} OFFSET ${}",
             base_select, where_clause, limit_idx, offset_idx
         );
 

@@ -6,6 +6,7 @@
 		getProviderProfile,
 		getProviderOfferings,
 		getProviderTrustMetrics,
+		getProviderSlaSummary,
 		getProviderHealthSummary,
 		getProviderFeedbackStats,
 		getProviderContacts,
@@ -15,6 +16,7 @@
 		type ProviderHealthSummary,
 		type ProviderFeedbackStats,
 		type ProviderContact,
+		type ProviderSlaSummary,
 		type Offering
 	} from '$lib/services/api';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
@@ -32,6 +34,7 @@
 	let offerings = $state<Offering[]>([]);
 	let trustMetrics = $state<ProviderTrustMetrics | null>(null);
 	let healthSummary = $state<ProviderHealthSummary | null>(null);
+	let providerSlaSummary = $state<ProviderSlaSummary | null>(null);
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let contacts = $state<ProviderContact[]>([]);
 	let icpPriceUsd = $state<number | null>(null);
@@ -65,11 +68,12 @@
 			}
 			pubkey = resolved;
 
-			const [profileData, offeringsData, trustData, healthData, feedbackData, contactsData, icp] = await Promise.all([
+			const [profileData, offeringsData, trustData, healthData, providerSlaData, feedbackData, contactsData, icp] = await Promise.all([
 				getProviderProfile(pubkey).catch(() => null),
 				getProviderOfferings(pubkey).catch(() => []),
 				getProviderTrustMetrics(pubkey).catch(() => null),
 				getProviderHealthSummary(pubkey, 30).catch(() => null),
+				getProviderSlaSummary(pubkey, 30).catch(() => null),
 				getProviderFeedbackStats(pubkey).catch(() => null),
 				getProviderContacts(pubkey).catch(() => []),
 				fetchIcpPrice()
@@ -79,6 +83,7 @@
 			offerings = offeringsData;
 			trustMetrics = trustData;
 			healthSummary = healthData;
+			providerSlaSummary = providerSlaData;
 			feedbackStats = feedbackData;
 			contacts = contactsData;
 			icpPriceUsd = icp;
@@ -165,6 +170,13 @@
 	const sellingPoints = $derived(parseJsonField<string>(profile?.unique_selling_points));
 	const supportChannels = $derived(parseJsonField<string>(profile?.support_channels));
 	const paymentMethods = $derived(parseJsonField<string>(profile?.payment_methods));
+
+	function reliabilityTone(score: number | undefined): string {
+		if (score === undefined || score === null) return 'text-neutral-300';
+		if (score >= 95) return 'text-emerald-400';
+		if (score >= 85) return 'text-yellow-300';
+		return 'text-red-400';
+	}
 </script>
 
 <div class="space-y-6 max-w-5xl">
@@ -314,6 +326,54 @@
 						<div class="metric-value text-base">{trustMetrics.days_since_last_checkin}d ago</div>
 					</div>
 				{/if}
+			</div>
+		{/if}
+
+		{#if providerSlaSummary && (providerSlaSummary.offeringsTracked > 0 || providerSlaSummary.reports30d > 0)}
+			<div class="card p-5 border border-neutral-800">
+				<div class="flex items-start justify-between gap-4 mb-4">
+					<div>
+						<h2 class="text-lg font-semibold text-white">Provider-Reported SLA</h2>
+						<p class="text-sm text-neutral-400 mt-1">
+							Current phase uses provider-submitted SLI reports. Independent platform monitoring comes later.
+						</p>
+					</div>
+					{#if providerSlaSummary.averageSlaTargetPercent !== undefined}
+						<div class="text-right shrink-0">
+							<div class="text-xs uppercase tracking-wide text-neutral-500">Average SLA target</div>
+							<div class="text-2xl font-semibold text-white">{providerSlaSummary.averageSlaTargetPercent.toFixed(2)}%</div>
+						</div>
+					{/if}
+				</div>
+
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+					<div>
+						<div class="data-label mb-1">30d Compliance</div>
+						<div class="text-2xl font-semibold {reliabilityTone(providerSlaSummary.compliance30dPercent)}">
+							{providerSlaSummary.compliance30dPercent?.toFixed(1) ?? '—'}%
+						</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Average Uptime</div>
+						<div class="text-2xl font-semibold text-white">
+							{providerSlaSummary.averageUptime30d?.toFixed(2) ?? '—'}%
+						</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Breach Days</div>
+						<div class="text-2xl font-semibold {providerSlaSummary.breachDays30d > 0 ? 'text-red-400' : 'text-emerald-400'}">
+							{providerSlaSummary.breachDays30d}
+						</div>
+						<div class="text-xs text-neutral-500 mt-1">across {providerSlaSummary.reports30d} reported days</div>
+					</div>
+					<div>
+						<div class="data-label mb-1">Reliability Penalty</div>
+						<div class="text-2xl font-semibold {providerSlaSummary.penaltyPoints > 0 ? 'text-yellow-300' : 'text-neutral-300'}">
+							-{providerSlaSummary.penaltyPoints.toFixed(1)}
+						</div>
+						<div class="text-xs text-neutral-500 mt-1">applied to provider score</div>
+					</div>
+				</div>
 			</div>
 		{/if}
 
