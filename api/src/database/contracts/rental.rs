@@ -167,6 +167,42 @@ impl Database {
         let is_self_provisioned = offering.offering_source.as_deref() == Some("self_provisioned");
         let mut tx = self.pool.begin().await?;
 
+        sqlx::query!(
+            r#"INSERT INTO contract_sign_requests (
+                contract_id, requester_pubkey, requester_ssh_pubkey,
+                requester_contact, provider_pubkey, offering_id,
+                payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
+                duration_hours, original_duration_hours, request_memo,
+                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address,
+                requester_account_id, provider_account_id, operating_system
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"#,
+            contract_id,
+            requester_pubkey,
+            ssh_pubkey,
+            contact,
+            offering_pubkey_bytes,
+            offering.offering_id,
+            payment_amount_e9s,
+            start_timestamp_ns,
+            end_timestamp_ns,
+            duration_hours,
+            original_duration_hours,
+            memo,
+            created_at_ns,
+            requested_status,
+            payment_method_str,
+            stripe_payment_intent_id,
+            stripe_customer_id,
+            payment_status,
+            offering.currency,
+            params.buyer_address,
+            requester_account_id,
+            provider_account_id,
+            params.operating_system
+        )
+        .execute(&mut *tx)
+        .await?;
+
         if is_self_provisioned {
             let reserved: Option<(i64,)> = sqlx::query_as(
                 r#"
@@ -211,42 +247,6 @@ impl Database {
             .execute(&mut *tx)
             .await?;
         }
-
-        sqlx::query!(
-            r#"INSERT INTO contract_sign_requests (
-                contract_id, requester_pubkey, requester_ssh_pubkey,
-                requester_contact, provider_pubkey, offering_id,
-                payment_amount_e9s, start_timestamp_ns, end_timestamp_ns,
-                duration_hours, original_duration_hours, request_memo,
-                created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, buyer_address,
-                requester_account_id, provider_account_id, operating_system
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)"#,
-            contract_id,
-            requester_pubkey,
-            ssh_pubkey,
-            contact,
-            offering_pubkey_bytes,
-            offering.offering_id,
-            payment_amount_e9s,
-            start_timestamp_ns,
-            end_timestamp_ns,
-            duration_hours,
-            original_duration_hours,
-            memo,
-            created_at_ns,
-            requested_status,
-            payment_method_str,
-            stripe_payment_intent_id,
-            stripe_customer_id,
-            payment_status,
-            offering.currency,
-            params.buyer_address,
-            requester_account_id,
-            provider_account_id,
-            params.operating_system
-        )
-        .execute(&mut *tx)
-        .await?;
 
         sqlx::query(
             r#"INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at)

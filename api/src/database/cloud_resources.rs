@@ -151,6 +151,7 @@ impl From<CloudResourceWithAccountRow> for CloudResourceWithDetails {
 }
 
 impl Database {
+    #[allow(dead_code)]
     pub async fn reserve_self_provisioned_resource(
         &self,
         offering_id: i64,
@@ -1558,22 +1559,18 @@ mod tests {
             .unwrap();
 
         let contract_id = vec![0x85u8; 32];
-        db.reserve_self_provisioned_resource(offering_id, &contract_id)
+        let past_end_ns = 1_000_000i64;
+        insert_test_contract(&db.pool, &contract_id, &[15u8; 32], &provider, offering_id).await;
+        sqlx::query("UPDATE contract_sign_requests SET end_timestamp_ns = $1 WHERE contract_id = $2")
+            .bind(past_end_ns)
+            .bind(&contract_id)
+            .execute(&db.pool)
             .await
             .unwrap();
 
-        let past_end_ns = 1_000_000i64;
-        sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, $4, 0, 1, $5, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
-        )
-        .bind(&contract_id)
-        .bind(&[15u8; 32][..])
-        .bind(&provider[..])
-        .bind(offering_id.to_string())
-        .bind(past_end_ns)
-        .execute(&db.pool)
-        .await
-        .unwrap();
+        db.reserve_self_provisioned_resource(offering_id, &contract_id)
+            .await
+            .unwrap();
 
         let count = db.expire_and_cleanup_cloud_contracts().await.unwrap();
         assert_eq!(count, 1);
@@ -1891,6 +1888,25 @@ mod tests {
         db.create_offering(pubkey, offering).await.unwrap()
     }
 
+    async fn insert_test_contract(
+        pool: &sqlx::PgPool,
+        contract_id: &[u8],
+        requester_pubkey: &[u8],
+        provider_pubkey: &[u8],
+        offering_id: i64,
+    ) {
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, $4, 0, 1, 2, 1, 1, '', 0, 'active', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(contract_id)
+        .bind(requester_pubkey)
+        .bind(provider_pubkey)
+        .bind(offering_id.to_string())
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
     #[tokio::test]
     async fn test_list_on_marketplace_success() {
         let db = setup_test_db().await;
@@ -2196,6 +2212,7 @@ mod tests {
         db.list_on_marketplace(&resource_id, &account.id, offering_id)
             .await
             .unwrap();
+        insert_test_contract(&db.pool, &[0x86u8; 32], &[99u8; 32], &pubkey, offering_id).await;
         db.reserve_self_provisioned_resource(offering_id, &[0x86u8; 32])
             .await
             .unwrap();
@@ -2254,6 +2271,7 @@ mod tests {
             .unwrap();
 
         let contract_id = vec![0x81u8; 32];
+        insert_test_contract(&db.pool, &contract_id, &[99u8; 32], &pubkey, offering_id).await;
         assert!(db
             .reserve_self_provisioned_resource(offering_id, &contract_id)
             .await
@@ -2318,6 +2336,8 @@ mod tests {
             .await
             .unwrap();
 
+        insert_test_contract(&db.pool, &[0x82u8; 32], &[99u8; 32], &pubkey, offering_id).await;
+        insert_test_contract(&db.pool, &[0x83u8; 32], &[98u8; 32], &pubkey, offering_id).await;
         assert!(db
             .reserve_self_provisioned_resource(offering_id, &[0x82u8; 32])
             .await
@@ -2372,6 +2392,7 @@ mod tests {
             .unwrap();
 
         let contract_id = vec![0x84u8; 32];
+        insert_test_contract(&db.pool, &contract_id, &[99u8; 32], &pubkey, offering_id).await;
         db.reserve_self_provisioned_resource(offering_id, &contract_id)
             .await
             .unwrap();
