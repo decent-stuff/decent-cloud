@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", o.offer_name as \"offering_name?\", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n               pd.password_reset_requested_at_ns, c.operating_system\n               FROM contract_sign_requests c\n               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n               LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey\n               WHERE c.provider_pubkey = $1 AND c.status IN ('requested', 'pending') ORDER BY c.created_at_ns DESC",
+  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", o.offer_name as \"offering_name?\", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system\n               FROM contract_sign_requests c\n               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n               LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey\n               WHERE c.provider_pubkey = $1 ORDER BY c.created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -275,6 +275,11 @@
       },
       {
         "ordinal": 54,
+        "name": "ssh_key_rotation_requested_at_ns",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 55,
         "name": "operating_system",
         "type_info": "Text"
       }
@@ -339,8 +344,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "9555e246d41a47fe36189c5c893287a4b4361fe4119bf09dba2cbb7a42e26af7"
+  "hash": "d6496ffe8e0d2b29907a999193c850b066c52a90f8e32aa5ae2ff0c590d98793"
 }

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE totp_backup_codes\n               SET used_at = $1\n               WHERE account_id = $2\n                 AND code_hash = $3\n                 AND used_at IS NULL\n               RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e5fea477517af18b49b1d8651f8e5754777fb9fdfe7c53cb320a3fc7a9bdab39"
+}
