@@ -155,9 +155,7 @@ async fn test_recovery_token_expired() {
 
     // Manually expire the token
     let past: i64 = crate::now_ns().unwrap() - 25 * 3600 * 1_000_000_000_i64;
-    sqlx::query(
-        "UPDATE recovery_tokens SET expires_at = $1 WHERE token = $2",
-    )
+    sqlx::query("UPDATE recovery_tokens SET expires_at = $1 WHERE token = $2")
     .bind(past)
     .bind(&token)
     .execute(&db.pool)
