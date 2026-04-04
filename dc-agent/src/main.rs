@@ -1707,6 +1707,8 @@ async fn poll_and_provision(
     consecutive_failures: &mut u32,
     gateway_manager: OptionalGatewayManager,
 ) -> i64 {
+    let running_by_contract = collect_running_by_contract(provisioners).await;
+
     // Fetch pending contracts for provisioning
     match api_client.get_pending_contracts().await {
         Ok(contracts) => {
@@ -1867,6 +1869,56 @@ async fn poll_and_provision(
                         }
                     }
 
+                    if let Some(external_id) = running_by_contract.get(&contract.contract_id) {
+                        info!(
+                            contract_id = %contract.contract_id,
+                            external_id = %external_id,
+                            "Found existing VM from a previous agent run, recovering"
+                        );
+                        let mut recovered = false;
+                        for prov in provisioners.values() {
+                            match prov.get_instance(external_id).await {
+                                Ok(Some(instance)) => {
+                                    if let Err(e) = api_client
+                                        .report_provisioned(&contract.contract_id, &instance)
+                                        .await
+                                    {
+                                        error!(
+                                            contract_id = %contract.contract_id,
+                                            error = ?e,
+                                            "Failed to report recovered VM as provisioned"
+                                        );
+                                    } else {
+                                        info!(
+                                            contract_id = %contract.contract_id,
+                                            external_id = %instance.external_id,
+                                            ip_address = ?instance.ip_address,
+                                            "Recovered and reported existing VM"
+                                        );
+                                        recovered = true;
+                                    }
+                                    break;
+                                }
+                                Ok(None) => continue,
+                                Err(_) => continue,
+                            }
+                        }
+                        if !recovered {
+                            warn!(
+                                contract_id = %contract.contract_id,
+                                "Could not retrieve existing VM details"
+                            );
+                        }
+                        if let Err(e) = api_client.release_lock(&contract.contract_id).await {
+                            warn!(
+                                contract_id = %contract.contract_id,
+                                error = ?e,
+                                "Failed to release lock after recovery attempt"
+                            );
+                        }
+                        continue;
+                    }
+
                     let request = ProvisionRequest {
                         contract_id: contract.contract_id.clone(),
                         offering_id: contract.offering_id.clone(),
@@ -1883,11 +1935,19 @@ async fn poll_and_provision(
                         .report_provisioning_started(&contract.contract_id)
                         .await
                     {
-                        warn!(
+                        error!(
                             contract_id = %contract.contract_id,
                             error = ?e,
-                            "Failed to report provisioning started, continuing anyway"
+                            "Failed to report provisioning started, releasing lock and skipping"
                         );
+                        if let Err(release_err) = api_client.release_lock(&contract.contract_id).await {
+                            warn!(
+                                contract_id = %contract.contract_id,
+                                error = ?release_err,
+                                "Failed to release lock after report_provisioning_started failure"
+                            );
+                        }
+                        continue;
                     }
 
                     match provisioner.provision(&request).await {
@@ -1973,7 +2033,6 @@ async fn poll_and_provision(
                                 .report_provisioned(&contract.contract_id, &instance)
                                 .await
                             {
-                                // This is a critical error - VM was created but API doesn't know
                                 error!(
                                     contract_id = %contract.contract_id,
                                     external_id = %instance.external_id,
@@ -1981,6 +2040,13 @@ async fn poll_and_provision(
                                     error = ?e,
                                     "CRITICAL: VM provisioned but failed to report to API! \
                                      Contract may be stuck. Manual intervention may be required."
+                                );
+                            }
+                            if let Err(e) = api_client.release_lock(&contract.contract_id).await {
+                                warn!(
+                                    contract_id = %contract.contract_id,
+                                    error = ?e,
+                                    "Failed to release provisioning lock"
                                 );
                             }
                         }
@@ -1996,13 +2062,19 @@ async fn poll_and_provision(
                                 .report_failed(&contract.contract_id, &format!("{:?}", e))
                                 .await
                             {
-                                // Less critical than report_provisioned failure, but still serious
                                 error!(
                                     contract_id = %contract.contract_id,
                                     original_error = ?e,
                                     report_error = %report_err,
                                     "Failed to report provisioning failure to API. \
                                      Contract may remain stuck in pending state."
+                                );
+                            }
+                            if let Err(release_err) = api_client.release_lock(&contract.contract_id).await {
+                                warn!(
+                                    contract_id = %contract.contract_id,
+                                    error = ?release_err,
+                                    "Failed to release provisioning lock after failure"
                                 );
                             }
                         }
@@ -2042,6 +2114,26 @@ async fn poll_and_provision(
     .await;
 
     running_count
+}
+
+async fn collect_running_by_contract(provisioners: &ProvisionerMap) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for prov in provisioners.values() {
+        match prov.list_running_instances().await {
+            Ok(instances) => {
+                for inst in instances {
+                    if let Some(ref cid) = inst.contract_id {
+                        if !cid.is_empty() {
+                            map.entry(cid.clone())
+                                .or_insert_with(|| inst.external_id.clone());
+                        }
+                    }
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    map
 }
 
 /// Reconcile running instances with the API.
@@ -3126,6 +3218,112 @@ WantedBy=multi-user.target
             !result,
             "dc-agent.service should not be installed in test environment"
         );
+    }
+
+    #[tokio::test]
+    async fn test_collect_running_by_contract_empty_provisioners() {
+        let provisioners: ProvisionerMap = HashMap::new();
+        let result = collect_running_by_contract(&provisioners).await;
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_collect_running_by_contract_maps_contract_to_external_id() {
+        use dc_agent::provisioner::{HealthStatus, Instance, RunningInstance};
+
+        struct StubProvisioner {
+            instances: Vec<RunningInstance>,
+        }
+
+        #[async_trait::async_trait]
+        impl Provisioner for StubProvisioner {
+            async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+                anyhow::bail!("not implemented")
+            }
+            async fn terminate(&self, _external_id: &str) -> Result<()> {
+                anyhow::bail!("not implemented")
+            }
+            async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+                anyhow::bail!("not implemented")
+            }
+            async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+                anyhow::bail!("not implemented")
+            }
+            async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+                Ok(self.instances.clone())
+            }
+        }
+
+        let mut provisioners: ProvisionerMap = HashMap::new();
+        let stub = StubProvisioner {
+            instances: vec![
+                RunningInstance {
+                    external_id: "101".to_string(),
+                    contract_id: Some("abc123".to_string()),
+                },
+                RunningInstance {
+                    external_id: "102".to_string(),
+                    contract_id: Some("def456".to_string()),
+                },
+            ],
+        };
+        provisioners.insert("stub".to_string(), Box::new(stub));
+
+        let result = collect_running_by_contract(&provisioners).await;
+        assert_eq!(result.len(), 2);
+        assert_eq!(result.get("abc123"), Some(&"101".to_string()));
+        assert_eq!(result.get("def456"), Some(&"102".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_collect_running_by_contract_filters_empty_contract_ids() {
+        use dc_agent::provisioner::{HealthStatus, Instance, RunningInstance};
+
+        struct StubProvisioner {
+            instances: Vec<RunningInstance>,
+        }
+
+        #[async_trait::async_trait]
+        impl Provisioner for StubProvisioner {
+            async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+                anyhow::bail!("not implemented")
+            }
+            async fn terminate(&self, _external_id: &str) -> Result<()> {
+                anyhow::bail!("not implemented")
+            }
+            async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+                anyhow::bail!("not implemented")
+            }
+            async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+                anyhow::bail!("not implemented")
+            }
+            async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+                Ok(self.instances.clone())
+            }
+        }
+
+        let mut provisioners: ProvisionerMap = HashMap::new();
+        let stub = StubProvisioner {
+            instances: vec![
+                RunningInstance {
+                    external_id: "101".to_string(),
+                    contract_id: Some("abc123".to_string()),
+                },
+                RunningInstance {
+                    external_id: "102".to_string(),
+                    contract_id: Some(String::new()),
+                },
+                RunningInstance {
+                    external_id: "103".to_string(),
+                    contract_id: None,
+                },
+            ],
+        };
+        provisioners.insert("stub".to_string(), Box::new(stub));
+
+        let result = collect_running_by_contract(&provisioners).await;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.get("abc123"), Some(&"101".to_string()));
     }
 
     #[test]
