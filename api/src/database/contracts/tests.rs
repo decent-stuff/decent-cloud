@@ -3200,12 +3200,6 @@ async fn test_try_activate_self_provisioned_contract_promotes_reserved_contract_
     db.list_on_marketplace(&resource_id, &account.id, offering_id)
         .await
         .unwrap();
-    sqlx::query("UPDATE cloud_resources SET contract_id = $1 WHERE id = $2")
-        .bind(&contract_id)
-        .bind(resource_id)
-        .execute(&db.pool)
-        .await
-        .unwrap();
 
     insert_contract_request(
         &db,
@@ -3217,6 +3211,13 @@ async fn test_try_activate_self_provisioned_contract_promotes_reserved_contract_
         "accepted",
     )
     .await;
+
+    sqlx::query("UPDATE cloud_resources SET contract_id = $1 WHERE id = $2")
+        .bind(&contract_id)
+        .bind(resource_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
 
     assert!(db
         .try_activate_self_provisioned_contract(&contract_id)
