@@ -2480,8 +2480,9 @@ mod tests {
     use crate::openapi::common::{
         AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
         AddAccountSocialRequest, ApiResponse, CompleteRecoveryRequest, RegisterAccountRequest,
-        RequestRecoveryRequest, UpdateAccountEmailRequest, UpdateAccountProfileRequest,
-        UpdateDeviceNameRequest, VerifyEmailRequest,
+        RequestRecoveryRequest, TotpCodeRequest, TotpEnableRequest, TotpEnableResponse,
+        TotpSetupResponse, TotpStatusResponse, UpdateAccountEmailRequest,
+        UpdateAccountProfileRequest, UpdateDeviceNameRequest, VerifyEmailRequest,
     };
 
     // ---- RegisterAccountRequest ----
@@ -2901,5 +2902,53 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("PGP public key block"));
+    }
+
+    // ---- TOTP 2FA types (ticket #80) ----
+
+    #[test]
+    fn test_totp_setup_response_camel_case() {
+        let resp = TotpSetupResponse {
+            secret: "JBSWY3DPEHPK3PXP".to_string(),
+            otpauth_uri: "otpauth://totp/DecentCloud:alice?secret=JBSWY3DPEHPK3PXP".to_string(),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["secret"], "JBSWY3DPEHPK3PXP");
+        assert_eq!(json["otpauthUri"], "otpauth://totp/DecentCloud:alice?secret=JBSWY3DPEHPK3PXP");
+    }
+
+    #[test]
+    fn test_totp_enable_request_deserialization() {
+        let json = r#"{"code":"123456"}"#;
+        let req: TotpEnableRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.code, "123456");
+    }
+
+    #[test]
+    fn test_totp_enable_response_camel_case() {
+        let resp = TotpEnableResponse {
+            backup_codes: vec!["abc123".to_string(), "def456".to_string()],
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["backupCodes"].as_array().unwrap().len(), 2);
+        assert_eq!(json["backupCodes"][0], "abc123");
+    }
+
+    #[test]
+    fn test_totp_code_request_deserialization() {
+        let json = r#"{"code":"654321"}"#;
+        let req: TotpCodeRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.code, "654321");
+    }
+
+    #[test]
+    fn test_totp_status_response_camel_case() {
+        let resp = TotpStatusResponse {
+            enabled: true,
+            has_backup_codes: false,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["enabled"], true);
+        assert_eq!(json["hasBackupCodes"], false);
     }
 }
