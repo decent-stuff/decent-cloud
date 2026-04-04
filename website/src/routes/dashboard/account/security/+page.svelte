@@ -15,6 +15,24 @@
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
 
+	// TOTP 2FA state
+	let totpEnabled = $state(false);
+	let totpHasBackupCodes = $state(false);
+	let totpLoading = $state(false);
+	let totpError = $state<string | null>(null);
+	// setup flow
+	let totpSetupUri = $state<string | null>(null);
+	let totpSetupSecret = $state<string | null>(null);
+	let totpSetupCode = $state('');
+	let totpSetupStep = $state<'idle' | 'scan' | 'confirm' | 'backup'>('idle');
+	let totpBackupCodes = $state<string[]>([]);
+	// disable flow
+	let totpDisableCode = $state('');
+	let totpDisabling = $state(false);
+	// regenerate backup codes flow
+	let totpRegenCode = $state('');
+	let totpRegenStep = $state<'idle' | 'confirm'>('idle');
+
 	// API token state
 	type ApiToken = { id: string; name: string; createdAt: number; lastUsedAt?: number; expiresAt?: number; isActive: boolean };
 	let tokens = $state<ApiToken[]>([]);
@@ -41,8 +59,10 @@
 			currentIdentity = value;
 			if (value) {
 				loadTokens();
+				loadTotpStatus();
 			} else {
 				tokens = [];
+				totpEnabled = false;
 			}
 		});
 	});
@@ -74,6 +94,99 @@
 			tokensError = e instanceof Error ? e.message : 'Failed to load tokens';
 		} finally {
 			tokensLoading = false;
+		}
+	}
+
+	// ── TOTP functions ───────────────────────────────────────────────────────
+
+	async function loadTotpStatus() {
+		const client = apiClient();
+		if (!client) return;
+		try {
+			const status = await client.getTotpStatus();
+			totpEnabled = status.enabled;
+			totpHasBackupCodes = status.hasBackupCodes;
+		} catch {
+			// non-critical; silently ignore if TOTP not configured on server
+		}
+	}
+
+	async function startTotpSetup() {
+		const client = apiClient();
+		if (!client) return;
+		totpLoading = true;
+		totpError = null;
+		try {
+			const result = await client.setupTotp();
+			totpSetupUri = result.otpauthUri;
+			totpSetupSecret = result.secret;
+			totpSetupStep = 'scan';
+		} catch (e) {
+			totpError = e instanceof Error ? e.message : 'Failed to start TOTP setup';
+		} finally {
+			totpLoading = false;
+		}
+	}
+
+	async function confirmTotpEnable() {
+		const client = apiClient();
+		if (!client || !totpSetupCode.trim()) return;
+		totpLoading = true;
+		totpError = null;
+		try {
+			const result = await client.enableTotp(totpSetupCode.trim());
+			totpBackupCodes = result.backupCodes;
+			totpEnabled = true;
+			totpHasBackupCodes = true;
+			totpSetupStep = 'backup';
+			totpSetupCode = '';
+		} catch (e) {
+			totpError = e instanceof Error ? e.message : 'Invalid code — try again';
+		} finally {
+			totpLoading = false;
+		}
+	}
+
+	function finishTotpSetup() {
+		totpSetupStep = 'idle';
+		totpSetupUri = null;
+		totpSetupSecret = null;
+		totpBackupCodes = [];
+	}
+
+	async function disableTotp() {
+		const client = apiClient();
+		if (!client || !totpDisableCode.trim()) return;
+		totpDisabling = true;
+		totpError = null;
+		try {
+			await client.disableTotp(totpDisableCode.trim());
+			totpEnabled = false;
+			totpHasBackupCodes = false;
+			totpDisableCode = '';
+		} catch (e) {
+			totpError = e instanceof Error ? e.message : 'Invalid code';
+		} finally {
+			totpDisabling = false;
+		}
+	}
+
+	async function regenerateBackupCodes() {
+		const client = apiClient();
+		if (!client || !totpRegenCode.trim()) return;
+		totpLoading = true;
+		totpError = null;
+		try {
+			const result = await client.regenerateBackupCodes(totpRegenCode.trim());
+			totpBackupCodes = result.backupCodes;
+			totpHasBackupCodes = true;
+			totpSetupStep = 'backup';
+			totpRegenStep = 'idle';
+			totpRegenCode = '';
+		} catch (e) {
+			totpError = e instanceof Error ? e.message : 'Invalid code';
+		} finally {
+			totpLoading = false;
 		}
 	}
 
@@ -162,6 +275,183 @@
 				username={currentIdentity.account.username}
 				apiClient={new UserApiClient(currentIdentity.identity as Ed25519KeyIdentity)}
 			/>
+		</div>
+
+		<!-- TOTP 2FA section -->
+		<div>
+			<div class="flex items-center justify-between mb-4">
+				<div>
+					<h2 class="text-xl font-semibold text-white">Two-Factor Authentication</h2>
+					<p class="text-neutral-500 text-sm mt-1">
+						Add an authenticator app for extra security.
+					</p>
+				</div>
+				{#if totpEnabled}
+					<span class="px-2 py-1 text-xs bg-green-900/40 text-green-400 border border-green-800">Enabled</span>
+				{:else}
+					<span class="px-2 py-1 text-xs bg-neutral-800 text-neutral-400 border border-neutral-700">Disabled</span>
+				{/if}
+			</div>
+
+			{#if totpError}
+				<div class="p-3 bg-red-900/30 border border-red-800 text-red-400 text-sm mb-4">{totpError}</div>
+			{/if}
+
+			{#if totpSetupStep === 'idle'}
+				{#if !totpEnabled}
+					<button
+						onclick={startTotpSetup}
+						disabled={totpLoading}
+						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+					>
+						{totpLoading ? 'Loading...' : 'Set up authenticator'}
+					</button>
+				{:else}
+					<div class="border border-neutral-800 p-4 space-y-4">
+						<p class="text-sm text-neutral-400">
+							Two-factor authentication is active. Use your authenticator app to log in and authorise sensitive operations.
+						</p>
+						{#if !totpHasBackupCodes}
+							<p class="text-sm text-amber-400">No backup codes remaining. Regenerate now to avoid being locked out.</p>
+						{/if}
+
+						<!-- Regenerate backup codes -->
+						{#if totpRegenStep === 'idle'}
+							<button
+								onclick={() => { totpRegenStep = 'confirm'; totpError = null; }}
+								class="text-sm text-neutral-400 hover:text-white underline transition-colors"
+							>
+								Regenerate backup codes
+							</button>
+						{:else}
+							<div class="space-y-2">
+								<p class="text-sm text-neutral-400">Enter your TOTP code to generate new backup codes:</p>
+								<div class="flex gap-2">
+									<input
+										type="text"
+										bind:value={totpRegenCode}
+										placeholder="6-digit code"
+										maxlength="6"
+										class="bg-neutral-800 border border-neutral-700 text-white px-3 py-2 text-sm font-mono w-32 focus:outline-none focus:border-primary-500"
+									/>
+									<button
+										onclick={regenerateBackupCodes}
+										disabled={totpLoading || totpRegenCode.length < 6}
+										class="px-3 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm transition-colors disabled:opacity-50"
+									>
+										{totpLoading ? 'Working...' : 'Regenerate'}
+									</button>
+									<button
+										onclick={() => { totpRegenStep = 'idle'; totpRegenCode = ''; totpError = null; }}
+										class="px-3 py-2 border border-neutral-700 text-neutral-400 hover:text-white text-sm transition-colors"
+									>
+										Cancel
+									</button>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Disable TOTP -->
+						<div class="border-t border-neutral-800 pt-4 space-y-2">
+							<p class="text-sm text-neutral-500">Disable two-factor authentication:</p>
+							<div class="flex gap-2">
+								<input
+									type="text"
+									bind:value={totpDisableCode}
+									placeholder="TOTP or backup code"
+									class="bg-neutral-800 border border-neutral-700 text-white px-3 py-2 text-sm font-mono w-48 focus:outline-none focus:border-red-500"
+								/>
+								<button
+									onclick={disableTotp}
+									disabled={totpDisabling || !totpDisableCode.trim()}
+									class="px-3 py-2 bg-red-700 hover:bg-red-600 text-white text-sm transition-colors disabled:opacity-50"
+								>
+									{totpDisabling ? 'Disabling...' : 'Disable 2FA'}
+								</button>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+			{:else if totpSetupStep === 'scan'}
+				<!-- Step 1: Scan QR code -->
+				<div class="border border-neutral-800 p-4 space-y-4">
+					<p class="text-sm text-neutral-400">
+						Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.):
+					</p>
+					<!-- QR code rendered client-side via otpauth URI shown as link -->
+					<div class="bg-neutral-950 border border-neutral-700 p-4 text-center">
+						<p class="text-xs text-neutral-500 mb-2">QR code (copy to authenticator)</p>
+						<a
+							href={totpSetupUri ?? '#'}
+							class="text-xs text-primary-400 break-all font-mono"
+						>{totpSetupUri}</a>
+					</div>
+					<div class="bg-neutral-900 border border-neutral-700 p-3">
+						<p class="text-xs text-neutral-500 mb-1">Or enter manually:</p>
+						<code class="text-sm text-white font-mono tracking-widest">{totpSetupSecret}</code>
+					</div>
+					<button
+						onclick={() => { totpSetupStep = 'confirm'; totpError = null; }}
+						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
+					>
+						I've scanned it — next
+					</button>
+					<button
+						onclick={() => { totpSetupStep = 'idle'; totpSetupUri = null; totpSetupSecret = null; totpError = null; }}
+						class="ml-3 text-sm text-neutral-400 hover:text-white"
+					>
+						Cancel
+					</button>
+				</div>
+
+			{:else if totpSetupStep === 'confirm'}
+				<!-- Step 2: Verify code -->
+				<div class="border border-neutral-800 p-4 space-y-4">
+					<p class="text-sm text-neutral-400">
+						Enter the 6-digit code from your authenticator app to confirm setup:
+					</p>
+					<div class="flex gap-2">
+						<input
+							type="text"
+							bind:value={totpSetupCode}
+							placeholder="000000"
+							maxlength="6"
+							class="bg-neutral-800 border border-neutral-700 text-white px-3 py-2 text-sm font-mono w-32 focus:outline-none focus:border-primary-500"
+						/>
+						<button
+							onclick={confirmTotpEnable}
+							disabled={totpLoading || totpSetupCode.length < 6}
+							class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+						>
+							{totpLoading ? 'Verifying...' : 'Enable 2FA'}
+						</button>
+					</div>
+					{#if totpError}
+						<p class="text-sm text-red-400">{totpError}</p>
+					{/if}
+				</div>
+
+			{:else if totpSetupStep === 'backup'}
+				<!-- Step 3: Show backup codes -->
+				<div class="border border-neutral-800 p-4 space-y-4">
+					<p class="text-sm font-semibold text-white">Two-factor authentication enabled!</p>
+					<p class="text-sm text-amber-400 border border-amber-700 bg-amber-900/20 p-3">
+						Save these backup codes somewhere safe. Each code can only be used once if you lose access to your authenticator.
+					</p>
+					<div class="grid grid-cols-2 gap-2 font-mono text-sm text-green-400 bg-neutral-950 border border-neutral-700 p-3">
+						{#each totpBackupCodes as code}
+							<span>{code}</span>
+						{/each}
+					</div>
+					<button
+						onclick={finishTotpSetup}
+						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
+					>
+						Done — I've saved my codes
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<!-- API Tokens section -->
