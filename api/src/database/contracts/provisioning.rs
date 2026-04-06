@@ -149,6 +149,48 @@ impl Database {
         Ok(())
     }
 
+    pub async fn try_activate_self_provisioned_contract(&self, contract_id: &[u8]) -> Result<bool> {
+        let contract = self
+            .get_contract(contract_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
+
+        if contract.status.to_lowercase() != "accepted" {
+            return Ok(false);
+        }
+
+        let resource = match self
+            .get_reserved_self_provisioned_resource(contract_id)
+            .await?
+        {
+            Some(resource) => resource,
+            None => return Ok(false),
+        };
+
+        let instance_details = serde_json::json!({
+            "public_ip": resource.public_ip,
+            "ssh_port": resource.ssh_port,
+            "ssh_username": resource.ssh_username,
+            "gateway_slug": resource.gateway_slug,
+            "gateway_subdomain": resource.gateway_subdomain,
+            "gateway_ssh_port": resource.gateway_ssh_port,
+            "gateway_port_range_start": resource.gateway_port_range_start,
+            "gateway_port_range_end": resource.gateway_port_range_end,
+        })
+        .to_string();
+
+        self.update_contract_provisioned_by_cloud_resource(
+            contract_id,
+            &instance_details,
+            resource.gateway_slug.as_deref(),
+            resource.gateway_subdomain.as_deref(),
+            resource.gateway_ssh_port,
+        )
+        .await?;
+
+        Ok(true)
+    }
+
     /// Delete expired credentials (should be called periodically)
     pub async fn cleanup_expired_credentials(&self) -> Result<i64> {
         let now_ns = crate::now_ns()?;
@@ -762,6 +804,19 @@ impl Database {
         .bind(gateway_subdomain)
         .bind(gateway_ssh_port)
         .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"INSERT INTO contract_provisioning_details (contract_id, instance_ip, instance_credentials, connection_instructions, provisioned_at_ns, credentials_expires_at_ns)
+               VALUES ($1, NULL, NULL, $2, $3, NULL)
+               ON CONFLICT(contract_id) DO UPDATE SET
+                   connection_instructions = excluded.connection_instructions,
+                   provisioned_at_ns = excluded.provisioned_at_ns"#,
+        )
+        .bind(contract_id)
+        .bind(instance_details)
+        .bind(now_ns)
         .execute(&mut *tx)
         .await?;
 

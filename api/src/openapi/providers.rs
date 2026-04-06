@@ -2420,6 +2420,17 @@ impl ProvidersApi {
                 .await
             {
                 Ok(_) => {
+                    if let Err(e) = db
+                        .try_activate_self_provisioned_contract(&contract_id)
+                        .await
+                    {
+                        tracing::warn!(
+                            "Self-provisioned fulfillment failed for contract {}: {:#}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
+
                     // Send notification email to user (async, don't fail endpoint)
                     crate::receipts::send_contract_accepted_notification(db.as_ref(), &contract_id)
                         .await;
