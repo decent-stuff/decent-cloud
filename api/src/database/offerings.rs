@@ -152,6 +152,14 @@ pub struct Offering {
     pub created_at_ns: Option<i64>,
 }
 
+struct SavedOfferingPriceChange {
+    offer_name: String,
+    old_currency: String,
+    old_monthly_price: f64,
+    new_currency: String,
+    new_monthly_price: f64,
+}
+
 /// Pricing statistics for offerings matching given filters
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -1010,6 +1018,59 @@ impl Database {
         Ok(count.0)
     }
 
+    async fn notify_saved_offering_price_change(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        offering_id: i64,
+        change: &SavedOfferingPriceChange,
+    ) -> Result<()> {
+        if (change.old_monthly_price - change.new_monthly_price).abs() < 1e-9 {
+            return Ok(());
+        }
+
+        let saved_user_pubkeys = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT user_pubkey FROM saved_offerings WHERE offering_id = $1",
+        )
+        .bind(offering_id)
+        .fetch_all(&mut **tx)
+        .await?;
+
+        if saved_user_pubkeys.is_empty() {
+            return Ok(());
+        }
+
+        let direction = if change.new_monthly_price < change.old_monthly_price {
+            "dropped"
+        } else {
+            "changed"
+        };
+        let title = format!("Saved offering price {}", direction);
+        let body = format!(
+            "{} changed from {} {:.2} to {} {:.2}.",
+            change.offer_name,
+            change.old_currency,
+            change.old_monthly_price,
+            change.new_currency,
+            change.new_monthly_price
+        );
+        let created_at = chrono::Utc::now().timestamp();
+
+        for user_pubkey in saved_user_pubkeys {
+            sqlx::query(
+                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5)",
+            )
+            .bind(user_pubkey.as_slice())
+            .bind("saved_offering_price_change")
+            .bind(&title)
+            .bind(&body)
+            .bind(created_at)
+            .execute(&mut **tx)
+            .await?;
+        }
+
+        Ok(())
+    }
+
     /// Create a new offering
     pub async fn create_offering(&self, pubkey: &[u8], params: Offering) -> Result<i64> {
         // Validate required fields
@@ -1251,23 +1312,23 @@ impl Database {
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
-        // Verify ownership
-        let owner: Option<Vec<u8>> = sqlx::query_scalar!(
-            "SELECT pubkey FROM provider_offerings WHERE id = $1",
-            offering_db_id
+        // Verify ownership and capture the current price for notifications.
+        let existing_offering = sqlx::query_as::<_, (Vec<u8>, String, String, f64)>(
+            "SELECT pubkey, offer_name, currency, monthly_price FROM provider_offerings WHERE id = $1",
         )
+        .bind(offering_db_id)
         .fetch_optional(&mut *tx)
         .await?;
 
-        match owner {
+        let existing_offering = match existing_offering {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some(owner_pubkey) if owner_pubkey != pubkey => {
+            Some((owner_pubkey, _, _, _)) if owner_pubkey != pubkey => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
             }
-            _ => {}
-        }
+            Some(existing_offering) => existing_offering,
+        };
 
         // Validate datacenter_country is a known ISO country code
         if !params.datacenter_country.is_empty()
@@ -1369,6 +1430,16 @@ impl Database {
             provisioner_config
         };
 
+        let (_, _, existing_currency, existing_monthly_price) = &existing_offering;
+        let price_changed = (*existing_monthly_price - monthly_price).abs() >= 1e-9;
+        let price_change = SavedOfferingPriceChange {
+            offer_name: offer_name.clone(),
+            old_currency: existing_currency.clone(),
+            old_monthly_price: *existing_monthly_price,
+            new_currency: currency.clone(),
+            new_monthly_price: monthly_price,
+        };
+
         sqlx::query!(
             r#"UPDATE provider_offerings SET
                 offering_id = $1, offer_name = $2, description = $3, product_page_url = $4,
@@ -1451,6 +1522,11 @@ impl Database {
         )
         .execute(&mut *tx)
         .await?;
+
+        if price_changed {
+            self.notify_saved_offering_price_change(&mut tx, offering_db_id, &price_change)
+                .await?;
+        }
 
         tx.commit().await?;
         Ok(())
@@ -1700,31 +1776,42 @@ impl Database {
 
         let mut tx = self.pool.begin().await?;
 
-        // Verify all offerings belong to this provider atomically
+        // Verify all offerings belong to this provider atomically and capture current prices.
         let id_placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
         let pubkey_placeholder = format!("${}", ids.len() + 1);
         let verify_query = format!(
-            "SELECT COUNT(*) FROM provider_offerings WHERE id IN ({}) AND pubkey = {}",
+            "SELECT id, offer_name, currency, monthly_price FROM provider_offerings WHERE id IN ({}) AND pubkey = {}",
             id_placeholders.join(","),
             pubkey_placeholder
         );
 
-        let mut verify_builder = sqlx::query_scalar::<_, i64>(&verify_query);
+        let mut verify_builder = sqlx::query_as::<_, (i64, String, String, f64)>(&verify_query);
         for id in &ids {
             verify_builder = verify_builder.bind(id);
         }
         verify_builder = verify_builder.bind(pubkey);
 
-        let count: i64 = verify_builder.fetch_one(&mut *tx).await?;
-        if count != ids.len() as i64 {
+        let existing_offerings = verify_builder.fetch_all(&mut *tx).await?;
+        if existing_offerings.len() != ids.len() {
             return Err(anyhow::anyhow!(
                 "Not all offerings belong to this provider or some IDs are invalid"
             ));
         }
 
+        let existing_offerings: HashMap<i64, (String, String, f64)> = existing_offerings
+            .into_iter()
+            .map(|(id, offer_name, currency, monthly_price)| {
+                (id, (offer_name, currency, monthly_price))
+            })
+            .collect();
+
         // Update each offering's price within the transaction
         let mut rows_affected = 0u64;
         for (id, price_e9s) in updates {
+            let (offer_name, currency, old_monthly_price) = existing_offerings
+                .get(id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Offering {} missing after ownership verification", id))?;
             let monthly_price = *price_e9s as f64 / 1_000_000_000.0;
             let result = sqlx::query!(
                 "UPDATE provider_offerings SET monthly_price = $1 WHERE id = $2",
@@ -1733,6 +1820,19 @@ impl Database {
             )
             .execute(&mut *tx)
             .await?;
+
+            if (old_monthly_price - monthly_price).abs() >= 1e-9 {
+                let price_change = SavedOfferingPriceChange {
+                    offer_name,
+                    old_currency: currency.clone(),
+                    old_monthly_price,
+                    new_currency: currency,
+                    new_monthly_price: monthly_price,
+                };
+                self.notify_saved_offering_price_change(&mut tx, *id, &price_change)
+                    .await?;
+            }
+
             rows_affected += result.rows_affected();
         }
 

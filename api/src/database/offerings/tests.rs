@@ -3369,6 +3369,86 @@ async fn test_unsave_nonexistent_is_ok() {
 }
 
 #[tokio::test]
+async fn test_update_offering_price_change_notifies_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x66u8; 32];
+    let user_a = vec![0x67u8; 32];
+    let user_b = vec![0x68u8; 32];
+
+    insert_test_offering(&db, 7, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(7);
+
+    db.save_offering(&user_a, offering_id)
+        .await
+        .expect("save for user_a should succeed");
+    db.save_offering(&user_b, offering_id)
+        .await
+        .expect("save for user_b should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.monthly_price = 12.5;
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    for user in [&user_a, &user_b] {
+        let notifications = db
+            .get_user_notifications(user, 10)
+            .await
+            .expect("get_user_notifications should succeed");
+        assert_eq!(notifications.len(), 1, "expected one price alert");
+        assert_eq!(
+            notifications[0].notification_type,
+            "saved_offering_price_change"
+        );
+        assert_eq!(notifications[0].title, "Saved offering price changed");
+        assert!(
+            notifications[0]
+                .body
+                .contains("Test Offer changed from USD 10.00 to USD 12.50."),
+            "unexpected notification body: {}",
+            notifications[0].body
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_update_offering_same_price_does_not_notify_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x69u8; 32];
+    let user = vec![0x6Au8; 32];
+
+    insert_test_offering(&db, 8, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(8);
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.offer_name = "Renamed Offer".to_string();
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert!(notifications.is_empty(), "same price should not notify");
+}
+
+#[tokio::test]
 async fn test_bulk_update_offering_prices_updates_all() {
     let db = setup_test_db().await;
     let pubkey = vec![0xAAu8; 32];
@@ -3412,6 +3492,65 @@ async fn test_bulk_update_offering_prices_updates_all() {
         (o3.monthly_price - 35.0).abs() < 1e-6,
         "expected 35.0, got {}",
         o3.monthly_price
+    );
+}
+
+#[tokio::test]
+async fn test_bulk_update_offering_prices_notifies_only_changed_saved_offerings() {
+    let db = setup_test_db().await;
+    let provider = vec![0xABu8; 32];
+    let changed_user = vec![0xACu8; 32];
+    let unchanged_user = vec![0xADu8; 32];
+
+    insert_test_offering(&db, 9, &provider, "US", 10.0).await;
+    insert_test_offering(&db, 10, &provider, "US", 20.0).await;
+    let changed_offering_id = test_id_to_db_id(9);
+    let unchanged_offering_id = test_id_to_db_id(10);
+
+    db.save_offering(&changed_user, changed_offering_id)
+        .await
+        .expect("save changed offering should succeed");
+    db.save_offering(&unchanged_user, unchanged_offering_id)
+        .await
+        .expect("save unchanged offering should succeed");
+
+    let rows = db
+        .bulk_update_offering_prices(
+            &provider,
+            &[
+                (changed_offering_id, 15_000_000_000i64),
+                (unchanged_offering_id, 20_000_000_000i64),
+            ],
+        )
+        .await
+        .expect("bulk update should succeed");
+
+    assert_eq!(rows, 2, "expected both rows to be updated");
+
+    let changed_notifications = db
+        .get_user_notifications(&changed_user, 10)
+        .await
+        .expect("get_user_notifications for changed user should succeed");
+    assert_eq!(changed_notifications.len(), 1, "changed offering should notify");
+    assert_eq!(
+        changed_notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert!(
+        changed_notifications[0]
+            .body
+            .contains("Test Offer changed from USD 10.00 to USD 15.00."),
+        "unexpected changed notification body: {}",
+        changed_notifications[0].body
+    );
+
+    let unchanged_notifications = db
+        .get_user_notifications(&unchanged_user, 10)
+        .await
+        .expect("get_user_notifications for unchanged user should succeed");
+    assert!(
+        unchanged_notifications.is_empty(),
+        "unchanged offering should not notify"
     );
 }
 
