@@ -3157,14 +3157,24 @@ impl ProvidersApi {
 
         let mut reports = Vec::with_capacity(req.reports.len());
         for report in &req.reports {
-            if chrono::NaiveDate::parse_from_str(&report.report_date, "%Y-%m-%d").is_err() {
+            let report_date = match chrono::NaiveDate::parse_from_str(&report.report_date, "%Y-%m-%d") {
+                Ok(d) => d,
+                Err(_) => {
+                    return Json(ApiResponse {
+                        success: false,
+                        data: None,
+                        error: Some(format!(
+                            "Invalid report_date '{}' - expected YYYY-MM-DD",
+                            report.report_date
+                        )),
+                    });
+                }
+            };
+            if report_date > chrono::Utc::now().date_naive() {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!(
-                        "Invalid report_date '{}' - expected YYYY-MM-DD",
-                        report.report_date
-                    )),
+                    error: Some("report_date must not be in the future".to_string()),
                 });
             }
             if !(0.0..=100.0).contains(&report.uptime_percent) {
