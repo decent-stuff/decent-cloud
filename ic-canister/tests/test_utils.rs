@@ -65,19 +65,24 @@ pub fn workspace_dir() -> PathBuf {
 
 pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
     let workspace = workspace_dir();
-    let canister_dir = workspace.join("ic-canister");
-    let output = Command::new("dfx")
-        .arg("build")
-        .current_dir(&canister_dir)
+    let output = Command::new("cargo")
+        .args([
+            "build",
+            "--target=wasm32-unknown-unknown",
+            "--release",
+            "-p",
+            "decent_cloud_canister",
+        ])
+        .current_dir(&workspace)
         .output()
-        .expect("Failed to execute 'dfx build'. Make sure dfx is installed and in PATH.");
+        .expect("Failed to execute 'cargo build'.");
 
     if !output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         panic!(
-            "Failed to build canister at {}\nstdout: {}\nstderr: {}",
-            canister_dir.display(),
+            "Failed to build canister WASM at {}\nstdout: {}\nstderr: {}",
+            workspace.display(),
             stdout,
             stderr
         );
@@ -87,7 +92,13 @@ pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace.join("target"));
     let wasm_path = target_dir.join("wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
-    fs_err::read(&wasm_path).unwrap()
+    fs_err::read(&wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "Canister WASM not found at {}: {}",
+            wasm_path.display(),
+            e
+        )
+    })
 });
 
 /// Shared PocketIc instance across all tests.
