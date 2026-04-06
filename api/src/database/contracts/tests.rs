@@ -3246,6 +3246,118 @@ async fn test_try_activate_self_provisioned_contract_promotes_reserved_contract_
         .contains("gwslug.dc-lk.dev-gw.decent-cloud.org"));
 }
 
+#[tokio::test]
+async fn test_cancel_contract_releases_self_provisioned_resource_not_deletes() {
+    let db = setup_test_db().await;
+    let requester = vec![5u8; 32];
+    let provider = vec![6u8; 32];
+
+    let account = db
+        .create_account("cancel_sp_provider", &provider, "cancel-sp@example.com")
+        .await
+        .unwrap();
+    let cloud_account = db
+        .create_cloud_account(
+            &account.id,
+            crate::cloud::types::BackendType::Hetzner,
+            "cancel-sp-hetzner",
+            "encrypted",
+            None,
+        )
+        .await
+        .unwrap();
+    let cloud_account_id: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+    let resource = db
+        .create_cloud_resource(
+            &cloud_account_id,
+            "cancel-sp-ext",
+            "cancel-sp-vm",
+            "cx22",
+            "nbg1",
+            "ubuntu-24.04",
+            "ssh-ed25519 AAAA owner",
+        )
+        .await
+        .unwrap();
+    let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+    db.update_cloud_resource_status(&resource_id, "running")
+        .await
+        .unwrap();
+
+    let offering_id: i64 = sqlx::query_scalar(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, offering_source, created_at_ns) VALUES ($1, 'off-cancel-sp', 'Self Prov Cancel', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 'self_provisioned', 0) RETURNING id",
+    )
+    .bind(&provider)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+
+    db.list_on_marketplace(&resource_id, &account.id, offering_id)
+        .await
+        .unwrap();
+
+    let params = RentalRequestParams {
+        offering_db_id: offering_id,
+        ssh_pubkey: Some("ssh-ed25519 AAAA tenant".to_string()),
+        contact_method: Some("email:tenant@example.com".to_string()),
+        request_memo: Some("Rent self-provisioned VM".to_string()),
+        duration_hours: Some(24),
+        payment_method: Some("icpay".to_string()),
+        buyer_address: None,
+        operating_system: Some("Ubuntu 24.04".to_string()),
+    };
+
+    let contract_id = db.create_rental_request(&requester, params).await.unwrap();
+
+    let stock_after_reserve: (String,) =
+        sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+            .bind(offering_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(stock_after_reserve.0, "out_of_stock");
+
+    db.cancel_contract(&contract_id, &requester, Some("Tenant cancelled"), None, None)
+        .await
+        .unwrap();
+
+    let contract_status: (String,) =
+        sqlx::query_as("SELECT status FROM contract_sign_requests WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(contract_status.0, "cancelled");
+
+    let resource_state: (Option<Vec<u8>>, String) = sqlx::query_as(
+        "SELECT contract_id, status FROM cloud_resources WHERE id = $1",
+    )
+    .bind(resource_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        resource_state.0, None,
+        "self-provisioned resource should be released (contract_id NULL), not deleted"
+    );
+    assert_eq!(
+        resource_state.1, "running",
+        "self-provisioned resource status should remain running, not set to deleting"
+    );
+
+    let stock_after_cancel: (String,) =
+        sqlx::query_as("SELECT stock_status FROM provider_offerings WHERE id = $1")
+            .bind(offering_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        stock_after_cancel.0, "in_stock",
+        "offering should be restocked after cancel"
+    );
+}
+
 // --- purge_terminal_contracts tests ---
 
 /// Helper to insert a terminal contract with a specific status_updated_at_ns
