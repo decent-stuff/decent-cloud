@@ -477,4 +477,71 @@ mod tests {
         assert!(mild_penalty > 0.0);
         assert!(severe_penalty > mild_penalty);
     }
+
+    #[test]
+    fn test_penalty_zero_samples() {
+        let penalty = Database::calculate_provider_sli_penalty_points(&[]);
+        assert_eq!(penalty, 0.0);
+    }
+
+    #[test]
+    fn test_penalty_all_compliant() {
+        let penalty = Database::calculate_provider_sli_penalty_points(&[
+            ProviderSliSample {
+                report_date: "2026-01-01".to_string(),
+                uptime_percent: 99.95,
+                response_sli_percent: Some(99.0),
+                incident_count: 0,
+                sla_target_percent: 99.9,
+            },
+            ProviderSliSample {
+                report_date: "2026-01-02".to_string(),
+                uptime_percent: 100.0,
+                response_sli_percent: Some(100.0),
+                incident_count: 0,
+                sla_target_percent: 99.9,
+            },
+        ]);
+        assert_eq!(penalty, 0.0);
+    }
+
+    #[test]
+    fn test_penalty_capped_at_45() {
+        let mut samples = Vec::new();
+        for i in 0..30 {
+            samples.push(ProviderSliSample {
+                report_date: format!("2026-01-{i:02}"),
+                uptime_percent: 0.0,
+                response_sli_percent: Some(0.0),
+                incident_count: 100,
+                sla_target_percent: 99.9,
+            });
+        }
+        let penalty = Database::calculate_provider_sli_penalty_points(&samples);
+        assert_eq!(penalty, 45.0);
+    }
+
+    #[test]
+    fn test_penalty_coverage_factor_reduces_sparse_data() {
+        let sparse = vec![ProviderSliSample {
+            report_date: "2026-01-01".to_string(),
+            uptime_percent: 99.0,
+            response_sli_percent: None,
+            incident_count: 0,
+            sla_target_percent: 99.9,
+        }];
+        let mut full = Vec::new();
+        for i in 0..30 {
+            full.push(ProviderSliSample {
+                report_date: format!("2026-01-{i:02}"),
+                uptime_percent: 99.0,
+                response_sli_percent: None,
+                incident_count: 0,
+                sla_target_percent: 99.9,
+            });
+        }
+        let sparse_penalty = Database::calculate_provider_sli_penalty_points(&sparse);
+        let full_penalty = Database::calculate_provider_sli_penalty_points(&full);
+        assert!(sparse_penalty < full_penalty);
+    }
 }

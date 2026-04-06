@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, getProviderProfile, hexEncode, getUserContracts, getProviderContracts, getProviderResponseMetrics, getProviderOfferingStats, getOfferingSlaSummary, getProviderSlaSummary } from './api';
+import { fetchPlatformStats, searchOfferings, getActiveProviders, getProviderOfferings, getProviderProfile, hexEncode, getUserContracts, getProviderContracts, getProviderResponseMetrics, getProviderOfferingStats, getOfferingSlaSummary, getProviderSlaSummary, upsertProviderOfferingSliReports } from './api';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 const sampleStats = {
@@ -571,6 +571,42 @@ describe('SLA summary fetchers', () => {
 		expect(globalThis.fetch).toHaveBeenCalledWith(
 			expect.stringContaining('/api/v1/providers/abcd1234/sla-summary?days=30')
 		);
+	});
+
+	it('submits SLI reports via PUT with auth headers', async () => {
+		const mockHeaders = { 'X-Signature': 'test-sig' };
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({ success: true, data: 'SLI reports updated successfully' })
+		});
+
+		await upsertProviderOfferingSliReports('abcd1234', 7, 99.9, [
+			{ reportDate: '2026-04-05', uptimePercent: 99.95, incidentCount: 0 },
+		], mockHeaders);
+
+		expect(globalThis.fetch).toHaveBeenCalledWith(
+			expect.stringContaining('/api/v1/providers/abcd1234/offerings/7/sli-reports'),
+			expect.objectContaining({
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json', ...mockHeaders },
+			})
+		);
+		const callBody = JSON.parse((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+		expect(callBody.slaTargetPercent).toBe(99.9);
+		expect(callBody.reports).toHaveLength(1);
+		expect(callBody.reports[0].reportDate).toBe('2026-04-05');
+	});
+
+	it('throws on upsert failure', async () => {
+		globalThis.fetch = vi.fn().mockResolvedValue({
+			ok: false,
+			status: 403,
+			statusText: 'Forbidden'
+		});
+
+		await expect(
+			upsertProviderOfferingSliReports('abcd1234', 7, 99.9, [], {})
+		).rejects.toThrow('Failed to submit SLI reports: 403');
 	});
 });
 
