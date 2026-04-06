@@ -264,7 +264,8 @@ impl Database {
         };
 
         let score = uptime_pct * 0.40 + completion_rate_pct * 0.35 + response_rate_pct * 0.25;
-        Ok(Some(score.clamp(0.0, 100.0)))
+        let sla_penalty = self.get_provider_sli_penalty_points(pubkey, 30).await?;
+        Ok(Some((score - sla_penalty).clamp(0.0, 100.0)))
     }
 
     /// Get trust metrics for a provider

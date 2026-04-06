@@ -15,6 +15,7 @@ pub mod core;
 pub mod email;
 pub mod handlers;
 pub mod notification_config;
+pub mod offering_sla;
 pub mod offerings;
 pub mod providers;
 pub mod recovery;

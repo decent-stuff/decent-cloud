@@ -3755,6 +3755,65 @@ async fn test_published_offering_visible_in_public_search() {
 }
 
 #[tokio::test]
+async fn test_search_offerings_prioritizes_provider_reputation() {
+	let db = setup_test_db().await;
+	delete_example_data(&db).await;
+	let high_pubkey = [210u8; 32];
+	let low_pubkey = [211u8; 32];
+	ensure_provider_with_pool(&db, &high_pubkey, "US").await;
+	ensure_provider_with_pool(&db, &low_pubkey, "US").await;
+
+	sqlx::query(
+		"INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, trust_score, reliability_score, has_critical_flags) VALUES ($1, 'High Trust', '1.0', '1.0', 0, 95, 97.5, FALSE)",
+	)
+	.bind(&high_pubkey[..])
+	.execute(&db.pool)
+	.await
+	.unwrap();
+
+	sqlx::query(
+		"INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, trust_score, reliability_score, has_critical_flags) VALUES ($1, 'Low Trust', '1.0', '1.0', 0, 40, 52.0, FALSE)",
+	)
+	.bind(&low_pubkey[..])
+	.execute(&db.pool)
+	.await
+	.unwrap();
+
+	sqlx::query(
+		"INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'rep-high', 'High Reputation Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Austin', FALSE, FALSE, 0)",
+	)
+	.bind(&high_pubkey[..])
+	.execute(&db.pool)
+	.await
+	.unwrap();
+
+	sqlx::query(
+		"INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'rep-low', 'Low Reputation Offer', 'USD', 5.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Austin', FALSE, FALSE, 0)",
+	)
+	.bind(&low_pubkey[..])
+	.execute(&db.pool)
+	.await
+	.unwrap();
+
+	let results = db
+		.search_offerings(SearchOfferingsParams {
+			product_type: None,
+			country: Some("US"),
+			in_stock_only: false,
+			has_recipe: false,
+			min_price_monthly: None,
+			max_price_monthly: None,
+			limit: 10,
+			offset: 0,
+			text_search: None,
+		})
+		.await
+		.expect("search offerings");
+
+	assert_eq!(results[0].offering_id, "rep-high");
+}
+
+#[tokio::test]
 async fn test_draft_offering_visible_in_provider_own_listings() {
     let db = setup_test_db().await;
     let pubkey = [202u8; 32];

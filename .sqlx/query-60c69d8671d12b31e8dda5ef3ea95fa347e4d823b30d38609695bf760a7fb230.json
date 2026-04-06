@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE accounts SET totp_secret = NULL, totp_enabled = FALSE WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "60c69d8671d12b31e8dda5ef3ea95fa347e4d823b30d38609695bf760a7fb230"
+}

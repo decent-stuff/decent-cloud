@@ -7,10 +7,15 @@
 		getProviderContractHealthSummary,
 		getProviderSlaUptimeConfig,
 		updateProviderSlaUptimeConfig,
+		getProviderOfferings,
+		getProviderSlaSummary,
+		upsertProviderOfferingSliReports,
 		hexEncode,
 		type Contract,
 		type ContractHealthSummary,
-		type SlaUptimeConfig
+		type SlaUptimeConfig,
+		type Offering,
+		type ProviderSlaSummary
 	} from '$lib/services/api';
 	import { signRequest } from '$lib/services/auth-api';
 	import { authStore } from '$lib/stores/auth';
@@ -34,6 +39,20 @@
 	let slaConfigSaving = $state(false);
 	let slaConfigError = $state<string | null>(null);
 	let slaConfigSuccess = $state(false);
+
+	// SLI reporting state
+	let offerings = $state<Offering[]>([]);
+	let providerSlaSummary = $state<ProviderSlaSummary | null>(null);
+	let sliSelectedOfferingId = $state<number | null>(null);
+	let sliSlaTarget = $state(99.9);
+	let sliDate = $state(new Date().toISOString().slice(0, 10));
+	let sliUptime = $state(100.0);
+	let sliResponseSli = $state<string>('');
+	let sliIncidents = $state(0);
+	let sliNotes = $state('');
+	let sliSubmitting = $state(false);
+	let sliError = $state<string | null>(null);
+	let sliSuccess = $state(false);
 
 	const overallUptime = $derived(() => {
 		const monitored = rows.filter((r) => r.summary && r.summary.totalChecks > 0);
@@ -77,10 +96,12 @@
 
 			const providerHex = hexEncode(info.publicKeyBytes);
 
-			// Load SLA config and contracts in parallel
+			// Load SLA config, contracts, offerings, and provider SLA summary in parallel
 			const [signedContracts] = await Promise.all([
 				signRequest(info.identity, 'GET', `/api/v1/providers/${providerHex}/contracts`),
-				loadSlaConfig(info.identity, providerHex)
+				loadSlaConfig(info.identity, providerHex),
+				getProviderOfferings(providerHex).then((o) => { offerings = o; }).catch(() => {}),
+				getProviderSlaSummary(providerHex, 30).then((s) => { providerSlaSummary = s; }).catch(() => {})
 			]);
 			const contracts = await getProviderContracts(signedContracts.headers, providerHex);
 
@@ -160,6 +181,66 @@
 		}
 	}
 
+	async function submitSliReport() {
+		if (!sliSelectedOfferingId) {
+			sliError = 'Select an offering';
+			return;
+		}
+		try {
+			sliSubmitting = true;
+			sliError = null;
+			sliSuccess = false;
+
+			const info = await authStore.getSigningIdentity();
+			if (!info || !(info.identity instanceof Ed25519KeyIdentity)) {
+				sliError = 'Authentication required';
+				return;
+			}
+			const providerHex = hexEncode(info.publicKeyBytes);
+			const signed = await signRequest(
+				info.identity,
+				'PUT',
+				`/api/v1/providers/${providerHex}/offerings/${sliSelectedOfferingId}/sli-reports`,
+				{
+					slaTargetPercent: sliSlaTarget,
+					reports: [
+						{
+							reportDate: sliDate,
+							uptimePercent: sliUptime,
+							responseSliPercent: sliResponseSli !== '' ? parseFloat(sliResponseSli) : undefined,
+							incidentCount: sliIncidents,
+							notes: sliNotes || undefined
+						}
+					]
+				}
+			);
+			await upsertProviderOfferingSliReports(
+				providerHex,
+				sliSelectedOfferingId,
+				sliSlaTarget,
+				[
+					{
+						reportDate: sliDate,
+						uptimePercent: sliUptime,
+						responseSliPercent: sliResponseSli !== '' ? parseFloat(sliResponseSli) : undefined,
+						incidentCount: sliIncidents,
+						notes: sliNotes || undefined
+					}
+				],
+				signed.headers
+			);
+			sliSuccess = true;
+			sliNotes = '';
+			setTimeout(() => { sliSuccess = false; }, 4000);
+			// Refresh provider SLA summary
+			getProviderSlaSummary(providerHex, 30).then((s) => { providerSlaSummary = s; }).catch(() => {});
+		} catch (e) {
+			sliError = e instanceof Error ? e.message : 'Failed to submit SLI report';
+		} finally {
+			sliSubmitting = false;
+		}
+	}
+
 	onDestroy(() => {
 		unsubscribeAuth?.();
 	});
@@ -202,6 +283,143 @@
 				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else}
+			<!-- Provider SLA Summary -->
+			{#if providerSlaSummary && (providerSlaSummary.reports30d > 0 || providerSlaSummary.offeringsTracked > 0)}
+				<section class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+					<div class="bg-surface-elevated border border-neutral-800 p-4">
+						<p class="text-neutral-500 text-xs">Offerings Tracked</p>
+						<p class="text-2xl font-bold text-white mt-1">{providerSlaSummary.offeringsTracked}</p>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-4">
+						<p class="text-neutral-500 text-xs">30d Compliance</p>
+						<p class="text-2xl font-bold mt-1 {(providerSlaSummary.compliance30dPercent ?? 100) >= 99 ? 'text-emerald-400' : (providerSlaSummary.compliance30dPercent ?? 100) >= 95 ? 'text-yellow-400' : 'text-red-400'}">
+							{providerSlaSummary.compliance30dPercent?.toFixed(1) ?? '—'}%
+						</p>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-4">
+						<p class="text-neutral-500 text-xs">Breach Days (30d)</p>
+						<p class="text-2xl font-bold mt-1 {providerSlaSummary.breachDays30d > 0 ? 'text-red-400' : 'text-emerald-400'}">{providerSlaSummary.breachDays30d}</p>
+					</div>
+					<div class="bg-surface-elevated border border-neutral-800 p-4">
+						<p class="text-neutral-500 text-xs">Penalty Points</p>
+						<p class="text-2xl font-bold mt-1 {providerSlaSummary.penaltyPoints > 10 ? 'text-red-400' : providerSlaSummary.penaltyPoints > 3 ? 'text-yellow-400' : 'text-emerald-400'}"
+							title="Deducted from reliability score (0–45 scale). Lower is better."
+						>
+							{providerSlaSummary.penaltyPoints.toFixed(1)}
+						</p>
+					</div>
+				</section>
+			{/if}
+
+			<!-- SLI Report Submission -->
+			<section class="bg-surface-elevated border border-neutral-800 p-5">
+				<h2 class="text-base font-semibold text-white mb-1">Submit SLI Report</h2>
+				<p class="text-neutral-500 text-xs mb-4">
+					Report daily uptime and SLI data for your offerings. This data is used to compute your reliability score and is displayed to potential customers.
+				</p>
+				{#if offerings.length === 0}
+					<p class="text-neutral-500 text-sm">No offerings found. <a href="/dashboard/offerings" class="text-primary-400 hover:text-primary-300">Create an offering</a> first.</p>
+				{:else}
+					<div class="flex flex-wrap gap-4">
+						<div class="flex flex-col gap-1 min-w-40">
+							<label for="sli-offering" class="text-xs text-neutral-400 font-medium">Offering</label>
+							<select
+								id="sli-offering"
+								bind:value={sliSelectedOfferingId}
+								class="bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							>
+								<option value={null}>— select —</option>
+								{#each offerings as o}
+									<option value={o.id}>{o.offer_name} (#{o.id})</option>
+								{/each}
+							</select>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="sli-sla-target" class="text-xs text-neutral-400 font-medium">SLA Target (%)</label>
+							<input
+								id="sli-sla-target"
+								type="number"
+								min="1"
+								max="100"
+								step="0.01"
+								bind:value={sliSlaTarget}
+								class="w-28 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="sli-date" class="text-xs text-neutral-400 font-medium">Date</label>
+							<input
+								id="sli-date"
+								type="date"
+								bind:value={sliDate}
+								class="bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="sli-uptime" class="text-xs text-neutral-400 font-medium">Uptime (%)</label>
+							<input
+								id="sli-uptime"
+								type="number"
+								min="0"
+								max="100"
+								step="0.01"
+								bind:value={sliUptime}
+								class="w-28 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="sli-response" class="text-xs text-neutral-400 font-medium">Response SLI (%) <span class="text-neutral-600">optional</span></label>
+							<input
+								id="sli-response"
+								type="number"
+								min="0"
+								max="100"
+								step="0.1"
+								bind:value={sliResponseSli}
+								placeholder="—"
+								class="w-28 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1">
+							<label for="sli-incidents" class="text-xs text-neutral-400 font-medium">Incidents</label>
+							<input
+								id="sli-incidents"
+								type="number"
+								min="0"
+								bind:value={sliIncidents}
+								class="w-20 bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1 grow">
+							<label for="sli-notes" class="text-xs text-neutral-400 font-medium">Notes <span class="text-neutral-600">optional</span></label>
+							<input
+								id="sli-notes"
+								type="text"
+								bind:value={sliNotes}
+								placeholder="e.g. scheduled maintenance"
+								class="bg-neutral-900 border border-neutral-700 text-white text-sm px-3 py-1.5 focus:outline-none focus:border-primary-500"
+							/>
+						</div>
+						<div class="flex flex-col gap-1 pb-5">
+							<div class="text-xs text-neutral-400 font-medium">&nbsp;</div>
+							<button
+								onclick={submitSliReport}
+								disabled={sliSubmitting || !sliSelectedOfferingId}
+								class="px-4 py-1.5 text-sm bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+							>
+								{sliSubmitting ? 'Submitting...' : 'Submit'}
+							</button>
+						</div>
+					</div>
+					{#if sliSuccess}
+						<p class="text-emerald-400 text-xs mt-2">SLI report submitted successfully.</p>
+					{/if}
+					{#if sliError}
+						<p class="text-red-400 text-xs mt-2">{sliError}</p>
+					{/if}
+				{/if}
+			</section>
+
 			<!-- Alert Configuration -->
 			<section class="bg-surface-elevated border border-neutral-800 p-5">
 				<h2 class="text-base font-semibold text-white mb-1">Alert Configuration</h2>

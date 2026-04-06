@@ -164,6 +164,10 @@ fn default_trend_days() -> i64 {
     30
 }
 
+fn default_sla_days() -> i64 {
+    30
+}
+
 #[OpenApi]
 impl OfferingsApi {
     /// Validate a recipe script
@@ -686,6 +690,34 @@ impl OfferingsApi {
                     error: Some("Failed to record view".to_string()),
                 })
             }
+        }
+    }
+
+    /// Get provider-reported SLA summary for an offering
+    #[oai(path = "/offerings/:id/sla-summary", method = "get", tag = "ApiTags::Offerings")]
+    async fn get_offering_sla_summary(
+        &self,
+        db: Data<&Arc<Database>>,
+        id: Path<i64>,
+        #[oai(default = "default_sla_days")] days: poem_openapi::param::Query<i64>,
+    ) -> Json<ApiResponse<crate::database::offering_sla::OfferingSlaSummary>> {
+        let requested_days = days.0.clamp(1, 90);
+        match db.get_offering_sla_summary(id.0, requested_days).await {
+            Ok(summary) => Json(ApiResponse {
+                success: true,
+                data: Some(summary),
+                error: None,
+            }),
+            Err(e) if e.to_string().contains("Offering not found") => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Offering not found".to_string()),
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
         }
     }
 
