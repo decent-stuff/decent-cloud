@@ -322,3 +322,89 @@ fn test_health_status_from_stopped_container() {
     assert!(!state.running.unwrap_or(false));
     assert_eq!(state.exit_code, Some(137));
 }
+
+#[test]
+fn test_container_to_instance_empty_inspect_returns_none() {
+    let config = default_config();
+    let prov = DockerProvisioner::new_for_test(config);
+    let result = prov.container_to_instance(&ContainerInspectResponse::default(), "id1");
+    assert!(result.is_none(), "Should return None for inspect with no name");
+}
+
+#[test]
+fn test_build_container_config_has_cmd() {
+    let config = default_config();
+    let prov = DockerProvisioner::new_for_test(config);
+    let request = make_provision_request();
+    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+
+    let cmd = cfg.cmd.expect("cmd must be set for SSH setup");
+    assert_eq!(cmd[0], "/bin/bash");
+    assert_eq!(cmd[1], "-c");
+    assert!(
+        cmd[2].contains("openssh-server"),
+        "cmd must install openssh-server"
+    );
+    assert!(
+        cmd[2].contains("authorized_keys"),
+        "cmd must set up authorized_keys"
+    );
+    assert!(
+        cmd[2].contains("sshd -D"),
+        "cmd must start sshd in foreground"
+    );
+}
+
+#[tokio::test]
+async fn test_terminate_not_found_returns_ok() {
+    let mut server = mockito::Server::new_async().await;
+    let _mock = server
+        .mock("GET", "/containers/nonexistent/json")
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message": "No such container: nonexistent"}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.terminate("nonexistent").await;
+    assert!(result.is_ok(), "terminate() should return Ok for 404");
+}
+
+#[tokio::test]
+async fn test_health_check_not_found_returns_unhealthy() {
+    let mut server = mockito::Server::new_async().await;
+    let _mock = server
+        .mock("GET", "/containers/missing/json")
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message": "No such container: missing"}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.health_check("missing").await.unwrap();
+    assert!(
+        matches!(result, HealthStatus::Unhealthy { .. }),
+        "health_check should return Unhealthy for 404"
+    );
+}
+
+#[tokio::test]
+async fn test_pull_image_propagates_list_error() {
+    let mut server = mockito::Server::new_async().await;
+    let _mock = server
+        .mock("GET", "/images/json")
+        .with_status(500)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message": "permission denied"}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.pull_image_if_needed("ubuntu:22.04").await;
+    assert!(
+        result.is_err(),
+        "pull_image_if_needed() should propagate list_images error"
+    );
+}

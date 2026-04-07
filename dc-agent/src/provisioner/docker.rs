@@ -20,6 +20,13 @@ fn container_name(contract_id: &str) -> String {
     format!("dc-{}", contract_id)
 }
 
+fn is_docker_not_found(e: &bollard::errors::Error) -> bool {
+    matches!(
+        e,
+        bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }
+    )
+}
+
 fn extract_contract_id(name: &str) -> Option<String> {
     name.strip_prefix("dc-").map(String::from)
 }
@@ -53,9 +60,9 @@ impl DockerProvisioner {
     }
 
     async fn pull_image_if_needed(&self, image: &str) -> Result<()> {
-        let images = self.client.list_images::<String>(None).await;
+        let images = self.client.list_images::<String>(None).await
+            .context("Failed to list Docker images to check local cache")?;
         let already_present = images
-            .unwrap_or_default()
             .iter()
             .any(|img| img.repo_tags.iter().any(|t| t == image));
 
@@ -106,6 +113,19 @@ impl DockerProvisioner {
             env.push(format!("SSH_PUBLIC_KEY={}", ssh_key));
         }
 
+        let cmd = Some(vec![
+            "/bin/bash".to_string(),
+            "-c".to_string(),
+            concat!(
+                "set -e; ",
+                "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server; ",
+                "mkdir -p /root/.ssh && chmod 700 /root/.ssh; ",
+                r#"[ -n "$SSH_PUBLIC_KEY" ] && printf '%s\n' "$SSH_PUBLIC_KEY" > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys; "#,
+                "mkdir -p /run/sshd; ",
+                "exec /usr/sbin/sshd -D -e"
+            ).to_string(),
+        ]);
+
         let mut labels = HashMap::new();
         labels.insert("dc-agent".to_string(), "true".to_string());
         labels.insert("dc-contract-id".to_string(), request.contract_id.clone());
@@ -129,6 +149,7 @@ impl DockerProvisioner {
             image: Some(image.to_string()),
             exposed_ports: Some(exposed_ports),
             env: Some(env),
+            cmd,
             labels: Some(labels),
             host_config: Some(host_config),
             ..Default::default()
@@ -140,11 +161,10 @@ impl DockerProvisioner {
         inspect: &ContainerInspectResponse,
         id: &str,
     ) -> Option<Instance> {
-        let name = inspect
-            .name
-            .as_ref()
-            .map(|n| n.trim_start_matches('/').to_string())
-            .unwrap_or_default();
+        let name = match inspect.name.as_ref() {
+            Some(n) => n.trim_start_matches('/').to_string(),
+            None => return None, // Completely empty inspect response; Docker always sets a name
+        };
 
         let ip = inspect
             .network_settings
@@ -312,7 +332,7 @@ impl Provisioner for DockerProvisioner {
         {
             Ok(resp) => resp,
             Err(e) => {
-                if e.to_string().contains("No such container") {
+                if is_docker_not_found(&e) {
                     tracing::warn!(id = %external_id, "Container not found, assuming already removed");
                     return Ok(());
                 }
@@ -361,7 +381,7 @@ impl Provisioner for DockerProvisioner {
         {
             Ok(resp) => resp,
             Err(e) => {
-                if e.to_string().contains("No such container") {
+                if is_docker_not_found(&e) {
                     return Ok(HealthStatus::Unhealthy {
                         reason: "Container not found".to_string(),
                     });
@@ -409,7 +429,7 @@ impl Provisioner for DockerProvisioner {
         {
             Ok(resp) => resp,
             Err(e) => {
-                if e.to_string().contains("No such container") {
+                if is_docker_not_found(&e) {
                     return Ok(None);
                 }
                 return Err(e).context("Failed to get instance");
@@ -449,8 +469,44 @@ impl Provisioner for DockerProvisioner {
         Ok(instances)
     }
 
+    async fn collect_resources(&self) -> Option<crate::api_client::ResourceInventory> {
+        use crate::api_client::ResourceInventory;
+
+        let info = match self.client.info().await {
+            Ok(info) => info,
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to get Docker info for resource inventory");
+                return None;
+            }
+        };
+
+        let cpu_threads = info.ncpu.unwrap_or(0) as u32;
+        let memory_total_mb = (info.mem_total.unwrap_or(0) / (1024 * 1024)) as u64;
+
+        Some(ResourceInventory {
+            cpu_model: None,
+            cpu_cores: cpu_threads, // Docker reports logical CPUs
+            cpu_threads,
+            cpu_mhz: None,
+            memory_total_mb,
+            memory_available_mb: memory_total_mb, // Docker doesn't expose available; use total
+            storage_pools: vec![],
+            gpu_devices: vec![],
+            templates: vec![],
+        })
+    }
+
     async fn verify_setup(&self) -> SetupVerification {
         let mut result = SetupVerification::default();
+
+        if self.config.default_image == "ubuntu:22.04" {
+            result.warnings.push(
+                "Default image 'ubuntu:22.04' is used. SSH server will be installed on first boot \
+                 via apt-get, which can be slow. Consider using a pre-built image with openssh-server \
+                 already installed."
+                    .to_string(),
+            );
+        }
 
         match self.client.ping().await {
             Ok(_) => {
@@ -491,6 +547,20 @@ impl DockerProvisioner {
         )
         .expect("connect_with_http should not fail");
         Self { config, client }
+    }
+
+    fn new_for_mockito(url: String) -> Self {
+        let client = Docker::connect_with_http(&url, 120, bollard::API_DEFAULT_VERSION)
+            .expect("connect_with_http should not fail");
+        Self {
+            config: DockerConfig {
+                socket_path: String::new(),
+                network: "bridge".to_string(),
+                default_image: "ubuntu:22.04".to_string(),
+                ssh_port: 22,
+            },
+            client,
+        }
     }
 }
 

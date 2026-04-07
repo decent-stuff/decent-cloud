@@ -77,6 +77,7 @@ pub struct SetupVerification {
     pub storage_accessible: Option<bool>,
     pub pool_exists: Option<bool>,
     pub errors: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 impl SetupVerification {
