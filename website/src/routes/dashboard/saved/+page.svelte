@@ -8,10 +8,10 @@
 		markNotificationsRead,
 		unsaveOffering,
 		hexEncode,
-		type Offering,
-		type UserNotification
+		type Offering
 	} from '$lib/services/api';
 	import { toggleSavedId } from '$lib/services/saved-offerings';
+	import { collectSavedOfferingPriceChanges } from '$lib/utils/saved-offering-price-change';
 	import Icon from '$lib/components/Icons.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
 	import { authStore } from '$lib/stores/auth';
@@ -25,7 +25,7 @@
 	let savedIds = $state(new Set<number>());
 	let selectedIds = $state(new Set<number>());
 	let removing = $state(false);
-	let priceChangeMap = $state(new Map<number, { direction: 'up' | 'down'; notificationId: number }>());
+	let priceChangeMap = $state(new Map<number, 'up' | 'down'>());
 
 	let allSelected = $derived(offerings.length > 0 && offerings.every(o => o.id !== undefined && selectedIds.has(o.id)));
 	let someSelected = $derived(selectedIds.size > 0);
@@ -51,14 +51,11 @@
 
 			const notifHeaders = (await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/notifications`)).headers;
 			const notifications = await getUserNotifications(notifHeaders, pubkeyHex);
-			buildPriceChangeMap(notifications);
-
-			const unreadPriceChangeIds = notifications
-				.filter(n => n.notificationType === 'saved_offering_price_change' && n.readAt === undefined && n.offeringId !== undefined)
-				.map(n => n.id);
-			if (unreadPriceChangeIds.length > 0) {
+			const { byOfferingId, unreadNotificationIds } = collectSavedOfferingPriceChanges(notifications);
+			priceChangeMap = byOfferingId;
+			if (unreadNotificationIds.length > 0) {
 				const markHeaders = (await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/notifications/mark-read`)).headers;
-				await markNotificationsRead(markHeaders, pubkeyHex, unreadPriceChangeIds);
+				await markNotificationsRead(markHeaders, pubkeyHex, unreadNotificationIds);
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load saved offerings';
@@ -66,17 +63,6 @@
 			loading = false;
 		}
 	});
-
-	function buildPriceChangeMap(notifications: UserNotification[]) {
-		const map = new Map<number, { direction: 'up' | 'down'; notificationId: number }>();
-		for (const n of notifications) {
-			if (n.notificationType !== 'saved_offering_price_change' || n.offeringId === undefined || n.readAt !== undefined) continue;
-			if (map.has(n.offeringId)) continue;
-			const direction = n.title.includes('dropped') ? 'down' : 'up';
-			map.set(n.offeringId, { direction, notificationId: n.id });
-		}
-		priceChangeMap = map;
-	}
 
 	async function handleUnsave(offeringId: number) {
 		const info = await authStore.getSigningIdentity();
@@ -283,8 +269,8 @@
 								<div class="font-medium text-white flex items-center justify-end gap-1.5">
 									{formatPrice(offering)}
 									{#if offering.id !== undefined && priceChangeMap.has(offering.id)}
-										{@const change = priceChangeMap.get(offering.id)}
-										{#if change?.direction === 'down'}
+										{@const direction = priceChangeMap.get(offering.id)}
+										{#if direction === 'down'}
 											<span class="inline-flex items-center px-1.5 py-0.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded" title="Price dropped">
 												↓
 											</span>

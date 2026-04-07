@@ -1841,7 +1841,10 @@ impl Database {
             pubkey_placeholder
         );
 
-        let mut verify_builder = sqlx::query_as::<_, (i64, String, String, f64, f64, Option<f64>, Option<f64>)>(&verify_query);
+        type ExistingOfferingRow = (i64, String, String, f64, f64, Option<f64>, Option<f64>);
+        type ExistingOfferingPrices = (String, String, f64, f64, Option<f64>, Option<f64>);
+
+        let mut verify_builder = sqlx::query_as::<_, ExistingOfferingRow>(&verify_query);
         for id in &ids {
             verify_builder = verify_builder.bind(id);
         }
@@ -1854,7 +1857,7 @@ impl Database {
             ));
         }
 
-        let existing_offerings: HashMap<i64, (String, String, f64, f64, Option<f64>, Option<f64>)> = existing_offerings
+        let existing_offerings: HashMap<i64, ExistingOfferingPrices> = existing_offerings
             .into_iter()
             .map(|(id, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit)| {
                 (id, (offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit))
