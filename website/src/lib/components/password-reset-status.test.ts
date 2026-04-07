@@ -106,4 +106,23 @@ describe('createPasswordResetPoller', () => {
 		expect(onComplete).toHaveBeenCalledOnce();
 		expect(poller.status).toBe('complete');
 	});
+
+	it('continues polling after a transient fetchContract rejection', async () => {
+		const poller = createPasswordResetPoller(100, 60_000);
+		const fetchContract = vi.fn()
+			.mockRejectedValueOnce(new Error('network error'))
+			.mockResolvedValue({ password_reset_requested_at_ns: undefined });
+		const onComplete = vi.fn();
+		const onTimeout = vi.fn();
+
+		poller.start(fetchContract, onComplete, onTimeout);
+
+		await vi.advanceTimersByTimeAsync(100);
+		expect(onComplete).not.toHaveBeenCalled();
+		expect(poller.status).toBe('polling');
+
+		await vi.advanceTimersByTimeAsync(100);
+		expect(onComplete).toHaveBeenCalledOnce();
+		expect(poller.status).toBe('complete');
+	});
 });
