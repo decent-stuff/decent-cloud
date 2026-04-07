@@ -7,8 +7,8 @@ use dc_agent::{
     orphan_tracker::OrphanTracker,
     post_provision::execute_post_provision_script,
     provisioner::{
-        manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
-        ProvisionRequest, Provisioner,
+        docker::DockerProvisioner, manual::ManualProvisioner, proxmox::ProxmoxProvisioner,
+        script::ScriptProvisioner, ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
     setup::{detect_public_ip, GatewaySetup},
@@ -2573,6 +2573,10 @@ fn create_provisioner_from_config(prov_config: &ProvisionerConfig) -> Result<Box
             info!("Creating Manual provisioner");
             Ok(Box::new(ManualProvisioner::new(manual.clone())))
         }
+        ProvisionerConfig::Docker(docker) => {
+            info!("Creating Docker provisioner");
+            Ok(Box::new(DockerProvisioner::new(docker.clone())?))
+        }
     }
 }
 
@@ -2728,6 +2732,32 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 println!("  Notification webhook: {}", webhook);
             } else {
                 println!("  No notification webhook configured");
+            }
+        }
+        ProvisionerConfig::Docker(docker) => {
+            println!("Provisioner: Docker");
+            println!("  Socket: {}", docker.socket_path);
+            println!("  Network: {}", docker.network);
+            println!("  Default image: {}", docker.default_image);
+            println!("  SSH port: {}", docker.ssh_port);
+            println!();
+            println!("Verifying Docker setup...");
+            let verification = provisioner.verify_setup().await;
+            if verification.api_reachable == Some(true) {
+                println!("  [ok] Docker daemon reachable");
+            }
+            if verification.storage_accessible == Some(true) {
+                println!("  [ok] Docker image storage accessible");
+            }
+            if !verification.errors.is_empty() {
+                println!();
+                for error in &verification.errors {
+                    println!("  [FAILED] {}", error);
+                }
+                return Err(anyhow::anyhow!(
+                    "Docker setup verification failed with {} error(s)",
+                    verification.errors.len()
+                ));
             }
         }
     }

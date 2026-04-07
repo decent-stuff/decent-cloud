@@ -80,6 +80,22 @@ verify_ssl = false
 # notification_webhook = "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 
+# Alternative: Docker Provisioner (container-based)
+# Uncomment to use Docker provisioner instead
+# [provisioner]
+# type = "docker"
+#
+# [provisioner.docker]
+# # Docker daemon socket path (default: "/var/run/docker.sock")
+# # socket_path = "/var/run/docker.sock"
+# # Docker network mode (default: "bridge")
+# # network = "bridge"
+# # Default container image
+# # default_image = "ubuntu:22.04"
+# # SSH port inside the container (default: 22)
+# # ssh_port = 22
+
+
 # Gateway Configuration (optional - for DC-level reverse proxy)
 # Enables per-VM subdomain routing via Caddy, DNS management, and port forwarding
 # [gateway]

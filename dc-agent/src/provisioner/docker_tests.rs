@@ -1,0 +1,324 @@
+use super::*;
+use bollard::models::ContainerStateStatusEnum;
+use bollard::service::{ContainerInspectResponse, ContainerState, NetworkSettings};
+
+fn default_config() -> DockerConfig {
+    DockerConfig {
+        socket_path: "/var/run/docker.sock".to_string(),
+        network: "bridge".to_string(),
+        default_image: "ubuntu:22.04".to_string(),
+        ssh_port: 22,
+    }
+}
+
+fn make_provision_request() -> ProvisionRequest {
+    ProvisionRequest {
+        contract_id: "test-contract-123".to_string(),
+        offering_id: "offering-1".to_string(),
+        cpu_cores: Some(2),
+        memory_mb: Some(1024),
+        storage_gb: None,
+        requester_ssh_pubkey: Some("ssh-ed25519 AAAATEST".to_string()),
+        instance_config: None,
+        post_provision_script: None,
+    }
+}
+
+#[test]
+fn test_container_name_format() {
+    assert_eq!(container_name("abc123"), "dc-abc123");
+    assert_eq!(container_name("contract-456-xyz"), "dc-contract-456-xyz");
+}
+
+#[test]
+fn test_extract_contract_id() {
+    assert_eq!(extract_contract_id("dc-abc123"), Some("abc123".to_string()));
+    assert_eq!(
+        extract_contract_id("dc-contract-456"),
+        Some("contract-456".to_string())
+    );
+    assert_eq!(extract_contract_id("other-name"), None);
+    assert_eq!(extract_contract_id("dc-"), Some("".to_string()));
+}
+
+#[test]
+fn test_resolve_image_from_config() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = make_provision_request();
+    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+}
+
+#[test]
+fn test_resolve_image_from_instance_config() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let mut request = make_provision_request();
+    request.instance_config = Some(serde_json::json!({
+        "image": "alpine:3.19"
+    }));
+    assert_eq!(prov.resolve_image(&request), "alpine:3.19");
+}
+
+#[test]
+fn test_resolve_image_instance_config_non_string_ignored() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let mut request = make_provision_request();
+    request.instance_config = Some(serde_json::json!({
+        "image": 42
+    }));
+    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+}
+
+#[test]
+fn test_resolve_image_no_instance_config() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let mut request = make_provision_request();
+    request.instance_config = None;
+    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+}
+
+#[test]
+fn test_build_container_config_defaults() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = make_provision_request();
+    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+
+    assert_eq!(cfg.image.as_deref(), Some("ubuntu:22.04"));
+    assert!(cfg.exposed_ports.is_some());
+    assert!(cfg.exposed_ports.as_ref().unwrap().contains_key("22"));
+
+    let labels = cfg.labels.as_ref().unwrap();
+    assert_eq!(labels.get("dc-agent"), Some(&"true".to_string()));
+    assert_eq!(
+        labels.get("dc-contract-id"),
+        Some(&"test-contract-123".to_string())
+    );
+
+    let host_config = cfg.host_config.as_ref().unwrap();
+    assert_eq!(host_config.cpu_count, Some(2));
+    assert_eq!(host_config.memory, Some(1024 * 1024 * 1024));
+    assert_eq!(host_config.network_mode.as_deref(), Some("bridge"));
+}
+
+#[test]
+fn test_build_container_config_minimal_request() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = ProvisionRequest {
+        contract_id: "min".to_string(),
+        offering_id: "off-1".to_string(),
+        cpu_cores: None,
+        memory_mb: None,
+        storage_gb: None,
+        requester_ssh_pubkey: None,
+        instance_config: None,
+        post_provision_script: None,
+    };
+    let cfg = prov.build_container_config(&request, "alpine:3.19");
+
+    let host_config = cfg.host_config.as_ref().unwrap();
+    assert_eq!(host_config.cpu_count, Some(1));
+    assert_eq!(host_config.memory, Some(512 * 1024 * 1024));
+
+    assert!(cfg.env.is_none() || cfg.env.as_ref().unwrap().is_empty());
+}
+
+#[test]
+fn test_build_container_config_ssh_key_in_env() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = make_provision_request();
+    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+
+    let env = cfg.env.unwrap();
+    assert!(env.iter().any(|e| e.starts_with("SSH_PUBLIC_KEY=")));
+    assert!(env.iter().any(|e| e.contains("ssh-ed25519 AAAATEST")));
+}
+
+#[test]
+fn test_build_container_config_custom_network() {
+    let config = DockerConfig {
+        socket_path: "/var/run/docker.sock".to_string(),
+        network: "host".to_string(),
+        default_image: "ubuntu:22.04".to_string(),
+        ssh_port: 2222,
+    };
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = make_provision_request();
+    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+
+    let host_config = cfg.host_config.as_ref().unwrap();
+    assert_eq!(host_config.network_mode.as_deref(), Some("host"));
+}
+
+#[test]
+fn test_build_container_config_custom_ssh_port() {
+    let config = DockerConfig {
+        socket_path: "/var/run/docker.sock".to_string(),
+        network: "bridge".to_string(),
+        default_image: "ubuntu:22.04".to_string(),
+        ssh_port: 2222,
+    };
+    let prov = DockerProvisioner::new(config).unwrap();
+    let request = make_provision_request();
+    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+
+    assert!(cfg
+        .exposed_ports
+        .as_ref()
+        .unwrap()
+        .contains_key("2222"));
+}
+
+fn make_port_map(
+    port: &str,
+    host_port: &str,
+) -> HashMap<String, Option<Vec<bollard::service::PortBinding>>> {
+    let mut map = HashMap::new();
+    map.insert(
+        port.to_string(),
+        Some(vec![bollard::service::PortBinding {
+            host_ip: Some("0.0.0.0".to_string()),
+            host_port: Some(host_port.to_string()),
+        }]),
+    );
+    map
+}
+
+#[test]
+fn test_container_to_instance_running() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        config: Some(bollard::service::ContainerConfig {
+            image: Some("ubuntu:22.04".to_string()),
+            ..Default::default()
+        }),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            ports: Some(make_port_map("22/tcp", "32768")),
+            ..Default::default()
+        }),
+        state: Some(ContainerState {
+            running: Some(true),
+            started_at: Some(chrono::Utc::now().to_rfc3339()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert_eq!(instance.external_id, "abc123");
+    assert_eq!(instance.ip_address.as_deref(), Some("172.17.0.2"));
+    assert_eq!(instance.ssh_port, 32768);
+    assert!(instance.additional_details.is_some());
+}
+
+#[test]
+fn test_container_to_instance_no_ip() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: None,
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "id1").unwrap();
+    assert!(instance.ip_address.is_none());
+    assert_eq!(instance.ssh_port, 22);
+}
+
+#[test]
+fn test_container_to_instance_empty_ip() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "id1").unwrap();
+    assert!(instance.ip_address.is_none());
+}
+
+#[test]
+fn test_container_to_instance_no_port_binding() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.3".to_string()),
+            ports: Some(HashMap::new()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "id1").unwrap();
+    assert_eq!(instance.ssh_port, 22);
+}
+
+#[test]
+fn test_container_to_instance_labels_and_image() {
+    let config = default_config();
+    let prov = DockerProvisioner::new(config).unwrap();
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-my-contract".to_string()),
+        config: Some(bollard::service::ContainerConfig {
+            image: Some("alpine:3.19".to_string()),
+            ..Default::default()
+        }),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.5".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "id2").unwrap();
+    let details = instance.additional_details.unwrap();
+    assert_eq!(details["name"], "dc-my-contract");
+    assert_eq!(details["image"], "alpine:3.19");
+}
+
+#[test]
+fn test_health_status_from_running_container() {
+    let state = ContainerState {
+        running: Some(true),
+        started_at: Some(chrono::Utc::now().to_rfc3339()),
+        ..Default::default()
+    };
+    let running = state.running.unwrap_or(false);
+    assert!(running);
+}
+
+#[test]
+fn test_health_status_from_stopped_container() {
+    let state = ContainerState {
+        running: Some(false),
+        status: Some(ContainerStateStatusEnum::EXITED),
+        exit_code: Some(137),
+        ..Default::default()
+    };
+    assert!(!state.running.unwrap_or(false));
+    assert_eq!(state.exit_code, Some(137));
+}

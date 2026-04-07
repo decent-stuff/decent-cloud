@@ -12,11 +12,13 @@ path = "src/main.rs"
 anyhow.workspace = true
 async-trait.workspace = true
 base64.workspace = true
+bollard = "0.18"
 chrono.workspace = true
 clap.workspace = true
 dcc-common.workspace = true
 dirs = "5.0"
 ed25519-dalek.workspace = true
+futures.workspace = true
 hex.workspace = true
 public-ip-address = { version = "0.4", default-features = false, features = ["rustls-tls"] }
 rand = "0.8"
