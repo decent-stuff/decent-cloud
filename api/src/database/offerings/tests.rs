@@ -3410,7 +3410,7 @@ async fn test_update_offering_price_change_notifies_saved_users() {
         assert!(
             notifications[0]
                 .body
-                .contains("Test Offer changed from USD 10.00 to USD 12.50."),
+                .contains("Test Offer: monthly_price from USD 10.00 to USD 12.50."),
             "unexpected notification body: {}",
             notifications[0].body
         );
@@ -3446,6 +3446,210 @@ async fn test_update_offering_same_price_does_not_notify_saved_users() {
         .await
         .expect("get_user_notifications should succeed");
     assert!(notifications.is_empty(), "same price should not notify");
+}
+
+#[tokio::test]
+async fn test_update_offering_setup_fee_change_notifies_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x70u8; 32];
+    let user = vec![0x71u8; 32];
+
+    insert_test_offering(&db, 11, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(11);
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.setup_fee = 25.0;
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert_eq!(notifications.len(), 1, "expected one setup_fee alert");
+    assert_eq!(
+        notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert!(
+        notifications[0]
+            .body
+            .contains("Test Offer: setup_fee from USD 0.00 to USD 25.00."),
+        "unexpected notification body: {}",
+        notifications[0].body
+    );
+}
+
+#[tokio::test]
+async fn test_update_offering_price_per_unit_change_notifies_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x72u8; 32];
+    let user = vec![0x73u8; 32];
+
+    insert_test_offering(&db, 12, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(12);
+
+    // Set initial usage-based pricing
+    sqlx::query(
+        "UPDATE provider_offerings SET price_per_unit = 0.50, overage_price_per_unit = 1.00, pricing_model = 'usage_overage' WHERE id = $1",
+    )
+    .bind(offering_id)
+    .execute(&db.pool)
+    .await
+    .expect("set initial usage pricing");
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.price_per_unit = Some(0.75);
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert_eq!(notifications.len(), 1, "expected one price_per_unit alert");
+    assert_eq!(
+        notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert!(
+        notifications[0]
+            .body
+            .contains("Test Offer: price_per_unit from USD 0.50 to USD 0.75."),
+        "unexpected notification body: {}",
+        notifications[0].body
+    );
+}
+
+#[tokio::test]
+async fn test_update_offering_overage_price_per_unit_change_notifies_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x74u8; 32];
+    let user = vec![0x75u8; 32];
+
+    insert_test_offering(&db, 13, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(13);
+
+    sqlx::query(
+        "UPDATE provider_offerings SET price_per_unit = 0.50, overage_price_per_unit = 1.00, pricing_model = 'usage_overage' WHERE id = $1",
+    )
+    .bind(offering_id)
+    .execute(&db.pool)
+    .await
+    .expect("set initial usage pricing");
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.overage_price_per_unit = Some(1.50);
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert_eq!(notifications.len(), 1, "expected one overage alert");
+    assert_eq!(
+        notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert!(
+        notifications[0]
+            .body
+            .contains("Test Offer: overage_price_per_unit from USD 1.00 to USD 1.50."),
+        "unexpected notification body: {}",
+        notifications[0].body
+    );
+}
+
+#[tokio::test]
+async fn test_update_offering_multiple_price_changes_notifies_all_components() {
+    let db = setup_test_db().await;
+    let provider = vec![0x76u8; 32];
+    let user = vec![0x77u8; 32];
+
+    insert_test_offering(&db, 14, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(14);
+
+    sqlx::query(
+        "UPDATE provider_offerings SET price_per_unit = 0.50, overage_price_per_unit = 1.00, pricing_model = 'usage_overage' WHERE id = $1",
+    )
+    .bind(offering_id)
+    .execute(&db.pool)
+    .await
+    .expect("set initial usage pricing");
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.monthly_price = 12.0;
+    update_params.setup_fee = 5.0;
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert_eq!(notifications.len(), 1, "expected one combined alert");
+    assert_eq!(
+        notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert!(
+        notifications[0]
+            .body
+            .contains("Test Offer pricing changed:"),
+        "expected multi-component prefix: {}",
+        notifications[0].body
+    );
+    assert!(
+        notifications[0].body.contains("monthly_price from USD 10.00 to USD 12.00"),
+        "expected monthly_price in body: {}",
+        notifications[0].body
+    );
+    assert!(
+        notifications[0].body.contains("setup_fee from USD 0.00 to USD 5.00"),
+        "expected setup_fee in body: {}",
+        notifications[0].body
+    );
 }
 
 #[tokio::test]
@@ -3539,7 +3743,7 @@ async fn test_bulk_update_offering_prices_notifies_only_changed_saved_offerings(
     assert!(
         changed_notifications[0]
             .body
-            .contains("Test Offer changed from USD 10.00 to USD 15.00."),
+            .contains("Test Offer: monthly_price from USD 10.00 to USD 15.00."),
         "unexpected changed notification body: {}",
         changed_notifications[0].body
     );
