@@ -10,6 +10,14 @@ describe('formatEventType', () => {
 		expect(formatEventType('password_reset')).toBe('Password Reset');
 	});
 
+	it('formats ssh_key_rotation', () => {
+		expect(formatEventType('ssh_key_rotation')).toBe('SSH Key Rotation Requested');
+	});
+
+	it('formats ssh_key_rotation_complete', () => {
+		expect(formatEventType('ssh_key_rotation_complete')).toBe('SSH Key Rotation Complete');
+	});
+
 	it('formats extension', () => {
 		expect(formatEventType('extension')).toBe('Contract Extended');
 	});
@@ -38,6 +46,14 @@ describe('getEventIcon', () => {
 
 	it('returns key for password_reset', () => {
 		expect(getEventIcon('password_reset')).toBe('key');
+	});
+
+	it('returns key for ssh_key_rotation', () => {
+		expect(getEventIcon('ssh_key_rotation')).toBe('key');
+	});
+
+	it('returns check for ssh_key_rotation_complete', () => {
+		expect(getEventIcon('ssh_key_rotation_complete')).toBe('check');
 	});
 
 	it('returns clock for extension', () => {

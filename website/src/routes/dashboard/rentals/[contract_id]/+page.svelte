@@ -12,6 +12,7 @@
 		getContractCredentials,
 		getContractRecipeLog,
 		requestPasswordReset,
+		rotateSshKey,
 		extendContract,
 		getContractExtensions,
 		getContractHealthChecks,
@@ -48,6 +49,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { createPasswordResetPoller, type PasswordResetPoller } from "$lib/utils/password-reset-poller";
+	import { createSshKeyRotationPoller, type SshKeyRotationPoller } from "$lib/utils/ssh-key-rotation-poller";
 	import { isPrivateIp, sshUsername } from "$lib/utils/network";
 
 	const contractId = $page.params.contract_id ?? "";
@@ -78,6 +80,13 @@
 	let passwordResetTimedOut = $state(false);
 	let passwordResetPolling = $state(false);
 	const passwordResetPoller: PasswordResetPoller = createPasswordResetPoller();
+	let sshKeyRotationValue = $state('');
+	let sshKeyRotationLoading = $state(false);
+	let sshKeyRotationError = $state<string | null>(null);
+	let sshKeyRotationComplete = $state(false);
+	let sshKeyRotationTimedOut = $state(false);
+	let sshKeyRotationPolling = $state(false);
+	const sshKeyRotationPoller: SshKeyRotationPoller = createSshKeyRotationPoller();
 
 	// Extend contract state
 	let showExtendForm = $state(false);
@@ -306,6 +315,29 @@
 		);
 	}
 
+	function startSshKeyRotationPolling() {
+		sshKeyRotationPolling = true;
+		sshKeyRotationPoller.start(
+			async () => {
+				await refreshContract();
+				return contract;
+			},
+			async () => {
+				sshKeyRotationPolling = false;
+				sshKeyRotationComplete = true;
+				const signingIdentityInfo = await authStore.getSigningIdentity();
+				if (signingIdentityInfo) {
+					await loadEvents(signingIdentityInfo);
+				}
+				sshKeyRotationValue = '';
+			},
+			() => {
+				sshKeyRotationPolling = false;
+				sshKeyRotationTimedOut = true;
+			},
+		);
+	}
+
 	async function refreshContract() {
 		if (!isAuthenticated || loading) return;
 		try {
@@ -408,6 +440,10 @@
 				if (contract.password_reset_requested_at_ns && !passwordResetPolling) {
 					startPasswordResetPolling();
 				}
+
+				if (contract.ssh_key_rotation_requested_at_ns && !sshKeyRotationPolling) {
+					startSshKeyRotationPolling();
+				}
 			}
 			lastRefresh = Date.now();
 		} catch (e) {
@@ -478,6 +514,44 @@
 			passwordResetError = e instanceof Error ? e.message : String(e);
 		} finally {
 			passwordResetLoading = false;
+		}
+	}
+
+	async function handleRotateSshKey() {
+		if (!contract) return;
+
+		const newSshKey = sshKeyRotationValue.trim();
+		if (!newSshKey) {
+			sshKeyRotationError = 'Enter the new SSH public key first';
+			return;
+		}
+
+		try {
+			sshKeyRotationLoading = true;
+			sshKeyRotationComplete = false;
+			sshKeyRotationTimedOut = false;
+			sshKeyRotationError = null;
+
+			const signingIdentityInfo = await authStore.getSigningIdentity();
+			if (!signingIdentityInfo) {
+				sshKeyRotationError = 'You must be authenticated';
+				return;
+			}
+
+			const body = { new_ssh_pubkey: newSshKey };
+			const { headers } = await signRequest(
+				signingIdentityInfo.identity as any,
+				'POST',
+				`/api/v1/contracts/${contractId}/rotate-ssh-key`,
+				body,
+			);
+
+			await rotateSshKey(contractId, newSshKey, headers);
+			startSshKeyRotationPolling();
+		} catch (e) {
+			sshKeyRotationError = e instanceof Error ? e.message : String(e);
+		} finally {
+			sshKeyRotationLoading = false;
 		}
 	}
 
@@ -797,6 +871,7 @@
 		unsubscribeAuth?.();
 		stopAutoRefresh();
 		passwordResetPoller.stop();
+		sshKeyRotationPoller.stop();
 	});
 
 </script>
@@ -1462,6 +1537,57 @@
 								<p class="text-neutral-500 text-xs mt-2">
 									Reset the system root password. Useful for <code class="font-mono">sudo</code> or console access. SSH login uses your key, not this password.
 								</p>
+							{/if}
+						</div>
+
+						<div class="mt-4 pt-3 border-t border-surface-elevated space-y-3">
+							<div>
+								<div class="text-white text-sm font-medium">Rotate SSH Key</div>
+								<p class="text-neutral-500 text-xs mt-1">
+									Paste a new SSH public key to replace the one used for future logins. The current key remains active until the provider finishes the rotation.
+								</p>
+							</div>
+
+							{#if sshKeyRotationComplete}
+								<div class="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/30 p-3 rounded">
+									<span>✓</span>
+									<span>SSH key rotation complete. Use the new key for your next SSH login.</span>
+								</div>
+							{:else if sshKeyRotationTimedOut}
+								<div class="text-amber-400 text-sm bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+									SSH key rotation is taking longer than expected. Please refresh the page in a few minutes.
+								</div>
+							{:else if contract.ssh_key_rotation_requested_at_ns || sshKeyRotationPolling}
+								<div class="flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/30 p-3 rounded">
+									<div class="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-amber-400"></div>
+									<span>SSH key rotation in progress...</span>
+								</div>
+							{:else}
+								<textarea
+									bind:value={sshKeyRotationValue}
+									rows="3"
+									placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
+									class="w-full bg-black/20 border border-neutral-700 rounded px-3 py-2 text-sm text-white font-mono placeholder:text-neutral-600 focus:outline-none focus:border-primary-500"
+								></textarea>
+								<div class="flex flex-col sm:flex-row sm:items-center gap-3">
+									<button
+										onclick={handleRotateSshKey}
+										disabled={sshKeyRotationLoading || !sshKeyRotationValue.trim()}
+										class="px-3 py-1.5 text-sm bg-primary-500/20 text-primary-300 border border-primary-500/30 rounded hover:bg-primary-500/30 transition-colors disabled:opacity-50"
+									>
+										{#if sshKeyRotationLoading}
+											Requesting...
+										{:else}
+											Rotate SSH Key
+										{/if}
+									</button>
+									<p class="text-neutral-500 text-xs">
+										Only OpenSSH public keys are accepted.
+									</p>
+								</div>
+								{#if sshKeyRotationError}
+									<div class="text-red-400 text-xs">{sshKeyRotationError}</div>
+								{/if}
 							{/if}
 						</div>
 					{/if}

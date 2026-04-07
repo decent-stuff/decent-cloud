@@ -1,37 +1,33 @@
 /**
- * Password reset polling state machine.
+ * SSH key rotation polling state machine.
  *
- * Polls a contract fetch function every POLL_INTERVAL_MS until
- * `password_reset_requested_at_ns` is cleared (reset complete) or
- * POLL_TIMEOUT_MS elapses.
+ * Polls a contract fetch function until `ssh_key_rotation_requested_at_ns`
+ * is cleared (rotation complete) or POLL_TIMEOUT_MS elapses.
  */
 export const POLL_INTERVAL_MS = 10_000;
-export const POLL_TIMEOUT_MS = 10 * 60 * 1_000; // 10 minutes
+export const POLL_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export type PollStatus = 'idle' | 'polling' | 'complete' | 'timeout';
 
-export interface PasswordResetPoller {
-	/** Start polling. Calls onComplete when reset is done, onTimeout on expiry. */
+export interface SshKeyRotationPoller {
 	start(
-		fetchContract: () => Promise<{ password_reset_requested_at_ns?: number } | null>,
+		fetchContract: () => Promise<{ ssh_key_rotation_requested_at_ns?: number } | null>,
 		onComplete: () => void,
 		onTimeout: () => void,
 	): void;
-	/** Stop polling and release the interval. */
 	stop(): void;
-	/** Current status — useful for testing. */
 	status: PollStatus;
 }
 
-export function createPasswordResetPoller(
+export function createSshKeyRotationPoller(
 	intervalMs = POLL_INTERVAL_MS,
 	timeoutMs = POLL_TIMEOUT_MS,
-): PasswordResetPoller {
+): SshKeyRotationPoller {
 	let handle: ReturnType<typeof setInterval> | null = null;
 	let startTime = 0;
 	let _status: PollStatus = 'idle';
 
-	const poller: PasswordResetPoller = {
+	const poller: SshKeyRotationPoller = {
 		get status() {
 			return _status;
 		},
@@ -51,7 +47,7 @@ export function createPasswordResetPoller(
 
 				try {
 					const contract = await fetchContract();
-					if (!contract?.password_reset_requested_at_ns) {
+					if (!contract?.ssh_key_rotation_requested_at_ns) {
 						poller.stop();
 						_status = 'complete';
 						onComplete();
