@@ -1103,12 +1103,13 @@ impl Database {
 
         for user_pubkey in saved_user_pubkeys {
             sqlx::query(
-                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5)",
+                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5, $6)",
             )
             .bind(user_pubkey.as_slice())
             .bind("saved_offering_price_change")
             .bind(&title)
             .bind(&body)
+            .bind(offering_id)
             .bind(created_at)
             .execute(&mut **tx)
             .await?;

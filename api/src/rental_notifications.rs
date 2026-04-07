@@ -100,6 +100,7 @@ pub async fn notify_provider_new_rental(
                 &contract.contract_id[..16]
             ),
             Some(&contract.contract_id),
+            None,
         )
         .await
     {
@@ -332,6 +333,7 @@ pub async fn notify_user_provisioned(
                 &contract.contract_id[..16]
             ),
             Some(&contract.contract_id),
+            None,
         )
         .await
     {
@@ -793,6 +795,7 @@ pub async fn notify_tenant_password_reset_complete(
                 &contract.contract_id[..16]
             ),
             Some(&contract.contract_id),
+            None,
         )
         .await
     {

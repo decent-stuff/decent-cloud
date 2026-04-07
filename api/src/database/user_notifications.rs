@@ -9,6 +9,7 @@ pub struct UserNotification {
     pub title: String,
     pub body: String,
     pub contract_id: Option<String>,
+    pub offering_id: Option<i64>,
     pub read_at: Option<i64>,
     pub created_at: i64,
 }
@@ -22,6 +23,7 @@ impl Database {
         title: &str,
         body: &str,
         contract_id: Option<&str>,
+        offering_id: Option<i64>,
     ) -> Result<i64> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -29,14 +31,15 @@ impl Database {
             .as_secs() as i64;
 
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)
+            r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
                RETURNING id"#,
             user_pubkey,
             notification_type,
             title,
             body,
             contract_id,
+            offering_id,
             now,
         )
         .fetch_one(&self.pool)
@@ -52,7 +55,7 @@ impl Database {
         limit: i64,
     ) -> Result<Vec<UserNotification>> {
         let rows = sqlx::query!(
-            r#"SELECT id, type, title, body, contract_id, read_at, created_at
+            r#"SELECT id, type, title, body, contract_id, offering_id, read_at, created_at
                FROM user_notifications
                WHERE user_pubkey = $1
                ORDER BY created_at DESC, id DESC
@@ -71,6 +74,7 @@ impl Database {
                 title: r.title,
                 body: r.body,
                 contract_id: r.contract_id,
+                offering_id: r.offering_id,
                 read_at: r.read_at,
                 created_at: r.created_at,
             })
@@ -149,6 +153,7 @@ mod tests {
                 "Contract Accepted",
                 "Your rental request was accepted.",
                 Some("abc123"),
+                None,
             )
             .await
             .unwrap();
@@ -181,22 +186,10 @@ mod tests {
         // No notifications yet
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 0);
 
-        db.insert_user_notification(
-            &pubkey,
-            "contract_provisioned",
-            "VM Ready",
-            "Your VM is provisioned.",
-            None,
-        )
+        db.insert_user_notification(&pubkey, "contract_provisioned", "VM Ready", "Your VM is provisioned.", None, None)
         .await
         .unwrap();
-        db.insert_user_notification(
-            &pubkey,
-            "auto_renewed",
-            "Auto-renewed",
-            "Contract was renewed.",
-            None,
-        )
+        db.insert_user_notification(&pubkey, "auto_renewed", "Auto-renewed", "Contract was renewed.", None, None)
         .await
         .unwrap();
 
@@ -215,6 +208,7 @@ mod tests {
                 "Cancelled",
                 "Contract was cancelled.",
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -224,6 +218,7 @@ mod tests {
                 "contract_status",
                 "Rejected",
                 "Contract was rejected.",
+                None,
                 None,
             )
             .await
@@ -253,6 +248,7 @@ mod tests {
             "New Request",
             "A tenant rented your VM.",
             None,
+            None,
         )
         .await
         .unwrap();
@@ -261,6 +257,7 @@ mod tests {
             "password_reset_complete",
             "Password Reset",
             "Password was reset.",
+            None,
             None,
         )
         .await
@@ -280,7 +277,7 @@ mod tests {
         let user_b = vec![0x06u8; 32];
 
         let id = db
-            .insert_user_notification(&user_a, "contract_status", "Title", "Body", None)
+            .insert_user_notification(&user_a, "contract_status", "Title", "Body", None, None)
             .await
             .unwrap();
 
@@ -303,6 +300,7 @@ mod tests {
                 &format!("N{}", i),
                 "body",
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -318,11 +316,11 @@ mod tests {
         let pubkey = vec![0x08u8; 32];
 
         let id1 = db
-            .insert_user_notification(&pubkey, "contract_status", "First", "body", None)
+            .insert_user_notification(&pubkey, "contract_status", "First", "body", None, None)
             .await
             .unwrap();
         let id2 = db
-            .insert_user_notification(&pubkey, "contract_status", "Second", "body", None)
+            .insert_user_notification(&pubkey, "contract_status", "Second", "body", None, None)
             .await
             .unwrap();
 
@@ -330,5 +328,46 @@ mod tests {
         // Newest first: id2 should appear before id1
         assert_eq!(notifications[0].id, id2);
         assert_eq!(notifications[1].id, id1);
+    }
+
+    #[tokio::test]
+    async fn test_notification_with_offering_id() {
+        let db = setup_test_db().await;
+        let pubkey = vec![0x09u8; 32];
+
+        let id = db
+            .insert_user_notification(
+                &pubkey,
+                "saved_offering_price_change",
+                "Saved offering price changed",
+                "Test Offer: monthly_price from USD 10.00 to USD 12.50.",
+                None,
+                Some(42),
+            )
+            .await
+            .unwrap();
+
+        let notifications = db.get_user_notifications(&pubkey, 50).await.unwrap();
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].offering_id, Some(42));
+
+        let id2 = db
+            .insert_user_notification(
+                &pubkey,
+                "contract_status",
+                "Accepted",
+                "Contract accepted.",
+                Some("c1"),
+                None,
+            )
+            .await
+            .unwrap();
+
+        let notifications = db.get_user_notifications(&pubkey, 50).await.unwrap();
+        assert_eq!(notifications.len(), 2);
+        let with_offering = notifications.iter().find(|n| n.id == id).unwrap();
+        assert_eq!(with_offering.offering_id, Some(42));
+        let without_offering = notifications.iter().find(|n| n.id == id2).unwrap();
+        assert_eq!(without_offering.offering_id, None);
     }
 }
