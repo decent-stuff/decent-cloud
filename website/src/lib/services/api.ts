@@ -1086,6 +1086,31 @@ export async function requestPasswordReset(
 	}
 }
 
+export async function rotateSshKey(
+	contractId: string,
+	newSshPubkey: string,
+	headers: SignedRequestHeaders
+): Promise<void> {
+	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/rotate-ssh-key`;
+
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({ new_ssh_pubkey: newSshPubkey })
+	});
+
+	if (!response.ok) {
+		const errorText = await response.text();
+		throw new Error(`Failed to request SSH key rotation: ${response.status} ${response.statusText}\n${errorText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<string>;
+
+	if (!payload.success) {
+		throw new Error(payload.error ?? 'Failed to request SSH key rotation');
+	}
+}
+
 export function offeringToCSVRow(offering: Offering): string[] {
 	return [
 		offering.offering_id,
@@ -1314,6 +1339,8 @@ export interface Contract {
 	auto_renew: boolean;
 	// Set when user has requested a password reset; cleared by agent after completion
 	password_reset_requested_at_ns?: number;
+	// Set when user has requested an SSH key rotation; cleared by agent after completion
+	ssh_key_rotation_requested_at_ns?: number;
 	// Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
 	operating_system?: string;
 }
@@ -1525,6 +1552,14 @@ export async function getPendingPasswordResets(
 	}
 
 	return payload.data ?? [];
+}
+
+export async function getPendingSshKeyRotations(
+	providerPubkey: string,
+	headers: SignedRequestHeaders
+): Promise<Contract[]> {
+	const contracts = await getProviderContracts(headers, providerPubkey);
+	return contracts.filter((contract) => contract.ssh_key_rotation_requested_at_ns !== undefined);
 }
 
 export async function getPendingProviderRequests(headers: SignedRequestHeaders): Promise<Contract[]> {

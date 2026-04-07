@@ -1,6 +1,8 @@
 const EVENT_TYPE_LABELS: Record<string, string> = {
 	status_change: 'Status Changed',
 	password_reset: 'Password Reset',
+	ssh_key_rotation: 'SSH Key Rotation Requested',
+	ssh_key_rotation_complete: 'SSH Key Rotation Complete',
 	extension: 'Contract Extended',
 	payment_confirmed: 'Payment Confirmed',
 	provisioned: 'Provisioned'
@@ -18,6 +20,8 @@ export function formatEventType(eventType: string): string {
 const EVENT_TYPE_ICONS: Record<string, string> = {
 	status_change: 'refresh',
 	password_reset: 'key',
+	ssh_key_rotation: 'key',
+	ssh_key_rotation_complete: 'check',
 	extension: 'clock',
 	payment_confirmed: 'check',
 	provisioned: 'server'

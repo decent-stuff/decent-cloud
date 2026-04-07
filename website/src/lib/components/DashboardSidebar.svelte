@@ -8,6 +8,7 @@
 		getProviderOfferings,
 		getProviderOnboarding,
 		getPendingProviderRequests,
+		getPendingSshKeyRotations,
 		getPendingPasswordResets,
 		hexEncode
 	} from '$lib/services/api';
@@ -29,6 +30,7 @@
 	let providerDataError = $state(false);
 	let pendingRequestsCount = $state(0);
 	let pendingPasswordResetsCount = $state(0);
+	let pendingSshKeyRotationsCount = $state(0);
 
 	// Section keys and their default collapsed state (false = expanded by default)
 	type SectionKey = 'discover' | 'activity' | 'provider';
@@ -98,6 +100,7 @@
 	const providerOnboardedItems: NavItem[] = [
 		{ href: '/dashboard/provider/requests', icon: 'inbox', label: 'Rental Requests' },
 		{ href: '/dashboard/provider/feedback', icon: 'star', label: 'Tenant Feedback' },
+		{ href: '/dashboard/provider/ssh-key-rotations', icon: 'key', label: 'SSH Key Rotations' },
 		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
 		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
@@ -134,20 +137,27 @@
 					const info = await authStore.getSigningIdentity();
 					if (info?.identity instanceof Ed25519KeyIdentity) {
 						const pubkeyHexSigning = hexEncode(info.publicKeyBytes);
-						const [signedRequests, signedResets] = await Promise.all([
+						const [signedRequests, signedResets, signedRotations] = await Promise.all([
 							signRequest(info.identity, 'GET', '/api/v1/provider/rental-requests/pending'),
 							signRequest(
 								info.identity,
 								'GET',
 								`/api/v1/providers/${pubkeyHexSigning}/contracts/pending-password-reset`
+							),
+							signRequest(
+								info.identity,
+								'GET',
+								`/api/v1/providers/${pubkeyHexSigning}/contracts`
 							)
 						]);
-						const [requests, resets] = await Promise.all([
+						const [requests, resets, rotations] = await Promise.all([
 							getPendingProviderRequests(signedRequests.headers),
-							getPendingPasswordResets(pubkeyHexSigning, signedResets.headers)
+							getPendingPasswordResets(pubkeyHexSigning, signedResets.headers),
+							getPendingSshKeyRotations(pubkeyHexSigning, signedRotations.headers)
 						]);
 						pendingRequestsCount = requests.length;
 						pendingPasswordResetsCount = resets.length;
+						pendingSshKeyRotationsCount = rotations.length;
 					}
 				} catch {
 					// keep counts at 0 - don't break sidebar on error
@@ -182,6 +192,7 @@
 				onboardingData = null;
 				pendingRequestsCount = 0;
 				pendingPasswordResetsCount = 0;
+				pendingSshKeyRotationsCount = 0;
 			}
 		});
 		// Listen for provider data updates from other components
@@ -388,6 +399,8 @@
 							<span class="text-sm">{item.label}</span>
 							{#if item.href === '/dashboard/provider/requests'}
 								<span class="ml-auto"><UnreadBadge count={pendingRequestsCount} /></span>
+							{:else if item.href === '/dashboard/provider/ssh-key-rotations'}
+								<span class="ml-auto"><UnreadBadge count={pendingSshKeyRotationsCount} /></span>
 							{:else if item.href === '/dashboard/provider/password-resets'}
 								<span class="ml-auto"><UnreadBadge count={pendingPasswordResetsCount} /></span>
 							{/if}

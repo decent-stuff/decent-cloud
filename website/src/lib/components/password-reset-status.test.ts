@@ -90,7 +90,7 @@ describe('createPasswordResetPoller', () => {
 	});
 
 	it('uses POLL_INTERVAL_MS and POLL_TIMEOUT_MS as defaults', () => {
-		expect(POLL_INTERVAL_MS).toBe(5_000);
+		expect(POLL_INTERVAL_MS).toBe(10_000);
 		expect(POLL_TIMEOUT_MS).toBe(10 * 60 * 1_000);
 	});
 
