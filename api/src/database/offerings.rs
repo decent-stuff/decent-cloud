@@ -158,6 +158,19 @@ struct SavedOfferingPriceChange {
     old_monthly_price: f64,
     new_currency: String,
     new_monthly_price: f64,
+    old_setup_fee: f64,
+    new_setup_fee: f64,
+    old_price_per_unit: Option<f64>,
+    new_price_per_unit: Option<f64>,
+    old_overage_price_per_unit: Option<f64>,
+    new_overage_price_per_unit: Option<f64>,
+}
+
+fn opt_f64_changed(old: Option<f64>, new: Option<f64>) -> bool {
+    match (old, new) {
+        (Some(o), Some(n)) => (o - n).abs() >= 1e-9,
+        _ => false,
+    }
 }
 
 /// Pricing statistics for offerings matching given filters
@@ -1019,7 +1032,38 @@ impl Database {
         offering_id: i64,
         change: &SavedOfferingPriceChange,
     ) -> Result<()> {
-        if (change.old_monthly_price - change.new_monthly_price).abs() < 1e-9 {
+        let mut changes: Vec<String> = Vec::new();
+
+        if (change.old_monthly_price - change.new_monthly_price).abs() >= 1e-9 {
+            changes.push(format!(
+                "monthly_price from {} {:.2} to {} {:.2}",
+                change.old_currency, change.old_monthly_price,
+                change.new_currency, change.new_monthly_price
+            ));
+        }
+        if (change.old_setup_fee - change.new_setup_fee).abs() >= 1e-9 {
+            changes.push(format!(
+                "setup_fee from {} {:.2} to {} {:.2}",
+                change.old_currency, change.old_setup_fee,
+                change.new_currency, change.new_setup_fee
+            ));
+        }
+        if opt_f64_changed(change.old_price_per_unit, change.new_price_per_unit) {
+            changes.push(format!(
+                "price_per_unit from {} {:.2} to {} {:.2}",
+                change.old_currency, change.old_price_per_unit.unwrap(),
+                change.new_currency, change.new_price_per_unit.unwrap()
+            ));
+        }
+        if opt_f64_changed(change.old_overage_price_per_unit, change.new_overage_price_per_unit) {
+            changes.push(format!(
+                "overage_price_per_unit from {} {:.2} to {} {:.2}",
+                change.old_currency, change.old_overage_price_per_unit.unwrap(),
+                change.new_currency, change.new_overage_price_per_unit.unwrap()
+            ));
+        }
+
+        if changes.is_empty() {
             return Ok(());
         }
 
@@ -1034,20 +1078,27 @@ impl Database {
             return Ok(());
         }
 
-        let direction = if change.new_monthly_price < change.old_monthly_price {
+        let monthly_dropped = change.new_monthly_price < change.old_monthly_price;
+        let setup_dropped = change.new_setup_fee < change.old_setup_fee;
+        let ppu_dropped = change.old_price_per_unit
+            .zip(change.new_price_per_unit)
+            .is_some_and(|(o, n)| n < o);
+        let opu_dropped = change.old_overage_price_per_unit
+            .zip(change.new_overage_price_per_unit)
+            .is_some_and(|(o, n)| n < o);
+        let direction = if monthly_dropped || setup_dropped || ppu_dropped || opu_dropped {
             "dropped"
         } else {
             "changed"
         };
         let title = format!("Saved offering price {}", direction);
-        let body = format!(
-            "{} changed from {} {:.2} to {} {:.2}.",
-            change.offer_name,
-            change.old_currency,
-            change.old_monthly_price,
-            change.new_currency,
-            change.new_monthly_price
-        );
+
+        let body = if changes.len() == 1 {
+            format!("{}: {}.", change.offer_name, changes[0])
+        } else {
+            format!("{} pricing changed: {}.", change.offer_name, changes.join("; "))
+        };
+
         let created_at = chrono::Utc::now().timestamp();
 
         for user_pubkey in saved_user_pubkeys {
@@ -1308,8 +1359,8 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // Verify ownership and capture the current price for notifications.
-        let existing_offering = sqlx::query_as::<_, (Vec<u8>, String, String, f64)>(
-            "SELECT pubkey, offer_name, currency, monthly_price FROM provider_offerings WHERE id = $1",
+        let existing_offering = sqlx::query_as::<_, (Vec<u8>, String, String, f64, f64, Option<f64>, Option<f64>)>(
+            "SELECT pubkey, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit FROM provider_offerings WHERE id = $1",
         )
         .bind(offering_db_id)
         .fetch_optional(&mut *tx)
@@ -1317,7 +1368,7 @@ impl Database {
 
         let existing_offering = match existing_offering {
             None => return Err(anyhow::anyhow!("Offering not found")),
-            Some((owner_pubkey, _, _, _)) if owner_pubkey != pubkey => {
+            Some((owner_pubkey, _, _, _, _, _, _)) if owner_pubkey != pubkey => {
                 return Err(anyhow::anyhow!(
                     "Unauthorized: You do not own this offering"
                 ))
@@ -1425,14 +1476,23 @@ impl Database {
             provisioner_config
         };
 
-        let (_, _, existing_currency, existing_monthly_price) = &existing_offering;
-        let price_changed = (*existing_monthly_price - monthly_price).abs() >= 1e-9;
+        let (_, _, existing_currency, existing_monthly_price, existing_setup_fee, existing_price_per_unit, existing_overage_price_per_unit) = &existing_offering;
+        let price_changed = (*existing_monthly_price - monthly_price).abs() >= 1e-9
+            || (*existing_setup_fee - setup_fee).abs() >= 1e-9
+            || opt_f64_changed(*existing_price_per_unit, price_per_unit)
+            || opt_f64_changed(*existing_overage_price_per_unit, overage_price_per_unit);
         let price_change = SavedOfferingPriceChange {
             offer_name: offer_name.clone(),
             old_currency: existing_currency.clone(),
             old_monthly_price: *existing_monthly_price,
             new_currency: currency.clone(),
             new_monthly_price: monthly_price,
+            old_setup_fee: *existing_setup_fee,
+            new_setup_fee: setup_fee,
+            old_price_per_unit: *existing_price_per_unit,
+            new_price_per_unit: price_per_unit,
+            old_overage_price_per_unit: *existing_overage_price_per_unit,
+            new_overage_price_per_unit: overage_price_per_unit,
         };
 
         sqlx::query!(
@@ -1775,12 +1835,12 @@ impl Database {
         let id_placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("${}", i)).collect();
         let pubkey_placeholder = format!("${}", ids.len() + 1);
         let verify_query = format!(
-            "SELECT id, offer_name, currency, monthly_price FROM provider_offerings WHERE id IN ({}) AND pubkey = {}",
+            "SELECT id, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit FROM provider_offerings WHERE id IN ({}) AND pubkey = {}",
             id_placeholders.join(","),
             pubkey_placeholder
         );
 
-        let mut verify_builder = sqlx::query_as::<_, (i64, String, String, f64)>(&verify_query);
+        let mut verify_builder = sqlx::query_as::<_, (i64, String, String, f64, f64, Option<f64>, Option<f64>)>(&verify_query);
         for id in &ids {
             verify_builder = verify_builder.bind(id);
         }
@@ -1793,17 +1853,17 @@ impl Database {
             ));
         }
 
-        let existing_offerings: HashMap<i64, (String, String, f64)> = existing_offerings
+        let existing_offerings: HashMap<i64, (String, String, f64, f64, Option<f64>, Option<f64>)> = existing_offerings
             .into_iter()
-            .map(|(id, offer_name, currency, monthly_price)| {
-                (id, (offer_name, currency, monthly_price))
+            .map(|(id, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit)| {
+                (id, (offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit))
             })
             .collect();
 
         // Update each offering's price within the transaction
         let mut rows_affected = 0u64;
         for (id, price_e9s) in updates {
-            let (offer_name, currency, old_monthly_price) = existing_offerings
+            let (offer_name, currency, old_monthly_price, old_setup_fee, old_price_per_unit, old_overage_price_per_unit) = existing_offerings
                 .get(id)
                 .cloned()
                 .ok_or_else(|| anyhow::anyhow!("Offering {} missing after ownership verification", id))?;
@@ -1823,6 +1883,12 @@ impl Database {
                     old_monthly_price,
                     new_currency: currency,
                     new_monthly_price: monthly_price,
+                    old_setup_fee,
+                    new_setup_fee: old_setup_fee,
+                    old_price_per_unit,
+                    new_price_per_unit: old_price_per_unit,
+                    old_overage_price_per_unit,
+                    new_overage_price_per_unit: old_overage_price_per_unit,
                 };
                 self.notify_saved_offering_price_change(&mut tx, *id, &price_change)
                     .await?;
