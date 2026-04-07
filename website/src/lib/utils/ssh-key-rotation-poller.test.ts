@@ -76,6 +76,27 @@ describe('createSshKeyRotationPoller', () => {
 		expect(poller.status).toBe('timeout');
 	});
 
+	it('continues polling after a transient fetchContract error', async () => {
+		const poller = createSshKeyRotationPoller(100, 60_000);
+		const fetchContract = vi.fn()
+			.mockRejectedValueOnce(new Error('network error'))
+			.mockResolvedValue({ ssh_key_rotation_requested_at_ns: undefined });
+		const onComplete = vi.fn();
+		const onTimeout = vi.fn();
+
+		poller.start(fetchContract, onComplete, onTimeout);
+
+		// First tick rejects — poller must survive
+		await vi.advanceTimersByTimeAsync(100);
+		expect(onComplete).not.toHaveBeenCalled();
+		expect(poller.status).toBe('polling');
+
+		// Second tick succeeds — onComplete fires
+		await vi.advanceTimersByTimeAsync(100);
+		expect(onComplete).toHaveBeenCalledOnce();
+		expect(poller.status).toBe('complete');
+	});
+
 	it('uses repo polling defaults', () => {
 		expect(POLL_INTERVAL_MS).toBe(10_000);
 		expect(POLL_TIMEOUT_MS).toBe(10 * 60 * 1_000);

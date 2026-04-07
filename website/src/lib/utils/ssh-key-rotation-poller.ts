@@ -45,11 +45,15 @@ export function createSshKeyRotationPoller(
 					return;
 				}
 
-				const contract = await fetchContract();
-				if (!contract?.ssh_key_rotation_requested_at_ns) {
-					poller.stop();
-					_status = 'complete';
-					onComplete();
+				try {
+					const contract = await fetchContract();
+					if (!contract?.ssh_key_rotation_requested_at_ns) {
+						poller.stop();
+						_status = 'complete';
+						onComplete();
+					}
+				} catch {
+					// Transient fetch error — retry on next tick.
 				}
 			}, intervalMs);
 		},

@@ -49,11 +49,15 @@ export function createPasswordResetPoller(
 					return;
 				}
 
-				const contract = await fetchContract();
-				if (!contract?.password_reset_requested_at_ns) {
-					poller.stop();
-					_status = 'complete';
-					onComplete();
+				try {
+					const contract = await fetchContract();
+					if (!contract?.password_reset_requested_at_ns) {
+						poller.stop();
+						_status = 'complete';
+						onComplete();
+					}
+				} catch {
+					// Transient fetch error — retry on next tick.
 				}
 			}, intervalMs);
 		},
