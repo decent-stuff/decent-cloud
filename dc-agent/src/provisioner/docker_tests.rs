@@ -44,7 +44,7 @@ fn test_extract_contract_id() {
 #[test]
 fn test_resolve_image_from_config() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
     assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
 }
@@ -52,7 +52,7 @@ fn test_resolve_image_from_config() {
 #[test]
 fn test_resolve_image_from_instance_config() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let mut request = make_provision_request();
     request.instance_config = Some(serde_json::json!({
         "image": "alpine:3.19"
@@ -63,7 +63,7 @@ fn test_resolve_image_from_instance_config() {
 #[test]
 fn test_resolve_image_instance_config_non_string_ignored() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let mut request = make_provision_request();
     request.instance_config = Some(serde_json::json!({
         "image": 42
@@ -74,7 +74,7 @@ fn test_resolve_image_instance_config_non_string_ignored() {
 #[test]
 fn test_resolve_image_no_instance_config() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let mut request = make_provision_request();
     request.instance_config = None;
     assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
@@ -83,7 +83,7 @@ fn test_resolve_image_no_instance_config() {
 #[test]
 fn test_build_container_config_defaults() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ubuntu:22.04");
 
@@ -107,7 +107,7 @@ fn test_build_container_config_defaults() {
 #[test]
 fn test_build_container_config_minimal_request() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = ProvisionRequest {
         contract_id: "min".to_string(),
         offering_id: "off-1".to_string(),
@@ -130,7 +130,7 @@ fn test_build_container_config_minimal_request() {
 #[test]
 fn test_build_container_config_ssh_key_in_env() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ubuntu:22.04");
 
@@ -147,7 +147,7 @@ fn test_build_container_config_custom_network() {
         default_image: "ubuntu:22.04".to_string(),
         ssh_port: 2222,
     };
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ubuntu:22.04");
 
@@ -163,7 +163,7 @@ fn test_build_container_config_custom_ssh_port() {
         default_image: "ubuntu:22.04".to_string(),
         ssh_port: 2222,
     };
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ubuntu:22.04");
 
@@ -192,7 +192,7 @@ fn make_port_map(
 #[test]
 fn test_container_to_instance_running() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
 
     let inspect = ContainerInspectResponse {
         name: Some("/dc-test-contract".to_string()),
@@ -223,7 +223,7 @@ fn test_container_to_instance_running() {
 #[test]
 fn test_container_to_instance_no_ip() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
 
     let inspect = ContainerInspectResponse {
         name: Some("/dc-test".to_string()),
@@ -242,7 +242,7 @@ fn test_container_to_instance_no_ip() {
 #[test]
 fn test_container_to_instance_empty_ip() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
 
     let inspect = ContainerInspectResponse {
         name: Some("/dc-test".to_string()),
@@ -260,7 +260,7 @@ fn test_container_to_instance_empty_ip() {
 #[test]
 fn test_container_to_instance_no_port_binding() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
 
     let inspect = ContainerInspectResponse {
         name: Some("/dc-test".to_string()),
@@ -279,7 +279,7 @@ fn test_container_to_instance_no_port_binding() {
 #[test]
 fn test_container_to_instance_labels_and_image() {
     let config = default_config();
-    let prov = DockerProvisioner::new(config).unwrap();
+    let prov = DockerProvisioner::new_for_test(config);
 
     let inspect = ContainerInspectResponse {
         name: Some("/dc-my-contract".to_string()),

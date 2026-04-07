@@ -482,5 +482,18 @@ impl Provisioner for DockerProvisioner {
 }
 
 #[cfg(test)]
+impl DockerProvisioner {
+    fn new_for_test(config: DockerConfig) -> Self {
+        let client = Docker::connect_with_http(
+            "http://localhost:1",
+            120,
+            bollard::API_DEFAULT_VERSION,
+        )
+        .expect("connect_with_http should not fail");
+        Self { config, client }
+    }
+}
+
+#[cfg(test)]
 #[path = "docker_tests.rs"]
 mod docker_tests;
