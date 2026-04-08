@@ -118,6 +118,7 @@ pub enum ProvisionerConfig {
     Proxmox(ProxmoxConfig),
     Script(ScriptConfig),
     Manual(ManualConfig),
+    Docker(DockerConfig),
 }
 
 impl ProvisionerConfig {
@@ -142,11 +143,19 @@ impl ProvisionerConfig {
         }
     }
 
+    pub fn as_docker(&self) -> Option<&DockerConfig> {
+        match self {
+            ProvisionerConfig::Docker(cfg) => Some(cfg),
+            _ => None,
+        }
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             ProvisionerConfig::Proxmox(_) => "proxmox",
             ProvisionerConfig::Script(_) => "script",
             ProvisionerConfig::Manual(_) => "manual",
+            ProvisionerConfig::Docker(_) => "docker",
         }
     }
 }
@@ -184,6 +193,12 @@ struct RawProvisionerConfig {
     timeout_seconds: u64,
     // Flat fields for manual
     notification_webhook: Option<String>,
+    // Nested subsection for docker
+    docker: Option<DockerConfig>,
+    // Flat fields for docker
+    socket_path: Option<String>,
+    network: Option<String>,
+    default_image: Option<String>,
 }
 
 fn deserialize_provisioner<'de, D>(deserializer: D) -> Result<ProvisionerConfig, D::Error>
@@ -288,9 +303,22 @@ where
             };
             Ok(ProvisionerConfig::Manual(config))
         }
+        "docker" => {
+            let config = if let Some(nested) = raw.docker {
+                nested
+            } else {
+                DockerConfig {
+                    socket_path: raw.socket_path.unwrap_or_else(default_docker_socket),
+                    network: raw.network.unwrap_or_else(default_docker_network),
+                    default_image: raw.default_image.unwrap_or_else(default_docker_image),
+                    ssh_port: default_docker_ssh_port(),
+                }
+            };
+            Ok(ProvisionerConfig::Docker(config))
+        }
         other => Err(serde::de::Error::unknown_variant(
             other,
-            &["proxmox", "script", "manual"],
+            &["proxmox", "script", "manual", "docker"],
         )),
     }
 }
@@ -330,6 +358,24 @@ pub struct ScriptConfig {
 #[serde(deny_unknown_fields)]
 pub struct ManualConfig {
     pub notification_webhook: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DockerConfig {
+    /// Docker daemon socket path (default: "/var/run/docker.sock").
+    /// Set to "" to use the default socket.
+    #[serde(default = "default_docker_socket")]
+    pub socket_path: String,
+    /// Docker network mode (default: "bridge")
+    #[serde(default = "default_docker_network")]
+    pub network: String,
+    /// Default container image to use when not specified per-request
+    #[serde(default = "default_docker_image")]
+    pub default_image: String,
+    /// SSH port inside the container (default: 22)
+    #[serde(default = "default_docker_ssh_port")]
+    pub ssh_port: u16,
 }
 
 /// Placeholder patterns that indicate unconfigured values
@@ -431,6 +477,18 @@ impl Config {
                     );
                 }
             }
+            ProvisionerConfig::Docker(docker) => {
+                Self::check_placeholder(
+                    &docker.socket_path,
+                    "provisioner.docker.socket_path",
+                    &mut placeholders_found,
+                );
+                Self::check_placeholder(
+                    &docker.default_image,
+                    "provisioner.docker.default_image",
+                    &mut placeholders_found,
+                );
+            }
         }
 
         // Check additional provisioners
@@ -456,6 +514,13 @@ impl Config {
                     );
                 }
                 ProvisionerConfig::Manual(_) => {}
+                ProvisionerConfig::Docker(docker) => {
+                    Self::check_placeholder(
+                        &docker.socket_path,
+                        &format!("additional_provisioners[{}].socket_path", idx),
+                        &mut placeholders_found,
+                    );
+                }
             }
         }
 
@@ -515,6 +580,22 @@ fn default_ip_wait_attempts() -> u32 {
 
 fn default_ip_wait_interval_secs() -> u64 {
     10
+}
+
+fn default_docker_socket() -> String {
+    "/var/run/docker.sock".to_string()
+}
+
+fn default_docker_network() -> String {
+    "bridge".to_string()
+}
+
+fn default_docker_image() -> String {
+    "ubuntu:22.04".to_string()
+}
+
+fn default_docker_ssh_port() -> u16 {
+    22
 }
 
 /// Deserialize additional provisioners from [[additional_provisioners]] array
@@ -597,10 +678,23 @@ where
                 };
                 ProvisionerConfig::Manual(config)
             }
+            "docker" => {
+                let config = if let Some(nested) = raw.docker {
+                    nested
+                } else {
+                    DockerConfig {
+                        socket_path: raw.socket_path.unwrap_or_else(default_docker_socket),
+                        network: raw.network.unwrap_or_else(default_docker_network),
+                        default_image: raw.default_image.unwrap_or_else(default_docker_image),
+                        ssh_port: default_docker_ssh_port(),
+                    }
+                };
+                ProvisionerConfig::Docker(config)
+            }
             other => {
                 return Err(serde::de::Error::unknown_variant(
                     other,
-                    &["proxmox", "script", "manual"],
+                    &["proxmox", "script", "manual", "docker"],
                 ))
             }
         };
@@ -1653,5 +1747,115 @@ traefik_dynamic_dir = "/etc/traefik/dynamic"
             "Error must identify the unknown field, got: {}",
             err_msg
         );
+    }
+
+    #[test]
+    fn test_load_nested_docker_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "docker"
+
+[provisioner.docker]
+socket_path = "/custom/docker.sock"
+network = "host"
+default_image = "alpine:3.19"
+ssh_port = 2222
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let docker = config.provisioner.as_docker().expect("Should be Docker");
+        assert_eq!(docker.socket_path, "/custom/docker.sock");
+        assert_eq!(docker.network, "host");
+        assert_eq!(docker.default_image, "alpine:3.19");
+        assert_eq!(docker.ssh_port, 2222);
+    }
+
+    #[test]
+    fn test_load_docker_config_defaults() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "docker"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+
+        let docker = config.provisioner.as_docker().expect("Should be Docker");
+        assert_eq!(docker.socket_path, "/var/run/docker.sock");
+        assert_eq!(docker.network, "bridge");
+        assert_eq!(docker.default_image, "ubuntu:22.04");
+        assert_eq!(docker.ssh_port, 22);
+    }
+
+    #[test]
+    fn test_docker_config_type_name() {
+        let docker = ProvisionerConfig::Docker(DockerConfig {
+            socket_path: "/var/run/docker.sock".to_string(),
+            network: "bridge".to_string(),
+            default_image: "ubuntu:22.04".to_string(),
+            ssh_port: 22,
+        });
+        assert_eq!(docker.type_name(), "docker");
+    }
+
+    #[test]
+    fn test_docker_as_docker_accessor() {
+        let config = ProvisionerConfig::Docker(DockerConfig {
+            socket_path: "/var/run/docker.sock".to_string(),
+            network: "bridge".to_string(),
+            default_image: "ubuntu:22.04".to_string(),
+            ssh_port: 22,
+        });
+        assert!(config.as_docker().is_some());
+        assert!(config.as_proxmox().is_none());
+        assert!(config.as_script().is_none());
+        assert!(config.as_manual().is_none());
+    }
+
+    #[test]
+    fn test_validate_accepts_docker_config() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+
+        let config_content = r#"
+[api]
+endpoint = "https://api.decent-cloud.org"
+provider_pubkey = "ed25519_pubkey_hex"
+provider_secret_key = "ed25519_secret_hex"
+
+[polling]
+
+[provisioner]
+type = "docker"
+"#;
+
+        fs::write(&config_path, config_content).unwrap();
+
+        let config = Config::load(&config_path).unwrap();
+        assert!(config.validate().is_ok());
     }
 }
