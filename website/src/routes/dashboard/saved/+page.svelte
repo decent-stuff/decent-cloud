@@ -4,11 +4,14 @@
 	import { goto } from '$app/navigation';
 	import {
 		getSavedOfferings,
+		getUserNotifications,
+		markNotificationsRead,
 		unsaveOffering,
 		hexEncode,
 		type Offering
 	} from '$lib/services/api';
 	import { toggleSavedId } from '$lib/services/saved-offerings';
+	import { collectSavedOfferingPriceChanges } from '$lib/utils/saved-offering-price-change';
 	import Icon from '$lib/components/Icons.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
 	import { authStore } from '$lib/stores/auth';
@@ -22,6 +25,7 @@
 	let savedIds = $state(new Set<number>());
 	let selectedIds = $state(new Set<number>());
 	let removing = $state(false);
+	let priceChangeMap = $state(new Map<number, 'up' | 'down'>());
 
 	let allSelected = $derived(offerings.length > 0 && offerings.every(o => o.id !== undefined && selectedIds.has(o.id)));
 	let someSelected = $derived(selectedIds.size > 0);
@@ -44,6 +48,15 @@
 			const { headers } = await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/saved-offerings`);
 			offerings = await getSavedOfferings(headers, pubkeyHex);
 			savedIds = new Set(offerings.map((o) => o.id).filter((id): id is number => id !== undefined));
+
+			const notifHeaders = (await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/notifications`)).headers;
+			const notifications = await getUserNotifications(notifHeaders, pubkeyHex);
+			const { byOfferingId, unreadNotificationIds } = collectSavedOfferingPriceChanges(notifications);
+			priceChangeMap = byOfferingId;
+			if (unreadNotificationIds.length > 0) {
+				const markHeaders = (await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/notifications/mark-read`)).headers;
+				await markNotificationsRead(markHeaders, pubkeyHex, unreadNotificationIds);
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load saved offerings';
 		} finally {
@@ -253,7 +266,21 @@
 						</div>
 						<div class="flex items-center gap-3 shrink-0">
 							<div class="text-right">
-								<div class="font-medium text-white">{formatPrice(offering)}</div>
+								<div class="font-medium text-white flex items-center justify-end gap-1.5">
+									{formatPrice(offering)}
+									{#if offering.id !== undefined && priceChangeMap.has(offering.id)}
+										{@const direction = priceChangeMap.get(offering.id)}
+										{#if direction === 'down'}
+											<span class="inline-flex items-center px-1.5 py-0.5 text-xs font-semibold bg-emerald-500/20 text-emerald-400 rounded" title="Price dropped">
+												↓
+											</span>
+										{:else}
+											<span class="inline-flex items-center px-1.5 py-0.5 text-xs font-semibold bg-amber-500/20 text-amber-400 rounded" title="Price increased">
+												↑
+											</span>
+										{/if}
+									{/if}
+								</div>
 								<div class="text-xs text-neutral-500">/month</div>
 							</div>
 							<a

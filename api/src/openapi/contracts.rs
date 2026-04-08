@@ -72,7 +72,7 @@ pub async fn check_spending_alert_and_notify(db: &Database, requester_pubkey: &[
     };
 
     if let Err(e) = db
-        .insert_user_notification(requester_pubkey, "spending_alert", &title, &body, None)
+        .insert_user_notification(requester_pubkey, "spending_alert", &title, &body, None, None)
         .await
     {
         tracing::warn!(

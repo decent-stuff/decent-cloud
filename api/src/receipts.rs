@@ -303,6 +303,7 @@ pub async fn send_contract_accepted_notification(db: &Database, contract_id: &[u
                     &contract_hex[..16]
                 ),
                 Some(&contract_hex),
+                None,
             )
             .await
         {
@@ -424,6 +425,7 @@ pub async fn send_contract_rejected_notification(
                     reason_text
                 ),
                 Some(&contract_hex),
+                None,
             )
             .await
         {

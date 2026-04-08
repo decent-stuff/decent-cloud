@@ -3739,6 +3739,7 @@ export interface UserNotification {
 	title: string;
 	body: string;
 	contractId?: string;
+	offeringId?: number;
 	readAt?: number;
 	createdAt: number;
 }

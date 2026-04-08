@@ -1103,12 +1103,13 @@ impl Database {
 
         for user_pubkey in saved_user_pubkeys {
             sqlx::query(
-                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5)",
+                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5, $6)",
             )
             .bind(user_pubkey.as_slice())
             .bind("saved_offering_price_change")
             .bind(&title)
             .bind(&body)
+            .bind(offering_id)
             .bind(created_at)
             .execute(&mut **tx)
             .await?;
@@ -1840,7 +1841,10 @@ impl Database {
             pubkey_placeholder
         );
 
-        let mut verify_builder = sqlx::query_as::<_, (i64, String, String, f64, f64, Option<f64>, Option<f64>)>(&verify_query);
+        type ExistingOfferingRow = (i64, String, String, f64, f64, Option<f64>, Option<f64>);
+        type ExistingOfferingPrices = (String, String, f64, f64, Option<f64>, Option<f64>);
+
+        let mut verify_builder = sqlx::query_as::<_, ExistingOfferingRow>(&verify_query);
         for id in &ids {
             verify_builder = verify_builder.bind(id);
         }
@@ -1853,7 +1857,7 @@ impl Database {
             ));
         }
 
-        let existing_offerings: HashMap<i64, (String, String, f64, f64, Option<f64>, Option<f64>)> = existing_offerings
+        let existing_offerings: HashMap<i64, ExistingOfferingPrices> = existing_offerings
             .into_iter()
             .map(|(id, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit)| {
                 (id, (offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit))
