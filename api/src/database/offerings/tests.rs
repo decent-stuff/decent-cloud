@@ -3420,10 +3420,54 @@ async fn test_update_offering_price_change_notifies_saved_users() {
 }
 
 #[tokio::test]
-async fn test_update_offering_same_price_does_not_notify_saved_users() {
+async fn test_update_offering_price_decrease_sets_direction_down() {
     let db = setup_test_db().await;
     let provider = vec![0x69u8; 32];
     let user = vec![0x6Au8; 32];
+
+    insert_test_offering(&db, 8, &provider, "US", 15.0).await;
+    let offering_id = test_id_to_db_id(8);
+
+    db.save_offering(&user, offering_id)
+        .await
+        .expect("save_offering should succeed");
+
+    let mut update_params = db
+        .get_offering(offering_id)
+        .await
+        .expect("get_offering should succeed")
+        .expect("offering should exist");
+    update_params.monthly_price = 10.0;
+
+    db.update_offering(&provider, offering_id, update_params)
+        .await
+        .expect("update_offering should succeed");
+
+    let notifications = db
+        .get_user_notifications(&user, 10)
+        .await
+        .expect("get_user_notifications should succeed");
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(
+        notifications[0].notification_type,
+        "saved_offering_price_change"
+    );
+    assert_eq!(notifications[0].title, "Saved offering price down");
+    assert_eq!(notifications[0].price_direction, Some("down".to_string()));
+    assert!(
+        notifications[0]
+            .body
+            .contains("Test Offer: monthly_price from USD 15.00 to USD 10.00."),
+        "unexpected notification body: {}",
+        notifications[0].body
+    );
+}
+
+#[tokio::test]
+async fn test_update_offering_same_price_does_not_notify_saved_users() {
+    let db = setup_test_db().await;
+    let provider = vec![0x79u8; 32];
+    let user = vec![0x7Au8; 32];
 
     insert_test_offering(&db, 8, &provider, "US", 10.0).await;
     let offering_id = test_id_to_db_id(8);
@@ -3483,6 +3527,8 @@ async fn test_update_offering_setup_fee_change_notifies_saved_users() {
         notifications[0].notification_type,
         "saved_offering_price_change"
     );
+    assert_eq!(notifications[0].title, "Saved offering price up");
+    assert_eq!(notifications[0].price_direction, Some("up".to_string()));
     assert!(
         notifications[0]
             .body
@@ -3584,6 +3630,7 @@ async fn test_update_offering_overage_price_per_unit_change_notifies_saved_users
         notifications[0].notification_type,
         "saved_offering_price_change"
     );
+    assert_eq!(notifications[0].price_direction, Some("up".to_string()));
     assert!(
         notifications[0]
             .body
@@ -3635,6 +3682,7 @@ async fn test_update_offering_multiple_price_changes_notifies_all_components() {
         notifications[0].notification_type,
         "saved_offering_price_change"
     );
+    assert_eq!(notifications[0].price_direction, Some("up".to_string()));
     assert!(
         notifications[0]
             .body

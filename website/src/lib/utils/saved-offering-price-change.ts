@@ -1,6 +1,6 @@
-import type { UserNotification } from '$lib/services/api';
+import type { UserNotification, UserNotificationPriceDirection } from '$lib/services/api';
 
-export type SavedOfferingPriceChangeDirection = 'up' | 'down';
+export type SavedOfferingPriceChangeDirection = UserNotificationPriceDirection;
 
 export interface SavedOfferingPriceChangeSummary {
 	byOfferingId: Map<number, SavedOfferingPriceChangeDirection>;

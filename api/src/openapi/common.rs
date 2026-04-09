@@ -1024,6 +1024,26 @@ mod tests {
     }
 
     #[test]
+    fn test_user_notification_response_serializes_price_direction_in_camel_case() {
+        let resp = UserNotificationResponse {
+            id: 7,
+            notification_type: "saved_offering_price_change".to_string(),
+            title: "Saved offering price up".to_string(),
+            body: "Offer A: monthly_price from USD 10.00 to USD 12.50.".to_string(),
+            contract_id: None,
+            offering_id: Some(42),
+            price_direction: Some("down".to_string()),
+            read_at: None,
+            created_at: 123,
+        };
+
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["offeringId"], 42);
+        assert_eq!(json["priceDirection"], "down");
+        assert!(json.get("price_direction").is_none());
+    }
+
+    #[test]
     fn test_reconcile_request_deserialization() {
         let json = r#"{"runningInstances":[{"externalId":"vm-100","contractId":"c-123"}]}"#;
         let req: ReconcileRequest = serde_json::from_str(json).unwrap();

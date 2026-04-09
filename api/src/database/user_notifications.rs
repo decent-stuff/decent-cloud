@@ -17,6 +17,7 @@ pub struct UserNotification {
 
 impl Database {
     /// Insert a new notification for the given user. Returns the new notification ID.
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_user_notification(
         &self,
         user_pubkey: &[u8],
@@ -383,5 +384,26 @@ mod tests {
         assert_eq!(with_offering.offering_id, Some(42));
         let without_offering = notifications.iter().find(|n| n.id == id2).unwrap();
         assert_eq!(without_offering.offering_id, None);
+    }
+
+    #[tokio::test]
+    async fn test_notification_rejects_invalid_price_direction() {
+        let db = setup_test_db().await;
+        let pubkey = vec![0x0Au8; 32];
+
+        let err = db
+            .insert_user_notification(
+                &pubkey,
+                "saved_offering_price_change",
+                "Saved offering price changed",
+                "Test Offer: monthly_price from USD 10.00 to USD 12.50.",
+                None,
+                Some(42),
+                Some("sideways"),
+            )
+            .await
+            .expect_err("invalid price direction should fail");
+
+        assert!(err.to_string().contains("user_notifications_price_direction_check"));
     }
 }
