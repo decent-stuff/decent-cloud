@@ -10,12 +10,14 @@ pub struct UserNotification {
     pub body: String,
     pub contract_id: Option<String>,
     pub offering_id: Option<i64>,
+    pub price_direction: Option<String>,
     pub read_at: Option<i64>,
     pub created_at: i64,
 }
 
 impl Database {
     /// Insert a new notification for the given user. Returns the new notification ID.
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_user_notification(
         &self,
         user_pubkey: &[u8],
@@ -24,6 +26,7 @@ impl Database {
         body: &str,
         contract_id: Option<&str>,
         offering_id: Option<i64>,
+        price_direction: Option<&str>,
     ) -> Result<i64> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -31,8 +34,8 @@ impl Database {
             .as_secs() as i64;
 
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)
+            r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, price_direction, created_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                RETURNING id"#,
             user_pubkey,
             notification_type,
@@ -40,6 +43,7 @@ impl Database {
             body,
             contract_id,
             offering_id,
+            price_direction,
             now,
         )
         .fetch_one(&self.pool)
@@ -55,7 +59,7 @@ impl Database {
         limit: i64,
     ) -> Result<Vec<UserNotification>> {
         let rows = sqlx::query!(
-            r#"SELECT id, type, title, body, contract_id, offering_id, read_at, created_at
+            r#"SELECT id, type, title, body, contract_id, offering_id, price_direction, read_at, created_at
                FROM user_notifications
                WHERE user_pubkey = $1
                ORDER BY created_at DESC, id DESC
@@ -75,6 +79,7 @@ impl Database {
                 body: r.body,
                 contract_id: r.contract_id,
                 offering_id: r.offering_id,
+                price_direction: r.price_direction,
                 read_at: r.read_at,
                 created_at: r.created_at,
             })
@@ -154,6 +159,7 @@ mod tests {
                 "Your rental request was accepted.",
                 Some("abc123"),
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -166,6 +172,7 @@ mod tests {
         assert_eq!(notifications[0].notification_type, "contract_status");
         assert_eq!(notifications[0].title, "Contract Accepted");
         assert_eq!(notifications[0].contract_id.as_deref(), Some("abc123"));
+        assert!(notifications[0].price_direction.is_none());
         assert!(notifications[0].read_at.is_none());
     }
 
@@ -186,10 +193,10 @@ mod tests {
         // No notifications yet
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 0);
 
-        db.insert_user_notification(&pubkey, "contract_provisioned", "VM Ready", "Your VM is provisioned.", None, None)
+        db.insert_user_notification(&pubkey, "contract_provisioned", "VM Ready", "Your VM is provisioned.", None, None, None)
         .await
         .unwrap();
-        db.insert_user_notification(&pubkey, "auto_renewed", "Auto-renewed", "Contract was renewed.", None, None)
+        db.insert_user_notification(&pubkey, "auto_renewed", "Auto-renewed", "Contract was renewed.", None, None, None)
         .await
         .unwrap();
 
@@ -209,6 +216,7 @@ mod tests {
                 "Contract was cancelled.",
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -218,6 +226,7 @@ mod tests {
                 "contract_status",
                 "Rejected",
                 "Contract was rejected.",
+                None,
                 None,
                 None,
             )
@@ -249,6 +258,7 @@ mod tests {
             "A tenant rented your VM.",
             None,
             None,
+            None,
         )
         .await
         .unwrap();
@@ -257,6 +267,7 @@ mod tests {
             "password_reset_complete",
             "Password Reset",
             "Password was reset.",
+            None,
             None,
             None,
         )
@@ -277,7 +288,7 @@ mod tests {
         let user_b = vec![0x06u8; 32];
 
         let id = db
-            .insert_user_notification(&user_a, "contract_status", "Title", "Body", None, None)
+            .insert_user_notification(&user_a, "contract_status", "Title", "Body", None, None, None)
             .await
             .unwrap();
 
@@ -301,6 +312,7 @@ mod tests {
                 "body",
                 None,
                 None,
+                None,
             )
             .await
             .unwrap();
@@ -316,11 +328,11 @@ mod tests {
         let pubkey = vec![0x08u8; 32];
 
         let id1 = db
-            .insert_user_notification(&pubkey, "contract_status", "First", "body", None, None)
+            .insert_user_notification(&pubkey, "contract_status", "First", "body", None, None, None)
             .await
             .unwrap();
         let id2 = db
-            .insert_user_notification(&pubkey, "contract_status", "Second", "body", None, None)
+            .insert_user_notification(&pubkey, "contract_status", "Second", "body", None, None, None)
             .await
             .unwrap();
 
@@ -343,6 +355,7 @@ mod tests {
                 "Test Offer: monthly_price from USD 10.00 to USD 12.50.",
                 None,
                 Some(42),
+                Some("up"),
             )
             .await
             .unwrap();
@@ -350,6 +363,7 @@ mod tests {
         let notifications = db.get_user_notifications(&pubkey, 50).await.unwrap();
         assert_eq!(notifications.len(), 1);
         assert_eq!(notifications[0].offering_id, Some(42));
+        assert_eq!(notifications[0].price_direction.as_deref(), Some("up"));
 
         let id2 = db
             .insert_user_notification(
@@ -358,6 +372,7 @@ mod tests {
                 "Accepted",
                 "Contract accepted.",
                 Some("c1"),
+                None,
                 None,
             )
             .await
@@ -369,5 +384,26 @@ mod tests {
         assert_eq!(with_offering.offering_id, Some(42));
         let without_offering = notifications.iter().find(|n| n.id == id2).unwrap();
         assert_eq!(without_offering.offering_id, None);
+    }
+
+    #[tokio::test]
+    async fn test_notification_rejects_invalid_price_direction() {
+        let db = setup_test_db().await;
+        let pubkey = vec![0x0Au8; 32];
+
+        let err = db
+            .insert_user_notification(
+                &pubkey,
+                "saved_offering_price_change",
+                "Saved offering price changed",
+                "Test Offer: monthly_price from USD 10.00 to USD 12.50.",
+                None,
+                Some(42),
+                Some("sideways"),
+            )
+            .await
+            .expect_err("invalid price direction should fail");
+
+        assert!(err.to_string().contains("user_notifications_price_direction_check"));
     }
 }

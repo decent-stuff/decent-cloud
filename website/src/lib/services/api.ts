@@ -3740,9 +3740,12 @@ export interface UserNotification {
 	body: string;
 	contractId?: string;
 	offeringId?: number;
+	priceDirection?: UserNotificationPriceDirection;
 	readAt?: number;
 	createdAt: number;
 }
+
+export type UserNotificationPriceDirection = 'up' | 'down';
 
 export async function getUserNotifications(
 	headers: SignedRequestHeaders,

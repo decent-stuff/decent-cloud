@@ -1,6 +1,6 @@
-import type { UserNotification } from '$lib/services/api';
+import type { UserNotification, UserNotificationPriceDirection } from '$lib/services/api';
 
-export type SavedOfferingPriceChangeDirection = 'up' | 'down';
+export type SavedOfferingPriceChangeDirection = UserNotificationPriceDirection;
 
 export interface SavedOfferingPriceChangeSummary {
 	byOfferingId: Map<number, SavedOfferingPriceChangeDirection>;
@@ -29,7 +29,8 @@ export function collectSavedOfferingPriceChanges(
 
 		byOfferingId.set(
 			notification.offeringId,
-			notification.title.includes('dropped') ? 'down' : 'up'
+			// The API now carries direction explicitly; titles are presentation-only.
+			notification.priceDirection === 'down' ? 'down' : 'up'
 		);
 	}
 

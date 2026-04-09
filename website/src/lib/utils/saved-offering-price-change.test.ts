@@ -8,17 +8,19 @@ describe('collectSavedOfferingPriceChanges', () => {
 			{
 				id: 1,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price dropped',
+				title: 'Saved offering price down',
 				body: 'Offer A: monthly_price from USD 12.00 to USD 10.00.',
 				offeringId: 42,
+				priceDirection: 'down',
 				createdAt: 1
 			},
 			{
 				id: 2,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price changed',
+				title: 'Saved offering price up',
 				body: 'Offer B: monthly_price from USD 10.00 to USD 12.00.',
 				offeringId: 99,
+				priceDirection: 'up',
 				createdAt: 2
 			}
 		]);
@@ -35,9 +37,10 @@ describe('collectSavedOfferingPriceChanges', () => {
 			{
 				id: 1,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price dropped',
+				title: 'Saved offering price down',
 				body: 'Offer A: monthly_price from USD 12.00 to USD 10.00.',
 				offeringId: 42,
+				priceDirection: 'down',
 				createdAt: 1,
 				readAt: 5
 			},
@@ -51,29 +54,48 @@ describe('collectSavedOfferingPriceChanges', () => {
 			{
 				id: 3,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price dropped',
+				title: 'Saved offering price down',
 				body: 'Offer B: monthly_price from USD 12.00 to USD 10.00.',
+				priceDirection: 'down',
 				createdAt: 3
 			},
 			{
 				id: 4,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price dropped',
+				title: 'Saved offering price down',
 				body: 'Offer C: monthly_price from USD 12.00 to USD 10.00.',
 				offeringId: 7,
+				priceDirection: 'down',
 				createdAt: 4
 			},
 			{
 				id: 5,
 				notificationType: 'saved_offering_price_change',
-				title: 'Saved offering price changed',
+				title: 'Saved offering price up',
 				body: 'Offer C: monthly_price from USD 10.00 to USD 12.00.',
 				offeringId: 7,
+				priceDirection: 'up',
 				createdAt: 5
 			}
 		]);
 
 		expect(result.unreadNotificationIds).toEqual([4, 5]);
 		expect(Array.from(result.byOfferingId.entries())).toEqual([[7, 'down']]);
+	});
+
+	it('prefers structured direction over title text', () => {
+		const result = collectSavedOfferingPriceChanges([
+			{
+				id: 1,
+				notificationType: 'saved_offering_price_change',
+				title: 'Saved offering price up',
+				body: 'Offer D: monthly_price from USD 12.00 to USD 10.00.',
+				offeringId: 55,
+				priceDirection: 'down',
+				createdAt: 1
+			}
+		]);
+
+		expect(Array.from(result.byOfferingId.entries())).toEqual([[55, 'down']]);
 	});
 });

@@ -393,6 +393,7 @@ impl UsersApi {
                         body: n.body,
                         contract_id: n.contract_id,
                         offering_id: n.offering_id,
+                        price_direction: n.price_direction,
                         read_at: n.read_at,
                         created_at: n.created_at,
                     })
