@@ -29,7 +29,8 @@ export function collectSavedOfferingPriceChanges(
 
 		byOfferingId.set(
 			notification.offeringId,
-			notification.title.includes('dropped') ? 'down' : 'up'
+			// The API now carries direction explicitly; titles are presentation-only.
+			notification.priceDirection === 'down' ? 'down' : 'up'
 		);
 	}
 

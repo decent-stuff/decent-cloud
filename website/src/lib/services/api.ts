@@ -3740,6 +3740,7 @@ export interface UserNotification {
 	body: string;
 	contractId?: string;
 	offeringId?: number;
+	priceDirection?: string;
 	readAt?: number;
 	createdAt: number;
 }

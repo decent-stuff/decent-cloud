@@ -639,6 +639,7 @@ impl OfferingsApi {
                 &body_text,
                 None,
                 None,
+                None,
             )
             .await
         {

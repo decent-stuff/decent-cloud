@@ -3407,7 +3407,8 @@ async fn test_update_offering_price_change_notifies_saved_users() {
             "saved_offering_price_change"
         );
         assert_eq!(notifications[0].offering_id, Some(offering_id));
-        assert_eq!(notifications[0].title, "Saved offering price changed");
+        assert_eq!(notifications[0].title, "Saved offering price up");
+        assert_eq!(notifications[0].price_direction, Some("up".to_string()));
         assert!(
             notifications[0]
                 .body

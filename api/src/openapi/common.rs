@@ -732,6 +732,9 @@ pub struct UserNotificationResponse {
     pub offering_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
+    pub price_direction: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
     pub read_at: Option<i64>,
     pub created_at: i64,
 }
