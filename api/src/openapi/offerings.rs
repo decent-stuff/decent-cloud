@@ -638,7 +638,7 @@ impl OfferingsApi {
                 &title,
                 &body_text,
                 None,
-                None,
+                offering.id,
                 None,
             )
             .await

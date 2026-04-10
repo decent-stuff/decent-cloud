@@ -4785,7 +4785,7 @@ async fn test_offering_inquiry_notification_includes_offering_id() {
         "Inquiry about \"Test Offer\"",
         "From alice: Is this available?",
         None,
-        None,
+        Some(offering_id),
         None,
     )
     .await
