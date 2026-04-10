@@ -1,4 +1,5 @@
 use super::types::Database;
+use super::user_notifications::insert_notification;
 use crate::regions::{country_to_region, is_valid_country_code};
 use anyhow::Result;
 use poem_openapi::Object;
@@ -1099,20 +1100,17 @@ impl Database {
             format!("{} pricing changed: {}.", change.offer_name, changes.join("; "))
         };
 
-        let created_at = chrono::Utc::now().timestamp();
-
-        for user_pubkey in saved_user_pubkeys {
-            sqlx::query(
-                "INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, price_direction, created_at) VALUES ($1, $2, $3, $4, NULL, $5, $6, $7)",
+        for user_pubkey in &saved_user_pubkeys {
+            insert_notification(
+                &mut **tx,
+                user_pubkey,
+                "saved_offering_price_change",
+                &title,
+                &body,
+                None,
+                Some(offering_id),
+                Some(direction),
             )
-            .bind(user_pubkey.as_slice())
-            .bind("saved_offering_price_change")
-            .bind(&title)
-            .bind(&body)
-            .bind(offering_id)
-            .bind(direction)
-            .bind(created_at)
-            .execute(&mut **tx)
             .await?;
         }
 

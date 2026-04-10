@@ -1,7 +1,6 @@
 use super::types::Database;
 use anyhow::Result;
 
-/// A user notification stored in the database.
 #[derive(Debug, Clone)]
 pub struct UserNotification {
     pub id: i64,
@@ -15,8 +14,42 @@ pub struct UserNotification {
     pub created_at: i64,
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn insert_notification(
+    executor: impl sqlx::Executor<'_, Database = sqlx::Postgres>,
+    user_pubkey: &[u8],
+    notification_type: &str,
+    title: &str,
+    body: &str,
+    contract_id: Option<&str>,
+    offering_id: Option<i64>,
+    price_direction: Option<&str>,
+) -> anyhow::Result<i64> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let id = sqlx::query_scalar!(
+        r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, price_direction, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id"#,
+        user_pubkey,
+        notification_type,
+        title,
+        body,
+        contract_id,
+        offering_id,
+        price_direction,
+        now,
+    )
+    .fetch_one(executor)
+    .await?;
+
+    Ok(id)
+}
+
 impl Database {
-    /// Insert a new notification for the given user. Returns the new notification ID.
     #[allow(clippy::too_many_arguments)]
     pub async fn insert_user_notification(
         &self,
@@ -28,15 +61,8 @@ impl Database {
         offering_id: Option<i64>,
         price_direction: Option<&str>,
     ) -> Result<i64> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        let id = sqlx::query_scalar!(
-            r#"INSERT INTO user_notifications (user_pubkey, type, title, body, contract_id, offering_id, price_direction, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-               RETURNING id"#,
+        insert_notification(
+            &self.pool,
             user_pubkey,
             notification_type,
             title,
@@ -44,12 +70,8 @@ impl Database {
             contract_id,
             offering_id,
             price_direction,
-            now,
         )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(id)
+        .await
     }
 
     /// Return the last `limit` notifications for a user, newest first.
