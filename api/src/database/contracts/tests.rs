@@ -825,6 +825,103 @@ async fn test_request_ssh_key_rotation_stages_pending_key_until_completion() {
 }
 
 #[tokio::test]
+async fn test_get_ssh_key_rotation_events_for_user_returns_rotation_events() {
+    let db = setup_test_db().await;
+    let contract_id = vec![80u8; 32];
+    let requester_pk = vec![3u8; 32];
+    let provider_pk = vec![4u8; 32];
+    let other_pk = vec![5u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-sse-rot",
+        0,
+        "active",
+    )
+    .await;
+
+    db.add_provisioning_details(&contract_id, "ip:1.2.3.4\nuser:root")
+        .await
+        .unwrap();
+
+    let other_contract_id = vec![81u8; 32];
+    insert_contract_request(
+        &db,
+        &other_contract_id,
+        &other_pk,
+        &provider_pk,
+        "off-sse-rot2",
+        0,
+        "active",
+    )
+    .await;
+
+    db.add_provisioning_details(&other_contract_id, "ip:5.6.7.8\nuser:root")
+        .await
+        .unwrap();
+
+    let before_rotation = crate::now_ns().unwrap();
+    db.request_ssh_key_rotation(&contract_id, "ssh-ed25519 NEWKEY1")
+        .await
+        .unwrap();
+    db.request_ssh_key_rotation(&other_contract_id, "ssh-ed25519 NEWKEY2")
+        .await
+        .unwrap();
+
+    let events = db
+        .get_ssh_key_rotation_events_for_user(&requester_pk, 0)
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].contract_id, hex::encode(&contract_id));
+    assert_eq!(events[0].event_type, "ssh_key_rotation");
+    assert_eq!(events[0].actor, "tenant");
+    assert!(events[0].created_at >= before_rotation);
+
+    db.complete_ssh_key_rotation(&contract_id)
+        .await
+        .unwrap();
+    db.insert_contract_event(
+        &contract_id,
+        "ssh_key_rotation_complete",
+        None,
+        None,
+        "provider",
+        Some("SSH key rotated to ssh-ed25519 NEWKEY... by agent"),
+    )
+    .await
+    .unwrap();
+
+    let all_events = db
+        .get_ssh_key_rotation_events_for_user(&requester_pk, 0)
+        .await
+        .unwrap();
+    assert_eq!(all_events.len(), 2);
+    assert_eq!(all_events[0].event_type, "ssh_key_rotation");
+    assert_eq!(all_events[1].event_type, "ssh_key_rotation_complete");
+
+    let after_all = all_events[1].created_at;
+    let filtered = db
+        .get_ssh_key_rotation_events_for_user(&requester_pk, after_all)
+        .await
+        .unwrap();
+    assert!(
+        filtered.is_empty(),
+        "after_ns filter should exclude events at or before the cutoff"
+    );
+
+    let other_events = db
+        .get_ssh_key_rotation_events_for_user(&other_pk, 0)
+        .await
+        .unwrap();
+    assert_eq!(other_events.len(), 1);
+    assert_eq!(other_events[0].contract_id, hex::encode(&other_contract_id));
+}
+
+#[tokio::test]
 async fn test_cancel_contract_success_requested() {
     let db = setup_test_db().await;
     let contract_id = vec![10u8; 32];

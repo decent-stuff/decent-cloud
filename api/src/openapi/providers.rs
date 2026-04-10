@@ -136,9 +136,15 @@ pub async fn password_reset_events(
 /// when any contract status or updated_at_ns changes. Keep-alive sent every 30 seconds.
 /// Closes after 5 minutes (client reconnects).
 ///
-/// Event format:
+/// Event types emitted:
 ///   event: contract-status
 ///   data: {"contract_id":"<id>","status":"<status>","updated_at_ns":<ns>}
+///
+///   event: ssh_key_rotation
+///   data: {"contract_id":"<id>","created_at":<ns>,"actor":"tenant","details":null}
+///
+///   event: ssh_key_rotation_complete
+///   data: {"contract_id":"<id>","created_at":<ns>,"actor":"provider","details":"<msg>"}
 #[poem::handler]
 pub async fn contract_status_events(
     req: &poem::Request,
@@ -162,24 +168,30 @@ pub async fn contract_status_events(
         ));
     }
 
-    // Snapshot: contract_id -> (status, updated_at_ns)
     type Snapshot = std::collections::HashMap<String, (String, Option<i64>)>;
 
+    struct SseState {
+        db: Arc<Database>,
+        pk: Vec<u8>,
+        prev_snapshot: Option<Snapshot>,
+        poll_count: u32,
+        last_rotation_event_ns: i64,
+    }
+
     let db_clone: Arc<Database> = Arc::clone(&db);
-    // Close after 5 minutes: 60 polls × 5 seconds
+    let initial = SseState {
+        db: db_clone,
+        pk: pubkey_bytes,
+        prev_snapshot: None,
+        poll_count: 0,
+        last_rotation_event_ns: 0,
+    };
     let stream =
-        futures::stream::unfold(
-            (db_clone, pubkey_bytes, None::<Snapshot>, 0u32),
-            |(db, pk, prev_snapshot, poll_count): (
-                Arc<Database>,
-                Vec<u8>,
-                Option<Snapshot>,
-                u32,
-            )| async move {
-                if poll_count >= 60 {
-                    return None;
-                }
-                let contracts = match db.get_user_contracts(&pk).await {
+        futures::stream::unfold(initial, |state: SseState| async move {
+            if state.poll_count >= 60 {
+                return None;
+            }
+            let contracts = match state.db.get_user_contracts(&state.pk).await {
                     Ok(c) => c,
                     Err(e) => {
                         tracing::error!("SSE contract-status-events DB error: {:#}", e);
@@ -197,9 +209,8 @@ pub async fn contract_status_events(
                     })
                     .collect();
 
-                let events: Vec<Event> = match &prev_snapshot {
+                let mut events: Vec<Event> = match &state.prev_snapshot {
                     None => {
-                        // First poll: emit all contracts
                         contracts
                             .iter()
                             .map(|c| {
@@ -213,7 +224,6 @@ pub async fn contract_status_events(
                             .collect()
                     }
                     Some(prev) => {
-                        // Subsequent polls: emit only changed contracts
                         contracts
                             .iter()
                             .filter(|c| {
@@ -221,7 +231,7 @@ pub async fn contract_status_events(
                                     .map(|(ps, pt)| {
                                         ps != &c.status || pt != &c.status_updated_at_ns
                                     })
-                                    .unwrap_or(true) // new contract
+                                    .unwrap_or(true)
                             })
                             .map(|c| {
                                 let data = serde_json::json!({
@@ -235,8 +245,37 @@ pub async fn contract_status_events(
                     }
                 };
 
+                let mut next_rotation_ns = state.last_rotation_event_ns;
+                if let Ok(rotation_events) = state
+                    .db
+                    .get_ssh_key_rotation_events_for_user(&state.pk, state.last_rotation_event_ns)
+                    .await
+                {
+                    for ev in &rotation_events {
+                        let data = serde_json::json!({
+                            "contract_id": ev.contract_id,
+                            "created_at": ev.created_at,
+                            "actor": ev.actor,
+                            "details": ev.details,
+                        });
+                        events.push(Event::message(data.to_string()).event_type(&ev.event_type));
+                        if ev.created_at > next_rotation_ns {
+                            next_rotation_ns = ev.created_at;
+                        }
+                    }
+                }
+
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                Some((events, (db, pk, Some(current), poll_count + 1)))
+                Some((
+                    events,
+                    SseState {
+                        db: state.db,
+                        pk: state.pk,
+                        prev_snapshot: Some(current),
+                        poll_count: state.poll_count + 1,
+                        last_rotation_event_ns: next_rotation_ns,
+                    },
+                ))
             },
         )
         .flat_map(|events: Vec<Event>| futures::stream::iter(events));
@@ -6125,6 +6164,60 @@ mod tests {
             resp.content_type(),
             Some("text/event-stream"),
             "Contract SSE response must have text/event-stream content type"
+        );
+    }
+
+    #[test]
+    fn test_ssh_key_rotation_sse_event_format_rotation_requested() {
+        let contract_id = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890";
+        let data = serde_json::json!({
+            "contract_id": contract_id,
+            "created_at": 1_700_000_000_000_000_000_i64,
+            "actor": "tenant",
+            "details": serde_json::Value::Null,
+        });
+        let json_str = data.to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed["contract_id"], contract_id);
+        assert_eq!(parsed["created_at"], 1_700_000_000_000_000_000_i64);
+        assert_eq!(parsed["actor"], "tenant");
+        assert!(parsed["details"].is_null());
+    }
+
+    #[test]
+    fn test_ssh_key_rotation_sse_event_format_rotation_complete() {
+        let contract_id = "deadbeef12345678";
+        let data = serde_json::json!({
+            "contract_id": contract_id,
+            "created_at": 1_700_000_001_000_000_000_i64,
+            "actor": "provider",
+            "details": "SSH key rotated to ssh-ed25519 AAA... by agent",
+        });
+        let json_str = data.to_string();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(parsed["contract_id"], contract_id);
+        assert_eq!(parsed["actor"], "provider");
+        assert_eq!(parsed["details"], "SSH key rotated to ssh-ed25519 AAA... by agent");
+    }
+
+    #[tokio::test]
+    async fn test_ssh_key_rotation_sse_event_types() {
+        use futures::stream;
+        use poem::web::sse::{Event, SSE};
+        use poem::IntoResponse;
+
+        let events: Vec<Event> = vec![
+            Event::message(r#"{"contract_id":"abc","created_at":123,"actor":"tenant","details":null}"#)
+                .event_type("ssh_key_rotation"),
+            Event::message(r#"{"contract_id":"abc","created_at":456,"actor":"provider","details":"rotated"}"#)
+                .event_type("ssh_key_rotation_complete"),
+        ];
+        let sse = SSE::new(stream::iter(events));
+        let resp = sse.into_response();
+        assert_eq!(
+            resp.content_type(),
+            Some("text/event-stream"),
+            "SSH key rotation SSE events must use text/event-stream"
         );
     }
 

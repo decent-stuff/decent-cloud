@@ -11,6 +11,13 @@ export interface PasswordResetCountEvent {
 	contract_ids: string[];
 }
 
+export interface SshKeyRotationEvent {
+	contract_id: string;
+	created_at: number;
+	actor: string;
+	details: string | null;
+}
+
 export function buildContractEventsUrl(pubkey: string, apiUrl: string, headers?: SignedRequestHeaders): string {
 	const baseUrl = `${apiUrl}/api/v1/users/${pubkey}/contract-events`;
 	if (!headers) {
@@ -75,5 +82,24 @@ export function parsePasswordResetEvent(data: string): PasswordResetCountEvent {
 	return {
 		count: obj.count as number,
 		contract_ids: obj.contract_ids as string[]
+	};
+}
+
+export function parseSshKeyRotationEvent(data: string): SshKeyRotationEvent {
+	const parsed = JSON.parse(data) as unknown;
+	if (
+		typeof parsed !== 'object' ||
+		parsed === null ||
+		typeof (parsed as Record<string, unknown>).contract_id !== 'string' ||
+		typeof (parsed as Record<string, unknown>).actor !== 'string'
+	) {
+		throw new Error(`Invalid SSH key rotation event payload: ${data}`);
+	}
+	const obj = parsed as Record<string, unknown>;
+	return {
+		contract_id: obj.contract_id as string,
+		created_at: typeof obj.created_at === 'number' ? (obj.created_at as number) : 0,
+		actor: obj.actor as string,
+		details: typeof obj.details === 'string' ? (obj.details as string) : null
 	};
 }

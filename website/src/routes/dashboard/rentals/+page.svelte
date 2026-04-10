@@ -27,7 +27,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
-	import { buildContractEventsUrl, parseContractEvent } from "$lib/utils/contract-sse";
+	import { buildContractEventsUrl, parseContractEvent, parseSshKeyRotationEvent } from "$lib/utils/contract-sse";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -178,6 +178,30 @@
 				);
 			} catch (e) {
 				console.error('[Rentals] Failed to parse contract SSE event:', e);
+			}
+		});
+		eventSource.addEventListener('ssh_key_rotation', (ev) => {
+			try {
+				const rotation = parseSshKeyRotationEvent(ev.data);
+				contracts = contracts.map((c) =>
+					c.contract_id === rotation.contract_id
+						? { ...c, ssh_key_rotation_requested_at_ns: rotation.created_at }
+						: c
+				);
+			} catch (e) {
+				console.error('[Rentals] Failed to parse ssh_key_rotation SSE event:', e);
+			}
+		});
+		eventSource.addEventListener('ssh_key_rotation_complete', (ev) => {
+			try {
+				const rotation = parseSshKeyRotationEvent(ev.data);
+				contracts = contracts.map((c) =>
+					c.contract_id === rotation.contract_id
+						? { ...c, ssh_key_rotation_requested_at_ns: undefined }
+						: c
+				);
+			} catch (e) {
+				console.error('[Rentals] Failed to parse ssh_key_rotation_complete SSE event:', e);
 			}
 		});
 		eventSource.onopen = () => { sseConnected = true; };

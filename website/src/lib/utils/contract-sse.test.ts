@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildContractEventsUrl, parseContractEvent, buildPasswordResetEventsUrl, parsePasswordResetEvent } from './contract-sse';
+import { buildContractEventsUrl, parseContractEvent, buildPasswordResetEventsUrl, parsePasswordResetEvent, parseSshKeyRotationEvent } from './contract-sse';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
 
 describe('buildContractEventsUrl', () => {
@@ -181,5 +181,72 @@ describe('parsePasswordResetEvent', () => {
 
 	it('throws on non-object payload', () => {
 		expect(() => parsePasswordResetEvent('"just a string"')).toThrow('Invalid password reset event payload');
+	});
+});
+
+describe('parseSshKeyRotationEvent', () => {
+	it('parses valid ssh_key_rotation event', () => {
+		const data = JSON.stringify({
+			contract_id: 'abc123',
+			created_at: 1700000000000000000,
+			actor: 'tenant',
+			details: null
+		});
+		const event = parseSshKeyRotationEvent(data);
+		expect(event.contract_id).toBe('abc123');
+		expect(event.created_at).toBe(1700000000000000000);
+		expect(event.actor).toBe('tenant');
+		expect(event.details).toBeNull();
+	});
+
+	it('parses valid ssh_key_rotation_complete event with details', () => {
+		const data = JSON.stringify({
+			contract_id: 'def456',
+			created_at: 1700000001000000000,
+			actor: 'provider',
+			details: 'SSH key rotated to ssh-ed25519 AAA... by agent'
+		});
+		const event = parseSshKeyRotationEvent(data);
+		expect(event.contract_id).toBe('def456');
+		expect(event.created_at).toBe(1700000001000000000);
+		expect(event.actor).toBe('provider');
+		expect(event.details).toBe('SSH key rotated to ssh-ed25519 AAA... by agent');
+	});
+
+	it('defaults created_at to 0 when missing', () => {
+		const data = JSON.stringify({
+			contract_id: 'abc',
+			actor: 'tenant'
+		});
+		const event = parseSshKeyRotationEvent(data);
+		expect(event.created_at).toBe(0);
+	});
+
+	it('defaults details to null when not a string', () => {
+		const data = JSON.stringify({
+			contract_id: 'abc',
+			actor: 'tenant',
+			details: 42
+		});
+		const event = parseSshKeyRotationEvent(data);
+		expect(event.details).toBeNull();
+	});
+
+	it('throws on malformed JSON', () => {
+		expect(() => parseSshKeyRotationEvent('not json')).toThrow();
+	});
+
+	it('throws when contract_id is missing', () => {
+		const data = JSON.stringify({ actor: 'tenant', created_at: 0 });
+		expect(() => parseSshKeyRotationEvent(data)).toThrow('Invalid SSH key rotation event payload');
+	});
+
+	it('throws when actor is missing', () => {
+		const data = JSON.stringify({ contract_id: 'abc', created_at: 0 });
+		expect(() => parseSshKeyRotationEvent(data)).toThrow('Invalid SSH key rotation event payload');
+	});
+
+	it('throws on non-object payload', () => {
+		expect(() => parseSshKeyRotationEvent('"just a string"')).toThrow('Invalid SSH key rotation event payload');
 	});
 });

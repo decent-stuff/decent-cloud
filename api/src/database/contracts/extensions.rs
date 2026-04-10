@@ -253,4 +253,32 @@ impl Database {
 
         Ok(events)
     }
+
+    /// Get recent SSH key rotation events across all contracts for a user,
+    /// created after the given timestamp (nanoseconds since epoch).
+    /// Returns events ordered by created_at ASC.
+    pub async fn get_ssh_key_rotation_events_for_user(
+        &self,
+        requester_pubkey: &[u8],
+        after_ns: i64,
+    ) -> Result<Vec<ContractEvent>> {
+        let events = sqlx::query_as!(
+            ContractEvent,
+            r#"SELECT ce.id as "id!", lower(encode(ce.contract_id, 'hex')) as "contract_id!: String",
+                ce.event_type as "event_type!", ce.old_status, ce.new_status,
+                ce.actor as "actor!", ce.details, ce.created_at as "created_at!"
+                FROM contract_events ce
+                JOIN contract_sign_requests csr ON csr.contract_id = ce.contract_id
+                WHERE csr.requester_pubkey = $1
+                  AND ce.event_type IN ('ssh_key_rotation', 'ssh_key_rotation_complete')
+                  AND ce.created_at > $2
+                ORDER BY ce.created_at ASC"#,
+            requester_pubkey,
+            after_ns
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(events)
+    }
 }
