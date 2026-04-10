@@ -36,6 +36,7 @@
 			case 'contract_status': return 'file';
 			case 'contract_provisioned': return 'server';
 			case 'rental_request': return 'inbox';
+			case 'offering_inquiry': return 'inbox';
 			case 'password_reset_complete': return 'key';
 			case 'auto_renewed': return 'refresh';
 			default: return 'bell';
@@ -125,6 +126,9 @@
 		if (notification.contractId) {
 			close();
 			goto(`/dashboard/rentals/${notification.contractId}`);
+		} else if (notification.offeringId) {
+			close();
+			goto(`/dashboard/marketplace/${notification.offeringId}`);
 		}
 	}
 

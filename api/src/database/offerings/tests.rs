@@ -4771,3 +4771,32 @@ async fn test_get_offering_returns_owner_username() {
         "search_offerings should return owner_username from account_public_keys join"
     );
 }
+
+#[tokio::test]
+async fn test_offering_inquiry_notification_includes_offering_id() {
+    let db = setup_test_db().await;
+    let provider = vec![0x77u8; 32];
+    insert_test_offering(&db, 50, &provider, "US", 10.0).await;
+    let offering_id = test_id_to_db_id(50);
+
+    db.insert_user_notification(
+        &provider,
+        "offering_inquiry",
+        "Inquiry about \"Test Offer\"",
+        "From alice: Is this available?",
+        None,
+        Some(offering_id),
+        None,
+    )
+    .await
+    .expect("insert_user_notification should succeed");
+
+    let notifications = db.get_user_notifications(&provider, 10).await.unwrap();
+    assert_eq!(notifications.len(), 1);
+    assert_eq!(notifications[0].notification_type, "offering_inquiry");
+    assert_eq!(
+        notifications[0].offering_id,
+        Some(offering_id),
+        "offering_inquiry notification must include offering_id for frontend navigation"
+    );
+}
