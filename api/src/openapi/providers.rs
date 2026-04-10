@@ -168,25 +168,30 @@ pub async fn contract_status_events(
         ));
     }
 
-    // Snapshot: contract_id -> (status, updated_at_ns)
     type Snapshot = std::collections::HashMap<String, (String, Option<i64>)>;
 
+    struct SseState {
+        db: Arc<Database>,
+        pk: Vec<u8>,
+        prev_snapshot: Option<Snapshot>,
+        poll_count: u32,
+        last_rotation_event_ns: i64,
+    }
+
     let db_clone: Arc<Database> = Arc::clone(&db);
-    // Close after 5 minutes: 60 polls × 5 seconds
+    let initial = SseState {
+        db: db_clone,
+        pk: pubkey_bytes,
+        prev_snapshot: None,
+        poll_count: 0,
+        last_rotation_event_ns: 0,
+    };
     let stream =
-        futures::stream::unfold(
-            (db_clone, pubkey_bytes, None::<Snapshot>, 0u32, 0i64),
-            |(db, pk, prev_snapshot, poll_count, last_event_ns): (
-                Arc<Database>,
-                Vec<u8>,
-                Option<Snapshot>,
-                u32,
-                i64,
-            )| async move {
-                if poll_count >= 60 {
-                    return None;
-                }
-                let contracts = match db.get_user_contracts(&pk).await {
+        futures::stream::unfold(initial, |state: SseState| async move {
+            if state.poll_count >= 60 {
+                return None;
+            }
+            let contracts = match state.db.get_user_contracts(&state.pk).await {
                     Ok(c) => c,
                     Err(e) => {
                         tracing::error!("SSE contract-status-events DB error: {:#}", e);
@@ -204,9 +209,8 @@ pub async fn contract_status_events(
                     })
                     .collect();
 
-                let mut events: Vec<Event> = match &prev_snapshot {
+                let mut events: Vec<Event> = match &state.prev_snapshot {
                     None => {
-                        // First poll: emit all contracts
                         contracts
                             .iter()
                             .map(|c| {
@@ -220,7 +224,6 @@ pub async fn contract_status_events(
                             .collect()
                     }
                     Some(prev) => {
-                        // Subsequent polls: emit only changed contracts
                         contracts
                             .iter()
                             .filter(|c| {
@@ -228,7 +231,7 @@ pub async fn contract_status_events(
                                     .map(|(ps, pt)| {
                                         ps != &c.status || pt != &c.status_updated_at_ns
                                     })
-                                    .unwrap_or(true) // new contract
+                                    .unwrap_or(true)
                             })
                             .map(|c| {
                                 let data = serde_json::json!({
@@ -242,9 +245,11 @@ pub async fn contract_status_events(
                     }
                 };
 
-                let mut new_last_event_ns = last_event_ns;
-                if let Ok(rotation_events) =
-                    db.get_ssh_key_rotation_events_for_user(&pk, last_event_ns).await
+                let mut next_rotation_ns = state.last_rotation_event_ns;
+                if let Ok(rotation_events) = state
+                    .db
+                    .get_ssh_key_rotation_events_for_user(&state.pk, state.last_rotation_event_ns)
+                    .await
                 {
                     for ev in &rotation_events {
                         let data = serde_json::json!({
@@ -254,14 +259,23 @@ pub async fn contract_status_events(
                             "details": ev.details,
                         });
                         events.push(Event::message(data.to_string()).event_type(&ev.event_type));
-                        if ev.created_at > new_last_event_ns {
-                            new_last_event_ns = ev.created_at;
+                        if ev.created_at > next_rotation_ns {
+                            next_rotation_ns = ev.created_at;
                         }
                     }
                 }
 
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                Some((events, (db, pk, Some(current), poll_count + 1, new_last_event_ns)))
+                Some((
+                    events,
+                    SseState {
+                        db: state.db,
+                        pk: state.pk,
+                        prev_snapshot: Some(current),
+                        poll_count: state.poll_count + 1,
+                        last_rotation_event_ns: next_rotation_ns,
+                    },
+                ))
             },
         )
         .flat_map(|events: Vec<Event>| futures::stream::iter(events));
