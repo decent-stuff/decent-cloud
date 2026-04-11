@@ -3,7 +3,7 @@
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
 	import { browser } from "$app/environment";
-	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, type Offering, type TrendingOffering, type NewProvider } from "$lib/services/api";
+	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, fetchRecommendedOfferings, type Offering, type TrendingOffering, type NewProvider, type RecommendedOffering } from "$lib/services/api";
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -64,6 +64,7 @@
 	let providerFilter = $state<string>('');
 	let recentlyViewedIds = $state<number[]>([]);
 	let trendingOfferings = $state<TrendingOffering[]>([]);
+	let recommendedOfferings = $state<RecommendedOffering[]>([]);
 	let newProviders = $state<NewProvider[]>([]);
 
 	// Track viewport size to set inert on hidden containers for accessibility/Playwright
@@ -285,6 +286,13 @@
 		savedIds = new Set(ids);
 	}
 
+	async function loadRecommendedOfferings() {
+		const info = await authStore.getSigningIdentity();
+		if (!info || !(info.identity instanceof Ed25519KeyIdentity)) return;
+		const { headers } = await signRequest(info.identity, 'GET', '/api/v1/offerings/recommended');
+		recommendedOfferings = await fetchRecommendedOfferings(headers, 6);
+	}
+
 	async function toggleBookmark(e: Event, offeringId: number) {
 		e.stopPropagation();
 		if (!isAuthenticated) {
@@ -416,6 +424,9 @@
 		// Load trending independently — failure must not block the main marketplace
 		fetchTrendingOfferings(6).then(t => { trendingOfferings = t; }).catch(err => console.error('Failed to load trending offerings:', err));
 		fetchNewProviders(6).then(p => { newProviders = p; }).catch(err => console.error('Failed to load new providers:', err));
+		if (isAuthenticated) {
+			loadRecommendedOfferings().catch(err => console.error('Failed to load recommended offerings:', err));
+		}
 		const offeringParam = $page.url.searchParams.get("offering");
 		if (offeringParam) {
 			const id = parseInt(offeringParam, 10);
@@ -1199,6 +1210,32 @@
 								{o.offer_name}
 								{#if o.monthly_price}
 									<span class="text-neutral-500 text-xs">{o.monthly_price.toFixed(2)} {o.currency}</span>
+								{/if}
+							</a>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			{#if recommendedOfferings.length >= 2 && !hasActiveFilters}
+				<div class="mb-6">
+					<div class="flex items-center justify-between mb-2">
+						<div class="text-xs text-neutral-500 uppercase tracking-wide">Recommended for you</div>
+					</div>
+					<div class="flex gap-3 overflow-x-auto pb-1">
+						{#each recommendedOfferings as r}
+							<a
+								href="/dashboard/marketplace/{r.offering_id}"
+								class="flex-none w-44 p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 transition-colors"
+							>
+								<div class="font-medium text-white text-sm truncate mb-1">{r.offer_name}</div>
+								<div class="text-xs text-neutral-400 mb-2">{r.product_type}</div>
+								<div class="text-xs text-neutral-300 mb-1">{r.monthly_price.toFixed(2)} {r.currency}/mo</div>
+								{#if r.datacenter_city || r.datacenter_country}
+									<div class="text-xs text-neutral-500 truncate mb-2">{[r.datacenter_city, r.datacenter_country].filter(Boolean).join(', ')}</div>
+								{/if}
+								{#if r.gpu_name}
+									<div class="text-xs text-blue-400 truncate">{r.gpu_name}</div>
 								{/if}
 							</a>
 						{/each}

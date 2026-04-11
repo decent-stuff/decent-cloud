@@ -4140,7 +4140,6 @@ export async function getOfferingViewTrends(
 	return payload.data;
 }
 
-// PoC(338): Personalized recommendations
 export interface RecommendedOffering {
 	offering_id: number;
 	offer_name: string;

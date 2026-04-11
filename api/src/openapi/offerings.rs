@@ -922,9 +922,8 @@ impl OfferingsApi {
         }
     }
 
-    /// Get personalized recommended offerings
+    /// Get personalized recommended offerings.
     ///
-    /// PoC(338): Content-based recommendation engine.
     /// Returns offerings similar to those the user has viewed or saved,
     /// scored by attribute similarity (product type, country, GPU, price).
     /// Requires authentication. If the user has no viewing/saving history,

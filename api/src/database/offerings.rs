@@ -202,19 +202,13 @@ pub struct TrendingOffering {
     pub views_7d: i64,
 }
 
-/// A recommended offering with a relevance score
+/// A recommended offering with a relevance score.
 ///
-/// PoC(338): Content-based recommendation engine.
 /// Score is computed from attribute similarity to the user's viewed/saved offerings:
 ///   - product_type match: +3 per signal
 ///   - datacenter_country match: +2 per signal
 ///   - gpu_name match: +4 per signal
 ///   - price within 1 stddev of user's average: +1
-/// Dev stage next steps:
-///   1. Consider collaborative filtering (users who viewed X also viewed Y)
-///   2. Add time-decay weighting (recent views weighted higher)
-///   3. Tune scoring weights based on real usage data
-///   4. Consider caching the user profile for performance
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
 pub struct RecommendedOffering {
@@ -2456,7 +2450,7 @@ impl Database {
         Ok(stats)
     }
 
-    /// PoC(338): Get personalized recommended offerings for a user.
+    /// Get personalized recommended offerings for a user.
     ///
     /// Content-based approach:
     ///   1. Gather user signals from `offering_views` and `saved_offerings`
@@ -2654,8 +2648,8 @@ fn score_candidate(candidate: &CandidateOffering, profile: &UserPreferenceProfil
 #[cfg(test)]
 mod tests;
 
-/// PoC(338): Unit tests for the pure recommendation-engine functions.
-/// These tests cover build_preference_profile and score_candidate without needing a DB.
+/// Unit tests for the pure recommendation-engine functions.
+/// Covers build_preference_profile and score_candidate without needing a DB.
 #[cfg(test)]
 mod recommendation_tests {
     use super::*;
