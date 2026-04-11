@@ -909,7 +909,7 @@ async fn test_verify_setup_warns_when_network_ipv6_disabled() {
         .mock("GET", "/images/json")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ghcr.io/decent-stuff/dc-agent-ssh:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
         .create_async()
         .await;
     let _network = server
@@ -951,7 +951,7 @@ async fn test_verify_setup_warns_when_network_cannot_be_inspected() {
         .mock("GET", "/images/json")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ghcr.io/decent-stuff/dc-agent-ssh:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
         .create_async()
         .await;
     let _network = server

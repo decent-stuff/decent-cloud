@@ -687,8 +687,8 @@ impl Provisioner for DockerProvisioner {
             Ok(network) => {
                 if !network.enable_ipv6.unwrap_or(false) {
                     result.warnings.push(format!(
-                        "Docker network '{}' does not have IPv6 enabled. Containers will not receive IPv6 addresses. Enable with: docker network create --ipv6 {}",
-                        self.config.network, self.config.network
+                        "Docker network '{}' does not have IPv6 enabled. Containers will not receive IPv6 addresses. Enable IPv6 on that network or switch to a user-defined IPv6 network created with `docker network create --ipv6 <name>`.",
+                        self.config.network
                     ));
                 }
             }
