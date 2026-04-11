@@ -4140,6 +4140,40 @@ export async function getOfferingViewTrends(
 	return payload.data;
 }
 
+export interface RecommendedOffering {
+	offering_id: number;
+	offer_name: string;
+	pubkey: string;
+	product_type: string;
+	monthly_price: number;
+	currency: string;
+	datacenter_country?: string;
+	datacenter_city?: string;
+	trust_score?: number;
+	gpu_name?: string;
+	score: number;
+}
+
+/**
+ * Fetch personalized recommended offerings for the authenticated user.
+ * Requires signed auth headers. Returns empty array if user has no history.
+ */
+export async function fetchRecommendedOfferings(
+	headers: SignedRequestHeaders,
+	limit = 6
+): Promise<RecommendedOffering[]> {
+	const url = `${API_BASE_URL}/api/v1/offerings/recommended?limit=${limit}`;
+	const response = await fetch(url, { method: 'GET', headers });
+	if (!response.ok) {
+		throw new Error(`Failed to fetch recommended offerings: ${response.status} ${response.statusText}`);
+	}
+	const payload = (await response.json()) as ApiResponse<RecommendedOffering[]>;
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch recommended offerings');
+	}
+	return payload.data;
+}
+
 /**
  * Fetch top trending offerings by view count in the last 7 days (public, no auth).
  */
