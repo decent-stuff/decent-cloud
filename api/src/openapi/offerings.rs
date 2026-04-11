@@ -921,6 +921,49 @@ impl OfferingsApi {
             }
         }
     }
+
+    /// Get personalized recommended offerings
+    ///
+    /// PoC(338): Content-based recommendation engine.
+    /// Returns offerings similar to those the user has viewed or saved,
+    /// scored by attribute similarity (product type, country, GPU, price).
+    /// Requires authentication. If the user has no viewing/saving history,
+    /// returns an empty list.
+    #[oai(
+        path = "/offerings/recommended",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_recommended_offerings(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: OptionalApiAuth,
+        #[oai(default = "default_trending_limit")] limit: poem_openapi::param::Query<i64>,
+    ) -> Json<ApiResponse<Vec<crate::database::offerings::RecommendedOffering>>> {
+        let Some(pubkey) = auth.pubkey else {
+            return Json(ApiResponse {
+                success: true,
+                data: Some(vec![]),
+                error: None,
+            });
+        };
+
+        match db.get_recommended_offerings(&pubkey, limit.0).await {
+            Ok(offerings) => Json(ApiResponse {
+                success: true,
+                data: Some(offerings),
+                error: None,
+            }),
+            Err(e) => {
+                tracing::error!("Failed to get recommended offerings: {e:#}");
+                Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!("Failed to get recommended offerings: {e:#?}")),
+                })
+            }
+        }
+    }
 }
 
 /// Extract the client IP from the request, preferring X-Forwarded-For.

@@ -4,6 +4,7 @@ use crate::regions::{country_to_region, is_valid_country_code};
 use anyhow::Result;
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use ts_rs::TS;
 
@@ -199,6 +200,53 @@ pub struct TrendingOffering {
     pub datacenter_city: Option<String>,
     pub trust_score: Option<f64>,
     pub views_7d: i64,
+}
+
+/// A recommended offering with a relevance score
+///
+/// PoC(338): Content-based recommendation engine.
+/// Score is computed from attribute similarity to the user's viewed/saved offerings:
+///   - product_type match: +3 per signal
+///   - datacenter_country match: +2 per signal
+///   - gpu_name match: +4 per signal
+///   - price within 1 stddev of user's average: +1
+/// Dev stage next steps:
+///   1. Consider collaborative filtering (users who viewed X also viewed Y)
+///   2. Add time-decay weighting (recent views weighted higher)
+///   3. Tune scoring weights based on real usage data
+///   4. Consider caching the user profile for performance
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct RecommendedOffering {
+    pub offering_id: i64,
+    pub offer_name: String,
+    pub pubkey: String,
+    pub product_type: String,
+    pub monthly_price: f64,
+    pub currency: String,
+    pub datacenter_country: Option<String>,
+    pub datacenter_city: Option<String>,
+    pub trust_score: Option<f64>,
+    pub gpu_name: Option<String>,
+    pub score: f64,
+}
+
+/// Internal struct for user preference profile built from viewed/saved offerings
+struct UserPreferenceProfile {
+    preferred_types: HashMap<String, f64>,
+    preferred_countries: HashMap<String, f64>,
+    preferred_gpus: HashMap<String, f64>,
+    avg_price: Option<f64>,
+    price_stddev: Option<f64>,
+}
+
+/// Internal struct for a signal offering (viewed or saved by the user)
+#[derive(sqlx::FromRow)]
+struct SignalOffering {
+    product_type: String,
+    datacenter_country: String,
+    gpu_name: Option<String>,
+    monthly_price: f64,
 }
 
 /// View analytics for a single offering
@@ -2407,7 +2455,333 @@ impl Database {
         .await?;
         Ok(stats)
     }
+
+    /// PoC(338): Get personalized recommended offerings for a user.
+    ///
+    /// Content-based approach:
+    ///   1. Gather user signals from `offering_views` and `saved_offerings`
+    ///   2. Build a preference profile (preferred types, countries, GPUs, price range)
+    ///   3. Score all eligible offerings by attribute similarity
+    ///   4. Exclude already-seen offerings, return top N by score
+    ///
+    /// Returns empty vec if the user has no viewing/saving history.
+    pub async fn get_recommended_offerings(
+        &self,
+        user_pubkey: &[u8],
+        limit: i64,
+    ) -> Result<Vec<RecommendedOffering>> {
+        let limit = limit.min(10);
+
+        let signals = self.fetch_user_signal_offerings(user_pubkey).await?;
+        if signals.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let profile = build_preference_profile(&signals);
+        let seen_ids = self.fetch_seen_offering_ids(user_pubkey).await?;
+        let candidates = self.fetch_candidate_offerings(&seen_ids, limit * 5).await?;
+
+        let mut scored: Vec<RecommendedOffering> = candidates
+            .into_iter()
+            .map(|c| score_candidate(&c, &profile))
+            .filter(|r| r.score > 0.0)
+            .collect();
+
+        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit as usize);
+
+        Ok(scored)
+    }
+
+    /// Fetch attributes of offerings the user has viewed or saved
+    async fn fetch_user_signal_offerings(
+        &self,
+        user_pubkey: &[u8],
+    ) -> Result<Vec<SignalOffering>> {
+        let rows = sqlx::query_as::<_, SignalOffering>(
+            r#"SELECT o.product_type, o.datacenter_country, o.gpu_name, o.monthly_price
+               FROM provider_offerings o
+               WHERE o.id IN (
+                   SELECT v.offering_id FROM offering_views v WHERE v.viewer_pubkey = $1
+                   UNION
+                   SELECT s.offering_id FROM saved_offerings s WHERE s.user_pubkey = $1
+               )
+               AND LOWER(o.visibility) = 'public' AND o.is_draft = false"#,
+        )
+        .bind(user_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Fetch IDs of offerings the user has already seen (viewed or saved)
+    async fn fetch_seen_offering_ids(
+        &self,
+        user_pubkey: &[u8],
+    ) -> Result<HashSet<i64>> {
+        let rows = sqlx::query(
+            r#"SELECT offering_id FROM offering_views WHERE viewer_pubkey = $1
+               UNION
+               SELECT offering_id FROM saved_offerings WHERE user_pubkey = $1"#,
+        )
+        .bind(user_pubkey)
+        .fetch_all(&self.pool)
+        .await?;
+        let ids: HashSet<i64> = rows.iter().filter_map(|r| r.try_get("offering_id").ok()).collect();
+        Ok(ids)
+    }
+
+    /// Fetch candidate offerings to score (public, non-draft, in-stock, excluding seen)
+    async fn fetch_candidate_offerings(
+        &self,
+        seen_ids: &HashSet<i64>,
+        limit: i64,
+    ) -> Result<Vec<CandidateOffering>> {
+        let mut rows = sqlx::query_as::<_, CandidateOffering>(
+            r#"SELECT o.id as offering_id, o.offer_name, lower(encode(o.pubkey, 'hex')) as pubkey,
+                      o.product_type, o.monthly_price, o.currency,
+                      o.datacenter_country, o.datacenter_city,
+                      p.trust_score as trust_score,
+                      o.gpu_name
+               FROM provider_offerings o
+               LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey
+               WHERE LOWER(o.visibility) = 'public'
+                 AND o.is_draft = false
+                 AND o.stock_status != 'out_of_stock'
+               ORDER BY p.reliability_score DESC NULLS LAST, o.monthly_price ASC
+               LIMIT $1"#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.retain(|c| !seen_ids.contains(&c.offering_id));
+        Ok(rows)
+    }
+}
+
+/// Internal struct for candidate offerings fetched from DB for scoring
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct CandidateOffering {
+    offering_id: i64,
+    offer_name: String,
+    pubkey: String,
+    product_type: String,
+    monthly_price: f64,
+    currency: String,
+    datacenter_country: Option<String>,
+    datacenter_city: Option<String>,
+    trust_score: Option<f64>,
+    gpu_name: Option<String>,
+}
+
+fn build_preference_profile(signals: &[SignalOffering]) -> UserPreferenceProfile {
+    let mut type_counts: HashMap<String, f64> = HashMap::new();
+    let mut country_counts: HashMap<String, f64> = HashMap::new();
+    let mut gpu_counts: HashMap<String, f64> = HashMap::new();
+    let mut prices: Vec<f64> = Vec::new();
+
+    for s in signals {
+        *type_counts.entry(s.product_type.clone()).or_default() += 1.0;
+        *country_counts.entry(s.datacenter_country.clone()).or_default() += 1.0;
+        if let Some(ref g) = s.gpu_name {
+            *gpu_counts.entry(g.clone()).or_default() += 1.0;
+        }
+        prices.push(s.monthly_price);
+    }
+
+    let (avg_price, price_stddev) = if prices.len() >= 2 {
+        let avg = prices.iter().sum::<f64>() / prices.len() as f64;
+        let variance = prices.iter().map(|p| (p - avg).powi(2)).sum::<f64>() / prices.len() as f64;
+        (Some(avg), Some(variance.sqrt()))
+    } else if prices.len() == 1 {
+        (Some(prices[0]), None)
+    } else {
+        (None, None)
+    };
+
+    UserPreferenceProfile {
+        preferred_types: type_counts,
+        preferred_countries: country_counts,
+        preferred_gpus: gpu_counts,
+        avg_price,
+        price_stddev,
+    }
+}
+
+fn score_candidate(candidate: &CandidateOffering, profile: &UserPreferenceProfile) -> RecommendedOffering {
+    let mut score = 0.0;
+
+    if let Some(w) = profile.preferred_types.get(&candidate.product_type) {
+        score += w * 3.0;
+    }
+    if let Some(ref country) = candidate.datacenter_country {
+        if let Some(w) = profile.preferred_countries.get(country) {
+            score += w * 2.0;
+        }
+    }
+    if let Some(ref gpu) = candidate.gpu_name {
+        if let Some(w) = profile.preferred_gpus.get(gpu) {
+            score += w * 4.0;
+        }
+    }
+    if let Some(avg) = profile.avg_price {
+        if let Some(stddev) = profile.price_stddev {
+            if stddev > 0.0 {
+                let z = (candidate.monthly_price - avg).abs() / stddev;
+                score += (1.0 - z.min(2.0) / 2.0).max(0.0) * 1.0;
+            }
+        } else if (candidate.monthly_price - avg).abs() <= avg * 0.5 {
+            score += 0.5;
+        }
+    }
+
+    RecommendedOffering {
+        offering_id: candidate.offering_id,
+        offer_name: candidate.offer_name.clone(),
+        pubkey: candidate.pubkey.clone(),
+        product_type: candidate.product_type.clone(),
+        monthly_price: candidate.monthly_price,
+        currency: candidate.currency.clone(),
+        datacenter_country: candidate.datacenter_country.clone(),
+        datacenter_city: candidate.datacenter_city.clone(),
+        trust_score: candidate.trust_score,
+        gpu_name: candidate.gpu_name.clone(),
+        score,
+    }
 }
 
 #[cfg(test)]
 mod tests;
+
+/// PoC(338): Unit tests for the pure recommendation-engine functions.
+/// These tests cover build_preference_profile and score_candidate without needing a DB.
+#[cfg(test)]
+mod recommendation_tests {
+    use super::*;
+
+    fn make_signal(product_type: &str, country: &str, gpu: Option<&str>, price: f64) -> SignalOffering {
+        SignalOffering {
+            product_type: product_type.to_string(),
+            datacenter_country: country.to_string(),
+            gpu_name: gpu.map(|s| s.to_string()),
+            monthly_price: price,
+        }
+    }
+
+    fn make_candidate(
+        id: i64,
+        product_type: &str,
+        country: Option<&str>,
+        gpu: Option<&str>,
+        price: f64,
+    ) -> CandidateOffering {
+        CandidateOffering {
+            offering_id: id,
+            offer_name: format!("offering-{id}"),
+            pubkey: "aabbcc".to_string(),
+            product_type: product_type.to_string(),
+            monthly_price: price,
+            currency: "USD".to_string(),
+            datacenter_country: country.map(|s| s.to_string()),
+            datacenter_city: None,
+            trust_score: None,
+            gpu_name: gpu.map(|s| s.to_string()),
+        }
+    }
+
+    /// Empty signal list produces zero-score candidates
+    #[test]
+    fn test_empty_signals_profile() {
+        let profile = build_preference_profile(&[]);
+        assert!(profile.preferred_types.is_empty());
+        assert!(profile.preferred_countries.is_empty());
+        assert!(profile.preferred_gpus.is_empty());
+        assert!(profile.avg_price.is_none());
+        assert!(profile.price_stddev.is_none());
+
+        let candidate = make_candidate(1, "gpu", Some("US"), Some("NVIDIA A100"), 100.0);
+        let scored = score_candidate(&candidate, &profile);
+        assert_eq!(scored.score, 0.0, "no signals -> zero score");
+    }
+
+    /// Single GPU-matching signal scores highest on GPU weight (4x)
+    #[test]
+    fn test_gpu_match_scores_highest() {
+        let signals = vec![make_signal("gpu", "US", Some("NVIDIA A100"), 500.0)];
+        let profile = build_preference_profile(&signals);
+
+        let gpu_match = make_candidate(1, "gpu", Some("US"), Some("NVIDIA A100"), 500.0);
+        let no_gpu = make_candidate(2, "gpu", Some("US"), None, 500.0);
+
+        let scored_gpu = score_candidate(&gpu_match, &profile);
+        let scored_no_gpu = score_candidate(&no_gpu, &profile);
+
+        // gpu match (+4) + type match (+3) + country match (+2) = 9 vs type (+3) + country (+2) = 5
+        assert!(
+            scored_gpu.score > scored_no_gpu.score,
+            "GPU match should outscore no-GPU: {:.1} vs {:.1}",
+            scored_gpu.score,
+            scored_no_gpu.score
+        );
+        // GPU weight is 4, so GPU-match score should include 4.0 contribution
+        assert!(scored_gpu.score >= 4.0);
+    }
+
+    /// Country mismatch should score lower than country match
+    #[test]
+    fn test_country_mismatch_scores_lower() {
+        let signals = vec![make_signal("compute", "DE", None, 100.0)];
+        let profile = build_preference_profile(&signals);
+
+        let same_country = make_candidate(1, "compute", Some("DE"), None, 100.0);
+        let diff_country = make_candidate(2, "compute", Some("US"), None, 100.0);
+
+        let score_same = score_candidate(&same_country, &profile).score;
+        let score_diff = score_candidate(&diff_country, &profile).score;
+
+        assert!(
+            score_same > score_diff,
+            "Same country ({score_same:.1}) should beat different country ({score_diff:.1})"
+        );
+    }
+
+    /// Price within user's avg range gets a bonus; far price gets none
+    #[test]
+    fn test_price_proximity_bonus() {
+        let signals = vec![
+            make_signal("compute", "US", None, 100.0),
+            make_signal("compute", "US", None, 120.0),
+        ];
+        let profile = build_preference_profile(&signals);
+
+        assert!(profile.avg_price.is_some());
+        // avg ~110, stddev ~10
+        let close_price = make_candidate(1, "compute", Some("US"), None, 110.0);
+        let far_price = make_candidate(2, "compute", Some("US"), None, 500.0);
+
+        let close_score = score_candidate(&close_price, &profile).score;
+        let far_score = score_candidate(&far_price, &profile).score;
+
+        assert!(
+            close_score > far_score,
+            "Close price ({close_score:.2}) should beat far price ({far_score:.2})"
+        );
+    }
+
+    /// build_preference_profile aggregates type counts correctly
+    #[test]
+    fn test_profile_type_aggregation() {
+        let signals = vec![
+            make_signal("gpu", "US", None, 100.0),
+            make_signal("gpu", "DE", None, 200.0),
+            make_signal("compute", "US", None, 50.0),
+        ];
+        let profile = build_preference_profile(&signals);
+
+        assert_eq!(profile.preferred_types.get("gpu"), Some(&2.0));
+        assert_eq!(profile.preferred_types.get("compute"), Some(&1.0));
+        assert_eq!(profile.preferred_countries.get("US"), Some(&2.0));
+        assert_eq!(profile.preferred_countries.get("DE"), Some(&1.0));
+    }
+}
