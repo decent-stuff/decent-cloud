@@ -522,8 +522,22 @@ impl Provisioner for DockerProvisioner {
         }
 
         match self.client.list_images::<String>(None).await {
-            Ok(_) => {
+            Ok(images) => {
                 result.storage_accessible = Some(true);
+
+                let image_exists = images.iter().any(|img| {
+                    img.repo_tags.iter().any(|t| t == &self.config.default_image)
+                });
+
+                if image_exists {
+                    result.template_exists = Some(true);
+                } else {
+                    result.template_exists = Some(false);
+                    result.errors.push(format!(
+                        "Default image '{}' not found locally. Pull it with: docker pull {}",
+                        self.config.default_image, self.config.default_image
+                    ));
+                }
             }
             Err(e) => {
                 result.storage_accessible = Some(false);
@@ -550,13 +564,17 @@ impl DockerProvisioner {
     }
 
     fn new_for_mockito(url: String) -> Self {
+        Self::new_for_mockito_with_image(url, "ubuntu:22.04".to_string())
+    }
+
+    fn new_for_mockito_with_image(url: String, default_image: String) -> Self {
         let client = Docker::connect_with_http(&url, 120, bollard::API_DEFAULT_VERSION)
             .expect("connect_with_http should not fail");
         Self {
             config: DockerConfig {
                 socket_path: String::new(),
                 network: "bridge".to_string(),
-                default_image: "ubuntu:22.04".to_string(),
+                default_image,
                 ssh_port: 22,
             },
             client,

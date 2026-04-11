@@ -408,3 +408,99 @@ async fn test_pull_image_propagates_list_error() {
         "pull_image_if_needed() should propagate list_images error"
     );
 }
+
+#[tokio::test]
+async fn test_verify_setup_image_found() {
+    let mut server = mockito::Server::new_async().await;
+    let _ping = server
+        .mock("GET", "/_ping")
+        .with_status(200)
+        .with_body("OK")
+        .create_async()
+        .await;
+    let _images = server
+        .mock("GET", "/images/json")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04","ubuntu:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.verify_setup().await;
+    assert_eq!(result.api_reachable, Some(true));
+    assert_eq!(result.storage_accessible, Some(true));
+    assert_eq!(result.template_exists, Some(true));
+    assert!(result.errors.is_empty(), "Expected no errors, got: {:?}", result.errors);
+}
+
+#[tokio::test]
+async fn test_verify_setup_image_not_found() {
+    let mut server = mockito::Server::new_async().await;
+    let _ping = server
+        .mock("GET", "/_ping")
+        .with_status(200)
+        .with_body("OK")
+        .create_async()
+        .await;
+    let _images = server
+        .mock("GET", "/images/json")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"Id":"sha256:def","RepoTags":["alpine:3.19"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.verify_setup().await;
+    assert_eq!(result.template_exists, Some(false));
+    assert_eq!(result.errors.len(), 1);
+    let err = &result.errors[0];
+    assert!(
+        err.contains("ubuntu:22.04"),
+        "Error should mention the image name: {}",
+        err
+    );
+    assert!(
+        err.contains("docker pull"),
+        "Error should suggest docker pull: {}",
+        err
+    );
+}
+
+#[tokio::test]
+async fn test_verify_setup_image_not_found_custom_image() {
+    let mut server = mockito::Server::new_async().await;
+    let _ping = server
+        .mock("GET", "/_ping")
+        .with_status(200)
+        .with_body("OK")
+        .create_async()
+        .await;
+    let _images = server
+        .mock("GET", "/images/json")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[]"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito_with_image(
+        server.url(),
+        "my-registry/custom:latest".to_string(),
+    );
+    let result = prov.verify_setup().await;
+    assert_eq!(result.template_exists, Some(false));
+    assert_eq!(result.errors.len(), 1);
+    let err = &result.errors[0];
+    assert!(
+        err.contains("my-registry/custom:latest"),
+        "Error should mention the custom image name: {}",
+        err
+    );
+    assert!(
+        err.contains("docker pull my-registry/custom:latest"),
+        "Error should suggest the exact docker pull command: {}",
+        err
+    );
+}
