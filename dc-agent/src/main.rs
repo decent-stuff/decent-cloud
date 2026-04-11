@@ -2749,6 +2749,9 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             if verification.storage_accessible == Some(true) {
                 println!("  [ok] Docker image storage accessible");
             }
+            if verification.template_exists == Some(true) {
+                println!("  [ok] Default image '{}' exists", docker.default_image);
+            }
             if !verification.errors.is_empty() {
                 println!();
                 for error in &verification.errors {
