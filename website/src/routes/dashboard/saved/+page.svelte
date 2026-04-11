@@ -49,13 +49,17 @@
 			offerings = await getSavedOfferings(headers, pubkeyHex);
 			savedIds = new Set(offerings.map((o) => o.id).filter((id): id is number => id !== undefined));
 
-			const notifHeaders = (await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/notifications`)).headers;
-			const notifications = await getUserNotifications(notifHeaders, pubkeyHex);
-			const { byOfferingId, unreadNotificationIds } = collectSavedOfferingPriceChanges(notifications);
-			priceChangeMap = byOfferingId;
-			if (unreadNotificationIds.length > 0) {
-				const markHeaders = (await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/notifications/mark-read`)).headers;
-				await markNotificationsRead(markHeaders, pubkeyHex, unreadNotificationIds);
+			try {
+				const notifHeaders = (await signRequest(info.identity, 'GET', `/api/v1/users/${pubkeyHex}/notifications`)).headers;
+				const notifications = await getUserNotifications(notifHeaders, pubkeyHex);
+				const { byOfferingId, unreadNotificationIds } = collectSavedOfferingPriceChanges(notifications);
+				priceChangeMap = byOfferingId;
+				if (unreadNotificationIds.length > 0) {
+					const markHeaders = (await signRequest(info.identity, 'POST', `/api/v1/users/${pubkeyHex}/notifications/mark-read`)).headers;
+					await markNotificationsRead(markHeaders, pubkeyHex, unreadNotificationIds);
+				}
+			} catch {
+				// Price indicators are non-critical — silently degrade
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load saved offerings';
