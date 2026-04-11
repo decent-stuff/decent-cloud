@@ -43,6 +43,18 @@
 		}
 	}
 
+	function displayBody(body: string): string {
+		try {
+			const parsed = JSON.parse(body);
+			if (parsed && typeof parsed.text === 'string') {
+				return parsed.text.length > 60 ? parsed.text.slice(0, 60) + '…' : parsed.text;
+			}
+		} catch {
+			// Not JSON — use raw string
+		}
+		return body.length > 60 ? body.slice(0, 60) + '…' : body;
+	}
+
 	async function getSignedHeaders(method: string, path: string) {
 		if (!activeIdentity?.identity || !(activeIdentity.identity instanceof Ed25519KeyIdentity)) {
 			throw new Error('No active Ed25519 identity');
@@ -238,7 +250,7 @@
 									<span class="flex-1 min-w-0">
 										<span class="block text-sm text-white font-medium">{notification.title}</span>
 										<span class="block text-xs text-neutral-400 truncate mt-0.5">
-											{notification.body.length > 60 ? notification.body.slice(0, 60) + '…' : notification.body}
+											{displayBody(notification.body)}
 										</span>
 									</span>
 									<span class="flex-shrink-0 text-xs text-neutral-600 mt-0.5">
@@ -267,7 +279,7 @@
 									<span class="flex-1 min-w-0">
 										<span class="block text-sm text-neutral-300">{notification.title}</span>
 										<span class="block text-xs text-neutral-500 truncate mt-0.5">
-											{notification.body.length > 60 ? notification.body.slice(0, 60) + '…' : notification.body}
+											{displayBody(notification.body)}
 										</span>
 									</span>
 									<span class="flex-shrink-0 text-xs text-neutral-600 mt-0.5">
