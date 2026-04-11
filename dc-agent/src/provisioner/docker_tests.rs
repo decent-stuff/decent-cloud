@@ -1,6 +1,8 @@
 use super::*;
 use bollard::models::ContainerStateStatusEnum;
-use bollard::service::{ContainerInspectResponse, ContainerState, NetworkSettings};
+use bollard::service::{
+    ContainerInspectResponse, ContainerState, EndpointSettings, NetworkSettings,
+};
 
 fn default_config() -> DockerConfig {
     DockerConfig {
@@ -203,6 +205,35 @@ fn test_container_to_instance_running() {
     assert_eq!(instance.ip_address.as_deref(), Some("172.17.0.2"));
     assert_eq!(instance.ssh_port, 32768);
     assert!(instance.additional_details.is_some());
+}
+
+#[test]
+fn test_container_to_instance_prefers_configured_network_ipv6() {
+    let config = DockerConfig {
+        network: "dc346-ipv6-net".to_string(),
+        ..default_config()
+    };
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            global_ipv6_address: Some("fd00:old::99".to_string()),
+            networks: Some(HashMap::from([(
+                "dc346-ipv6-net".to_string(),
+                EndpointSettings {
+                    global_ipv6_address: Some("fd00:346::2".to_string()),
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert_eq!(instance.ipv6_address.as_deref(), Some("fd00:346::2"));
 }
 
 #[test]

@@ -223,6 +223,27 @@ impl DockerProvisioner {
         }
     }
 
+    fn extract_ipv6_address(&self, inspect: &ContainerInspectResponse) -> Option<String> {
+        let network_settings = inspect.network_settings.as_ref()?;
+
+        // PoC: real Docker inspect data exposes IPv6 on the per-network endpoint,
+        // so prefer the configured network and only fall back to Docker's deprecated field.
+        network_settings
+            .networks
+            .as_ref()
+            .and_then(|networks| networks.get(&self.config.network))
+            .and_then(|network| network.global_ipv6_address.as_ref())
+            .filter(|ip| !ip.is_empty())
+            .cloned()
+            .or_else(|| {
+                network_settings
+                    .global_ipv6_address
+                    .as_ref()
+                    .filter(|ip| !ip.is_empty())
+                    .cloned()
+            })
+    }
+
     fn container_to_instance(
         &self,
         inspect: &ContainerInspectResponse,
@@ -268,7 +289,7 @@ impl DockerProvisioner {
         Some(Instance {
             external_id: id.to_string(),
             ip_address: ip,
-            ipv6_address: None,
+            ipv6_address: self.extract_ipv6_address(inspect),
             public_ip: None,
             ssh_port: host_ssh_port.unwrap_or(self.config.ssh_port),
             root_password: None,
