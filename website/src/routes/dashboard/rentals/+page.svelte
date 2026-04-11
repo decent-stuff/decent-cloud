@@ -679,6 +679,15 @@
 										&#x23F1; {expiryInfo.text}
 									</span>
 								{/if}
+								{#if contract.ssh_key_rotation_requested_at_ns}
+									<span
+										class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded bg-amber-500/20 text-amber-400 border border-amber-500/30"
+										title="An SSH key rotation has been requested and is being processed by the provider"
+									>
+										<span class="animate-spin inline-block h-3 w-3 border-t-2 border-b-2 border-amber-400 rounded-full"></span>
+										Key rotation in progress
+									</span>
+								{/if}
 								<!-- Cancel button for cancelable contracts -->
 								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
 									<button
@@ -861,6 +870,12 @@
 										contract.requester_ssh_pubkey,
 									)}
 								</div>
+								{#if contract.ssh_key_rotation_requested_at_ns}
+									<div class="text-xs text-amber-400 flex items-center gap-1 mt-1.5">
+										<span class="animate-spin inline-block h-2.5 w-2.5 border-t-2 border-b-2 border-amber-400 rounded-full"></span>
+										Rotating…
+									</div>
+								{/if}
 							</div>
 						{/if}
 						<div
