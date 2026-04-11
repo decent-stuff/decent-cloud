@@ -237,6 +237,143 @@ fn test_container_to_instance_prefers_configured_network_ipv6() {
 }
 
 #[test]
+fn test_container_to_instance_prefers_configured_network_ipv4() {
+    let config = DockerConfig {
+        network: "dc346-ipv6-net".to_string(),
+        ..default_config()
+    };
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.99".to_string()),
+            networks: Some(HashMap::from([(
+                "dc346-ipv6-net".to_string(),
+                EndpointSettings {
+                    ip_address: Some("192.168.16.2".to_string()),
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert_eq!(instance.ip_address.as_deref(), Some("192.168.16.2"));
+}
+
+#[test]
+fn test_extract_ipv6_falls_back_to_deprecated_field() {
+    let config = DockerConfig {
+        network: "dc346-ipv6-net".to_string(),
+        ..default_config()
+    };
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            global_ipv6_address: Some("fd00:deprecated::1".to_string()),
+            networks: Some(HashMap::from([(
+                "dc346-ipv6-net".to_string(),
+                EndpointSettings {
+                    global_ipv6_address: None,
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert_eq!(instance.ipv6_address.as_deref(), Some("fd00:deprecated::1"));
+}
+
+#[test]
+fn test_extract_ipv4_falls_back_to_deprecated_field() {
+    let config = DockerConfig {
+        network: "dc346-ipv6-net".to_string(),
+        ..default_config()
+    };
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            networks: Some(HashMap::from([(
+                "dc346-ipv6-net".to_string(),
+                EndpointSettings {
+                    ip_address: None,
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert_eq!(instance.ip_address.as_deref(), Some("172.17.0.2"));
+}
+
+#[test]
+fn test_extract_ipv6_returns_none_when_no_ipv6() {
+    let config = default_config();
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert!(instance.ipv6_address.is_none());
+}
+
+#[test]
+fn test_extract_ipv6_ignores_empty_strings() {
+    let config = default_config();
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: Some(NetworkSettings {
+            ip_address: Some("172.17.0.2".to_string()),
+            global_ipv6_address: Some("".to_string()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert!(instance.ipv6_address.is_none());
+}
+
+#[test]
+fn test_extract_ipv6_no_network_settings_returns_none() {
+    let config = default_config();
+    let prov = DockerProvisioner::new_for_test(config);
+
+    let inspect = ContainerInspectResponse {
+        name: Some("/dc-test-contract".to_string()),
+        network_settings: None,
+        ..Default::default()
+    };
+
+    let instance = prov.container_to_instance(&inspect, "abc123").unwrap();
+    assert!(instance.ipv6_address.is_none());
+}
+
+#[test]
 fn test_container_to_instance_no_ip() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
@@ -444,6 +581,13 @@ async fn test_verify_setup_image_found() {
         .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ghcr.io/decent-stuff/dc-agent-ssh:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
         .create_async()
         .await;
+    let _network = server
+        .mock("GET", "/networks/bridge")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"EnableIPv6":true}"#)
+        .create_async()
+        .await;
 
     let prov = DockerProvisioner::new_for_mockito(server.url());
     let result = prov.verify_setup().await;
@@ -454,6 +598,14 @@ async fn test_verify_setup_image_found() {
         result.errors.is_empty(),
         "Expected no errors, got: {:?}",
         result.errors
+    );
+    assert!(
+        !result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("IPv6") || warning.contains("inspect Docker network")),
+        "Expected no IPv6 warnings, got: {:?}",
+        result.warnings
     );
 }
 
@@ -471,6 +623,13 @@ async fn test_verify_setup_image_not_found() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"[{"Id":"sha256:def","RepoTags":["alpine:3.19"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .create_async()
+        .await;
+    let _network = server
+        .mock("GET", "/networks/bridge")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"EnableIPv6":true}"#)
         .create_async()
         .await;
 
@@ -505,6 +664,13 @@ async fn test_verify_setup_image_not_found_custom_image() {
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"[]"#)
+        .create_async()
+        .await;
+    let _network = server
+        .mock("GET", "/networks/bridge")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"EnableIPv6":true}"#)
         .create_async()
         .await;
 
@@ -595,7 +761,7 @@ MemFree:         2048000 kB\n\
 MemAvailable:    8192000 kB\n\
 Buffers:          204800 kB\n";
     let avail = super::parse_mem_available_mb(meminfo).expect("should parse MemAvailable");
-    assert_eq!(avail, 8000); // 8192000 kB / 1024 = 8000 MB
+    assert_eq!(avail, 8000);
 }
 
 #[test]
@@ -725,5 +891,91 @@ async fn test_collect_resources_returns_none_on_info_error() {
     assert!(
         resources.is_none(),
         "collect_resources() must return None when Docker info fails"
+    );
+}
+
+// ── Ticket 346: IPv6 verification warnings ────────────────────────────────
+
+#[tokio::test]
+async fn test_verify_setup_warns_when_network_ipv6_disabled() {
+    let mut server = mockito::Server::new_async().await;
+    let _ping = server
+        .mock("GET", "/_ping")
+        .with_status(200)
+        .with_body("OK")
+        .create_async()
+        .await;
+    let _images = server
+        .mock("GET", "/images/json")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .create_async()
+        .await;
+    let _network = server
+        .mock("GET", "/networks/bridge")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"EnableIPv6":false}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.verify_setup().await;
+
+    assert!(
+        result.errors.is_empty(),
+        "Expected no errors, got: {:?}",
+        result.errors
+    );
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("does not have IPv6 enabled")),
+        "Expected IPv6-disabled warning, got: {:?}",
+        result.warnings
+    );
+}
+
+#[tokio::test]
+async fn test_verify_setup_warns_when_network_cannot_be_inspected() {
+    let mut server = mockito::Server::new_async().await;
+    let _ping = server
+        .mock("GET", "/_ping")
+        .with_status(200)
+        .with_body("OK")
+        .create_async()
+        .await;
+    let _images = server
+        .mock("GET", "/images/json")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .create_async()
+        .await;
+    let _network = server
+        .mock("GET", "/networks/bridge")
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message":"network bridge not found"}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let result = prov.verify_setup().await;
+
+    assert!(
+        result.errors.is_empty(),
+        "Expected no errors, got: {:?}",
+        result.errors
+    );
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("Cannot inspect Docker network 'bridge'")),
+        "Expected network inspection warning, got: {:?}",
+        result.warnings
     );
 }

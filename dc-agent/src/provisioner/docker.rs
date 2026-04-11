@@ -226,8 +226,6 @@ impl DockerProvisioner {
     fn extract_ipv6_address(&self, inspect: &ContainerInspectResponse) -> Option<String> {
         let network_settings = inspect.network_settings.as_ref()?;
 
-        // PoC: real Docker inspect data exposes IPv6 on the per-network endpoint,
-        // so prefer the configured network and only fall back to Docker's deprecated field.
         network_settings
             .networks
             .as_ref()
@@ -244,6 +242,25 @@ impl DockerProvisioner {
             })
     }
 
+    fn extract_ip_address(&self, inspect: &ContainerInspectResponse) -> Option<String> {
+        let network_settings = inspect.network_settings.as_ref()?;
+
+        network_settings
+            .networks
+            .as_ref()
+            .and_then(|networks| networks.get(&self.config.network))
+            .and_then(|network| network.ip_address.as_ref())
+            .filter(|ip| !ip.is_empty())
+            .cloned()
+            .or_else(|| {
+                network_settings
+                    .ip_address
+                    .as_ref()
+                    .filter(|ip| !ip.is_empty())
+                    .cloned()
+            })
+    }
+
     fn container_to_instance(
         &self,
         inspect: &ContainerInspectResponse,
@@ -254,12 +271,7 @@ impl DockerProvisioner {
             None => return None, // Completely empty inspect response; Docker always sets a name
         };
 
-        let ip = inspect
-            .network_settings
-            .as_ref()
-            .and_then(|ns| ns.ip_address.as_ref())
-            .filter(|ip| !ip.is_empty())
-            .cloned();
+        let ip = self.extract_ip_address(inspect);
 
         let host_ssh_port = inspect
             .network_settings
@@ -400,6 +412,7 @@ impl Provisioner for DockerProvisioner {
         tracing::info!(
             id = %id,
             ip = ?instance.ip_address,
+            ipv6 = ?instance.ipv6_address,
             ssh_port = instance.ssh_port,
             "Container provisioned successfully"
         );
@@ -663,6 +676,27 @@ impl Provisioner for DockerProvisioner {
                 result
                     .errors
                     .push(format!("Cannot list Docker images: {:#}", e));
+            }
+        }
+
+        match self
+            .client
+            .inspect_network::<String>(&self.config.network, None)
+            .await
+        {
+            Ok(network) => {
+                if !network.enable_ipv6.unwrap_or(false) {
+                    result.warnings.push(format!(
+                        "Docker network '{}' does not have IPv6 enabled. Containers will not receive IPv6 addresses. Enable with: docker network create --ipv6 {}",
+                        self.config.network, self.config.network
+                    ));
+                }
+            }
+            Err(e) => {
+                result.warnings.push(format!(
+                    "Cannot inspect Docker network '{}': {:#}. IPv6 support cannot be verified.",
+                    self.config.network, e
+                ));
             }
         }
 
