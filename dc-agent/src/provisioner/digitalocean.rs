@@ -1,6 +1,7 @@
 use super::{
     HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification,
 };
+use crate::api_client::ResourceInventory;
 use crate::config::DigitalOceanConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -217,6 +218,8 @@ fn extract_contract_id(name: &str) -> Option<String> {
 pub struct DigitalOceanProvisioner {
     config: DigitalOceanConfig,
     client: Client,
+    base_url: String,
+    poll_interval: Duration,
 }
 
 impl DigitalOceanProvisioner {
@@ -225,11 +228,16 @@ impl DigitalOceanProvisioner {
             .timeout(Duration::from_secs(30))
             .build()
             .context("Failed to build HTTP client for DigitalOcean API")?;
-        Ok(Self { config, client })
+        Ok(Self {
+            config,
+            client,
+            base_url: DO_API_BASE.to_string(),
+            poll_interval: Duration::from_secs(5),
+        })
     }
 
     fn request_builder(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        let url = format!("{}{}", DO_API_BASE, path);
+        let url = format!("{}{}", self.base_url, path);
         self.client
             .request(method, &url)
             .bearer_auth(&self.config.api_token)
@@ -290,7 +298,7 @@ impl DigitalOceanProvisioner {
                 attempt,
                 "Waiting for droplet to become active"
             );
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            tokio::time::sleep(self.poll_interval).await;
         }
         bail!(
             "Droplet {} did not reach 'active' state within {} retries",
@@ -395,6 +403,62 @@ impl DigitalOceanProvisioner {
             gateway_ssh_port: None,
             gateway_port_range_start: None,
             gateway_port_range_end: None,
+        }
+    }
+
+    async fn fetch_account(&self) -> Result<AccountInfo> {
+        let resp = self
+            .request_builder(reqwest::Method::GET, "/v2/account")
+            .send()
+            .await
+            .context("Failed to get DO account info")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("Failed to get account info: status={}, body={}", status, body);
+        }
+
+        let account_resp: AccountResponse = resp
+            .json()
+            .await
+            .context("Failed to parse account response")?;
+        Ok(account_resp.account)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountResponse {
+    account: AccountInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountInfo {
+    droplet_limit: i64,
+    #[serde(default)]
+    email: String,
+    #[serde(default)]
+    status: String,
+}
+
+#[cfg(test)]
+impl DigitalOceanProvisioner {
+    fn new_for_mockito(url: String) -> Self {
+        let config = DigitalOceanConfig {
+            api_token: "test-token".to_string(),
+            default_size: "s-1vcpu-1gb".to_string(),
+            default_region: "nyc3".to_string(),
+            default_image: "ubuntu-24-04-x64".to_string(),
+        };
+        let client = Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("Failed to build test HTTP client");
+        Self {
+            config,
+            client,
+            base_url: url,
+            poll_interval: Duration::from_millis(10),
         }
     }
 }
@@ -644,7 +708,63 @@ impl Provisioner for DigitalOceanProvisioner {
             }
         }
 
+        match self
+            .request_builder(
+                reqwest::Method::GET,
+                &format!("/v2/images?slug={}", self.config.default_image),
+            )
+            .send()
+            .await
+        {
+            Ok(resp) if resp.status().is_success() => {
+                let images_resp: ImagesResponse = resp.json().await.unwrap_or(ImagesResponse { images: vec![] });
+                if images_resp.images.is_empty() {
+                    result.template_exists = Some(false);
+                    result.errors.push(format!(
+                        "Default image '{}' not found on DigitalOcean",
+                        self.config.default_image
+                    ));
+                } else {
+                    result.template_exists = Some(true);
+                }
+            }
+            _ => {
+                result.warnings.push(
+                    "Could not verify default image existence".to_string(),
+                );
+            }
+        }
+
         result
+    }
+
+    async fn collect_resources(&self) -> Option<ResourceInventory> {
+        let account = match self.fetch_account().await {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to fetch DO account info for collect_resources");
+                return None;
+            }
+        };
+
+        tracing::info!(
+            droplet_limit = account.droplet_limit,
+            email = %account.email,
+            status = %account.status,
+            "DigitalOcean account info collected"
+        );
+
+        Some(ResourceInventory {
+            cpu_model: Some("DigitalOcean Droplet".to_string()),
+            cpu_cores: 0,
+            cpu_threads: 0,
+            cpu_mhz: None,
+            memory_total_mb: 0,
+            memory_available_mb: 0,
+            storage_pools: vec![],
+            gpu_devices: vec![],
+            templates: vec![],
+        })
     }
 }
 
