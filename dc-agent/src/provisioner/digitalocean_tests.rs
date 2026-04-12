@@ -683,6 +683,22 @@ async fn test_health_check_droplet_off() {
 }
 
 #[tokio::test]
+async fn test_health_check_api_error_returns_err() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _mock = server
+        .mock("GET", "/v2/droplets/12345")
+        .with_status(500)
+        .with_body(r#"{"id":"server_error","message":"Internal error"}"#)
+        .create_async()
+        .await;
+
+    let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
+    let result = prov.health_check("12345").await;
+    assert!(result.is_err(), "health_check should return Err on API error, not Ok(Unhealthy)");
+}
+
+#[tokio::test]
 async fn test_get_instance() {
     let mut server = mockito::Server::new_async().await;
 
@@ -817,7 +833,33 @@ async fn test_verify_setup_image_not_found() {
 }
 
 #[tokio::test]
-async fn test_collect_resources_success() {
+async fn test_verify_setup_image_json_parse_failure() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _droplets = server
+        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"droplets":[],"meta":{"total":0}}"#)
+        .create_async()
+        .await;
+
+    let _images = server
+        .mock("GET", mockito::Matcher::Regex(r"/v2/images\?.*slug=ubuntu-24-04-x64.*".to_string()))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"this is not valid json"#)
+        .create_async()
+        .await;
+
+    let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
+    let result = prov.verify_setup().await;
+    assert_eq!(result.api_reachable, Some(true));
+    assert!(!result.warnings.is_empty(), "Should have warning about JSON parse failure");
+}
+
+#[tokio::test]
+async fn test_collect_resources_success_returns_none() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
@@ -830,9 +872,7 @@ async fn test_collect_resources_success() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.collect_resources().await;
-    assert!(result.is_some(), "collect_resources should return Some");
-    let inventory = result.unwrap();
-    assert_eq!(inventory.cpu_model, Some("DigitalOcean Droplet".to_string()));
+    assert!(result.is_none(), "collect_resources should return None (no host resource data available for cloud provider)");
 }
 
 #[tokio::test]

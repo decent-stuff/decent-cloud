@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing;
 
-const DO_API_BASE: &str = "https://api.digitalocean.com/v2";
+const DO_API_BASE: &str = "https://api.digitalocean.com";
 const DC_AGENT_TAG: &str = "dc-agent";
 
 // ── DO API response types ───────────────────────────────────────────────────
@@ -523,7 +523,9 @@ impl Provisioner for DigitalOceanProvisioner {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             if let Some(key_id) = created_ssh_key_id {
-                let _ = self.delete_ssh_key(key_id).await;
+                if let Err(e) = self.delete_ssh_key(key_id).await {
+                    tracing::warn!(key_id, error = %e, "Failed to clean up SSH key after droplet creation failure");
+                }
             }
             bail!(
                 "Failed to create droplet: status={}, body={}",
@@ -552,15 +554,20 @@ impl Provisioner for DigitalOceanProvisioner {
             }
             Err(e) => {
                 tracing::error!(droplet_id, error = %e, "Droplet failed to become active, cleaning up");
-                let _ = self
+                if let Err(cleanup_err) = self
                     .request_builder(
                         reqwest::Method::DELETE,
                         &format!("/v2/droplets/{}", droplet_id),
                     )
                     .send()
-                    .await;
+                    .await
+                {
+                    tracing::warn!(droplet_id, error = %cleanup_err, "Failed to delete droplet during cleanup");
+                }
                 if let Some(key_id) = created_ssh_key_id {
-                    let _ = self.delete_ssh_key(key_id).await;
+                    if let Err(key_err) = self.delete_ssh_key(key_id).await {
+                        tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
+                    }
                 }
                 Err(e)
             }
@@ -595,9 +602,7 @@ impl Provisioner for DigitalOceanProvisioner {
                 });
             }
             Err(e) => {
-                return Ok(HealthStatus::Unhealthy {
-                    reason: format!("Failed to check droplet: {:#}", e),
-                });
+                return Err(e).context("Health check failed");
             }
         };
 
@@ -717,15 +722,24 @@ impl Provisioner for DigitalOceanProvisioner {
             .await
         {
             Ok(resp) if resp.status().is_success() => {
-                let images_resp: ImagesResponse = resp.json().await.unwrap_or(ImagesResponse { images: vec![] });
-                if images_resp.images.is_empty() {
-                    result.template_exists = Some(false);
-                    result.errors.push(format!(
-                        "Default image '{}' not found on DigitalOcean",
-                        self.config.default_image
-                    ));
-                } else {
-                    result.template_exists = Some(true);
+                match resp.json::<ImagesResponse>().await {
+                    Ok(images_resp) => {
+                        if images_resp.images.is_empty() {
+                            result.template_exists = Some(false);
+                            result.errors.push(format!(
+                                "Default image '{}' not found on DigitalOcean",
+                                self.config.default_image
+                            ));
+                        } else {
+                            result.template_exists = Some(true);
+                        }
+                    }
+                    Err(e) => {
+                        result.warnings.push(format!(
+                            "Failed to parse images response for '{}': {:#}",
+                            self.config.default_image, e
+                        ));
+                    }
                 }
             }
             _ => {
@@ -754,17 +768,7 @@ impl Provisioner for DigitalOceanProvisioner {
             "DigitalOcean account info collected"
         );
 
-        Some(ResourceInventory {
-            cpu_model: Some("DigitalOcean Droplet".to_string()),
-            cpu_cores: 0,
-            cpu_threads: 0,
-            cpu_mhz: None,
-            memory_total_mb: 0,
-            memory_available_mb: 0,
-            storage_pools: vec![],
-            gpu_devices: vec![],
-            templates: vec![],
-        })
+        None
     }
 }
 
