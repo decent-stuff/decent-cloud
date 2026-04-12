@@ -4,12 +4,12 @@ use super::{
 use crate::config::DockerConfig;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use bollard::models::{HostConfig, PortBinding};
 use bollard::container::{
     Config, CreateContainerOptions, InspectContainerOptions, ListContainersOptions,
     RemoveContainerOptions, StartContainerOptions, StopContainerOptions,
 };
 use bollard::image::CreateImageOptions;
+use bollard::models::{HostConfig, PortBinding};
 use bollard::service::ContainerInspectResponse;
 use bollard::Docker;
 use futures::StreamExt;
@@ -18,15 +18,37 @@ use tracing;
 
 // ── procfs helpers ─────────────────────────────────────────────────────────
 
-/// Parse the first "model name" from `/proc/cpuinfo` content.
+/// Parse the CPU model from `/proc/cpuinfo` content.
 ///
-/// `/proc/cpuinfo` lines have the format `"model name\t: <value>"`.
-/// Returns `None` if the field is absent (e.g. on non-x86 architectures it
-/// may appear as "Model" or "Hardware"; callers should fall back gracefully).
+/// Tries fields in order:
+/// 1. `model name` — x86 and AArch64 kernels
+/// 2. `Hardware` — ARM32 boards (e.g. "BCM2835")
+/// 3. `Processor` — older ARM kernels (e.g. "ARMv7 Processor rev 3")
 pub(crate) fn parse_cpu_model(cpuinfo: &str) -> Option<String> {
     for line in cpuinfo.lines() {
         if let Some(rest) = line.strip_prefix("model name") {
-            // rest = "\t: Intel(R) Core(TM) ..." — strip any whitespace before ':'
+            let after_colon = rest.trim_start_matches(['\t', ' ']);
+            if let Some(value) = after_colon.strip_prefix(':') {
+                let model = value.trim().to_string();
+                if !model.is_empty() {
+                    return Some(model);
+                }
+            }
+        }
+    }
+    for line in cpuinfo.lines() {
+        if let Some(rest) = line.strip_prefix("Hardware") {
+            let after_colon = rest.trim_start_matches(['\t', ' ']);
+            if let Some(value) = after_colon.strip_prefix(':') {
+                let model = value.trim().to_string();
+                if !model.is_empty() {
+                    return Some(model);
+                }
+            }
+        }
+    }
+    for line in cpuinfo.lines() {
+        if let Some(rest) = line.strip_prefix("Processor") {
             let after_colon = rest.trim_start_matches(['\t', ' ']);
             if let Some(value) = after_colon.strip_prefix(':') {
                 let model = value.trim().to_string();
@@ -53,25 +75,14 @@ pub(crate) fn parse_mem_available_mb(meminfo: &str) -> Option<u64> {
     None
 }
 
-/// Read the filesystem total and available space (in bytes) for `path` by
-/// spawning `df`.  Returns `(total_bytes, avail_bytes)`.
-///
-/// This avoids pulling in `libc` or `nix` as a direct dependency.
-/// The PoC uses this; the dev stage may replace it with a proper statvfs call.
-async fn df_bytes(path: &str) -> Option<(u64, u64)> {
-    let out = tokio::process::Command::new("df")
-        .args(["--output=size,avail", "--block-size=1", path])
-        .output()
-        .await
-        .ok()?;
-    // Output format (two header-less lines after the title):
-    // "     1B-blocks     Avail\n   500000000   200000000\n"
-    let stdout = String::from_utf8(out.stdout).ok()?;
-    let data_line = stdout.lines().nth(1)?;
-    let mut parts = data_line.split_whitespace();
-    let total: u64 = parts.next()?.parse().ok()?;
-    let avail: u64 = parts.next()?.parse().ok()?;
-    Some((total, avail))
+/// Read the filesystem total and available space (in bytes) for `path` via
+/// statvfs.  Returns `(total_bytes, avail_bytes)`.
+fn fs_stats(path: &str) -> Option<(u64, u64)> {
+    let stat = nix::sys::statvfs::statvfs(path).ok()?;
+    Some((
+        stat.blocks() * stat.fragment_size(),
+        stat.blocks_available() * stat.fragment_size(),
+    ))
 }
 
 fn container_name(contract_id: &str) -> String {
@@ -81,7 +92,10 @@ fn container_name(contract_id: &str) -> String {
 fn is_docker_not_found(e: &bollard::errors::Error) -> bool {
     matches!(
         e,
-        bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }
+        bollard::errors::Error::DockerResponseServerError {
+            status_code: 404,
+            ..
+        }
     )
 }
 
@@ -118,7 +132,10 @@ impl DockerProvisioner {
     }
 
     async fn pull_image_if_needed(&self, image: &str) -> Result<()> {
-        let images = self.client.list_images::<String>(None).await
+        let images = self
+            .client
+            .list_images::<String>(None)
+            .await
             .context("Failed to list Docker images to check local cache")?;
         let already_present = images
             .iter()
@@ -146,11 +163,7 @@ impl DockerProvisioner {
         Ok(())
     }
 
-    fn build_container_config(
-        &self,
-        request: &ProvisionRequest,
-        image: &str,
-    ) -> Config<String> {
+    fn build_container_config(&self, request: &ProvisionRequest, image: &str) -> Config<String> {
         let ssh_port_str = self.config.ssh_port.to_string();
 
         let mut exposed_ports = HashMap::new();
@@ -284,10 +297,7 @@ impl DockerProvisioner {
         };
 
         let containers = self.client.list_containers(Some(options)).await?;
-        Ok(containers
-            .into_iter()
-            .next()
-            .and_then(|c| c.id))
+        Ok(containers.into_iter().next().and_then(|c| c.id))
     }
 }
 
@@ -394,7 +404,8 @@ impl Provisioner for DockerProvisioner {
                     tracing::warn!(id = %external_id, "Container not found, assuming already removed");
                     return Ok(());
                 }
-                return Err(e).with_context(|| format!("Failed to inspect container {}", external_id));
+                return Err(e)
+                    .with_context(|| format!("Failed to inspect container {}", external_id));
             }
         };
 
@@ -406,12 +417,7 @@ impl Provisioner for DockerProvisioner {
 
         if running {
             self.client
-                .stop_container(
-                    external_id,
-                    Some(StopContainerOptions {
-                        t: 30,
-                    }),
-                )
+                .stop_container(external_id, Some(StopContainerOptions { t: 30 }))
                 .await
                 .with_context(|| format!("Failed to stop container {}", external_id))?;
         }
@@ -454,15 +460,15 @@ impl Provisioner for DockerProvisioner {
         if running {
             let started_at = state
                 .and_then(|s| s.started_at.as_deref())
-                .and_then(|ts| {
-                    chrono::DateTime::parse_from_rfc3339(ts).ok()
-                });
+                .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok());
 
-            let uptime_seconds = started_at.map(|t| {
-                t.signed_duration_since(chrono::Utc::now())
-                    .num_seconds()
-                    .unsigned_abs()
-            }).unwrap_or(0);
+            let uptime_seconds = started_at
+                .map(|t| {
+                    t.signed_duration_since(chrono::Utc::now())
+                        .num_seconds()
+                        .unsigned_abs()
+                })
+                .unwrap_or(0);
 
             Ok(HealthStatus::Healthy { uptime_seconds })
         } else {
@@ -561,16 +567,13 @@ impl Provisioner for DockerProvisioner {
 
         // ── Storage pool from Docker root dir ─────────────────────────────
         let storage_pools = {
-            let docker_root = info
-                .docker_root_dir
-                .as_deref()
-                .unwrap_or("/var/lib/docker");
+            let docker_root = info.docker_root_dir.as_deref().unwrap_or("/var/lib/docker");
             let storage_type = info
                 .driver
                 .clone()
                 .unwrap_or_else(|| "overlay2".to_string());
 
-            match df_bytes(docker_root).await {
+            match fs_stats(docker_root) {
                 Some((total_bytes, avail_bytes)) => {
                     vec![StoragePoolInfo {
                         name: docker_root.to_string(),
@@ -632,7 +635,9 @@ impl Provisioner for DockerProvisioner {
                 result.storage_accessible = Some(true);
 
                 let image_exists = images.iter().any(|img| {
-                    img.repo_tags.iter().any(|t| t == &self.config.default_image)
+                    img.repo_tags
+                        .iter()
+                        .any(|t| t == &self.config.default_image)
                 });
 
                 if image_exists {
@@ -660,12 +665,9 @@ impl Provisioner for DockerProvisioner {
 #[cfg(test)]
 impl DockerProvisioner {
     fn new_for_test(config: DockerConfig) -> Self {
-        let client = Docker::connect_with_http(
-            "http://localhost:1",
-            120,
-            bollard::API_DEFAULT_VERSION,
-        )
-        .expect("connect_with_http should not fail");
+        let client =
+            Docker::connect_with_http("http://localhost:1", 120, bollard::API_DEFAULT_VERSION)
+                .expect("connect_with_http should not fail");
         Self { config, client }
     }
 

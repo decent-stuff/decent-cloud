@@ -167,11 +167,7 @@ fn test_build_container_config_custom_ssh_port() {
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ubuntu:22.04");
 
-    assert!(cfg
-        .exposed_ports
-        .as_ref()
-        .unwrap()
-        .contains_key("2222"));
+    assert!(cfg.exposed_ports.as_ref().unwrap().contains_key("2222"));
 }
 
 fn make_port_map(
@@ -328,7 +324,10 @@ fn test_container_to_instance_empty_inspect_returns_none() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let result = prov.container_to_instance(&ContainerInspectResponse::default(), "id1");
-    assert!(result.is_none(), "Should return None for inspect with no name");
+    assert!(
+        result.is_none(),
+        "Should return None for inspect with no name"
+    );
 }
 
 #[test]
@@ -431,7 +430,11 @@ async fn test_verify_setup_image_found() {
     assert_eq!(result.api_reachable, Some(true));
     assert_eq!(result.storage_accessible, Some(true));
     assert_eq!(result.template_exists, Some(true));
-    assert!(result.errors.is_empty(), "Expected no errors, got: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "Expected no errors, got: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -524,9 +527,33 @@ fn test_parse_cpu_model_amd() {
 }
 
 #[test]
+fn test_parse_cpu_model_arm_hardware() {
+    let cpuinfo = "Processor\t: AArch64 Processor rev 1 (aarch64)\nHardware\t: BCM2835\n";
+    let model = super::parse_cpu_model(cpuinfo).expect("should parse Hardware field");
+    assert_eq!(model, "BCM2835");
+}
+
+#[test]
+fn test_parse_cpu_model_arm_processor() {
+    let cpuinfo = "Processor\t: ARMv7 Processor rev 3 (v7l)\nBogoMIPS\t: 89.99\n";
+    let model = super::parse_cpu_model(cpuinfo).expect("should parse Processor field");
+    assert_eq!(model, "ARMv7 Processor rev 3 (v7l)");
+}
+
+#[test]
+fn test_parse_cpu_model_model_name_preferred_over_hardware() {
+    let cpuinfo = "model name\t: ARM Cortex-A72\nHardware\t: BCM2837\n";
+    let model = super::parse_cpu_model(cpuinfo).expect("should prefer model name");
+    assert_eq!(model, "ARM Cortex-A72");
+}
+
+#[test]
 fn test_parse_cpu_model_missing() {
     let cpuinfo = "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu MHz\t\t: 3800.000\n";
-    assert!(super::parse_cpu_model(cpuinfo).is_none(), "no model name field → None");
+    assert!(
+        super::parse_cpu_model(cpuinfo).is_none(),
+        "no model name field → None"
+    );
 }
 
 #[test]
@@ -570,12 +597,11 @@ fn test_parse_mem_available_mb_zero() {
 // ── Ticket 347: collect_resources via mockito ────────────────────────────
 
 /// Mock the /info endpoint to confirm cpu_model, memory fields, and
-/// storage_pools are populated (the full df() path requires /system/df mock).
+/// storage_pools are populated.
 #[tokio::test]
 async fn test_collect_resources_populates_cpu_and_memory() {
     let mut server = mockito::Server::new_async().await;
 
-    // Docker /info response — minimal fields needed by collect_resources()
     let _info_mock = server
         .mock("GET", "/info")
         .with_status(200)
@@ -591,32 +617,75 @@ async fn test_collect_resources_populates_cpu_and_memory() {
         .create_async()
         .await;
 
-    // /system/df response — used for storage pool sizes
-    let _df_mock = server
-        .mock("GET", "/system/df")
-        .with_status(200)
-        .with_header("content-type", "application/json")
-        .with_body(r#"{"LayersSize":0,"Images":[],"Containers":[],"Volumes":[],"BuildCache":[]}"#)
-        .create_async()
-        .await;
-
     let prov = DockerProvisioner::new_for_mockito(server.url());
     let resources = prov.collect_resources().await;
 
-    // Must return Some even if procfs reads fall back gracefully
     let inv = resources.expect("collect_resources() must return Some");
 
     assert_eq!(inv.cpu_threads, 4);
-    assert_eq!(inv.memory_total_mb, 8192); // 8 GiB in MiB (from mocked /info)
-    // memory_available_mb is read from the real /proc/meminfo; we only verify
-    // it was populated (> 0) and didn't panic or overflow.
+    assert_eq!(inv.memory_total_mb, 8192);
     assert!(
         inv.memory_available_mb > 0,
         "available_mb must be non-zero (read from /proc/meminfo)"
     );
-    // GPU and templates stay empty (no Docker GPU/template APIs used)
     assert!(inv.gpu_devices.is_empty());
     assert!(inv.templates.is_empty());
+}
+
+#[test]
+fn test_fs_stats_on_tmp() {
+    let (total, avail) = super::fs_stats("/tmp").expect("statvfs on /tmp must succeed");
+    assert!(total > 0, "total bytes on /tmp must be non-zero");
+    assert!(avail > 0, "available bytes on /tmp must be non-zero");
+    assert!(avail <= total, "available must not exceed total");
+}
+
+#[test]
+fn test_fs_stats_nonexistent_path_returns_none() {
+    assert!(
+        super::fs_stats("/no/such/path/statvfs-test-347").is_none(),
+        "statvfs on nonexistent path must return None"
+    );
+}
+
+#[tokio::test]
+async fn test_collect_resources_storage_pools_populated() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _info_mock = server
+        .mock("GET", "/info")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{
+                "NCPU": 2,
+                "MemTotal": 4294967296,
+                "Driver": "overlay2",
+                "DockerRootDir": "/tmp"
+            }"#,
+        )
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let inv = prov
+        .collect_resources()
+        .await
+        .expect("collect_resources must return Some");
+
+    assert_eq!(
+        inv.storage_pools.len(),
+        1,
+        "should have exactly one storage pool"
+    );
+    let pool = &inv.storage_pools[0];
+    assert_eq!(pool.name, "/tmp");
+    assert_eq!(pool.storage_type, "overlay2");
+    assert!(pool.total_gb > 0, "total_gb must be non-zero for /tmp");
+    assert!(
+        pool.available_gb > 0,
+        "available_gb must be non-zero for /tmp"
+    );
 }
 
 /// When /info fails, collect_resources() must return None.
