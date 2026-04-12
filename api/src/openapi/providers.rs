@@ -311,17 +311,26 @@ pub fn normalize_provisioning_details(
     Ok(sanitized)
 }
 
-/// Validate Hetzner offering config against the live Hetzner catalog.
-/// No-op for non-Hetzner offerings.
-async fn validate_hetzner_offering(
+/// Validate cloud offering config against the live provider catalog.
+/// Delegates to the appropriate provider validation based on provisioner_type.
+/// No-op for offerings without a recognized cloud provisioner_type.
+async fn validate_cloud_offering(
     db: &Database,
     offering: &crate::database::offerings::Offering,
     pubkey_bytes: &[u8],
 ) -> Result<(), String> {
-    if offering.provisioner_type.as_deref() != Some("hetzner") {
-        return Ok(());
+    match offering.provisioner_type.as_deref() {
+        Some("hetzner") => validate_hetzner_offering_inner(db, offering, pubkey_bytes).await,
+        Some("vultr") => validate_vultr_offering_inner(db, offering, pubkey_bytes).await,
+        _ => Ok(()),
     }
+}
 
+async fn validate_hetzner_offering_inner(
+    db: &Database,
+    offering: &crate::database::offerings::Offering,
+    pubkey_bytes: &[u8],
+) -> Result<(), String> {
     let config = crate::cloud::hetzner::resolve_provisioner_config(
         offering.provisioner_config.as_deref(),
         &offering.datacenter_city,
@@ -358,6 +367,51 @@ async fn validate_hetzner_offering(
         .validate_offering_config(&config)
         .await
         .map_err(|e| format!("Hetzner offering validation failed: {e:#}"))?;
+
+    Ok(())
+}
+
+async fn validate_vultr_offering_inner(
+    db: &Database,
+    offering: &crate::database::offerings::Offering,
+    pubkey_bytes: &[u8],
+) -> Result<(), String> {
+    let config = crate::cloud::vultr::resolve_provisioner_config(
+        offering.provisioner_config.as_deref(),
+        &offering.datacenter_city,
+        offering.template_name.as_deref(),
+    )
+    .map_err(|e| format!("Invalid provisioner config: {e:#}"))?;
+
+    let cloud_account_id = db
+        .find_vultr_cloud_account_for_provider(pubkey_bytes)
+        .await
+        .map_err(|e| format!("Failed to look up Vultr cloud account: {e:#}"))?
+        .ok_or_else(|| {
+            "No Vultr cloud account configured for this provider. \
+             Add a Vultr cloud account before creating Vultr offerings."
+                .to_string()
+        })?;
+
+    let (_account_id, _backend_type, credentials_encrypted) = db
+        .get_cloud_account_credentials(&cloud_account_id)
+        .await
+        .map_err(|e| format!("Failed to get cloud account credentials: {e:#}"))?
+        .ok_or_else(|| "Cloud account credentials not found".to_string())?;
+
+    let encryption_key = crate::crypto::ServerEncryptionKey::from_env()
+        .map_err(|e| format!("Server credential encryption not configured: {e:#}"))?;
+
+    let api_key = crate::crypto::decrypt_server_credential(&credentials_encrypted, &encryption_key)
+        .map_err(|e| format!("Failed to decrypt Vultr credentials: {e:#}"))?;
+
+    let backend = crate::cloud::vultr::VultrBackend::new(api_key)
+        .map_err(|e| format!("Failed to create Vultr client: {e:#}"))?;
+
+    backend
+        .validate_offering_config(&config)
+        .await
+        .map_err(|e| format!("Vultr offering validation failed: {e:#}"))?;
 
     Ok(())
 }
@@ -1684,7 +1738,7 @@ impl ProvidersApi {
         params.id = None;
         params.pubkey = hex::encode(&pubkey_bytes);
 
-        if let Err(e) = validate_hetzner_offering(&db, &params, &pubkey_bytes).await {
+        if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
             return Json(ApiResponse {
                 success: false,
                 data: None,
@@ -1758,7 +1812,7 @@ impl ProvidersApi {
         let mut params = offering.0;
         params.pubkey = hex::encode(&pubkey_bytes);
 
-        if let Err(e) = validate_hetzner_offering(&db, &params, &pubkey_bytes).await {
+        if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
             return Json(ApiResponse {
                 success: false,
                 data: None,
@@ -2212,20 +2266,28 @@ impl ProvidersApi {
             .await
         {
             Ok((success_count, mut errors)) => {
-                // Post-import: validate Hetzner offerings against live catalog
+                // Post-import: validate cloud offerings against live catalog
                 if let Ok(offerings) = db.get_provider_offerings(&pubkey_bytes).await {
-                    for offering in offerings
-                        .iter()
-                        .filter(|o| o.provisioner_type.as_deref() == Some("hetzner"))
-                    {
+                    for offering in offerings.iter().filter(|o| {
+                        matches!(
+                            o.provisioner_type.as_deref(),
+                            Some("hetzner") | Some("vultr")
+                        )
+                    }) {
                         if let Err(e) =
-                            validate_hetzner_offering(&db, offering, &pubkey_bytes).await
+                            validate_cloud_offering(&db, offering, &pubkey_bytes).await
                         {
                             errors.push((
                                 0,
                                 format!(
-                                    "Hetzner validation failed for offering '{}': {}",
-                                    offering.offering_id, e
+                                    "{} validation failed for offering '{}': {}",
+                                    offering
+                                        .provisioner_type
+                                        .as_deref()
+                                        .unwrap_or("unknown")
+                                        .to_uppercase(),
+                                    offering.offering_id,
+                                    e
                                 ),
                             ));
                         }

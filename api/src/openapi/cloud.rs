@@ -1,11 +1,13 @@
 //! Cloud account and resource API endpoints.
 //!
-//! Handles self-provisioning of cloud resources (Hetzner, Proxmox).
+//! Handles self-provisioning of cloud resources (Hetzner, Proxmox, Vultr).
 
 use super::common::{ApiResponse, ApiTags, EmptyResponse};
 use crate::auth::ApiAuthenticatedUser;
 use crate::cloud::types::BackendCatalog;
-use crate::cloud::{hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, CloudBackend};
+use crate::cloud::{
+    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, vultr::VultrBackend, CloudBackend,
+};
 use crate::crypto::{decrypt_server_credential, encrypt_server_credential, ServerEncryptionKey};
 use crate::database::offerings::Offering;
 use crate::database::{CloudAccount, CloudResourceWithDetails, Database};
@@ -96,6 +98,10 @@ async fn create_backend(
             let config: crate::cloud::proxmox_api::ProxmoxConfig =
                 serde_json::from_str(credentials)?;
             let backend = ProxmoxApiBackend::new(config)?;
+            Ok(Box::new(backend))
+        }
+        "vultr" => {
+            let backend = VultrBackend::new(credentials.to_string())?;
             Ok(Box::new(backend))
         }
         _ => anyhow::bail!("Unknown backend type: {}", backend_type),

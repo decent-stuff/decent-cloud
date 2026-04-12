@@ -10,6 +10,7 @@ use ts_rs::TS;
 pub enum BackendType {
     Hetzner,
     ProxmoxApi,
+    Vultr,
 }
 
 impl std::fmt::Display for BackendType {
@@ -17,6 +18,7 @@ impl std::fmt::Display for BackendType {
         match self {
             BackendType::Hetzner => write!(f, "hetzner"),
             BackendType::ProxmoxApi => write!(f, "proxmox_api"),
+            BackendType::Vultr => write!(f, "vultr"),
         }
     }
 }
@@ -28,6 +30,7 @@ impl std::str::FromStr for BackendType {
         match s {
             "hetzner" => Ok(BackendType::Hetzner),
             "proxmox_api" => Ok(BackendType::ProxmoxApi),
+            "vultr" => Ok(BackendType::Vultr),
             _ => anyhow::bail!("Unknown backend type: {}", s),
         }
     }

@@ -7,6 +7,7 @@ use crate::cloud::types::{BackendCatalog, Server, ServerMetrics};
 pub mod hetzner;
 pub mod proxmox_api;
 pub mod types;
+pub mod vultr;
 
 pub use types::CreateServerRequest;
 

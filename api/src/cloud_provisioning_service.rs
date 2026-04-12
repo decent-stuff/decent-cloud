@@ -4,7 +4,7 @@
 //! For contract-linked resources, also executes post-provision scripts and updates contract status.
 
 use crate::cloud::{
-    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType, CloudBackend,
+    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType, vultr::VultrBackend, CloudBackend,
     CreateServerRequest,
 };
 use crate::cloudflare_dns::CloudflareDns;
@@ -282,7 +282,7 @@ async fn provision_one(
     // Cloud VMs have public IPs — SSH is directly on port 22, no port range needed
     let gateway_slug = generate_gateway_slug();
     let gateway_ssh_port = 22;
-    let dc_id = cloud_dc_id(&resource.location);
+    let dc_id = cloud_dc_id(&backend_type, &resource.location);
 
     // Create DNS A record if Cloudflare is configured
     let gateway_subdomain = if let Some(cf) = cloudflare_dns {
@@ -495,7 +495,7 @@ async fn terminate_one(
     // Delete DNS record if gateway_slug was set
     if let Some(slug) = &resource.gateway_slug {
         if let Some(cf) = cloudflare_dns {
-            let dc_id = cloud_dc_id(&resource.location);
+            let dc_id = cloud_dc_id(&backend_type, &resource.location);
             if let Err(e) = cf.delete_gateway_record(slug, &dc_id).await {
                 tracing::warn!(
                     resource_id = %resource_id,
@@ -529,13 +529,22 @@ async fn create_backend(
             let backend = ProxmoxApiBackend::new(config)?;
             Ok(Box::new(backend))
         }
+        BackendType::Vultr => {
+            let backend = VultrBackend::new(credentials.to_string())?;
+            Ok(Box::new(backend))
+        }
     }
 }
 
-/// Derive dc_id for cloud-provisioned VMs from the cloud location.
-/// Format: "hz-{location}" (e.g., "hz-nbg1", "hz-fsn1").
-fn cloud_dc_id(location: &str) -> String {
-    format!("hz-{}", location)
+/// Derive dc_id for cloud-provisioned VMs from the cloud location and backend type.
+/// Format: "hz-{location}" for Hetzner, "vl-{location}" for Vultr.
+fn cloud_dc_id(backend_type: &BackendType, location: &str) -> String {
+    let prefix = match backend_type {
+        BackendType::Hetzner => "hz",
+        BackendType::Vultr => "vl",
+        BackendType::ProxmoxApi => "px",
+    };
+    format!("{}-{}", prefix, location)
 }
 
 fn generate_gateway_slug() -> String {
@@ -556,9 +565,11 @@ mod tests {
 
     #[test]
     fn test_cloud_dc_id() {
-        assert_eq!(cloud_dc_id("nbg1"), "hz-nbg1");
-        assert_eq!(cloud_dc_id("fsn1"), "hz-fsn1");
-        assert_eq!(cloud_dc_id("ash"), "hz-ash");
+        assert_eq!(cloud_dc_id(&BackendType::Hetzner, "nbg1"), "hz-nbg1");
+        assert_eq!(cloud_dc_id(&BackendType::Hetzner, "fsn1"), "hz-fsn1");
+        assert_eq!(cloud_dc_id(&BackendType::Hetzner, "ash"), "hz-ash");
+        assert_eq!(cloud_dc_id(&BackendType::Vultr, "ewr"), "vl-ewr");
+        assert_eq!(cloud_dc_id(&BackendType::Vultr, "ams"), "vl-ams");
     }
 
     #[test]
