@@ -91,7 +91,7 @@ verify_ssl = false
 # # Docker network mode (default: "bridge")
 # # network = "bridge"
 # # Default container image
-# # default_image = "ubuntu:22.04"
+# # default_image = "ghcr.io/decent-stuff/dc-agent-ssh:latest"
 # # SSH port inside the container (default: 22)
 # # ssh_port = 22
 

@@ -6,7 +6,7 @@ fn default_config() -> DockerConfig {
     DockerConfig {
         socket_path: "/var/run/docker.sock".to_string(),
         network: "bridge".to_string(),
-        default_image: "ubuntu:22.04".to_string(),
+        default_image: "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
         ssh_port: 22,
     }
 }
@@ -46,7 +46,7 @@ fn test_resolve_image_from_config() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn test_resolve_image_instance_config_non_string_ignored() {
     request.instance_config = Some(serde_json::json!({
         "image": 42
     }));
-    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn test_resolve_image_no_instance_config() {
     let prov = DockerProvisioner::new_for_test(config);
     let mut request = make_provision_request();
     request.instance_config = None;
-    assert_eq!(prov.resolve_image(&request), "ubuntu:22.04");
+    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 }
 
 #[test]
@@ -85,9 +85,9 @@ fn test_build_container_config_defaults() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+    let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
-    assert_eq!(cfg.image.as_deref(), Some("ubuntu:22.04"));
+    assert_eq!(cfg.image.as_deref(), Some("ghcr.io/decent-stuff/dc-agent-ssh:latest"));
     assert!(cfg.exposed_ports.is_some());
     assert!(cfg.exposed_ports.as_ref().unwrap().contains_key("22"));
 
@@ -132,7 +132,7 @@ fn test_build_container_config_ssh_key_in_env() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+    let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
     let env = cfg.env.unwrap();
     assert!(env.iter().any(|e| e.starts_with("SSH_PUBLIC_KEY=")));
@@ -144,12 +144,12 @@ fn test_build_container_config_custom_network() {
     let config = DockerConfig {
         socket_path: "/var/run/docker.sock".to_string(),
         network: "host".to_string(),
-        default_image: "ubuntu:22.04".to_string(),
+        default_image: "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
         ssh_port: 2222,
     };
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+    let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
     let host_config = cfg.host_config.as_ref().unwrap();
     assert_eq!(host_config.network_mode.as_deref(), Some("host"));
@@ -160,12 +160,12 @@ fn test_build_container_config_custom_ssh_port() {
     let config = DockerConfig {
         socket_path: "/var/run/docker.sock".to_string(),
         network: "bridge".to_string(),
-        default_image: "ubuntu:22.04".to_string(),
+        default_image: "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
         ssh_port: 2222,
     };
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+    let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
     assert!(cfg.exposed_ports.as_ref().unwrap().contains_key("2222"));
 }
@@ -193,7 +193,7 @@ fn test_container_to_instance_running() {
     let inspect = ContainerInspectResponse {
         name: Some("/dc-test-contract".to_string()),
         config: Some(bollard::service::ContainerConfig {
-            image: Some("ubuntu:22.04".to_string()),
+            image: Some("ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string()),
             ..Default::default()
         }),
         network_settings: Some(NetworkSettings {
@@ -335,14 +335,14 @@ fn test_build_container_config_has_cmd() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    let cfg = prov.build_container_config(&request, "ubuntu:22.04");
+    let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
     let cmd = cfg.cmd.expect("cmd must be set for SSH setup");
     assert_eq!(cmd[0], "/bin/bash");
     assert_eq!(cmd[1], "-c");
     assert!(
-        cmd[2].contains("openssh-server"),
-        "cmd must install openssh-server"
+        !cmd[2].contains("apt-get"),
+        "cmd must NOT contain apt-get (pre-built image has openssh-server)"
     );
     assert!(
         cmd[2].contains("authorized_keys"),
@@ -401,7 +401,7 @@ async fn test_pull_image_propagates_list_error() {
         .await;
 
     let prov = DockerProvisioner::new_for_mockito(server.url());
-    let result = prov.pull_image_if_needed("ubuntu:22.04").await;
+    let result = prov.pull_image_if_needed("ghcr.io/decent-stuff/dc-agent-ssh:latest").await;
     assert!(
         result.is_err(),
         "pull_image_if_needed() should propagate list_images error"
@@ -421,7 +421,7 @@ async fn test_verify_setup_image_found() {
         .mock("GET", "/images/json")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ubuntu:22.04","ubuntu:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
+        .with_body(r#"[{"Id":"sha256:abc","RepoTags":["ghcr.io/decent-stuff/dc-agent-ssh:latest"],"Created":0,"Size":0,"VirtualSize":0,"SharedSize":0,"Containers":0,"Labels":{},"ParentId":"","RepoDigests":[]}]"#)
         .create_async()
         .await;
 
@@ -460,7 +460,7 @@ async fn test_verify_setup_image_not_found() {
     assert_eq!(result.errors.len(), 1);
     let err = &result.errors[0];
     assert!(
-        err.contains("ubuntu:22.04"),
+        err.contains("ghcr.io/decent-stuff/dc-agent-ssh:latest"),
         "Error should mention the image name: {}",
         err
     );

@@ -1,0 +1,27 @@
+name: Build & Publish Docker Image
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "dc-agent/container/**"
+  workflow_dispatch:
+
+jobs:
+  build-publish:
+    name: Build & Publish dc-agent-ssh
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: bash dc-agent/container/build.sh dc-agent-ssh latest
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish image
+        run: bash dc-agent/container/publish.sh ghcr.io decent-stuff
