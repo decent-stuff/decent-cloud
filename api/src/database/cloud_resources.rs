@@ -852,11 +852,12 @@ impl Database {
         Ok(count)
     }
 
-    /// Find the Hetzner cloud_account for a provider pubkey.
-    /// Looks up: provider_pubkey → account_id → cloud_accounts (backend_type='hetzner').
-    pub async fn find_hetzner_cloud_account_for_provider(
+    /// Find a cloud_account for a provider pubkey by backend type.
+    /// Looks up: provider_pubkey → account_id → cloud_accounts (backend_type matches).
+    pub async fn find_cloud_account_for_provider(
         &self,
         provider_pubkey: &[u8],
+        backend_type: &str,
     ) -> Result<Option<Uuid>> {
         let row: Option<(Uuid,)> = sqlx::query_as(
             r#"
@@ -865,17 +866,36 @@ impl Database {
             JOIN account_public_keys apk ON ca.account_id = apk.account_id
             WHERE apk.public_key = $1
               AND apk.is_active = TRUE
-              AND ca.backend_type = 'hetzner'
+              AND ca.backend_type = $2
               AND ca.is_valid = TRUE
             ORDER BY ca.created_at ASC
             LIMIT 1
             "#,
         )
         .bind(provider_pubkey)
+        .bind(backend_type)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(|r| r.0))
+    }
+
+    /// Find the Hetzner cloud_account for a provider pubkey.
+    pub async fn find_hetzner_cloud_account_for_provider(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Option<Uuid>> {
+        self.find_cloud_account_for_provider(provider_pubkey, "hetzner")
+            .await
+    }
+
+    /// Find the Vultr cloud_account for a provider pubkey.
+    pub async fn find_vultr_cloud_account_for_provider(
+        &self,
+        provider_pubkey: &[u8],
+    ) -> Result<Option<Uuid>> {
+        self.find_cloud_account_for_provider(provider_pubkey, "vultr")
+            .await
     }
 
     /// List a running personal resource on the marketplace.

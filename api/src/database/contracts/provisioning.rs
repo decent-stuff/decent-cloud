@@ -685,20 +685,18 @@ impl Database {
         Ok(true)
     }
 
-    /// After auto-accept, check if the offering uses Hetzner provisioning and create
-    /// a cloud_resource linked to the contract. The provisioning service will pick it up.
-    pub async fn try_trigger_hetzner_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
+    /// After auto-accept, check if the offering uses a cloud provisioner (Hetzner, Vultr)
+    /// and create a cloud_resource linked to the contract. The provisioning service will pick it up.
+    pub async fn try_trigger_cloud_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
         let contract = self
             .get_contract(contract_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Contract not found"))?;
 
-        // Only trigger for accepted contracts
         if contract.status.to_lowercase() != "accepted" {
             return Ok(false);
         }
 
-        // Get the offering to check provisioner_type
         let offering_db_id: i64 = contract.offering_id.parse().map_err(|_| {
             anyhow::anyhow!("Invalid offering_id in contract: {}", contract.offering_id)
         })?;
@@ -708,31 +706,65 @@ impl Database {
             .await?
             .ok_or_else(|| anyhow::anyhow!("Offering {} not found", offering_db_id))?;
 
-        // Only Hetzner provisioner type triggers cloud_resource creation
-        match offering.provisioner_type.as_deref() {
-            Some("hetzner") => {}
+        let provisioner_type = match offering.provisioner_type.as_deref() {
+            Some(t) => t,
             _ => return Ok(false),
-        }
+        };
 
-        // Find the provider's Hetzner cloud_account
         let provider_pubkey = hex::decode(&contract.provider_pubkey)
             .map_err(|_| anyhow::anyhow!("Invalid provider pubkey hex"))?;
 
-        let cloud_account_id = self
-            .find_hetzner_cloud_account_for_provider(&provider_pubkey)
-            .await?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Provider {} has no valid Hetzner cloud account configured",
-                    contract.provider_pubkey
-                )
-            })?;
+        let (cloud_account_id, server_type, location, image) = match provisioner_type {
+            "hetzner" => {
+                let cloud_account_id = self
+                    .find_hetzner_cloud_account_for_provider(&provider_pubkey)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Provider {} has no valid Hetzner cloud account configured",
+                            contract.provider_pubkey
+                        )
+                    })?;
 
-        let resolved = crate::cloud::hetzner::resolve_provisioner_config(
-            offering.provisioner_config.as_deref(),
-            &offering.datacenter_city,
-            offering.template_name.as_deref(),
-        )?;
+                let resolved = crate::cloud::hetzner::resolve_provisioner_config(
+                    offering.provisioner_config.as_deref(),
+                    &offering.datacenter_city,
+                    offering.template_name.as_deref(),
+                )?;
+
+                (
+                    cloud_account_id,
+                    resolved.server_type,
+                    resolved.location,
+                    resolved.image,
+                )
+            }
+            "vultr" => {
+                let cloud_account_id = self
+                    .find_vultr_cloud_account_for_provider(&provider_pubkey)
+                    .await?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Provider {} has no valid Vultr cloud account configured",
+                            contract.provider_pubkey
+                        )
+                    })?;
+
+                let resolved = crate::cloud::vultr::resolve_provisioner_config(
+                    offering.provisioner_config.as_deref(),
+                    &offering.datacenter_city,
+                    offering.template_name.as_deref(),
+                )?;
+
+                (
+                    cloud_account_id,
+                    resolved.plan,
+                    resolved.region,
+                    resolved.os_id.to_string(),
+                )
+            }
+            _ => return Ok(false),
+        };
 
         let name = format!("dc-recipe-{}", &hex::encode(contract_id)[..12]);
 
@@ -740,9 +772,9 @@ impl Database {
             contract_id,
             &cloud_account_id,
             &name,
-            &resolved.server_type,
-            &resolved.location,
-            &resolved.image,
+            &server_type,
+            &location,
+            &image,
             &contract.requester_ssh_pubkey,
             offering.post_provision_script.as_deref(),
         )
@@ -751,10 +783,16 @@ impl Database {
         tracing::info!(
             contract_id = %hex::encode(contract_id),
             cloud_account_id = %cloud_account_id,
-            "Triggered Hetzner provisioning for recipe contract"
+            provisioner_type = %provisioner_type,
+            "Triggered {} provisioning for recipe contract", provisioner_type
         );
 
         Ok(true)
+    }
+
+    /// Backwards-compatible alias — delegates to try_trigger_cloud_provisioning.
+    pub async fn try_trigger_hetzner_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
+        self.try_trigger_cloud_provisioning(contract_id).await
     }
 
     // ==================== Cloud Resource Provisioning Bridge ====================

@@ -3,9 +3,6 @@
 //! Implements the CloudBackend trait for Vultr Cloud.
 //!
 //! API docs: https://www.vultr.com/api/
-//!
-//! PoC for ticket #185: validates Vultr API v2 integration following HetznerBackend pattern.
-//! Dev stage should flesh out error handling, add integration tests, and wire into provisioning.
 
 use anyhow::Context;
 use async_trait::async_trait;
