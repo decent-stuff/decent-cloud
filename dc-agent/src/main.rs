@@ -7,8 +7,9 @@ use dc_agent::{
     orphan_tracker::OrphanTracker,
     post_provision::execute_post_provision_script,
     provisioner::{
-        docker::DockerProvisioner, manual::ManualProvisioner, proxmox::ProxmoxProvisioner,
-        script::ScriptProvisioner, ProvisionRequest, Provisioner,
+        digitalocean::DigitalOceanProvisioner, docker::DockerProvisioner,
+        manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
+        ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
     setup::{detect_public_ip, GatewaySetup},
@@ -2581,6 +2582,10 @@ fn create_provisioner_from_config(prov_config: &ProvisionerConfig) -> Result<Box
             info!("Creating Docker provisioner");
             Ok(Box::new(DockerProvisioner::new(docker.clone())?))
         }
+        ProvisionerConfig::DigitalOcean(do_config) => {
+            info!("Creating DigitalOcean provisioner");
+            Ok(Box::new(DigitalOceanProvisioner::new(do_config.clone())?))
+        }
     }
 }
 
@@ -2763,6 +2768,29 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 }
                 return Err(anyhow::anyhow!(
                     "Docker setup verification failed with {} error(s)",
+                    verification.errors.len()
+                ));
+            }
+        }
+        ProvisionerConfig::DigitalOcean(do_config) => {
+            println!("Provisioner: DigitalOcean");
+            println!("  Default size: {}", do_config.default_size);
+            println!("  Default region: {}", do_config.default_region);
+            println!("  Default image: {}", do_config.default_image);
+            println!("  API token: {}...", &do_config.api_token.chars().take(8).collect::<String>());
+            println!();
+            println!("Verifying DigitalOcean setup...");
+            let verification = provisioner.verify_setup().await;
+            if verification.api_reachable == Some(true) {
+                println!("  [ok] DigitalOcean API reachable");
+            }
+            if !verification.errors.is_empty() {
+                println!();
+                for error in &verification.errors {
+                    println!("  [FAILED] {}", error);
+                }
+                return Err(anyhow::anyhow!(
+                    "DigitalOcean setup verification failed with {} error(s)",
                     verification.errors.len()
                 ));
             }
