@@ -189,7 +189,6 @@ impl DockerProvisioner {
             "-c".to_string(),
             concat!(
                 "set -e; ",
-                "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openssh-server; ",
                 "mkdir -p /root/.ssh && chmod 700 /root/.ssh; ",
                 r#"[ -n "$SSH_PUBLIC_KEY" ] && printf '%s\n' "$SSH_PUBLIC_KEY" > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys; "#,
                 "mkdir -p /run/sshd; ",
@@ -608,15 +607,6 @@ impl Provisioner for DockerProvisioner {
     async fn verify_setup(&self) -> SetupVerification {
         let mut result = SetupVerification::default();
 
-        if self.config.default_image == "ubuntu:22.04" {
-            result.warnings.push(
-                "Default image 'ubuntu:22.04' is used. SSH server will be installed on first boot \
-                 via apt-get, which can be slow. Consider using a pre-built image with openssh-server \
-                 already installed."
-                    .to_string(),
-            );
-        }
-
         match self.client.ping().await {
             Ok(_) => {
                 result.api_reachable = Some(true);
@@ -672,7 +662,7 @@ impl DockerProvisioner {
     }
 
     fn new_for_mockito(url: String) -> Self {
-        Self::new_for_mockito_with_image(url, "ubuntu:22.04".to_string())
+        Self::new_for_mockito_with_image(url, "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string())
     }
 
     fn new_for_mockito_with_image(url: String, default_image: String) -> Self {

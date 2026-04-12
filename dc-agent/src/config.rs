@@ -591,7 +591,7 @@ fn default_docker_network() -> String {
 }
 
 fn default_docker_image() -> String {
-    "ubuntu:22.04".to_string()
+    "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string()
 }
 
 fn default_docker_ssh_port() -> u16 {
@@ -1807,7 +1807,7 @@ type = "docker"
         let docker = config.provisioner.as_docker().expect("Should be Docker");
         assert_eq!(docker.socket_path, "/var/run/docker.sock");
         assert_eq!(docker.network, "bridge");
-        assert_eq!(docker.default_image, "ubuntu:22.04");
+        assert_eq!(docker.default_image, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
         assert_eq!(docker.ssh_port, 22);
     }
 
@@ -1816,7 +1816,7 @@ type = "docker"
         let docker = ProvisionerConfig::Docker(DockerConfig {
             socket_path: "/var/run/docker.sock".to_string(),
             network: "bridge".to_string(),
-            default_image: "ubuntu:22.04".to_string(),
+            default_image: "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
             ssh_port: 22,
         });
         assert_eq!(docker.type_name(), "docker");
@@ -1827,7 +1827,7 @@ type = "docker"
         let config = ProvisionerConfig::Docker(DockerConfig {
             socket_path: "/var/run/docker.sock".to_string(),
             network: "bridge".to_string(),
-            default_image: "ubuntu:22.04".to_string(),
+            default_image: "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
             ssh_port: 22,
         });
         assert!(config.as_docker().is_some());
