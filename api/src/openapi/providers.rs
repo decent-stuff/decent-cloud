@@ -246,22 +246,27 @@ pub async fn contract_status_events(
                 };
 
                 let mut next_rotation_ns = state.last_rotation_event_ns;
-                if let Ok(rotation_events) = state
+                match state
                     .db
                     .get_ssh_key_rotation_events_for_user(&state.pk, state.last_rotation_event_ns)
                     .await
                 {
-                    for ev in &rotation_events {
-                        let data = serde_json::json!({
-                            "contract_id": ev.contract_id,
-                            "created_at": ev.created_at,
-                            "actor": ev.actor,
-                            "details": ev.details,
-                        });
-                        events.push(Event::message(data.to_string()).event_type(&ev.event_type));
-                        if ev.created_at > next_rotation_ns {
-                            next_rotation_ns = ev.created_at;
+                    Ok(rotation_events) => {
+                        for ev in &rotation_events {
+                            let data = serde_json::json!({
+                                "contract_id": ev.contract_id,
+                                "created_at": ev.created_at,
+                                "actor": ev.actor,
+                                "details": ev.details,
+                            });
+                            events.push(Event::message(data.to_string()).event_type(&ev.event_type));
+                            if ev.created_at > next_rotation_ns {
+                                next_rotation_ns = ev.created_at;
+                            }
                         }
+                    }
+                    Err(e) => {
+                        tracing::warn!("SSE ssh-key-rotation-events DB error: {:#}", e);
                     }
                 }
 
