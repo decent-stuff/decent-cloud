@@ -1940,7 +1940,9 @@ async fn poll_and_provision(
                             error = ?e,
                             "Failed to report provisioning started, releasing lock and skipping"
                         );
-                        if let Err(release_err) = api_client.release_lock(&contract.contract_id).await {
+                        if let Err(release_err) =
+                            api_client.release_lock(&contract.contract_id).await
+                        {
                             warn!(
                                 contract_id = %contract.contract_id,
                                 error = ?release_err,
@@ -2070,7 +2072,9 @@ async fn poll_and_provision(
                                      Contract may remain stuck in pending state."
                                 );
                             }
-                            if let Err(release_err) = api_client.release_lock(&contract.contract_id).await {
+                            if let Err(release_err) =
+                                api_client.release_lock(&contract.contract_id).await
+                            {
                                 warn!(
                                     contract_id = %contract.contract_id,
                                     error = ?release_err,
@@ -3016,10 +3020,9 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         println!("  Terminating test container...");
                         match provisioner.terminate(&instance.external_id).await {
                             Ok(()) => println!("[ok] Test container terminated successfully"),
-                            Err(e) => println!(
-                                "[WARN] Container created but termination failed: {:#}",
-                                e
-                            ),
+                            Err(e) => {
+                                println!("[WARN] Container created but termination failed: {:#}", e)
+                            }
                         }
                     }
                     Err(e) => {
@@ -3034,7 +3037,9 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                 }
             }
             _ => {
-                println!("  [skip] --test-provision only supported for Proxmox and Docker provisioners");
+                println!(
+                    "  [skip] --test-provision only supported for Proxmox and Docker provisioners"
+                );
             }
         }
     }
