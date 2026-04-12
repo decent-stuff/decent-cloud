@@ -4,7 +4,7 @@
 //! For contract-linked resources, also executes post-provision scripts and updates contract status.
 
 use crate::cloud::{
-    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType, CloudBackend,
+    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType, vultr::VultrBackend, CloudBackend,
     CreateServerRequest,
 };
 use crate::cloudflare_dns::CloudflareDns;
@@ -527,6 +527,10 @@ async fn create_backend(
         BackendType::ProxmoxApi => {
             let config = serde_json::from_str(credentials)?;
             let backend = ProxmoxApiBackend::new(config)?;
+            Ok(Box::new(backend))
+        }
+        BackendType::Vultr => {
+            let backend = VultrBackend::new(credentials.to_string())?;
             Ok(Box::new(backend))
         }
     }
