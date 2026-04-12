@@ -2473,7 +2473,7 @@ impl Database {
 
         let profile = build_preference_profile(&signals);
         let seen_ids = self.fetch_seen_offering_ids(user_pubkey).await?;
-        let candidates = self.fetch_candidate_offerings(&seen_ids, limit * 5).await?;
+        let candidates = self.fetch_candidate_offerings(&seen_ids, limit).await?;
 
         let mut scored: Vec<RecommendedOffering> = candidates
             .into_iter()
@@ -2531,7 +2531,8 @@ impl Database {
         seen_ids: &HashSet<i64>,
         limit: i64,
     ) -> Result<Vec<CandidateOffering>> {
-        let mut rows = sqlx::query_as::<_, CandidateOffering>(
+        let seen_list: Vec<i64> = seen_ids.iter().copied().collect();
+        let rows = sqlx::query_as::<_, CandidateOffering>(
             r#"SELECT o.id as offering_id, o.offer_name, lower(encode(o.pubkey, 'hex')) as pubkey,
                       o.product_type, o.monthly_price, o.currency,
                       o.datacenter_country, o.datacenter_city,
@@ -2542,14 +2543,15 @@ impl Database {
                WHERE LOWER(o.visibility) = 'public'
                  AND o.is_draft = false
                  AND o.stock_status != 'out_of_stock'
+                 AND NOT (o.id = ANY($1))
                ORDER BY p.reliability_score DESC NULLS LAST, o.monthly_price ASC
-               LIMIT $1"#,
+               LIMIT $2"#,
         )
+        .bind(&seen_list)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
-        rows.retain(|c| !seen_ids.contains(&c.offering_id));
         Ok(rows)
     }
 }
