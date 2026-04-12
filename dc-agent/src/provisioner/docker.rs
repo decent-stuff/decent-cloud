@@ -16,6 +16,64 @@ use futures::StreamExt;
 use std::collections::HashMap;
 use tracing;
 
+// ── procfs helpers ─────────────────────────────────────────────────────────
+
+/// Parse the first "model name" from `/proc/cpuinfo` content.
+///
+/// `/proc/cpuinfo` lines have the format `"model name\t: <value>"`.
+/// Returns `None` if the field is absent (e.g. on non-x86 architectures it
+/// may appear as "Model" or "Hardware"; callers should fall back gracefully).
+pub(crate) fn parse_cpu_model(cpuinfo: &str) -> Option<String> {
+    for line in cpuinfo.lines() {
+        if let Some(rest) = line.strip_prefix("model name") {
+            // rest = "\t: Intel(R) Core(TM) ..." — strip any whitespace before ':'
+            let after_colon = rest.trim_start_matches(['\t', ' ']);
+            if let Some(value) = after_colon.strip_prefix(':') {
+                let model = value.trim().to_string();
+                if !model.is_empty() {
+                    return Some(model);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Parse "MemAvailable" from `/proc/meminfo` content, returning megabytes.
+///
+/// `/proc/meminfo` reports values in kB; we convert to MB.
+pub(crate) fn parse_mem_available_mb(meminfo: &str) -> Option<u64> {
+    for line in meminfo.lines() {
+        if let Some(rest) = line.strip_prefix("MemAvailable:") {
+            // format: "MemAvailable:   12345678 kB"
+            let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
+            return Some(kb / 1024);
+        }
+    }
+    None
+}
+
+/// Read the filesystem total and available space (in bytes) for `path` by
+/// spawning `df`.  Returns `(total_bytes, avail_bytes)`.
+///
+/// This avoids pulling in `libc` or `nix` as a direct dependency.
+/// The PoC uses this; the dev stage may replace it with a proper statvfs call.
+async fn df_bytes(path: &str) -> Option<(u64, u64)> {
+    let out = tokio::process::Command::new("df")
+        .args(["--output=size,avail", "--block-size=1", path])
+        .output()
+        .await
+        .ok()?;
+    // Output format (two header-less lines after the title):
+    // "     1B-blocks     Avail\n   500000000   200000000\n"
+    let stdout = String::from_utf8(out.stdout).ok()?;
+    let data_line = stdout.lines().nth(1)?;
+    let mut parts = data_line.split_whitespace();
+    let total: u64 = parts.next()?.parse().ok()?;
+    let avail: u64 = parts.next()?.parse().ok()?;
+    Some((total, avail))
+}
+
 fn container_name(contract_id: &str) -> String {
     format!("dc-{}", contract_id)
 }
@@ -470,7 +528,7 @@ impl Provisioner for DockerProvisioner {
     }
 
     async fn collect_resources(&self) -> Option<crate::api_client::ResourceInventory> {
-        use crate::api_client::ResourceInventory;
+        use crate::api_client::{ResourceInventory, StoragePoolInfo};
 
         let info = match self.client.info().await {
             Ok(info) => info,
@@ -483,14 +541,62 @@ impl Provisioner for DockerProvisioner {
         let cpu_threads = info.ncpu.unwrap_or(0) as u32;
         let memory_total_mb = (info.mem_total.unwrap_or(0) / (1024 * 1024)) as u64;
 
+        // ── CPU model from /proc/cpuinfo ──────────────────────────────────
+        let cpu_model = match tokio::fs::read_to_string("/proc/cpuinfo").await {
+            Ok(content) => parse_cpu_model(&content),
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to read /proc/cpuinfo for CPU model");
+                None
+            }
+        };
+
+        // ── Available memory from /proc/meminfo ───────────────────────────
+        let memory_available_mb = match tokio::fs::read_to_string("/proc/meminfo").await {
+            Ok(content) => parse_mem_available_mb(&content).unwrap_or(memory_total_mb),
+            Err(e) => {
+                tracing::warn!(error = ?e, "Failed to read /proc/meminfo for available memory");
+                memory_total_mb // fall back to total
+            }
+        };
+
+        // ── Storage pool from Docker root dir ─────────────────────────────
+        let storage_pools = {
+            let docker_root = info
+                .docker_root_dir
+                .as_deref()
+                .unwrap_or("/var/lib/docker");
+            let storage_type = info
+                .driver
+                .clone()
+                .unwrap_or_else(|| "overlay2".to_string());
+
+            match df_bytes(docker_root).await {
+                Some((total_bytes, avail_bytes)) => {
+                    vec![StoragePoolInfo {
+                        name: docker_root.to_string(),
+                        total_gb: total_bytes / (1024 * 1024 * 1024),
+                        available_gb: avail_bytes / (1024 * 1024 * 1024),
+                        storage_type,
+                    }]
+                }
+                None => {
+                    tracing::warn!(
+                        "Failed to get filesystem stats for Docker root '{}'; storage pool omitted",
+                        docker_root
+                    );
+                    vec![]
+                }
+            }
+        };
+
         Some(ResourceInventory {
-            cpu_model: None,
-            cpu_cores: cpu_threads, // Docker reports logical CPUs
+            cpu_model,
+            cpu_cores: cpu_threads, // Docker reports logical CPUs; no physical-core count available
             cpu_threads,
-            cpu_mhz: None,
+            cpu_mhz: None, // not exposed by Docker API; would need /proc/cpuinfo MHz field
             memory_total_mb,
-            memory_available_mb: memory_total_mb, // Docker doesn't expose available; use total
-            storage_pools: vec![],
+            memory_available_mb,
+            storage_pools,
             gpu_devices: vec![],
             templates: vec![],
         })

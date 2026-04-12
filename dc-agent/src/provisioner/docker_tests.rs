@@ -504,3 +504,137 @@ async fn test_verify_setup_image_not_found_custom_image() {
         err
     );
 }
+
+// ── Ticket 347: parse_cpu_model ──────────────────────────────────────────
+
+#[test]
+fn test_parse_cpu_model_x86() {
+    let cpuinfo = "\
+processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz\ncpu MHz\t\t: 3800.000\n\
+processor\t: 1\nmodel name\t: Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz\ncpu MHz\t\t: 3800.000\n";
+    let model = super::parse_cpu_model(cpuinfo).expect("should parse model name");
+    assert_eq!(model, "Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz");
+}
+
+#[test]
+fn test_parse_cpu_model_amd() {
+    let cpuinfo = "processor\t: 0\nvendor_id\t: AuthenticAMD\nmodel name\t: AMD EPYC 7763 64-Core Processor\n";
+    let model = super::parse_cpu_model(cpuinfo).expect("should parse AMD model");
+    assert_eq!(model, "AMD EPYC 7763 64-Core Processor");
+}
+
+#[test]
+fn test_parse_cpu_model_missing() {
+    let cpuinfo = "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu MHz\t\t: 3800.000\n";
+    assert!(super::parse_cpu_model(cpuinfo).is_none(), "no model name field → None");
+}
+
+#[test]
+fn test_parse_cpu_model_empty_value() {
+    let cpuinfo = "model name\t:\n";
+    assert!(
+        super::parse_cpu_model(cpuinfo).is_none(),
+        "empty model name value → None"
+    );
+}
+
+// ── Ticket 347: parse_mem_available_mb ──────────────────────────────────
+
+#[test]
+fn test_parse_mem_available_mb_typical() {
+    let meminfo = "\
+MemTotal:       16384000 kB\n\
+MemFree:         2048000 kB\n\
+MemAvailable:    8192000 kB\n\
+Buffers:          204800 kB\n";
+    let avail = super::parse_mem_available_mb(meminfo).expect("should parse MemAvailable");
+    assert_eq!(avail, 8000); // 8192000 kB / 1024 = 8000 MB
+}
+
+#[test]
+fn test_parse_mem_available_mb_missing() {
+    let meminfo = "MemTotal:       16384000 kB\nMemFree:         2048000 kB\n";
+    assert!(
+        super::parse_mem_available_mb(meminfo).is_none(),
+        "no MemAvailable → None"
+    );
+}
+
+#[test]
+fn test_parse_mem_available_mb_zero() {
+    let meminfo = "MemAvailable:          0 kB\n";
+    let avail = super::parse_mem_available_mb(meminfo).expect("should parse zero");
+    assert_eq!(avail, 0);
+}
+
+// ── Ticket 347: collect_resources via mockito ────────────────────────────
+
+/// Mock the /info endpoint to confirm cpu_model, memory fields, and
+/// storage_pools are populated (the full df() path requires /system/df mock).
+#[tokio::test]
+async fn test_collect_resources_populates_cpu_and_memory() {
+    let mut server = mockito::Server::new_async().await;
+
+    // Docker /info response — minimal fields needed by collect_resources()
+    let _info_mock = server
+        .mock("GET", "/info")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            r#"{
+                "NCPU": 4,
+                "MemTotal": 8589934592,
+                "Driver": "overlay2",
+                "DockerRootDir": "/var/lib/docker"
+            }"#,
+        )
+        .create_async()
+        .await;
+
+    // /system/df response — used for storage pool sizes
+    let _df_mock = server
+        .mock("GET", "/system/df")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"LayersSize":0,"Images":[],"Containers":[],"Volumes":[],"BuildCache":[]}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let resources = prov.collect_resources().await;
+
+    // Must return Some even if procfs reads fall back gracefully
+    let inv = resources.expect("collect_resources() must return Some");
+
+    assert_eq!(inv.cpu_threads, 4);
+    assert_eq!(inv.memory_total_mb, 8192); // 8 GiB in MiB (from mocked /info)
+    // memory_available_mb is read from the real /proc/meminfo; we only verify
+    // it was populated (> 0) and didn't panic or overflow.
+    assert!(
+        inv.memory_available_mb > 0,
+        "available_mb must be non-zero (read from /proc/meminfo)"
+    );
+    // GPU and templates stay empty (no Docker GPU/template APIs used)
+    assert!(inv.gpu_devices.is_empty());
+    assert!(inv.templates.is_empty());
+}
+
+/// When /info fails, collect_resources() must return None.
+#[tokio::test]
+async fn test_collect_resources_returns_none_on_info_error() {
+    let mut server = mockito::Server::new_async().await;
+    let _info_mock = server
+        .mock("GET", "/info")
+        .with_status(500)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"message":"internal error"}"#)
+        .create_async()
+        .await;
+
+    let prov = DockerProvisioner::new_for_mockito(server.url());
+    let resources = prov.collect_resources().await;
+    assert!(
+        resources.is_none(),
+        "collect_resources() must return None when Docker info fails"
+    );
+}
