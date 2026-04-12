@@ -4280,6 +4280,384 @@ async fn test_get_offering_view_trends_with_data() {
     );
 }
 
+// ── recommendation DB method tests ────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_get_recommended_offerings_empty_history() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    insert_test_offering(&db, 60, &[0xE1u8; 32], "US", 100.0).await;
+
+    let user = vec![0xF0u8; 32];
+    let results = db
+        .get_recommended_offerings(&user, 10)
+        .await
+        .expect("get_recommended_offerings failed");
+    assert!(
+        results.is_empty(),
+        "user with no history should get empty recommendations"
+    );
+}
+
+#[tokio::test]
+async fn test_fetch_user_signal_offerings_from_views() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE1u8; 32];
+    insert_test_offering(&db, 61, &provider, "US", 100.0).await;
+    insert_test_offering(&db, 62, &provider, "DE", 200.0).await;
+
+    let user = vec![0xF1u8; 32];
+    let id1 = test_id_to_db_id(61);
+    let id2 = test_id_to_db_id(62);
+    db.record_offering_view(id1, Some(&user), &[0xC1u8; 32])
+        .await
+        .expect("view 1");
+    db.record_offering_view(id2, Some(&user), &[0xC2u8; 32])
+        .await
+        .expect("view 2");
+
+    let signals = db
+        .fetch_user_signal_offerings(&user)
+        .await
+        .expect("fetch_user_signal_offerings failed");
+    assert_eq!(signals.len(), 2, "should have 2 signal offerings");
+    assert!(
+        signals.iter().any(|s| s.datacenter_country == "US" && s.monthly_price == 100.0),
+        "US offering should appear in signals"
+    );
+    assert!(
+        signals.iter().any(|s| s.datacenter_country == "DE" && s.monthly_price == 200.0),
+        "DE offering should appear in signals"
+    );
+}
+
+#[tokio::test]
+async fn test_fetch_user_signal_offerings_from_saves() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE2u8; 32];
+    insert_test_offering(&db, 63, &provider, "JP", 150.0).await;
+
+    let user = vec![0xF2u8; 32];
+    let id1 = test_id_to_db_id(63);
+    db.save_offering(&user, id1)
+        .await
+        .expect("save offering");
+
+    let signals = db
+        .fetch_user_signal_offerings(&user)
+        .await
+        .expect("fetch_user_signal_offerings failed");
+    assert_eq!(signals.len(), 1, "saved offering should produce 1 signal");
+    assert_eq!(signals[0].datacenter_country, "JP");
+    assert_eq!(signals[0].monthly_price, 150.0);
+}
+
+#[tokio::test]
+async fn test_fetch_user_signal_offerings_dedupes_view_and_save() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE3u8; 32];
+    insert_test_offering(&db, 64, &provider, "US", 100.0).await;
+
+    let user = vec![0xF3u8; 32];
+    let id1 = test_id_to_db_id(64);
+    db.record_offering_view(id1, Some(&user), &[0xC1u8; 32])
+        .await
+        .expect("view");
+    db.save_offering(&user, id1)
+        .await
+        .expect("save");
+
+    let signals = db
+        .fetch_user_signal_offerings(&user)
+        .await
+        .expect("fetch_user_signal_offerings failed");
+    assert_eq!(
+        signals.len(),
+        1,
+        "same offering viewed AND saved should produce only 1 signal"
+    );
+}
+
+#[tokio::test]
+async fn test_fetch_seen_offering_ids_returns_correct_set() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE4u8; 32];
+    insert_test_offering(&db, 65, &provider, "US", 100.0).await;
+    insert_test_offering(&db, 66, &provider, "DE", 200.0).await;
+    insert_test_offering(&db, 67, &provider, "JP", 300.0).await;
+
+    let user = vec![0xF4u8; 32];
+    let id_viewed = test_id_to_db_id(65);
+    let id_saved = test_id_to_db_id(66);
+    let id_unseen = test_id_to_db_id(67);
+
+    db.record_offering_view(id_viewed, Some(&user), &[0xC1u8; 32])
+        .await
+        .expect("view");
+    db.save_offering(&user, id_saved)
+        .await
+        .expect("save");
+
+    let seen = db
+        .fetch_seen_offering_ids(&user)
+        .await
+        .expect("fetch_seen_offering_ids failed");
+    assert_eq!(seen.len(), 2, "should have 2 seen offering IDs");
+    assert!(seen.contains(&id_viewed), "viewed offering should be in seen set");
+    assert!(seen.contains(&id_saved), "saved offering should be in seen set");
+    assert!(
+        !seen.contains(&id_unseen),
+        "unseen offering should NOT be in seen set"
+    );
+}
+
+#[tokio::test]
+async fn test_fetch_candidate_offerings_excludes_seen() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE5u8; 32];
+    insert_test_offering(&db, 68, &provider, "US", 100.0).await;
+    insert_test_offering(&db, 69, &provider, "DE", 200.0).await;
+    insert_test_offering(&db, 70, &provider, "JP", 300.0).await;
+
+    let id_seen = test_id_to_db_id(68);
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(id_seen);
+
+    let candidates = db
+        .fetch_candidate_offerings(&seen, 50)
+        .await
+        .expect("fetch_candidate_offerings failed");
+    let candidate_ids: Vec<i64> = candidates.iter().map(|c| c.offering_id).collect();
+    assert!(
+        !candidate_ids.contains(&id_seen),
+        "seen offering must not appear in candidates"
+    );
+    assert!(
+        candidate_ids.contains(&test_id_to_db_id(69)),
+        "unseen DE offering should be a candidate"
+    );
+    assert!(
+        candidate_ids.contains(&test_id_to_db_id(70)),
+        "unseen JP offering should be a candidate"
+    );
+}
+
+#[tokio::test]
+async fn test_get_recommended_offerings_excludes_seen() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xE6u8; 32];
+    insert_test_offering(&db, 71, &provider, "US", 100.0).await;
+    insert_test_offering(&db, 72, &provider, "US", 200.0).await;
+    insert_test_offering(&db, 73, &provider, "US", 300.0).await;
+
+    let user = vec![0xF5u8; 32];
+    let id_viewed = test_id_to_db_id(71);
+    let id_saved = test_id_to_db_id(72);
+    db.record_offering_view(id_viewed, Some(&user), &[0xD1u8; 32])
+        .await
+        .expect("view 71");
+    db.save_offering(&user, id_saved)
+        .await
+        .expect("save 72");
+
+    let results = db
+        .get_recommended_offerings(&user, 10)
+        .await
+        .expect("get_recommended_offerings failed");
+
+    let result_ids: Vec<i64> = results.iter().map(|r| r.offering_id).collect();
+    assert!(
+        !result_ids.contains(&id_viewed),
+        "viewed offering must not appear in recommendations"
+    );
+    assert!(
+        !result_ids.contains(&id_saved),
+        "saved offering must not appear in recommendations"
+    );
+}
+
+#[tokio::test]
+async fn test_get_recommended_offerings_scores_and_orders() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider_a = vec![0xE7u8; 32];
+    let provider_b = vec![0xE8u8; 32];
+
+    ensure_provider_with_pool(&db, &provider_a, "US").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US Compute A', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(201i64)
+    .bind(&provider_a)
+    .bind("sig-compute-us")
+    .execute(&db.pool)
+    .await
+    .expect("insert signal compute US");
+
+    ensure_provider_with_pool(&db, &provider_b, "DE").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'DE GPU', 'USD', 500.0, 0, 'public', 'gpu', 'monthly', 'in_stock', 'DE', 'Berlin', FALSE, 0)",
+    )
+    .bind(202i64)
+    .bind(&provider_b)
+    .bind("sig-gpu-de")
+    .execute(&db.pool)
+    .await
+    .expect("insert signal GPU DE");
+
+    let provider_c = vec![0xE9u8; 32];
+    let provider_d = vec![0xE0u8; 32];
+
+    ensure_provider_with_pool(&db, &provider_c, "US").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'US Compute Match', 'USD', 105.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(203i64)
+    .bind(&provider_c)
+    .bind("candidate-compute-us")
+    .execute(&db.pool)
+    .await
+    .expect("insert candidate compute US");
+
+    ensure_provider_with_pool(&db, &provider_d, "JP").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'JP Storage', 'USD', 50.0, 0, 'public', 'storage', 'monthly', 'in_stock', 'JP', 'Tokyo', FALSE, 0)",
+    )
+    .bind(204i64)
+    .bind(&provider_d)
+    .bind("candidate-storage-jp")
+    .execute(&db.pool)
+    .await
+    .expect("insert candidate storage JP");
+
+    let user = vec![0xF6u8; 32];
+    db.record_offering_view(201, Some(&user), &[0xD1u8; 32])
+        .await
+        .expect("view compute US");
+    db.record_offering_view(202, Some(&user), &[0xD2u8; 32])
+        .await
+        .expect("view GPU DE");
+
+    let results = db
+        .get_recommended_offerings(&user, 10)
+        .await
+        .expect("get_recommended_offerings failed");
+
+    assert!(
+        !results.is_empty(),
+        "should get recommendations with viewing history"
+    );
+
+    let pos_compute_us = results.iter().position(|r| r.offering_id == 203);
+    let pos_storage_jp = results.iter().position(|r| r.offering_id == 204);
+
+    assert!(
+        pos_compute_us.is_some(),
+        "compute/US candidate should be recommended"
+    );
+    assert!(
+        pos_storage_jp.is_some(),
+        "storage/JP candidate should still be recommended (score > 0 from price)"
+    );
+    assert!(
+        pos_compute_us.unwrap() < pos_storage_jp.unwrap(),
+        "compute/US candidate (matching type + country) must rank higher than storage/JP"
+    );
+
+    let compute_rec = results.iter().find(|r| r.offering_id == 203).unwrap();
+    assert!(
+        compute_rec.score > 0.0,
+        "matching candidate should have positive score"
+    );
+}
+
+#[tokio::test]
+async fn test_fetch_candidate_offerings_excludes_drafts_and_private() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xEBu8; 32];
+    ensure_provider_with_pool(&db, &provider, "US").await;
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, $2, $3, 'Draft Offer', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, TRUE, 0)",
+    )
+    .bind(301i64)
+    .bind(&provider)
+    .bind("draft-cand")
+    .execute(&db.pool)
+    .await
+    .expect("insert draft");
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'Private Offer', 'USD', 50.0, 0, 'private', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(302i64)
+    .bind(&provider)
+    .bind("private-cand")
+    .execute(&db.pool)
+    .await
+    .expect("insert private");
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'Out of Stock', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'out_of_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(303i64)
+    .bind(&provider)
+    .bind("oos-cand")
+    .execute(&db.pool)
+    .await
+    .expect("insert out of stock");
+
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, $2, $3, 'Valid Candidate', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(304i64)
+    .bind(&provider)
+    .bind("valid-cand")
+    .execute(&db.pool)
+    .await
+    .expect("insert valid");
+
+    let seen = std::collections::HashSet::new();
+    let candidates = db
+        .fetch_candidate_offerings(&seen, 50)
+        .await
+        .expect("fetch_candidate_offerings failed");
+
+    let candidate_ids: Vec<i64> = candidates.iter().map(|c| c.offering_id).collect();
+    assert!(
+        !candidate_ids.contains(&301i64),
+        "draft offering must not appear in candidates"
+    );
+    assert!(
+        !candidate_ids.contains(&302i64),
+        "private offering must not appear in candidates"
+    );
+    assert!(
+        !candidate_ids.contains(&303i64),
+        "out-of-stock offering must not appear in candidates"
+    );
+    assert!(
+        candidate_ids.contains(&304i64),
+        "valid public in-stock offering should appear in candidates"
+    );
+}
+
 // ── trending offerings tests ───────────────────────────────────────────────────
 
 #[tokio::test]
