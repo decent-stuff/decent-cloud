@@ -49,6 +49,7 @@
 	let pendingGuidanceDismissed = $state(
 		typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pending_guidance_dismissed') === '1'
 	);
+	let recentlyCompletedRotations = $state<Set<string>>(new Set());
 
 	const spendingStats = $derived({
 		total: contracts.length,
@@ -200,6 +201,14 @@
 						? { ...c, ssh_key_rotation_requested_at_ns: undefined }
 						: c
 				);
+				const updated = new Set(recentlyCompletedRotations);
+				updated.add(rotation.contract_id);
+				recentlyCompletedRotations = updated;
+				setTimeout(() => {
+					const next = new Set(recentlyCompletedRotations);
+					next.delete(rotation.contract_id);
+					recentlyCompletedRotations = next;
+				}, 30_000);
 			} catch (e) {
 				console.error('[Rentals] Failed to parse ssh_key_rotation_complete SSE event:', e);
 			}
@@ -688,6 +697,14 @@
 										Key rotation in progress
 									</span>
 								{/if}
+								{#if recentlyCompletedRotations.has(contract.contract_id)}
+									<span
+										class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+										title="SSH key rotation completed successfully"
+									>
+										&#10003; Key rotated
+									</span>
+								{/if}
 								<!-- Cancel button for cancelable contracts -->
 								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
 									<button
@@ -874,6 +891,11 @@
 									<div class="text-xs text-amber-400 flex items-center gap-1 mt-1.5">
 										<span class="animate-spin inline-block h-2.5 w-2.5 border-t-2 border-b-2 border-amber-400 rounded-full"></span>
 										Rotating…
+									</div>
+								{/if}
+								{#if recentlyCompletedRotations.has(contract.contract_id)}
+									<div class="text-xs text-emerald-400 flex items-center gap-1 mt-1.5">
+										&#10003; Rotation complete
 									</div>
 								{/if}
 							</div>
