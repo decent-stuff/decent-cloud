@@ -119,6 +119,7 @@ pub enum ProvisionerConfig {
     Script(ScriptConfig),
     Manual(ManualConfig),
     Docker(DockerConfig),
+    DigitalOcean(DigitalOceanConfig),
 }
 
 impl ProvisionerConfig {
@@ -150,12 +151,20 @@ impl ProvisionerConfig {
         }
     }
 
+    pub fn as_digitalocean(&self) -> Option<&DigitalOceanConfig> {
+        match self {
+            ProvisionerConfig::DigitalOcean(cfg) => Some(cfg),
+            _ => None,
+        }
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             ProvisionerConfig::Proxmox(_) => "proxmox",
             ProvisionerConfig::Script(_) => "script",
             ProvisionerConfig::Manual(_) => "manual",
             ProvisionerConfig::Docker(_) => "docker",
+            ProvisionerConfig::DigitalOcean(_) => "digitalocean",
         }
     }
 }
@@ -199,6 +208,13 @@ struct RawProvisionerConfig {
     socket_path: Option<String>,
     network: Option<String>,
     default_image: Option<String>,
+    // Nested subsection for digitalocean
+    digitalocean: Option<DigitalOceanConfig>,
+    // Flat fields for digitalocean
+    api_token: Option<String>,
+    do_size: Option<String>,
+    do_region: Option<String>,
+    do_image: Option<String>,
 }
 
 fn deserialize_provisioner<'de, D>(deserializer: D) -> Result<ProvisionerConfig, D::Error>
@@ -316,9 +332,25 @@ where
             };
             Ok(ProvisionerConfig::Docker(config))
         }
+        "digitalocean" => {
+            let config = if let Some(nested) = raw.digitalocean {
+                nested
+            } else {
+                let api_token = raw
+                    .api_token
+                    .ok_or_else(|| serde::de::Error::missing_field("api_token"))?;
+                DigitalOceanConfig {
+                    api_token,
+                    default_size: raw.do_size.unwrap_or_else(default_do_size),
+                    default_region: raw.do_region.unwrap_or_else(default_do_region),
+                    default_image: raw.do_image.unwrap_or_else(default_do_image),
+                }
+            };
+            Ok(ProvisionerConfig::DigitalOcean(config))
+        }
         other => Err(serde::de::Error::unknown_variant(
             other,
-            &["proxmox", "script", "manual", "docker"],
+            &["proxmox", "script", "manual", "docker", "digitalocean"],
         )),
     }
 }
@@ -376,6 +408,22 @@ pub struct DockerConfig {
     /// SSH port inside the container (default: 22)
     #[serde(default = "default_docker_ssh_port")]
     pub ssh_port: u16,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DigitalOceanConfig {
+    /// DigitalOcean API token (required)
+    pub api_token: String,
+    /// Default droplet size slug (default: "s-1vcpu-1gb")
+    #[serde(default = "default_do_size")]
+    pub default_size: String,
+    /// Default region slug (default: "nyc3")
+    #[serde(default = "default_do_region")]
+    pub default_region: String,
+    /// Default image slug (default: "ubuntu-24-04-x64")
+    #[serde(default = "default_do_image")]
+    pub default_image: String,
 }
 
 /// Placeholder patterns that indicate unconfigured values
@@ -489,6 +537,13 @@ impl Config {
                     &mut placeholders_found,
                 );
             }
+            ProvisionerConfig::DigitalOcean(do_config) => {
+                Self::check_placeholder(
+                    &do_config.api_token,
+                    "provisioner.digitalocean.api_token",
+                    &mut placeholders_found,
+                );
+            }
         }
 
         // Check additional provisioners
@@ -518,6 +573,13 @@ impl Config {
                     Self::check_placeholder(
                         &docker.socket_path,
                         &format!("additional_provisioners[{}].socket_path", idx),
+                        &mut placeholders_found,
+                    );
+                }
+                ProvisionerConfig::DigitalOcean(do_config) => {
+                    Self::check_placeholder(
+                        &do_config.api_token,
+                        &format!("additional_provisioners[{}].api_token", idx),
                         &mut placeholders_found,
                     );
                 }
@@ -596,6 +658,18 @@ fn default_docker_image() -> String {
 
 fn default_docker_ssh_port() -> u16 {
     22
+}
+
+fn default_do_size() -> String {
+    "s-1vcpu-1gb".to_string()
+}
+
+fn default_do_region() -> String {
+    "nyc3".to_string()
+}
+
+fn default_do_image() -> String {
+    "ubuntu-24-04-x64".to_string()
 }
 
 /// Deserialize additional provisioners from [[additional_provisioners]] array
@@ -691,10 +765,26 @@ where
                 };
                 ProvisionerConfig::Docker(config)
             }
+            "digitalocean" => {
+                let config = if let Some(nested) = raw.digitalocean {
+                    nested
+                } else {
+                    let api_token = raw
+                        .api_token
+                        .ok_or_else(|| serde::de::Error::missing_field("api_token"))?;
+                    DigitalOceanConfig {
+                        api_token,
+                        default_size: raw.do_size.unwrap_or_else(default_do_size),
+                        default_region: raw.do_region.unwrap_or_else(default_do_region),
+                        default_image: raw.do_image.unwrap_or_else(default_do_image),
+                    }
+                };
+                ProvisionerConfig::DigitalOcean(config)
+            }
             other => {
                 return Err(serde::de::Error::unknown_variant(
                     other,
-                    &["proxmox", "script", "manual", "docker"],
+                    &["proxmox", "script", "manual", "docker", "digitalocean"],
                 ))
             }
         };
