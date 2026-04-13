@@ -49,13 +49,18 @@ impl VultrBackend {
 
     #[cfg(test)]
     fn new_for_mockito(base_url: String) -> Self {
+        Self::new_for_test(base_url, "test-key".to_string())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test(base_url: String, api_key: String) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .expect("Failed to build test HTTP client");
         Self {
             client,
-            api_key: "test-key".to_string(),
+            api_key,
             base_url,
             poll_interval: std::time::Duration::from_millis(10),
             ip_wait_timeout_secs: 1,
@@ -1482,4 +1487,356 @@ mod tests {
         let result = backend.validate_credentials().await;
         assert!(result.is_err(), "validate_credentials should fail on 401");
     }
+
+    #[tokio::test]
+    async fn test_start_server_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _start = server
+            .mock("POST", "/instances/inst-start/start")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let _get_running = server
+            .mock("GET", "/instances/inst-start")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-start", "active", "1.2.3.4")
+            ))
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.start_server("inst-start").await;
+        assert!(result.is_ok(), "start_server should succeed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_stop_server_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _halt = server
+            .mock("POST", "/instances/inst-stop/halt")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let _get_stopped = server
+            .mock("GET", "/instances/inst-stop")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-stop", "halted", "1.2.3.4")
+            ))
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.stop_server("inst-stop").await;
+        assert!(result.is_ok(), "stop_server should succeed: {:?}", result.err());
+    }
+
+    #[tokio::test]
+    async fn test_list_server_types_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/plans")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"plans":[{"id":"vc2-1c-1gb","vcpu_count":1,"ram":1024,"disk":25,"monthly_cost":5.0,"hourly_cost":0.007,"type":"vc2","locations":["ewr"]}]}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.list_server_types().await;
+        assert!(result.is_ok(), "list_server_types should succeed");
+        let types = result.unwrap();
+        assert_eq!(types.len(), 1);
+        assert_eq!(types[0].id, "vc2-1c-1gb");
+    }
+
+    #[tokio::test]
+    async fn test_list_locations_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/regions")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"regions":[{"id":"ewr","city":"Piscataway","country":"US"},{"id":"ams","city":"Amsterdam","country":"NL"}]}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.list_locations().await;
+        assert!(result.is_ok(), "list_locations should succeed");
+        let locations = result.unwrap();
+        assert_eq!(locations.len(), 2);
+        assert_eq!(locations[0].id, "ewr");
+        assert_eq!(locations[1].city, "Amsterdam");
+    }
+
+    #[tokio::test]
+    async fn test_list_images_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/os")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"os":[{"id":2284,"name":"Ubuntu 24.04 LTS x64","arch":"x64","family":"ubuntu"},{"id":159,"name":"Custom ISO","arch":"x64","family":"iso"}]}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.list_images().await;
+        assert!(result.is_ok(), "list_images should succeed");
+        let images = result.unwrap();
+        assert_eq!(images.len(), 1, "iso family should be filtered out");
+        assert_eq!(images[0].id, "2284");
+    }
+
+    #[tokio::test]
+    async fn test_delete_ssh_key_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("DELETE", "/ssh-keys/key-123")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.delete_ssh_key("key-123").await;
+        assert!(result.is_ok(), "delete_ssh_key should succeed on 204");
+    }
+
+    #[tokio::test]
+    async fn test_delete_ssh_key_not_found_is_ok() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("DELETE", "/ssh-keys/key-gone")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.delete_ssh_key("key-gone").await;
+        assert!(result.is_ok(), "delete_ssh_key should return Ok for 404");
+    }
+
+    #[tokio::test]
+    async fn test_get_catalog_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = server
+            .mock("GET", "/plans")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"plans":[{"id":"vc2-1c-1gb","vcpu_count":1,"ram":1024,"disk":25,"monthly_cost":5.0,"hourly_cost":0.007,"type":"vc2","locations":["ewr"]}]}"#)
+            .create_async()
+            .await;
+
+        let _regions = server
+            .mock("GET", "/regions")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"regions":[{"id":"ewr","city":"Piscataway","country":"US"}]}"#)
+            .create_async()
+            .await;
+
+        let _os = server
+            .mock("GET", "/os")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"os":[{"id":2284,"name":"Ubuntu 24.04 LTS x64","arch":"x64","family":"ubuntu"}]}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.get_catalog().await;
+        assert!(result.is_ok(), "get_catalog should succeed");
+        let catalog = result.unwrap();
+        assert_eq!(catalog.server_types.len(), 1);
+        assert_eq!(catalog.locations.len(), 1);
+        assert_eq!(catalog.images.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_new_for_test_accepts_custom_api_key() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/account")
+            .match_header("Authorization", "Bearer my-custom-key")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"account":{"name":"Test","email":"test@example.com"}}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_test(server.url(), "my-custom-key".to_string());
+        let result = backend.validate_credentials().await;
+        assert!(result.is_ok(), "new_for_test should use custom api_key");
+    }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+
+    fn get_api_key() -> Option<String> {
+        std::env::var("VULTR_API_KEY").ok().filter(|k| !k.is_empty())
+    }
+
+    fn backend_from_env() -> VultrBackend {
+        let api_key = get_api_key().expect("VULTR_API_KEY not set");
+        VultrBackend::new(api_key).expect("Failed to create VultrBackend")
+    }
+
+    fn backend_with_short_timeouts() -> VultrBackend {
+        let api_key = get_api_key().expect("VULTR_API_KEY not set");
+        VultrBackend::new(api_key).expect("Failed to create VultrBackend")
+    }
+
+    macro_rules! vultr_integration_test {
+        ($name:ident, $body:expr) => {
+            #[tokio::test]
+            async fn $name() {
+                if get_api_key().is_none() {
+                    eprintln!(
+                        "skipping {} — VULTR_API_KEY not set",
+                        stringify!($name)
+                    );
+                    return;
+                }
+                $body
+            }
+        };
+    }
+
+    vultr_integration_test!(test_real_validate_credentials, {
+        let backend = backend_from_env();
+        backend
+            .validate_credentials()
+            .await
+            .expect("credential validation failed");
+    });
+
+    vultr_integration_test!(test_real_list_server_types, {
+        let backend = backend_from_env();
+        let plans = backend
+            .list_server_types()
+            .await
+            .expect("list_server_types failed");
+        assert!(!plans.is_empty(), "should have at least one plan");
+    });
+
+    vultr_integration_test!(test_real_list_locations, {
+        let backend = backend_from_env();
+        let regions = backend
+            .list_locations()
+            .await
+            .expect("list_locations failed");
+        assert!(!regions.is_empty(), "should have at least one region");
+    });
+
+    vultr_integration_test!(test_real_list_images, {
+        let backend = backend_from_env();
+        let images = backend.list_images().await.expect("list_images failed");
+        assert!(!images.is_empty(), "should have at least one image");
+    });
+
+    vultr_integration_test!(test_real_get_catalog, {
+        let backend = backend_from_env();
+        let catalog = backend.get_catalog().await.expect("get_catalog failed");
+        assert!(!catalog.server_types.is_empty());
+        assert!(!catalog.locations.is_empty());
+        assert!(!catalog.images.is_empty());
+    });
+
+    vultr_integration_test!(test_real_ssh_key_lifecycle, {
+        let backend = backend_from_env();
+        let key_name = format!("dc-inttest-{}", chrono::Utc::now().timestamp());
+        let ssh_pubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIntegrationTestKeyForVultrDC";
+
+        let create_resp = backend
+            .request_builder(
+                reqwest::Method::POST,
+                "/ssh-keys",
+            )
+            .json(&CreateSshKeyRequest {
+                name: key_name.clone(),
+                ssh_key: ssh_pubkey.to_string(),
+            })
+            .send()
+            .await
+            .expect("SSH key create request failed");
+
+        assert!(
+            create_resp.status().is_success(),
+            "SSH key creation failed: {}",
+            create_resp.status()
+        );
+
+        let key_data: SshKeyResponse = create_resp.json().await.expect("bad SSH key response");
+        let key_id = key_data.ssh_key.id;
+        assert!(!key_id.is_empty(), "SSH key ID should not be empty");
+
+        backend
+            .delete_ssh_key(&key_id)
+            .await
+            .expect("SSH key deletion failed");
+    });
+
+    vultr_integration_test!(test_real_instance_lifecycle, {
+        let backend = backend_with_short_timeouts();
+        let label = format!("dc-inttest-{}", chrono::Utc::now().timestamp() % 100000);
+
+        let ssh_pubkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIntegrationTestKeyForVultrDC";
+
+        let create_req = CreateServerRequest {
+            name: label.clone(),
+            server_type: "vc2-1c-1gb".to_string(),
+            location: "ewr".to_string(),
+            image: "2284".to_string(),
+            ssh_pubkey: ssh_pubkey.to_string(),
+        };
+
+        let result = backend
+            .create_server(create_req)
+            .await
+            .expect("instance creation failed");
+
+        assert_eq!(result.server.name, label);
+        assert!(
+            result.server.public_ip.is_some(),
+            "server should have a public IP"
+        );
+        assert_eq!(result.ssh_key_id.as_ref().unwrap().len(), 36);
+
+        let server_id = result.server.id.clone();
+        let ssh_key_id = result.ssh_key_id.unwrap();
+
+        let stop_result = backend.stop_server(&server_id).await;
+        assert!(stop_result.is_ok(), "stop_server failed: {:?}", stop_result.err());
+
+        let start_result = backend.start_server(&server_id).await;
+        assert!(start_result.is_ok(), "start_server failed: {:?}", start_result.err());
+
+        backend
+            .delete_server(&server_id)
+            .await
+            .expect("delete_server failed");
+        backend
+            .delete_ssh_key(&ssh_key_id)
+            .await
+            .expect("delete_ssh_key failed");
+    });
 }
