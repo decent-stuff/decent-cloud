@@ -1129,11 +1129,10 @@ async fn integration_wait_for_droplet_ip() {
         name, droplet_id
     );
 
-    let wait_result = async {
+    let wait_result: Result<Droplet, anyhow::Error> = async {
         let active = provisioner
             .wait_for_droplet_active(droplet_id, 60)
-            .await
-            .expect("Droplet should become active");
+            .await?;
         println!(
             "Droplet {} is active (has_ipv4={}, has_ipv6={})",
             droplet_id,
@@ -1143,8 +1142,7 @@ async fn integration_wait_for_droplet_ip() {
 
         let with_ip = provisioner
             .wait_for_droplet_ip(droplet_id, 12)
-            .await
-            .expect("wait_for_droplet_ip should return a droplet with IP");
+            .await?;
 
         let ipv4 = with_ip.public_ipv4();
         let ipv6 = with_ip.public_ipv6();
@@ -1162,16 +1160,19 @@ async fn integration_wait_for_droplet_ip() {
             println!("Droplet {} got IPv6: {}", droplet_id, ip);
         }
 
-        with_ip
+        Ok(with_ip)
     }
     .await;
 
     println!("Cleaning up droplet {} ...", droplet_id);
-    provisioner
-        .terminate(&droplet_id.to_string())
-        .await
-        .expect("Failed to clean up test droplet");
-    println!("Droplet {} deleted", droplet_id);
+    if let Err(e) = provisioner.terminate(&droplet_id.to_string()).await {
+        eprintln!(
+            "WARNING: Failed to clean up test droplet {}: {:?}",
+            droplet_id, e
+        );
+    } else {
+        println!("Droplet {} deleted", droplet_id);
+    }
 
-    drop(wait_result);
+    wait_result.expect("wait_for_droplet_ip test failed");
 }
