@@ -19,6 +19,7 @@ use crate::cloud::types::{
 
 const VULTR_API_BASE: &str = "https://api.vultr.com/v2";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
+const IP_ASSIGNMENT_TIMEOUT_SECS: u64 = 120;
 
 pub struct VultrBackend {
     client: Client,
@@ -559,11 +560,35 @@ impl CloudBackend for VultrBackend {
             anyhow::bail!("Server failed to reach running state: {:?}", server.status);
         }
 
-        if let Some(ref ip) = server.public_ip {
-            if !self.wait_for_ssh_reachable(ip, 120).await? {
-                cleanup_server_and_key(self, &server.id, &ssh_key_id).await;
-                anyhow::bail!("SSH port not reachable after 120s");
+        if server.public_ip.is_none() {
+            let ip_wait_start = std::time::Instant::now();
+            let ip_timeout = std::time::Duration::from_secs(IP_ASSIGNMENT_TIMEOUT_SECS);
+            while server.public_ip.is_none() && ip_wait_start.elapsed() < ip_timeout {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                match self.get_server(&server.id).await {
+                    Ok(s) => server = s,
+                    Err(e) => {
+                        tracing::warn!("Error polling server {} for IP: {:#}", server.id, e);
+                    }
+                }
             }
+        }
+
+        let ip = match server.public_ip {
+            Some(ref ip) => ip.clone(),
+            None => {
+                cleanup_server_and_key(self, &server.id, &ssh_key_id).await;
+                anyhow::bail!(
+                    "Server {} reached running state but never got a public IP within {}s",
+                    server.id,
+                    IP_ASSIGNMENT_TIMEOUT_SECS
+                );
+            }
+        };
+
+        if !self.wait_for_ssh_reachable(&ip, 120).await? {
+            cleanup_server_and_key(self, &server.id, &ssh_key_id).await;
+            anyhow::bail!("SSH port not reachable after 120s");
         }
 
         Ok(ProvisionResult {

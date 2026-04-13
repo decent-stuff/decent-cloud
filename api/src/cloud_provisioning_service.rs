@@ -214,10 +214,17 @@ async fn provision_one(
 
     let result = backend.create_server(request).await?;
 
-    let public_ip = result
-        .server
-        .public_ip
-        .ok_or_else(|| anyhow::anyhow!("Server has no public IP"))?;
+    let public_ip = match result.server.public_ip {
+        Some(ip) => ip,
+        None => {
+            let ssh_key_id = result.ssh_key_id.unwrap_or_default();
+            cleanup_failed_provision(&*backend, &result.server.id, &ssh_key_id).await;
+            anyhow::bail!(
+                "Server {} has no public IP after provisioning",
+                result.server.id
+            );
+        }
+    };
     let ssh_key_id = result.ssh_key_id.unwrap_or_default();
 
     // Execute post-provision script if present (recipe provisioning)
