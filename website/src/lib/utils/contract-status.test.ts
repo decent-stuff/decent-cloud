@@ -52,14 +52,14 @@ describe('getContractStatusBadge', () => {
 		const badge = getContractStatusBadge('failed');
 		expect(badge.text).toBe('Failed');
 		expect(badge.icon).toBe('❗');
-		expect(badge.class).toContain('red');
+		expect(badge.class).toContain('danger');
 	});
 
 	it('shows Rejected badge for rejected status', () => {
 		const badge = getContractStatusBadge('rejected');
 		expect(badge.text).toBe('Rejected');
 		expect(badge.icon).toBe('🔴');
-		expect(badge.class).toContain('red');
+		expect(badge.class).toContain('danger');
 	});
 
 	it('treats failed status case-insensitively', () => {

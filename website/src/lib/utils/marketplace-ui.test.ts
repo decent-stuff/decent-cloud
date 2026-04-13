@@ -20,9 +20,9 @@ describe('buildQuickPillClass', () => {
 
 	it('applies active color treatment by color key', () => {
 		const cls = buildQuickPillClass('preset', true, 'sky');
-		expect(cls).toContain('bg-sky-500/20');
-		expect(cls).toContain('border-sky-500/50');
-		expect(cls).toContain('text-sky-300');
+		expect(cls).toContain('bg-info/20');
+		expect(cls).toContain('border-info/50');
+		expect(cls).toContain('text-info');
 	});
 
 	it('falls back to neutral active style for unknown color key', () => {

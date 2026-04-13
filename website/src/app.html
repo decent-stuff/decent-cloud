@@ -3,7 +3,7 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="theme-color" content="#53def5" />
+		<meta name="theme-color" content="#0a0a0a" />
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="default">
 		<link rel="manifest" href="/manifest.json">
@@ -13,6 +13,15 @@
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<script>
+			(function(){
+				try{
+					var t=localStorage.getItem('dc-theme');
+					if(!t){t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';}
+					if(t==='light'){document.documentElement.setAttribute('data-theme','light');}
+				}catch(e){}
+			})();
+		</script>
 		<div style="display: contents">%sveltekit.body%</div>
 		<script>
 			if ('serviceWorker' in navigator) {

@@ -10,9 +10,9 @@ function parseJsonField<T>(field: string | undefined | null): T[] {
 }
 
 function getFeedbackColor(pct: number): string {
-	if (pct >= 80) return 'text-green-400';
-	if (pct >= 60) return 'text-yellow-400';
-	return 'text-red-400';
+	if (pct >= 80) return 'text-success';
+	if (pct >= 60) return 'text-warning';
+	return 'text-danger';
 }
 
 describe('Provider Profile: parseJsonField', () => {
@@ -45,18 +45,18 @@ describe('Provider Profile: parseJsonField', () => {
 });
 
 describe('Provider Profile: feedback color classification', () => {
-	it('green for >= 80%', () => {
-		expect(getFeedbackColor(80)).toBe('text-green-400');
-		expect(getFeedbackColor(100)).toBe('text-green-400');
+	it('success for >= 80%', () => {
+		expect(getFeedbackColor(80)).toBe('text-success');
+		expect(getFeedbackColor(100)).toBe('text-success');
 	});
 
-	it('yellow for 60-79%', () => {
-		expect(getFeedbackColor(60)).toBe('text-yellow-400');
-		expect(getFeedbackColor(79)).toBe('text-yellow-400');
+	it('warning for 60-79%', () => {
+		expect(getFeedbackColor(60)).toBe('text-warning');
+		expect(getFeedbackColor(79)).toBe('text-warning');
 	});
 
-	it('red for < 60%', () => {
-		expect(getFeedbackColor(59)).toBe('text-red-400');
-		expect(getFeedbackColor(0)).toBe('text-red-400');
+	it('danger for < 60%', () => {
+		expect(getFeedbackColor(59)).toBe('text-danger');
+		expect(getFeedbackColor(0)).toBe('text-danger');
 	});
 });

@@ -14,10 +14,10 @@ const QUICK_PILL_INACTIVE =
 
 const ACTIVE_BY_COLOR: Record<string, string> = {
 	neutral: 'bg-primary-500/20 text-primary-300 border-primary-500/50',
-	amber: 'bg-amber-500/20 text-amber-300 border-amber-500/50',
-	purple: 'bg-purple-500/20 text-purple-300 border-purple-500/50',
-	emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50',
-	sky: 'bg-sky-500/20 text-sky-300 border-sky-500/50',
+	amber: 'bg-warning/20 text-warning border-warning/50',
+	purple: 'bg-info/20 text-info border-info/50',
+	emerald: 'bg-success/20 text-success border-success/50',
+	sky: 'bg-info/20 text-info border-info/50',
 };
 
 function activeColorClass(color: QuickPillColor | string): string {

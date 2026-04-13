@@ -64,6 +64,70 @@
 		--font-mono: 'JetBrains Mono', ui-monospace, monospace;
 	}
 
+	/* Light theme overrides - flips the dark "Industrial Luxe" palette */
+	:root[data-theme='light'] {
+		--color-base: #ffffff;
+		--color-surface: #f7f6f5;
+		--color-surface-elevated: #eeeded;
+		--color-surface-hover: #e8e7e6;
+		--color-surface-active: #dddcdb;
+
+		--color-neutral-50: #141413;
+		--color-neutral-100: #1e1d1c;
+		--color-neutral-200: #2a2928;
+		--color-neutral-300: #3a3938;
+		--color-neutral-400: #525150;
+		--color-neutral-500: #737270;
+		--color-neutral-600: #a8a7a5;
+		--color-neutral-700: #dddcda;
+		--color-neutral-800: #f0efee;
+		--color-neutral-900: #fafaf9;
+
+		--color-success: #2e7d46;
+		--color-warning: #9a6f1f;
+		--color-danger: #b33a3a;
+		--color-info: #2c5f8f;
+
+		--color-glass: #000000;
+		--color-glass-border: #000000;
+	}
+
+	:root[data-theme='light'] .text-white {
+		color: var(--color-neutral-100);
+	}
+
+	:root[data-theme='light'] .border-white {
+		border-color: var(--color-neutral-100);
+	}
+
+	:root[data-theme='light'] .bg-white {
+		background-color: var(--color-neutral-100);
+	}
+
+	:root[data-theme='light'] .hover\:text-white:hover {
+		color: var(--color-neutral-100);
+	}
+
+	:root[data-theme='light'] .hover\:border-white:hover {
+		border-color: var(--color-neutral-400);
+	}
+
+	:root[data-theme='light'] .hover\:border-white\/40:hover {
+		border-color: rgb(var(--color-neutral-400) / 0.4);
+	}
+
+	:root[data-theme='light'] .hover\:bg-white\/\[0\.03\]:hover {
+		background-color: rgb(0 0 0 / 0.03);
+	}
+
+	:root[data-theme='light'] .hover\:bg-white\/\[0\.12\]:hover {
+		background-color: rgb(0 0 0 / 0.12);
+	}
+
+	:root[data-theme='light'] .bg-white\/30 {
+		background-color: rgb(0 0 0 / 0.3);
+	}
+
 	html {
 		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 		-webkit-font-smoothing: antialiased;
@@ -73,6 +137,11 @@
 	body {
 		@apply bg-base text-neutral-100 min-h-screen;
 		font-feature-settings: 'kern' 1, 'liga' 1;
+		transition: background-color 0.2s ease, color 0.2s ease;
+	}
+
+	:root[data-theme='light'] body {
+		@apply text-neutral-900;
 	}
 
 	/* Headings - Bold, commanding */
@@ -505,6 +574,10 @@ select option {
 	padding: 8px;
 }
 
+:root[data-theme='light'] select option {
+	color: var(--color-neutral-900);
+}
+
 /* === Focus Styles === */
 :focus-visible {
 	outline: 1px solid var(--color-primary-500);
@@ -575,3 +648,20 @@ select option {
 .stagger-3 { animation-delay: 0.3s; }
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
+
+/* === Theme Transition === */
+@media (prefers-reduced-motion: no-preference) {
+	:root[data-theme='light'],
+	:root[data-theme='light'] body,
+	:root[data-theme='light'] .card,
+	:root[data-theme='light'] .card-glass,
+	:root[data-theme='light'] .metric-card,
+	:root[data-theme='light'] .feature-card,
+	:root[data-theme='light'] .icon-box,
+	:root[data-theme='light'] .nav-item,
+	:root[data-theme='light'] .btn-primary,
+	:root[data-theme='light'] .btn-secondary,
+	:root[data-theme='light'] .input {
+		transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+	}
+}

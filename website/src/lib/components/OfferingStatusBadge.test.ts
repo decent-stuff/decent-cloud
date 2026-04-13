@@ -16,10 +16,10 @@ function getPrimaryStatus(
 	resellerName?: string
 ): { label: string; color: string } | null {
 	if (!providerOnline) {
-		return { label: "Offline", color: "bg-red-500/20 text-red-400 border-red-500/30" };
+		return { label: "Offline", color: "bg-danger/20 text-danger border-danger/30" };
 	}
 	if (isDemo) {
-		return { label: "Demo", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" };
+		return { label: "Demo", color: "bg-warning/20 text-warning border-warning/30" };
 	}
 	if (isReseller && resellerName) {
 		return { label: `Via ${resellerName}`, color: "bg-primary-500/20 text-primary-400 border-primary-500/30" };
@@ -28,21 +28,21 @@ function getPrimaryStatus(
 }
 
 function getTrustColor(score: number, hasCriticalFlags: boolean): string {
-	if (hasCriticalFlags) return 'bg-red-500/20 text-red-400 border-red-500/30';
-	if (score >= 80) return 'bg-green-500/20 text-green-400 border-green-500/30';
-	if (score >= 60) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-	return 'bg-red-500/20 text-red-400 border-red-500/30';
+	if (hasCriticalFlags) return 'bg-danger/20 text-danger border-danger/30';
+	if (score >= 80) return 'bg-success/20 text-success border-success/30';
+	if (score >= 60) return 'bg-warning/20 text-warning border-warning/30';
+	return 'bg-danger/20 text-danger border-danger/30';
 }
 
 describe('OfferingStatusBadge: primary status priority', () => {
 	it('returns Offline when provider is offline', () => {
 		const status = getPrimaryStatus(false, false, false);
-		expect(status).toEqual({ label: "Offline", color: expect.stringContaining("red") });
+		expect(status).toEqual({ label: "Offline", color: expect.stringContaining("danger") });
 	});
 
 	it('returns Demo when offering is a demo and provider is online', () => {
 		const status = getPrimaryStatus(true, true, false);
-		expect(status).toEqual({ label: "Demo", color: expect.stringContaining("amber") });
+		expect(status).toEqual({ label: "Demo", color: expect.stringContaining("warning") });
 	});
 
 	it('returns reseller badge when via reseller and no higher priority status', () => {
@@ -102,23 +102,23 @@ describe('OfferingStatusBadge: subscription label', () => {
 });
 
 describe('OfferingStatusBadge: trust score colors', () => {
-	it('returns green for score >= 80 without flags', () => {
-		expect(getTrustColor(80, false)).toContain("green");
-		expect(getTrustColor(100, false)).toContain("green");
+	it('returns success for score >= 80 without flags', () => {
+		expect(getTrustColor(80, false)).toContain("success");
+		expect(getTrustColor(100, false)).toContain("success");
 	});
 
-	it('returns yellow for score 60-79 without flags', () => {
-		expect(getTrustColor(60, false)).toContain("yellow");
-		expect(getTrustColor(79, false)).toContain("yellow");
+	it('returns warning for score 60-79 without flags', () => {
+		expect(getTrustColor(60, false)).toContain("warning");
+		expect(getTrustColor(79, false)).toContain("warning");
 	});
 
-	it('returns red for score < 60 without flags', () => {
-		expect(getTrustColor(59, false)).toContain("red");
-		expect(getTrustColor(0, false)).toContain("red");
+	it('returns danger for score < 60 without flags', () => {
+		expect(getTrustColor(59, false)).toContain("danger");
+		expect(getTrustColor(0, false)).toContain("danger");
 	});
 
-	it('returns red for any score with critical flags', () => {
-		expect(getTrustColor(100, true)).toContain("red");
-		expect(getTrustColor(80, true)).toContain("red");
+	it('returns danger for any score with critical flags', () => {
+		expect(getTrustColor(100, true)).toContain("danger");
+		expect(getTrustColor(80, true)).toContain("danger");
 	});
 });

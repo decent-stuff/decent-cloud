@@ -1744,26 +1744,26 @@
 					{#each [0, 0.5, 1] as frac}
 						{@const yVal = Math.round(maxBytes * frac)}
 						{@const y = toY(yVal)}
-						<line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="#374151" stroke-width="0.5"/>
-						<text x={padL - 4} y={y + 4} text-anchor="end" class="text-[9px]" fill="#6b7280" font-size="9">{formatBytes(yVal)}</text>
+						<line x1={padL} y1={y} x2={chartW - padR} y2={y} stroke="var(--color-neutral-700)" stroke-width="0.5"/>
+						<text x={padL - 4} y={y + 4} text-anchor="end" class="text-[9px]" fill="var(--color-neutral-500)" font-size="9">{formatBytes(yVal)}</text>
 					{/each}
 					<!-- bytes_in filled area -->
 					{#if n > 1}
 						{@const areaIn = `M${toX(0)},${padT + plotH} ` + points.map((p, i) => `L${toX(i)},${toY(Number(p.bytesIn))}`).join(' ') + ` L${toX(n-1)},${padT + plotH} Z`}
 						{@const areaOut = `M${toX(0)},${padT + plotH} ` + points.map((p, i) => `L${toX(i)},${toY(Number(p.bytesOut))}`).join(' ') + ` L${toX(n-1)},${padT + plotH} Z`}
-						<path d={areaIn} fill="#3b82f6" fill-opacity="0.15"/>
-						<path d={areaOut} fill="#10b981" fill-opacity="0.15"/>
-						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesIn))}`).join(' ')} fill="none" stroke="#3b82f6" stroke-width="1.5"/>
-						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesOut))}`).join(' ')} fill="none" stroke="#10b981" stroke-width="1.5"/>
+						<path d={areaIn} fill="var(--color-info)" fill-opacity="0.15"/>
+						<path d={areaOut} fill="var(--color-success)" fill-opacity="0.15"/>
+						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesIn))}`).join(' ')} fill="none" stroke="var(--color-info)" stroke-width="1.5"/>
+						<polyline points={points.map((p, i) => `${toX(i)},${toY(Number(p.bytesOut))}`).join(' ')} fill="none" stroke="var(--color-success)" stroke-width="1.5"/>
 					{:else}
 						<!-- Single data point: render dots -->
-						<circle cx={toX(0)} cy={toY(Number(points[0].bytesIn))} r="3" fill="#3b82f6"/>
-						<circle cx={toX(0)} cy={toY(Number(points[0].bytesOut))} r="3" fill="#10b981"/>
+						<circle cx={toX(0)} cy={toY(Number(points[0].bytesIn))} r="3" fill="var(--color-info)"/>
+						<circle cx={toX(0)} cy={toY(Number(points[0].bytesOut))} r="3" fill="var(--color-success)"/>
 					{/if}
 					<!-- X axis labels (show at most 5 evenly spaced) -->
 					{#each points as p, i}
 						{#if n <= 5 || i % Math.ceil((n - 1) / 4) === 0 || i === n - 1}
-							<text x={toX(i)} y={chartH - 4} text-anchor="middle" fill="#6b7280" font-size="8">{formatTime(Number(p.recordedAtNs))}</text>
+							<text x={toX(i)} y={chartH - 4} text-anchor="middle" fill="var(--color-neutral-500)" font-size="8">{formatTime(Number(p.recordedAtNs))}</text>
 						{/if}
 					{/each}
 				</svg>

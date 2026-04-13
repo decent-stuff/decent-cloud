@@ -8,18 +8,18 @@ const STATUS_BADGES: Record<string, ContractStatusBadge> = {
 	// Payment-aware statuses (for 'requested' + payment_status combinations)
 	'awaiting_payment': {
 		text: 'Awaiting Payment',
-		class: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+		class: 'bg-warning/20 text-warning border-warning/30',
 		icon: '💳'
 	},
 	'payment_failed': {
 		text: 'Payment Failed',
-		class: 'bg-red-500/20 text-red-400 border-red-500/30',
+		class: 'bg-danger/20 text-danger border-danger/30',
 		icon: '❌'
 	},
 	// Standard contract statuses
 	requested: {
 		text: 'Pending Provider',
-		class: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+		class: 'bg-warning/20 text-warning border-warning/30',
 		icon: '⏳'
 	},
 	pending: {
@@ -29,44 +29,44 @@ const STATUS_BADGES: Record<string, ContractStatusBadge> = {
 	},
 	accepted: {
 		text: 'Accepted',
-		class: 'bg-green-500/20 text-green-400 border-green-500/30',
+		class: 'bg-success/20 text-success border-success/30',
 		icon: '🟢'
 	},
 	provisioning: {
 		text: 'Provisioning (5–15 min)',
-		class: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+		class: 'bg-info/20 text-info border-info/30',
 		icon: '⚙️'
 	},
 	provisioned: {
 		text: 'Provisioned',
-		class: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+		class: 'bg-success/20 text-success border-success/30',
 		icon: '✅'
 	},
 	active: {
 		text: 'Active',
-		class: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+		class: 'bg-success/20 text-success border-success/30',
 		icon: '✅'
 	},
 	rejected: {
 		text: 'Rejected',
-		class: 'bg-red-500/20 text-red-400 border-red-500/30',
+		class: 'bg-danger/20 text-danger border-danger/30',
 		icon: '🔴'
 	},
 	failed: {
 		text: 'Failed',
-		class: 'bg-red-500/20 text-red-400 border-red-500/30',
+		class: 'bg-danger/20 text-danger border-danger/30',
 		icon: '❗'
 	},
 	cancelled: {
 		text: 'Cancelled',
-		class: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+		class: 'bg-neutral-700/20 text-neutral-400 border-neutral-700/30',
 		icon: '⚫'
 	}
 };
 
 const DEFAULT_BADGE: ContractStatusBadge = {
 	text: 'Unknown',
-	class: 'bg-gray-500/20 text-gray-300 border-gray-500/30',
+	class: 'bg-neutral-700/20 text-neutral-300 border-neutral-700/30',
 	icon: '⚪'
 };
 
