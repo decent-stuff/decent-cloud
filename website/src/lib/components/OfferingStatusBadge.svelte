@@ -40,10 +40,10 @@
 
 	function getPrimaryStatus(): { label: string; color: string } | null {
 		if (providerOnline === false) {
-			return { label: "Offline", color: "bg-red-500/20 text-red-400 border-red-500/30" };
+			return { label: "Offline", color: "bg-danger/20 text-danger border-danger/30" };
 		}
 		if (isDemo) {
-			return { label: "Demo", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" };
+			return { label: "Demo", color: "bg-warning/20 text-warning border-warning/30" };
 		}
 		if (isReseller && resellerName) {
 			return { label: `Via ${resellerName}`, color: "bg-primary-500/20 text-primary-400 border-primary-500/30" };
@@ -80,7 +80,7 @@
 			class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded border {primaryStatus.color}"
 		>
 			{#if providerOnline === false}
-				<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>
+				<span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
 			{/if}
 			{primaryStatus.label}
 			{#if isReseller && resellerCommission}
@@ -89,7 +89,7 @@
 		</div>
 	{:else if trustScore !== undefined}
 		<div
-			class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded border {hasCriticalFlags ? 'bg-red-500/20 text-red-400 border-red-500/30' : trustScore >= 80 ? 'bg-green-500/20 text-green-400 border-green-500/30' : trustScore >= 60 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}"
+			class="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs rounded border {hasCriticalFlags ? 'bg-danger/20 text-danger border-danger/30' : trustScore >= 80 ? 'bg-success/20 text-success border-success/30' : trustScore >= 60 ? 'bg-warning/20 text-warning border-warning/30' : 'bg-danger/20 text-danger border-danger/30'}"
 		>
 			{#if hasCriticalFlags}
 				<Icon name="alert" size={12} />

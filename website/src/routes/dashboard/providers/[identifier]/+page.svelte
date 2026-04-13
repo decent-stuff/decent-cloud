@@ -173,9 +173,9 @@
 
 	function reliabilityTone(score: number | undefined): string {
 		if (score === undefined || score === null) return 'text-neutral-300';
-		if (score >= 95) return 'text-emerald-400';
-		if (score >= 85) return 'text-yellow-300';
-		return 'text-red-400';
+		if (score >= 95) return 'text-success';
+		if (score >= 85) return 'text-warning';
+		return 'text-danger';
 	}
 </script>
 
@@ -198,7 +198,7 @@
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else if error && !profile && offerings.length === 0}
-		<div class="bg-red-500/20 border border-red-500/30 p-6 text-center">
+					<div class="bg-danger/20 border border-danger/30 p-6 text-center">
 			<div class="icon-box mx-auto mb-4">
 				<Icon name="search" size={20} />
 			</div>
@@ -361,7 +361,7 @@
 					</div>
 					<div>
 						<div class="data-label mb-1">Breach Days</div>
-						<div class="text-2xl font-semibold {providerSlaSummary.breachDays30d > 0 ? 'text-red-400' : 'text-emerald-400'}">
+						<div class="text-2xl font-semibold {providerSlaSummary.breachDays30d > 0 ? 'text-danger' : 'text-success'}">
 							{providerSlaSummary.breachDays30d}
 						</div>
 						<div class="text-xs text-neutral-500 mt-1">across {providerSlaSummary.reports30d} reported days</div>
@@ -388,7 +388,7 @@
 					</div>
 					<div>
 						<div class="data-label mb-1">Service Matched Description</div>
-						<div class="text-2xl font-semibold {feedbackStats.service_match_rate_pct >= 80 ? 'text-green-400' : feedbackStats.service_match_rate_pct >= 60 ? 'text-yellow-400' : 'text-red-400'}">
+						<div class="text-2xl font-semibold {feedbackStats.service_match_rate_pct >= 80 ? 'text-success' : feedbackStats.service_match_rate_pct >= 60 ? 'text-warning' : 'text-danger'}">
 							{feedbackStats.service_match_rate_pct.toFixed(0)}%
 						</div>
 						<div class="text-xs text-neutral-500 mt-1">
@@ -403,7 +403,7 @@
 					</div>
 					<div>
 						<div class="data-label mb-1">Would Rent Again</div>
-						<div class="text-2xl font-semibold {feedbackStats.would_rent_again_rate_pct >= 80 ? 'text-green-400' : feedbackStats.would_rent_again_rate_pct >= 60 ? 'text-yellow-400' : 'text-red-400'}">
+						<div class="text-2xl font-semibold {feedbackStats.would_rent_again_rate_pct >= 80 ? 'text-success' : feedbackStats.would_rent_again_rate_pct >= 60 ? 'text-warning' : 'text-danger'}">
 							{feedbackStats.would_rent_again_rate_pct.toFixed(0)}%
 						</div>
 						<div class="text-xs text-neutral-500 mt-1">
@@ -431,7 +431,7 @@
 					<ul class="mt-3 space-y-1.5">
 						{#each sellingPoints as point}
 							<li class="flex items-start gap-2 text-sm text-neutral-300">
-								<Icon name="check" size={16} class="text-green-400 mt-0.5 shrink-0" />
+								<Icon name="check" size={16} class="text-success mt-0.5 shrink-0" />
 								{point}
 							</li>
 						{/each}
@@ -536,7 +536,7 @@
 								</div>
 								<div class="flex flex-col items-end gap-1 shrink-0">
 									{#if offering.provider_online === false}
-										<span class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded" title="Provider is not actively monitoring — requests are still accepted when agent comes back online">
+										<span class="flex items-center gap-1 px-1.5 py-0.5 text-xs bg-danger/20 text-danger rounded" title="Provider is not actively monitoring — requests are still accepted when agent comes back online">
 											<span class="h-1.5 w-1.5 rounded-full bg-red-400"></span>Offline
 										</span>
 									{/if}

@@ -475,7 +475,7 @@
 											y={chartH - reqH}
 											width={barW}
 											height={reqH}
-											fill="#6366f1"
+											fill="var(--color-info)"
 											fill-opacity="0.4"
 											rx="2"
 										>
@@ -487,7 +487,7 @@
 											y={chartH - actH}
 											width={barW}
 											height={actH}
-											fill="#10b981"
+											fill="var(--color-success)"
 											fill-opacity="0.8"
 											rx="2"
 										>
@@ -497,7 +497,7 @@
 											x={x + barW / 2}
 											y={chartH + 16}
 											text-anchor="middle"
-											fill="#6b7280"
+											fill="var(--color-neutral-500)"
 											font-size="8"
 										>{week.weekStart.slice(5)}</text>
 									</g>
@@ -505,8 +505,8 @@
 							</svg>
 						</div>
 						<div class="flex items-center gap-4 mt-2 text-xs text-neutral-400">
-							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-indigo-500/40 rounded-sm"></span> Requests</span>
-							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-emerald-500/80 rounded-sm"></span> Active</span>
+							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-info/40 rounded-sm"></span> Requests</span>
+							<span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 bg-success/80 rounded-sm"></span> Active</span>
 							<span class="text-neutral-600">Hover bars for details.</span>
 						</div>
 					</div>

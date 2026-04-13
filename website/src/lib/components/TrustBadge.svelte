@@ -13,15 +13,15 @@
 	let tooltipVisible = $state(false);
 
 	function getScoreColor(s: number): string {
-		if (s >= 80) return 'text-green-400';
-		if (s >= 60) return 'text-yellow-400';
-		return 'text-red-400';
+		if (s >= 80) return 'text-success';
+		if (s >= 60) return 'text-warning';
+		return 'text-danger';
 	}
 
 	function getBgColor(s: number): string {
-		if (s >= 80) return 'bg-green-500/20 border-green-500/30';
-		if (s >= 60) return 'bg-yellow-500/20 border-yellow-500/30';
-		return 'bg-red-500/20 border-red-500/30';
+		if (s >= 80) return 'bg-success/20 border-success/30';
+		if (s >= 60) return 'bg-warning/20 border-warning/30';
+		return 'bg-danger/20 border-danger/30';
 	}
 
 	function getLabel(s: number): string {
@@ -38,7 +38,7 @@
 			title={showTooltip ? undefined : "Trust Score: {score}/100{hasFlags ? ' (has warnings)' : ''}"}
 		>
 			{#if hasFlags}
-				<Icon name="alert" size={20} class="text-red-400" />
+				<Icon name="alert" size={20} class="text-danger" />
 			{/if}
 			<span class={getScoreColor(score)}>{score}</span>
 		</div>
@@ -63,10 +63,10 @@
 					<div class="font-semibold text-white mb-1">Trust Score: {score}%</div>
 					<div class="text-neutral-400 mb-2 text-xs leading-relaxed">Based on completed contracts.</div>
 					<div class="space-y-0.5">
-						<div class="flex items-center gap-1.5"><span class="text-green-400">●</span><span class="text-neutral-300">90%+ Excellent</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-green-400">●</span><span class="text-neutral-300">80–89% Good</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-yellow-400">●</span><span class="text-neutral-300">60–79% Caution</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-red-400">●</span><span class="text-neutral-300">&lt;60% High Risk</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-success">●</span><span class="text-neutral-300">90%+ Excellent</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-success">●</span><span class="text-neutral-300">80–89% Good</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-warning">●</span><span class="text-neutral-300">60–79% Caution</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-danger">●</span><span class="text-neutral-300">&lt;60% High Risk</span></div>
 					</div>
 				</div>
 			{/if}
@@ -78,7 +78,7 @@
 			class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium border {getBgColor(score)}"
 		>
 			{#if hasFlags}
-				<Icon name="alert" size={20} class="text-red-400" />
+				<Icon name="alert" size={20} class="text-danger" />
 			{/if}
 			<span class={getScoreColor(score)}>{score}</span>
 			<span class="text-neutral-500">{getLabel(score)}</span>
@@ -104,10 +104,10 @@
 					<div class="font-semibold text-white mb-1">Trust Score: {score}%</div>
 					<div class="text-neutral-400 mb-2 text-xs leading-relaxed">Based on completed contracts.</div>
 					<div class="space-y-0.5">
-						<div class="flex items-center gap-1.5"><span class="text-green-400">●</span><span class="text-neutral-300">90%+ Excellent</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-green-400">●</span><span class="text-neutral-300">80–89% Good</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-yellow-400">●</span><span class="text-neutral-300">60–79% Caution</span></div>
-						<div class="flex items-center gap-1.5"><span class="text-red-400">●</span><span class="text-neutral-300">&lt;60% High Risk</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-success">●</span><span class="text-neutral-300">90%+ Excellent</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-success">●</span><span class="text-neutral-300">80–89% Good</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-warning">●</span><span class="text-neutral-300">60–79% Caution</span></div>
+						<div class="flex items-center gap-1.5"><span class="text-danger">●</span><span class="text-neutral-300">&lt;60% High Risk</span></div>
 					</div>
 				</div>
 			{/if}
