@@ -1338,6 +1338,9 @@ async fn run_agent(config: Config) -> Result<()> {
             verification.errors.join("\n  - ")
         );
     }
+    for warning in &verification.warnings {
+        warn!(warning = %warning, "Provisioner setup warning");
+    }
     info!("Provisioner setup verified successfully");
 
     // Initialize gateway manager if configured
@@ -2760,6 +2763,12 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             }
             if verification.template_exists == Some(true) {
                 println!("  [ok] Default image '{}' exists", docker.default_image);
+            }
+            if !verification.warnings.is_empty() {
+                println!();
+                for warning in &verification.warnings {
+                    println!("  [WARN] {}", warning);
+                }
             }
             if !verification.errors.is_empty() {
                 println!();
