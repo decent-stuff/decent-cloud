@@ -335,6 +335,24 @@ impl DigitalOceanProvisioner {
         );
     }
 
+    async fn cleanup_droplet_and_key(&self, droplet_id: i64, ssh_key_id: Option<i64>) {
+        if let Err(cleanup_err) = self
+            .request_builder(
+                reqwest::Method::DELETE,
+                &format!("/v2/droplets/{}", droplet_id),
+            )
+            .send()
+            .await
+        {
+            tracing::warn!(droplet_id, error = %cleanup_err, "Failed to delete droplet during cleanup");
+        }
+        if let Some(key_id) = ssh_key_id {
+            if let Err(key_err) = self.delete_ssh_key(key_id).await {
+                tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
+            }
+        }
+    }
+
     async fn create_ssh_key(&self, name: &str, public_key: &str) -> Result<i64> {
         #[derive(Serialize)]
         struct CreateSshKeyRequest {
@@ -574,21 +592,7 @@ impl Provisioner for DigitalOceanProvisioner {
             Ok(droplet) => droplet,
             Err(e) => {
                 tracing::error!(droplet_id, error = %e, "Droplet failed to become active, cleaning up");
-                if let Err(cleanup_err) = self
-                    .request_builder(
-                        reqwest::Method::DELETE,
-                        &format!("/v2/droplets/{}", droplet_id),
-                    )
-                    .send()
-                    .await
-                {
-                    tracing::warn!(droplet_id, error = %cleanup_err, "Failed to delete droplet during cleanup");
-                }
-                if let Some(key_id) = created_ssh_key_id {
-                    if let Err(key_err) = self.delete_ssh_key(key_id).await {
-                        tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
-                    }
-                }
+                self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id).await;
                 return Err(e);
             }
         };
@@ -601,21 +605,7 @@ impl Provisioner for DigitalOceanProvisioner {
                 Ok(droplet) => droplet,
                 Err(e) => {
                     tracing::error!(droplet_id, error = %e, "Droplet never got IP, cleaning up");
-                    if let Err(cleanup_err) = self
-                        .request_builder(
-                            reqwest::Method::DELETE,
-                            &format!("/v2/droplets/{}", droplet_id),
-                        )
-                        .send()
-                        .await
-                    {
-                        tracing::warn!(droplet_id, error = %cleanup_err, "Failed to delete droplet during cleanup");
-                    }
-                    if let Some(key_id) = created_ssh_key_id {
-                        if let Err(key_err) = self.delete_ssh_key(key_id).await {
-                            tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
-                        }
-                    }
+                    self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id).await;
                     return Err(e);
                 }
             }
