@@ -24,6 +24,10 @@ const IP_ASSIGNMENT_TIMEOUT_SECS: u64 = 120;
 pub struct VultrBackend {
     client: Client,
     api_key: String,
+    base_url: String,
+    poll_interval: std::time::Duration,
+    ip_wait_timeout_secs: u64,
+    ssh_wait_timeout_secs: u64,
 }
 
 impl VultrBackend {
@@ -33,11 +37,34 @@ impl VultrBackend {
             .build()
             .context("Failed to create HTTP client")?;
 
-        Ok(Self { client, api_key })
+        Ok(Self {
+            client,
+            api_key,
+            base_url: VULTR_API_BASE.to_string(),
+            poll_interval: std::time::Duration::from_secs(5),
+            ip_wait_timeout_secs: IP_ASSIGNMENT_TIMEOUT_SECS,
+            ssh_wait_timeout_secs: 120,
+        })
+    }
+
+    #[cfg(test)]
+    fn new_for_mockito(base_url: String) -> Self {
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .expect("Failed to build test HTTP client");
+        Self {
+            client,
+            api_key: "test-key".to_string(),
+            base_url,
+            poll_interval: std::time::Duration::from_millis(10),
+            ip_wait_timeout_secs: 1,
+            ssh_wait_timeout_secs: 0,
+        }
     }
 
     fn request_builder(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
-        let url = format!("{}{}", VULTR_API_BASE, path);
+        let url = format!("{}{}", self.base_url, path);
         self.client
             .request(method, &url)
             .header("Authorization", format!("Bearer {}", self.api_key))
@@ -418,7 +445,7 @@ impl VultrBackend {
                     server.status
                 );
             }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(self.poll_interval).await;
         }
     }
 }
@@ -550,7 +577,7 @@ impl CloudBackend for VultrBackend {
 
         let mut retries = 0;
         while server.status == ServerStatus::Provisioning && retries < 60 {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(self.poll_interval).await;
             server = self.get_server(&server.id).await?;
             retries += 1;
         }
@@ -562,9 +589,9 @@ impl CloudBackend for VultrBackend {
 
         if server.public_ip.is_none() {
             let ip_wait_start = std::time::Instant::now();
-            let ip_timeout = std::time::Duration::from_secs(IP_ASSIGNMENT_TIMEOUT_SECS);
+            let ip_timeout = std::time::Duration::from_secs(self.ip_wait_timeout_secs);
             while server.public_ip.is_none() && ip_wait_start.elapsed() < ip_timeout {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                tokio::time::sleep(self.poll_interval).await;
                 match self.get_server(&server.id).await {
                     Ok(s) => server = s,
                     Err(e) => {
@@ -581,12 +608,12 @@ impl CloudBackend for VultrBackend {
                 anyhow::bail!(
                     "Server {} reached running state but never got a public IP within {}s",
                     server.id,
-                    IP_ASSIGNMENT_TIMEOUT_SECS
+                    self.ip_wait_timeout_secs
                 );
             }
         };
 
-        if !self.wait_for_ssh_reachable(&ip, 120).await? {
+        if self.ssh_wait_timeout_secs > 0 && !self.wait_for_ssh_reachable(&ip, self.ssh_wait_timeout_secs).await? {
             cleanup_server_and_key(self, &server.id, &ssh_key_id).await;
             anyhow::bail!("SSH port not reachable after 120s");
         }
@@ -1038,5 +1065,421 @@ mod tests {
         use crate::cloud::types::BackendType;
         assert_eq!(BackendType::Vultr.to_string(), "vultr");
         assert_eq!("vultr".parse::<BackendType>().unwrap(), BackendType::Vultr);
+    }
+
+    // ── Mockito-based HTTP mock tests ──────────────────────────────────────────
+
+    fn vultr_instance_json(id: &str, status: &str, main_ip: &str) -> String {
+        format!(
+            r#"{{"id":"{}","label":"test-server","status":"{}","main_ip":"{}","plan":"vc2-1c-1gb","region":"ewr","os_id":2284,"date_created":"2024-01-15"}}"#,
+            id, status, main_ip
+        )
+    }
+
+    fn make_create_request() -> CreateServerRequest {
+        CreateServerRequest {
+            name: "test-server".to_string(),
+            server_type: "vc2-1c-1gb".to_string(),
+            location: "ewr".to_string(),
+            image: "2284".to_string(),
+            ssh_pubkey: "ssh-ed25519 AAAATEST".to_string(),
+        }
+    }
+
+    async fn setup_plans_mock(server: &mut mockito::ServerGuard) -> mockito::Mock {
+        server
+            .mock("GET", "/plans")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"plans":[{"id":"vc2-1c-1gb","vcpu_count":1,"ram":1024,"disk":25,"monthly_cost":5.0,"hourly_cost":0.007,"type":"vc2","locations":["ewr","ams"]}]}"#)
+            .create_async()
+            .await
+    }
+
+    async fn setup_os_mock(server: &mut mockito::ServerGuard) -> mockito::Mock {
+        server
+            .mock("GET", "/os")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"os":[{"id":2284,"name":"Ubuntu 24.04 LTS x64","arch":"x64","family":"ubuntu"}]}"#)
+            .create_async()
+            .await
+    }
+
+    #[tokio::test]
+    async fn test_create_server_ip_assigned_after_active() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = setup_plans_mock(&mut server).await;
+        let _os = setup_os_mock(&mut server).await;
+
+        let _ssh_key = server
+            .mock("POST", "/ssh-keys")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ssh_key":{"id":"ssh-key-1","name":"dc-test-server"}}"#)
+            .create_async()
+            .await;
+
+        let _create = server
+            .mock("POST", "/instances")
+            .with_status(202)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-1", "pending", "0.0.0.0")
+            ))
+            .create_async()
+            .await;
+
+        let _get_active_no_ip = server
+            .mock("GET", "/instances/inst-1")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-1", "active", "0.0.0.0")
+            ))
+            .expect(1)
+            .create_async()
+            .await;
+
+        let _get_active_with_ip = server
+            .mock("GET", "/instances/inst-1")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-1", "active", "192.168.1.1")
+            ))
+            .expect(1)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.create_server(make_create_request()).await;
+        assert!(result.is_ok(), "create_server should succeed after IP assigned: {:?}", result.err());
+
+        let provision_result = result.unwrap();
+        assert_eq!(provision_result.server.id, "inst-1");
+        assert_eq!(provision_result.server.public_ip, Some("192.168.1.1".to_string()));
+        assert_eq!(provision_result.ssh_key_id, Some("ssh-key-1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_create_server_ip_never_assigned_cleans_up() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = setup_plans_mock(&mut server).await;
+        let _os = setup_os_mock(&mut server).await;
+
+        let _ssh_key = server
+            .mock("POST", "/ssh-keys")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ssh_key":{"id":"ssh-key-2","name":"dc-test-server"}}"#)
+            .create_async()
+            .await;
+
+        let _create = server
+            .mock("POST", "/instances")
+            .with_status(202)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-2", "pending", "0.0.0.0")
+            ))
+            .create_async()
+            .await;
+
+        let _get_active_no_ip = server
+            .mock("GET", "/instances/inst-2")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-2", "active", "0.0.0.0")
+            ))
+            .create_async()
+            .await;
+
+        let _delete_instance = server
+            .mock("DELETE", "/instances/inst-2")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let _delete_ssh_key = server
+            .mock("DELETE", "/ssh-keys/ssh-key-2")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.create_server(make_create_request()).await;
+        assert!(result.is_err(), "create_server should fail when IP never assigned");
+        let err = format!("{:#}", result.unwrap_err());
+        assert!(
+            err.contains("never got a public IP"),
+            "Error should mention IP wait failure: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_server_instance_creation_fails_cleans_up_ssh_key() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = setup_plans_mock(&mut server).await;
+        let _os = setup_os_mock(&mut server).await;
+
+        let _ssh_key = server
+            .mock("POST", "/ssh-keys")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ssh_key":{"id":"ssh-key-3","name":"dc-test-server"}}"#)
+            .create_async()
+            .await;
+
+        let _create_fail = server
+            .mock("POST", "/instances")
+            .with_status(422)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"error":"Invalid plan"}"#)
+            .create_async()
+            .await;
+
+        let _delete_ssh_key = server
+            .mock("DELETE", "/ssh-keys/ssh-key-3")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.create_server(make_create_request()).await;
+        assert!(result.is_err(), "create_server should fail on instance creation error");
+        let err = format!("{:#}", result.unwrap_err());
+        assert!(
+            err.contains("422") || err.contains("Invalid"),
+            "Error should mention 422 or invalid: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_server_never_reaches_running_cleans_up() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = setup_plans_mock(&mut server).await;
+        let _os = setup_os_mock(&mut server).await;
+
+        let _ssh_key = server
+            .mock("POST", "/ssh-keys")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ssh_key":{"id":"ssh-key-4","name":"dc-test-server"}}"#)
+            .create_async()
+            .await;
+
+        let _create = server
+            .mock("POST", "/instances")
+            .with_status(202)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-4", "pending", "0.0.0.0")
+            ))
+            .create_async()
+            .await;
+
+        let _get_pending = server
+            .mock("GET", "/instances/inst-4")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-4", "pending", "0.0.0.0")
+            ))
+            .expect(1)
+            .create_async()
+            .await;
+
+        let _delete_instance = server
+            .mock("DELETE", "/instances/inst-4")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let _delete_ssh_key = server
+            .mock("DELETE", "/ssh-keys/ssh-key-4")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.create_server(make_create_request()).await;
+        assert!(result.is_err(), "create_server should fail when server never reaches running");
+        let err = format!("{:#}", result.unwrap_err());
+        assert!(
+            err.contains("failed to reach running state"),
+            "Error should mention running state failure: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_server_full_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _plans = setup_plans_mock(&mut server).await;
+        let _os = setup_os_mock(&mut server).await;
+
+        let _ssh_key = server
+            .mock("POST", "/ssh-keys")
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"ssh_key":{"id":"ssh-key-5","name":"dc-test-server"}}"#)
+            .create_async()
+            .await;
+
+        let _create = server
+            .mock("POST", "/instances")
+            .with_status(202)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-5", "active", "203.0.113.50")
+            ))
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.create_server(make_create_request()).await;
+        assert!(result.is_ok(), "create_server should succeed with immediate IP: {:?}", result.err());
+
+        let provision_result = result.unwrap();
+        assert_eq!(provision_result.server.id, "inst-5");
+        assert_eq!(provision_result.server.public_ip, Some("203.0.113.50".to_string()));
+        assert_eq!(provision_result.ssh_key_id, Some("ssh-key-5".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_delete_server_not_found_is_ok() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("DELETE", "/instances/gone-id")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.delete_server("gone-id").await;
+        assert!(result.is_ok(), "delete_server should return Ok for 404");
+    }
+
+    #[tokio::test]
+    async fn test_delete_server_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("DELETE", "/instances/inst-6")
+            .with_status(204)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.delete_server("inst-6").await;
+        assert!(result.is_ok(), "delete_server should succeed on 204");
+    }
+
+    #[tokio::test]
+    async fn test_delete_server_api_error_returns_err() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("DELETE", "/instances/inst-7")
+            .with_status(500)
+            .with_body(r#"{"error":"Internal error"}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.delete_server("inst-7").await;
+        assert!(result.is_err(), "delete_server should fail on 500");
+    }
+
+    #[tokio::test]
+    async fn test_get_server_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/instances/inst-8")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(format!(
+                r#"{{"instance":{}}}"#,
+                vultr_instance_json("inst-8", "active", "10.0.0.1")
+            ))
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.get_server("inst-8").await;
+        assert!(result.is_ok(), "get_server should succeed");
+        let srv = result.unwrap();
+        assert_eq!(srv.id, "inst-8");
+        assert_eq!(srv.public_ip, Some("10.0.0.1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_get_server_not_found() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/instances/nope")
+            .with_status(404)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.get_server("nope").await;
+        assert!(result.is_err(), "get_server should return Err for 404");
+        let err = format!("{:#}", result.unwrap_err());
+        assert!(err.contains("not found"), "Error should mention not found: {}", err);
+    }
+
+    #[tokio::test]
+    async fn test_validate_credentials_success() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/account")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"account":{"name":"Test","email":"test@example.com"}}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.validate_credentials().await;
+        assert!(result.is_ok(), "validate_credentials should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_validate_credentials_failure() {
+        let mut server = mockito::Server::new_async().await;
+
+        let _mock = server
+            .mock("GET", "/account")
+            .with_status(401)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"error":"Invalid API key"}"#)
+            .create_async()
+            .await;
+
+        let backend = VultrBackend::new_for_mockito(server.url());
+        let result = backend.validate_credentials().await;
+        assert!(result.is_err(), "validate_credentials should fail on 401");
     }
 }
