@@ -4658,7 +4658,63 @@ async fn test_fetch_candidate_offerings_excludes_drafts_and_private() {
     );
 }
 
-// ── trending offerings tests ───────────────────────────────────────────────────
+#[tokio::test]
+async fn test_fetch_candidate_offerings_limit_applies_after_exclusion() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xECu8; 32];
+    for i in 0..10u8 {
+        let country = if i < 5 { "US" } else { "DE" };
+        insert_test_offering(&db, 100 + i as i64, &provider, country, 100.0 + i as f64).await;
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    for i in 0..8 {
+        seen.insert(test_id_to_db_id(100 + i));
+    }
+
+    let candidates = db
+        .fetch_candidate_offerings(&seen, 3)
+        .await
+        .expect("fetch_candidate_offerings failed");
+
+    assert_eq!(
+        candidates.len(),
+        2,
+        "with 10 offerings, 8 seen, should return the 2 unseen (not be drained to 0 by LIMIT-before-filter)"
+    );
+    for c in &candidates {
+        assert!(
+            !seen.contains(&c.offering_id),
+            "seen offering {} must not appear in candidates",
+            c.offering_id
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_fetch_candidate_offerings_empty_seen_ids() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    let provider = vec![0xEDu8; 32];
+    insert_test_offering(&db, 110, &provider, "US", 100.0).await;
+    insert_test_offering(&db, 111, &provider, "DE", 200.0).await;
+
+    let seen = std::collections::HashSet::new();
+    let candidates = db
+        .fetch_candidate_offerings(&seen, 50)
+        .await
+        .expect("fetch_candidate_offerings failed");
+
+    assert!(
+        candidates.len() >= 2,
+        "empty seen set should return all candidates, got {}",
+        candidates.len()
+    );
+}
+
 
 #[tokio::test]
 async fn test_get_trending_offerings_with_views_appears() {
