@@ -198,7 +198,7 @@
 			<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
 	{:else if error && !profile && offerings.length === 0}
-					<div class="bg-danger/20 border border-danger/30 p-6 text-center">
+		<div class="bg-danger/20 border border-danger/30 p-6 text-center">
 			<div class="icon-box mx-auto mb-4">
 				<Icon name="search" size={20} />
 			</div>
