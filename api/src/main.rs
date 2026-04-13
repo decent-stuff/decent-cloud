@@ -1090,7 +1090,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         }
         Err(_) => {
             tracing::warn!(
-                "CREDENTIAL_ENCRYPTION_KEY not set — cloud account management (Hetzner/Proxmox) will NOT work! \
+                "CREDENTIAL_ENCRYPTION_KEY not set — cloud account management (Hetzner/Proxmox/Vultr) will NOT work! \
                  Generate with: openssl rand -hex 32"
             );
         }

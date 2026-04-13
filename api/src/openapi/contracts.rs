@@ -742,11 +742,11 @@ impl ContractsApi {
                                 );
                             }
 
-                            // Auto-accepted, try to trigger Hetzner provisioning
-                            if let Err(e) = db.try_trigger_hetzner_provisioning(&contract_id).await
+                            // Auto-accepted, try to trigger cloud provisioning
+                            if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await
                             {
                                 tracing::warn!(
-                                    "Hetzner provisioning trigger failed for contract {}: {}",
+                                    "Cloud provisioning trigger failed for contract {}: {}",
                                     hex::encode(&contract_id),
                                     e
                                 );
@@ -1407,11 +1407,11 @@ impl ContractsApi {
         match db.try_auto_accept_contract(&contract_id_bytes).await {
             Ok(true) => {
                 if let Err(e) = db
-                    .try_trigger_hetzner_provisioning(&contract_id_bytes)
+                    .try_trigger_cloud_provisioning(&contract_id_bytes)
                     .await
                 {
                     tracing::warn!(
-                        "Hetzner provisioning trigger failed for contract {}: {}",
+                        "Cloud provisioning trigger failed for contract {}: {}",
                         session_result.contract_id,
                         e
                     );

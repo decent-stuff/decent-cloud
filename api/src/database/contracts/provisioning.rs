@@ -790,11 +790,6 @@ impl Database {
         Ok(true)
     }
 
-    /// Backwards-compatible alias — delegates to try_trigger_cloud_provisioning.
-    pub async fn try_trigger_hetzner_provisioning(&self, contract_id: &[u8]) -> Result<bool> {
-        self.try_trigger_cloud_provisioning(contract_id).await
-    }
-
     // ==================== Cloud Resource Provisioning Bridge ====================
 
     /// Update contract to active after cloud_resource provisioning completes.
