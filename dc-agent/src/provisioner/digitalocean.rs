@@ -304,6 +304,37 @@ impl DigitalOceanProvisioner {
         );
     }
 
+    async fn wait_for_droplet_ip(&self, droplet_id: i64, max_retries: u32) -> Result<Droplet> {
+        for attempt in 0..max_retries {
+            let droplet = self
+                .get_droplet(droplet_id)
+                .await?
+                .context("Droplet disappeared while waiting for IP address")?;
+
+            if droplet.public_ipv4().is_some() || droplet.public_ipv6().is_some() {
+                tracing::info!(
+                    droplet_id,
+                    ipv4 = ?droplet.public_ipv4(),
+                    ipv6 = ?droplet.public_ipv6(),
+                    "Droplet has IP address"
+                );
+                return Ok(droplet);
+            }
+
+            tracing::debug!(
+                droplet_id,
+                attempt,
+                "Waiting for droplet to be assigned an IP address"
+            );
+            tokio::time::sleep(self.poll_interval).await;
+        }
+        bail!(
+            "Droplet {} is active but no IP address assigned within {} retries",
+            droplet_id,
+            max_retries
+        );
+    }
+
     async fn create_ssh_key(&self, name: &str, public_key: &str) -> Result<i64> {
         #[derive(Serialize)]
         struct CreateSshKeyRequest {
@@ -539,16 +570,8 @@ impl Provisioner for DigitalOceanProvisioner {
         let droplet_id = droplet_resp.droplet.id;
         tracing::info!(droplet_id, "Droplet created, waiting for active state");
 
-        match self.wait_for_droplet_active(droplet_id, 60).await {
-            Ok(droplet) => {
-                let instance = self.droplet_to_instance(&droplet);
-                tracing::info!(
-                    droplet_id,
-                    ip = ?instance.ip_address,
-                    "Droplet provisioned successfully"
-                );
-                Ok(instance)
-            }
+        let active_droplet = match self.wait_for_droplet_active(droplet_id, 60).await {
+            Ok(droplet) => droplet,
             Err(e) => {
                 tracing::error!(droplet_id, error = %e, "Droplet failed to become active, cleaning up");
                 if let Err(cleanup_err) = self
@@ -566,9 +589,47 @@ impl Provisioner for DigitalOceanProvisioner {
                         tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
                     }
                 }
-                Err(e)
+                return Err(e);
             }
-        }
+        };
+
+        let droplet = if active_droplet.public_ipv4().is_none()
+            && active_droplet.public_ipv6().is_none()
+        {
+            tracing::info!(droplet_id, "Droplet active but no IP yet, waiting for IP assignment");
+            match self.wait_for_droplet_ip(droplet_id, 12).await {
+                Ok(droplet) => droplet,
+                Err(e) => {
+                    tracing::error!(droplet_id, error = %e, "Droplet never got IP, cleaning up");
+                    if let Err(cleanup_err) = self
+                        .request_builder(
+                            reqwest::Method::DELETE,
+                            &format!("/v2/droplets/{}", droplet_id),
+                        )
+                        .send()
+                        .await
+                    {
+                        tracing::warn!(droplet_id, error = %cleanup_err, "Failed to delete droplet during cleanup");
+                    }
+                    if let Some(key_id) = created_ssh_key_id {
+                        if let Err(key_err) = self.delete_ssh_key(key_id).await {
+                            tracing::warn!(key_id, error = %key_err, "Failed to clean up SSH key during droplet cleanup");
+                        }
+                    }
+                    return Err(e);
+                }
+            }
+        } else {
+            active_droplet
+        };
+
+        let instance = self.droplet_to_instance(&droplet);
+        tracing::info!(
+            droplet_id,
+            ip = ?instance.ip_address,
+            "Droplet provisioned successfully"
+        );
+        Ok(instance)
     }
 
     async fn terminate(&self, external_id: &str) -> Result<()> {

@@ -33,6 +33,13 @@ fn active_droplet_json(id: i64, name: &str) -> String {
     )
 }
 
+fn active_droplet_no_ip_json(id: i64, name: &str) -> String {
+    format!(
+        r#"{{"id":{},"name":"{}","status":"active","memory":1024,"vcpus":1,"disk":25,"locked":false,"created_at":"2020-07-21T18:37:44Z","networks":{{"v4":[],"v6":[]}},"region":{{"name":"New York 3","slug":"nyc3"}},"size_slug":"s-1vcpu-1gb","tags":["dc-agent"],"features":[]}}"#,
+        id, name
+    )
+}
+
 fn new_droplet_json(id: i64, name: &str) -> String {
     format!(
         r#"{{"id":{},"name":"{}","status":"new","memory":1024,"vcpus":1,"disk":25,"locked":false,"created_at":"2020-07-21T18:37:44Z","networks":{{"v4":[],"v6":[]}},"region":{{"name":"New York 3","slug":"nyc3"}},"size_slug":"s-1vcpu-1gb","tags":["dc-agent"],"features":[]}}"#,
@@ -881,6 +888,97 @@ async fn test_collect_resources_api_failure_returns_none() {
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.collect_resources().await;
     assert!(result.is_none(), "collect_resources should return None on API failure");
+}
+
+#[tokio::test]
+async fn test_provision_active_then_ip_assigned() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _create = server
+        .mock("POST", "/v2/droplets")
+        .with_status(202)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"droplet":{}}}"#,
+            new_droplet_json(77777, "dc-test-contract-123")
+        ))
+        .create_async()
+        .await;
+
+    let _get_active_no_ip = server
+        .mock("GET", "/v2/droplets/77777")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"droplet":{}}}"#,
+            active_droplet_no_ip_json(77777, "dc-test-contract-123")
+        ))
+        .expect(1)
+        .create_async()
+        .await;
+
+    let _get_active_with_ip = server
+        .mock("GET", "/v2/droplets/77777")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"droplet":{}}}"#,
+            active_droplet_json(77777, "dc-test-contract-123")
+        ))
+        .expect(1)
+        .create_async()
+        .await;
+
+    let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
+    let result = prov.provision(&make_provision_request()).await;
+    assert!(result.is_ok(), "provision should succeed after IP is assigned: {:?}", result.err());
+
+    let instance = result.unwrap();
+    assert_eq!(instance.external_id, "77777");
+    assert_eq!(instance.ip_address.as_deref(), Some("192.241.165.154"));
+}
+
+#[tokio::test]
+async fn test_provision_active_never_gets_ip() {
+    let mut server = mockito::Server::new_async().await;
+
+    let _create = server
+        .mock("POST", "/v2/droplets")
+        .with_status(202)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"droplet":{}}}"#,
+            new_droplet_json(88888, "dc-test-contract-123")
+        ))
+        .create_async()
+        .await;
+
+    let _get_active_no_ip = server
+        .mock("GET", "/v2/droplets/88888")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(format!(
+            r#"{{"droplet":{}}}"#,
+            active_droplet_no_ip_json(88888, "dc-test-contract-123")
+        ))
+        .create_async()
+        .await;
+
+    let _delete = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .with_status(204)
+        .create_async()
+        .await;
+
+    let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
+    let result = prov.provision(&make_provision_request()).await;
+    assert!(result.is_err(), "provision should fail when droplet never gets IP");
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(
+        err.contains("no IP address assigned"),
+        "Error should mention IP wait failure: {}",
+        err
+    );
 }
 
 // ── Integration test (requires DIGITALOCEAN_API_TOKEN env var) ──────────────
