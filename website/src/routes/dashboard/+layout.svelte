@@ -10,6 +10,7 @@
 	import SeedPhraseBackupBanner from '$lib/components/SeedPhraseBackupBanner.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Icon from '$lib/components/Icons.svelte';
 
 	const SEED_BACKUP_DISMISSED_KEY = 'seedPhraseBackupDismissed';
@@ -80,6 +81,7 @@
 			<Icon name="menu" size={20} />
 		</button>
 		<span class="ml-3 text-white font-semibold text-sm flex-1">Decent Cloud</span>
+		<ThemeToggle />
 		<NotificationBell />
 		<button
 			type="button"

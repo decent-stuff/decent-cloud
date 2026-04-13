@@ -64,6 +64,29 @@
 		--font-mono: 'JetBrains Mono', ui-monospace, monospace;
 	}
 
+	/* Light theme overrides - flips the dark "Industrial Luxe" palette */
+	:root[data-theme='light'] {
+		--color-base: #ffffff;
+		--color-surface: #f7f6f5;
+		--color-surface-elevated: #eeeded;
+		--color-surface-hover: #e8e7e6;
+		--color-surface-active: #dddcdb;
+
+		--color-neutral-50: #141413;
+		--color-neutral-100: #1e1d1c;
+		--color-neutral-200: #2a2928;
+		--color-neutral-300: #3a3938;
+		--color-neutral-400: #525150;
+		--color-neutral-500: #737270;
+		--color-neutral-600: #a8a7a5;
+		--color-neutral-700: #dddcda;
+		--color-neutral-800: #f0efee;
+		--color-neutral-900: #fafaf9;
+
+		--color-glass: #000000;
+		--color-glass-border: #000000;
+	}
+
 	html {
 		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 		-webkit-font-smoothing: antialiased;
@@ -73,6 +96,10 @@
 	body {
 		@apply bg-base text-neutral-100 min-h-screen;
 		font-feature-settings: 'kern' 1, 'liga' 1;
+	}
+
+	:root[data-theme='light'] body {
+		@apply text-neutral-900;
 	}
 
 	/* Headings - Bold, commanding */
@@ -503,6 +530,10 @@ select option {
 	background-color: var(--color-surface);
 	color: white;
 	padding: 8px;
+}
+
+:root[data-theme='light'] select option {
+	color: var(--color-neutral-900);
 }
 
 /* === Focus Styles === */

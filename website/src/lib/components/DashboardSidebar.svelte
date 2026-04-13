@@ -17,6 +17,7 @@
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
+	import ThemeToggle from './ThemeToggle.svelte';
 	import UnreadBadge from './UnreadBadge.svelte';
 
 	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
@@ -443,6 +444,9 @@
 
 	<!-- User Section -->
 	<div class="p-3 border-t border-neutral-800/80 space-y-1">
+		<div class="flex items-center justify-end px-1 pb-1">
+			<ThemeToggle />
+		</div>
 		{#if isAuthenticated}
 			<a
 				href="/dashboard/account"
