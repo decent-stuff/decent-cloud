@@ -267,20 +267,34 @@ pub async fn stripe_webhook(
             );
 
             // Notify provider about new rental request
-            if let Ok(Some(contract)) = db.get_contract(&contract_id_bytes).await {
-                if let Err(e) = crate::rental_notifications::notify_provider_new_rental(
-                    db.as_ref(),
-                    email_service.as_ref(),
-                    &contract,
-                )
-                .await
-                {
+            match db.get_contract(&contract_id_bytes).await {
+                Ok(Some(contract)) => {
+                    if let Err(e) = crate::rental_notifications::notify_provider_new_rental(
+                        db.as_ref(),
+                        email_service.as_ref(),
+                        &contract,
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            "Failed to notify provider for contract {}: {}",
+                            contract_id_hex,
+                            e
+                        );
+                    }
+                }
+                Ok(None) => {
                     tracing::warn!(
-                        "Failed to notify provider for contract {}: {}",
+                        "Contract {} not found after payment succeeded",
+                        contract_id_hex
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch contract {} for provider notification after payment: {:#}",
                         contract_id_hex,
                         e
                     );
-                    // Don't fail the webhook - payment succeeded
                 }
             }
 
@@ -1038,20 +1052,35 @@ pub async fn icpay_webhook(
                         );
 
                         // Notify provider about new rental request
-                        if let Ok(Some(contract)) = db.get_contract(&contract_id_bytes).await {
-                            if let Err(e) = crate::rental_notifications::notify_provider_new_rental(
-                                db.as_ref(),
-                                email_service.as_ref(),
-                                &contract,
-                            )
-                            .await
-                            {
+                        match db.get_contract(&contract_id_bytes).await {
+                            Ok(Some(contract)) => {
+                                if let Err(e) =
+                                    crate::rental_notifications::notify_provider_new_rental(
+                                        db.as_ref(),
+                                        email_service.as_ref(),
+                                        &contract,
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to notify provider for contract {}: {}",
+                                        contract_id_hex,
+                                        e
+                                    );
+                                }
+                            }
+                            Ok(None) => {
                                 tracing::warn!(
-                                    "Failed to notify provider for contract {}: {}",
+                                    "Contract {} not found after ICPay payment succeeded",
+                                    contract_id_hex
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to fetch contract {} for provider notification after ICPay payment: {:#}",
                                     contract_id_hex,
                                     e
                                 );
-                                // Don't fail the webhook - payment succeeded
                             }
                         }
 

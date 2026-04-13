@@ -367,17 +367,33 @@ impl ContractsApi {
 
         match db.request_password_reset(&contract_id).await {
             Ok(_) => {
-                if let Ok(Some(full_contract)) = db.get_contract(&contract_id).await {
-                    if let Err(e) = crate::rental_notifications::notify_provider_password_reset(
-                        db.as_ref(),
-                        email_service.as_ref(),
-                        &full_contract,
-                        false,
-                    )
-                    .await
-                    {
+                match db.get_contract(&contract_id).await {
+                    Ok(Some(full_contract)) => {
+                        if let Err(e) =
+                            crate::rental_notifications::notify_provider_password_reset(
+                                db.as_ref(),
+                                email_service.as_ref(),
+                                &full_contract,
+                                false,
+                            )
+                            .await
+                        {
+                            tracing::warn!(
+                                "Failed to notify provider of password reset for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
+                    }
+                    Ok(None) => {
                         tracing::warn!(
-                            "Failed to notify provider of password reset for contract {}: {}",
+                            "Contract {} not found after password reset request",
+                            hex::encode(&contract_id)
+                        );
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to fetch contract {} for password reset notification: {:#}",
                             hex::encode(&contract_id),
                             e
                         );

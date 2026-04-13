@@ -2267,30 +2267,39 @@ impl ProvidersApi {
         {
             Ok((success_count, mut errors)) => {
                 // Post-import: validate cloud offerings against live catalog
-                if let Ok(offerings) = db.get_provider_offerings(&pubkey_bytes).await {
-                    for offering in offerings.iter().filter(|o| {
-                        matches!(
-                            o.provisioner_type.as_deref(),
-                            Some("hetzner") | Some("vultr")
-                        )
-                    }) {
-                        if let Err(e) =
-                            validate_cloud_offering(&db, offering, &pubkey_bytes).await
-                        {
-                            errors.push((
-                                0,
-                                format!(
-                                    "{} validation failed for offering '{}': {}",
-                                    offering
-                                        .provisioner_type
-                                        .as_deref()
-                                        .unwrap_or("unknown")
-                                        .to_uppercase(),
-                                    offering.offering_id,
-                                    e
-                                ),
-                            ));
+                match db.get_provider_offerings(&pubkey_bytes).await {
+                    Ok(offerings) => {
+                        for offering in offerings.iter().filter(|o| {
+                            matches!(
+                                o.provisioner_type.as_deref(),
+                                Some("hetzner") | Some("vultr")
+                            )
+                        }) {
+                            if let Err(e) =
+                                validate_cloud_offering(&db, offering, &pubkey_bytes).await
+                            {
+                                errors.push((
+                                    0,
+                                    format!(
+                                        "{} validation failed for offering '{}': {}",
+                                        offering
+                                            .provisioner_type
+                                            .as_deref()
+                                            .unwrap_or("unknown")
+                                            .to_uppercase(),
+                                        offering.offering_id,
+                                        e
+                                    ),
+                                ));
+                            }
                         }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "CSV import post-validation: failed to fetch offerings for provider {}: {:#}",
+                            hex::encode(&pubkey_bytes),
+                            e
+                        );
                     }
                 }
 
@@ -2702,18 +2711,33 @@ impl ProvidersApi {
                         }
 
                         // Notify user that their VM is ready
-                        if let Ok(Some(contract)) = db.get_contract(&contract_id).await {
-                            if let Err(e) = crate::rental_notifications::notify_user_provisioned(
-                                &db,
-                                email_service.as_ref(),
-                                &contract,
-                                details,
-                            )
-                            .await
-                            {
-                                // Log but don't fail - provisioning succeeded
+                        match db.get_contract(&contract_id).await {
+                            Ok(Some(contract)) => {
+                                if let Err(e) =
+                                    crate::rental_notifications::notify_user_provisioned(
+                                        &db,
+                                        email_service.as_ref(),
+                                        &contract,
+                                        details,
+                                    )
+                                    .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to send provisioned notification for contract {}: {}",
+                                        &id.0[..16],
+                                        e
+                                    );
+                                }
+                            }
+                            Ok(None) => {
                                 tracing::warn!(
-                                    "Failed to send provisioned notification for contract {}: {}",
+                                    "Contract {} not found after provisioning status update",
+                                    &id.0[..16]
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to fetch contract {} for provisioned notification: {:#}",
                                     &id.0[..16],
                                     e
                                 );

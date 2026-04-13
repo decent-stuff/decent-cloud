@@ -729,13 +729,33 @@ impl CloudApi {
         };
 
         // Auto-unlist from marketplace if listed
-        if let Ok(Some(resource)) = db.get_cloud_resource(&uuid, &account_id).await {
-            if resource.resource.listing_mode == "marketplace" {
-                if let Ok(old_offering_id) = db.unlist_from_marketplace(&uuid, &account_id).await {
-                    if let Err(e) = db.delete_offering(&user.pubkey, old_offering_id).await {
-                        tracing::warn!(resource_id = %uuid, offering_id = old_offering_id, "Failed to delete offering during resource deletion: {e:#}");
+        match db.get_cloud_resource(&uuid, &account_id).await {
+            Ok(Some(resource)) => {
+                if resource.resource.listing_mode == "marketplace" {
+                    match db.unlist_from_marketplace(&uuid, &account_id).await {
+                        Ok(old_offering_id) => {
+                            if let Err(e) = db.delete_offering(&user.pubkey, old_offering_id).await
+                            {
+                                tracing::warn!(resource_id = %uuid, offering_id = old_offering_id, "Failed to delete offering during resource deletion: {e:#}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                resource_id = %uuid,
+                                "Failed to unlist from marketplace during resource deletion: {e:#}"
+                            );
+                        }
                     }
                 }
+            }
+            Ok(None) => {
+                tracing::warn!(resource_id = %uuid, "Cloud resource not found for marketplace unlist check");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    resource_id = %uuid,
+                    "Failed to fetch cloud resource for marketplace unlist check: {e:#}"
+                );
             }
         }
 
