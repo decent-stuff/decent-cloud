@@ -1,5 +1,6 @@
 use super::{
-    HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification,
+    extract_contract_id, HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance,
+    SetupVerification,
 };
 use crate::config::ProxmoxConfig;
 use anyhow::{bail, Context, Result};
@@ -566,11 +567,6 @@ impl ProxmoxProvisioner {
     async fn list_vms(&self) -> Result<Vec<VmListEntry>> {
         let path = format!("/api2/json/nodes/{}/qemu", self.config.node);
         self.api_get(&path).await
-    }
-
-    /// Extract contract ID from VM name (dc-{contract_id} -> contract_id)
-    fn extract_contract_id(name: &str) -> Option<String> {
-        name.strip_prefix("dc-").map(String::from)
     }
 
     async fn get_vm_ip(&self, vmid: u32) -> Result<(Option<String>, Option<String>)> {
@@ -1178,7 +1174,7 @@ impl Provisioner for ProxmoxProvisioner {
                 _ => continue,
             };
 
-            let contract_id = Self::extract_contract_id(name);
+            let contract_id = extract_contract_id(name);
             instances.push(RunningInstance {
                 external_id: vm.vmid.to_string(),
                 contract_id,

@@ -9,6 +9,10 @@ pub mod manual;
 pub mod proxmox;
 pub mod script;
 
+pub fn extract_contract_id(name: &str) -> Option<String> {
+    name.strip_prefix("dc-").map(String::from)
+}
+
 /// Instance provisioned by the agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instance {
@@ -177,7 +181,6 @@ mod tests {
 
     #[test]
     fn test_instance_deserialization_without_public_ip_field() {
-        // Backward compatibility: JSON without public_ip should deserialize with public_ip: None
         let json = r#"{
             "external_id": "vm-123",
             "ip_address": "10.0.0.100",
@@ -192,5 +195,24 @@ mod tests {
             instance.public_ip.is_none(),
             "public_ip should default to None when absent from JSON"
         );
+    }
+
+    #[test]
+    fn test_extract_contract_id() {
+        assert_eq!(extract_contract_id("dc-abc123"), Some("abc123".to_string()));
+        assert_eq!(
+            extract_contract_id("dc-test-contract"),
+            Some("test-contract".to_string())
+        );
+        assert_eq!(
+            extract_contract_id("dc-contract-456"),
+            Some("contract-456".to_string())
+        );
+        assert_eq!(
+            extract_contract_id("dc-test-contract-123"),
+            Some("test-contract-123".to_string())
+        );
+        assert_eq!(extract_contract_id("other-name"), None);
+        assert_eq!(extract_contract_id("dc-"), Some("".to_string()));
     }
 }

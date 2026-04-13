@@ -31,17 +31,6 @@ fn test_container_name_format() {
 }
 
 #[test]
-fn test_extract_contract_id() {
-    assert_eq!(extract_contract_id("dc-abc123"), Some("abc123".to_string()));
-    assert_eq!(
-        extract_contract_id("dc-contract-456"),
-        Some("contract-456".to_string())
-    );
-    assert_eq!(extract_contract_id("other-name"), None);
-    assert_eq!(extract_contract_id("dc-"), Some("".to_string()));
-}
-
-#[test]
 fn test_resolve_image_from_config() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
