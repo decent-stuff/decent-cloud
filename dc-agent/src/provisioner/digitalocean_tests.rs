@@ -1066,3 +1066,113 @@ async fn integration_catalog_endpoints() {
         println!("  {} ({}) slug={:?}", img.name, img.distribution, img.slug);
     }
 }
+
+#[tokio::test]
+#[ignore]
+async fn integration_wait_for_droplet_ip() {
+    let token = std::env::var("DIGITALOCEAN_API_TOKEN")
+        .expect("DIGITALOCEAN_API_TOKEN env var required for integration test");
+
+    let config = DigitalOceanConfig {
+        api_token: token,
+        default_size: "s-1vcpu-1gb".to_string(),
+        default_region: "nyc3".to_string(),
+        default_image: "ubuntu-24-04-x64".to_string(),
+    };
+    let provisioner = DigitalOceanProvisioner::new(config).unwrap();
+
+    let verification = provisioner.verify_setup().await;
+    assert!(
+        verification.api_reachable == Some(true),
+        "API should be reachable: {:?}",
+        verification.errors
+    );
+
+    let contract_id = format!(
+        "ip-wait-test-{}",
+        chrono::Utc::now().format("%Y%m%d%H%M%S")
+    );
+    let name = droplet_name(&contract_id);
+
+    let create_req = CreateDropletRequest {
+        name: name.clone(),
+        region: "nyc3".to_string(),
+        size: "s-1vcpu-1gb".to_string(),
+        image: "ubuntu-24-04-x64".to_string(),
+        ssh_keys: None,
+        tags: Some(vec![
+            DC_AGENT_TAG.to_string(),
+            format!("dc-contract-{}", contract_id),
+        ]),
+        user_data: None,
+    };
+
+    let resp = provisioner
+        .request_builder(reqwest::Method::POST, "/v2/droplets")
+        .json(&create_req)
+        .send()
+        .await
+        .expect("Failed to create droplet");
+    assert!(
+        resp.status().is_success(),
+        "Create droplet failed: status={}",
+        resp.status()
+    );
+
+    let droplet_resp: DropletResponse = resp
+        .json()
+        .await
+        .expect("Failed to parse create response");
+    let droplet_id = droplet_resp.droplet.id;
+    println!(
+        "Created droplet '{}' (id={}), waiting for active state",
+        name, droplet_id
+    );
+
+    let wait_result: Result<Droplet, anyhow::Error> = async {
+        let active = provisioner
+            .wait_for_droplet_active(droplet_id, 60)
+            .await?;
+        println!(
+            "Droplet {} is active (has_ipv4={}, has_ipv6={})",
+            droplet_id,
+            active.public_ipv4().is_some(),
+            active.public_ipv6().is_some()
+        );
+
+        let with_ip = provisioner
+            .wait_for_droplet_ip(droplet_id, 12)
+            .await?;
+
+        let ipv4 = with_ip.public_ipv4();
+        let ipv6 = with_ip.public_ipv6();
+        assert!(
+            ipv4.is_some() || ipv6.is_some(),
+            "Droplet should have at least one public IP after wait (ipv4={:?}, ipv6={:?})",
+            ipv4,
+            ipv6
+        );
+
+        if let Some(ref ip) = ipv4 {
+            println!("Droplet {} got IPv4: {}", droplet_id, ip);
+        }
+        if let Some(ref ip) = ipv6 {
+            println!("Droplet {} got IPv6: {}", droplet_id, ip);
+        }
+
+        Ok(with_ip)
+    }
+    .await;
+
+    println!("Cleaning up droplet {} ...", droplet_id);
+    if let Err(e) = provisioner.terminate(&droplet_id.to_string()).await {
+        eprintln!(
+            "WARNING: Failed to clean up test droplet {}: {:?}",
+            droplet_id, e
+        );
+    } else {
+        println!("Droplet {} deleted", droplet_id);
+    }
+
+    wait_result.expect("wait_for_droplet_ip test failed");
+}
