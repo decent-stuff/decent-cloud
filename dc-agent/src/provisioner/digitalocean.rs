@@ -1,5 +1,6 @@
 use super::{
-    HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification,
+    extract_contract_id, HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance,
+    SetupVerification,
 };
 use crate::api_client::ResourceInventory;
 use crate::config::DigitalOceanConfig;
@@ -207,10 +208,6 @@ struct CreateDropletRequest {
 
 fn droplet_name(contract_id: &str) -> String {
     format!("dc-{}", contract_id)
-}
-
-fn extract_contract_id(name: &str) -> Option<String> {
-    name.strip_prefix("dc-").map(String::from)
 }
 
 // ── DigitalOceanProvisioner ─────────────────────────────────────────────────

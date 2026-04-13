@@ -1,5 +1,6 @@
 use super::{
-    HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance, SetupVerification,
+    extract_contract_id, HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance,
+    SetupVerification,
 };
 use crate::config::DockerConfig;
 use anyhow::{bail, Context, Result};
@@ -97,10 +98,6 @@ fn is_docker_not_found(e: &bollard::errors::Error) -> bool {
             ..
         }
     )
-}
-
-fn extract_contract_id(name: &str) -> Option<String> {
-    name.strip_prefix("dc-").map(String::from)
 }
 
 pub struct DockerProvisioner {

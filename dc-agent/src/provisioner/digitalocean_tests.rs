@@ -256,13 +256,6 @@ fn test_droplet_name_format() {
 }
 
 #[test]
-fn test_extract_contract_id() {
-    assert_eq!(extract_contract_id("dc-abc123"), Some("abc123".to_string()));
-    assert_eq!(extract_contract_id("dc-test-contract"), Some("test-contract".to_string()));
-    assert_eq!(extract_contract_id("other-name"), None);
-}
-
-#[test]
 fn test_droplet_network_extraction_no_networks() {
     let droplet = Droplet {
         id: 1,

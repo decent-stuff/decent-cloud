@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::super::{HealthStatus, ProvisionRequest, Provisioner};
+    use super::super::{extract_contract_id, HealthStatus, ProvisionRequest, Provisioner};
     use crate::config::ProxmoxConfig;
     use crate::provisioner::proxmox::{fnv1a_hash, ProxmoxProvisioner};
     use mockito::Server;
@@ -803,20 +803,20 @@ mod tests {
     #[test]
     fn test_extract_contract_id_valid() {
         assert_eq!(
-            ProxmoxProvisioner::extract_contract_id("dc-test-contract-123"),
+            extract_contract_id("dc-test-contract-123"),
             Some("test-contract-123".to_string())
         );
     }
 
     #[test]
     fn test_extract_contract_id_no_prefix() {
-        assert_eq!(ProxmoxProvisioner::extract_contract_id("test-vm"), None);
+        assert_eq!(extract_contract_id("test-vm"), None);
     }
 
     #[test]
     fn test_extract_contract_id_empty_after_prefix() {
         assert_eq!(
-            ProxmoxProvisioner::extract_contract_id("dc-"),
+            extract_contract_id("dc-"),
             Some("".to_string())
         );
     }
