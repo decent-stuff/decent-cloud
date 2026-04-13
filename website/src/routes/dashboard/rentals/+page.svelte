@@ -28,6 +28,7 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
 	import { buildContractEventsUrl, parseContractEvent, parseSshKeyRotationEvent } from "$lib/utils/contract-sse";
+	import { RotationStateTracker } from "$lib/utils/rotation-state";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 
@@ -50,6 +51,9 @@
 		typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pending_guidance_dismissed') === '1'
 	);
 	let recentlyCompletedRotations = $state<Set<string>>(new Set());
+	let rotationTracker = new RotationStateTracker({
+		onChange: () => { recentlyCompletedRotations = new Set(rotationTracker.completedSet); }
+	});
 
 	const spendingStats = $derived({
 		total: contracts.length,
@@ -201,14 +205,7 @@
 						? { ...c, ssh_key_rotation_requested_at_ns: undefined }
 						: c
 				);
-				const updated = new Set(recentlyCompletedRotations);
-				updated.add(rotation.contract_id);
-				recentlyCompletedRotations = updated;
-				setTimeout(() => {
-					const next = new Set(recentlyCompletedRotations);
-					next.delete(rotation.contract_id);
-					recentlyCompletedRotations = next;
-				}, 30_000);
+				rotationTracker.markCompleted(rotation.contract_id);
 			} catch (e) {
 				console.error('[Rentals] Failed to parse ssh_key_rotation_complete SSE event:', e);
 			}
@@ -223,6 +220,8 @@
 			eventSource = null;
 			sseConnected = false;
 		}
+		rotationTracker.clearAll();
+		recentlyCompletedRotations = new Set();
 	}
 
 	async function refreshContracts() {
