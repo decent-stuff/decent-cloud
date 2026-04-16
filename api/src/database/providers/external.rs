@@ -230,3 +230,167 @@ impl Database {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::database::test_helpers::setup_test_db;
+    use crate::database::LedgerEntryData;
+
+    fn make_entry(label: &str, key: &[u8], value: &[u8], timestamp: u64, offset: u64) -> LedgerEntryData {
+        LedgerEntryData {
+            label: label.to_string(),
+            key: key.to_vec(),
+            value: value.to_vec(),
+            block_timestamp_ns: timestamp,
+            block_hash: vec![offset as u8; 3],
+            block_offset: offset,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_registrations_stores_columns() {
+        let db = setup_test_db().await;
+        let pubkey = b"reg_col_test";
+        let signature = b"test_signature_data";
+
+        let entries = vec![make_entry(
+            "PROV_REGISTER",
+            pubkey,
+            signature,
+            1_000_000_000,
+            1,
+        )];
+
+        let mut tx = db.pool.begin().await.unwrap();
+        db.insert_provider_registrations(&mut tx, &entries)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT pubkey, signature, created_at_ns FROM provider_registrations WHERE pubkey = $1",
+        )
+        .bind(pubkey.as_slice())
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+
+        let stored_pubkey: Vec<u8> = row.get("pubkey");
+        let stored_sig: Vec<u8> = row.get("signature");
+        let stored_ts: i64 = row.get("created_at_ns");
+
+        assert_eq!(stored_pubkey, pubkey.as_slice());
+        assert_eq!(stored_sig, signature.as_slice());
+        assert_eq!(stored_ts, 1_000_000_000_i64);
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_registrations_multiple_different_pubkeys() {
+        let db = setup_test_db().await;
+
+        let entries = vec![
+            make_entry("PROV_REGISTER", b"pubkey_aaa", b"sig_a", 1_000_000_000, 1),
+            make_entry("PROV_REGISTER", b"pubkey_bbb", b"sig_b", 2_000_000_000, 2),
+        ];
+
+        let mut tx = db.pool.begin().await.unwrap();
+        db.insert_provider_registrations(&mut tx, &entries)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_registrations WHERE pubkey != $1")
+            .bind(crate::database::Database::example_provider_pubkey())
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_check_ins_stores_memo_and_nonce() {
+        let db = setup_test_db().await;
+        let pubkey = b"checkin_memo_test";
+
+        let payload = dcc_common::CheckInPayload::new("hello_memo".to_string(), vec![0xAA; 64]);
+        let entries = vec![make_entry(
+            "PROV_CHECK_IN",
+            pubkey,
+            &payload.to_bytes().unwrap(),
+            3_000_000_000,
+            1,
+        )];
+
+        let mut tx = db.pool.begin().await.unwrap();
+        db.insert_provider_check_ins(&mut tx, &entries)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT memo, nonce_signature, block_timestamp_ns FROM provider_check_ins WHERE pubkey = $1",
+        )
+        .bind(pubkey.as_slice())
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+
+        let memo: String = row.get("memo");
+        let nonce_sig: Vec<u8> = row.get("nonce_signature");
+        let ts: i64 = row.get("block_timestamp_ns");
+
+        assert_eq!(memo, "hello_memo");
+        assert_eq!(nonce_sig, vec![0xAAu8; 64]);
+        assert_eq!(ts, 3_000_000_000_i64);
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_check_ins_skips_invalid_non_legacy_payload() {
+        let db = setup_test_db().await;
+        let pubkey = b"checkin_skip_test";
+
+        let invalid_payload = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let entries = vec![make_entry(
+            "PROV_CHECK_IN",
+            pubkey,
+            &invalid_payload,
+            4_000_000_000,
+            1,
+        )];
+
+        let mut tx = db.pool.begin().await.unwrap();
+        db.insert_provider_check_ins(&mut tx, &entries)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_check_ins WHERE pubkey = $1")
+            .bind(pubkey.as_slice())
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "Short invalid payload should be skipped (not 64 bytes, not valid borsh)");
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_check_ins_empty_entries_is_ok() {
+        let db = setup_test_db().await;
+
+        let mut tx = db.pool.begin().await.unwrap();
+        let result = db.insert_provider_check_ins(&mut tx, &[]).await;
+        assert!(result.is_ok());
+        tx.commit().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_insert_provider_registrations_empty_entries_is_ok() {
+        let db = setup_test_db().await;
+
+        let mut tx = db.pool.begin().await.unwrap();
+        let result = db.insert_provider_registrations(&mut tx, &[]).await;
+        assert!(result.is_ok());
+        tx.commit().await.unwrap();
+    }
+}
