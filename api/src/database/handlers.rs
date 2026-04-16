@@ -382,6 +382,143 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_insert_entries_empty_vec_returns_ok() {
+        let db = setup_test_db().await;
+        let result = db.insert_entries(vec![]).await;
+        assert!(result.is_ok(), "Empty entries should return Ok immediately");
+    }
+
+    #[tokio::test]
+    async fn test_insert_entries_prov_register() {
+        let db = setup_test_db().await;
+
+        let entries = vec![make_entry(
+            LABEL_PROV_REGISTER,
+            b"prov_provider_key",
+            b"prov_signature",
+            1_000_000_000,
+            1,
+        )];
+        db.insert_entries(entries).await.unwrap();
+
+        assert_eq!(
+            count_rows(&db, "provider_registrations").await,
+            1,
+            "PROV_REGISTER should dispatch to provider_registrations"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_entries_legacy_64byte_check_in_fallback() {
+        let db = setup_test_db().await;
+
+        let provider_key = b"legacy_checkin_provider";
+        let legacy_nonce = vec![0xABu8; 64];
+
+        let entries = vec![
+            make_entry(LABEL_PROV_REGISTER, provider_key, b"sig", 1_000_000_000, 1),
+            make_entry(
+                LABEL_PROV_CHECK_IN,
+                provider_key,
+                &legacy_nonce,
+                1_100_000_000,
+                2,
+            ),
+        ];
+        db.insert_entries(entries).await.unwrap();
+
+        assert_eq!(
+            count_rows(&db, "provider_check_ins").await,
+            1,
+            "Legacy 64-byte nonce should be accepted as check-in"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_entries_provider_registration_upsert() {
+        let db = setup_test_db().await;
+
+        let provider_key = b"upsert_provider";
+
+        let entries_v1 = vec![make_entry(
+            LABEL_PROV_REGISTER,
+            provider_key,
+            b"signature_v1",
+            1_000_000_000,
+            1,
+        )];
+        db.insert_entries(entries_v1).await.unwrap();
+
+        assert_eq!(count_rows(&db, "provider_registrations").await, 1);
+
+        let entries_v2 = vec![make_entry(
+            LABEL_PROV_REGISTER,
+            provider_key,
+            b"signature_v2",
+            2_000_000_000,
+            2,
+        )];
+        db.insert_entries(entries_v2).await.unwrap();
+
+        assert_eq!(
+            count_rows(&db, "provider_registrations").await,
+            1,
+            "Upsert should not create duplicate rows"
+        );
+
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT signature FROM provider_registrations WHERE pubkey != $1",
+        )
+        .bind(Database::example_provider_pubkey())
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        let sig: Vec<u8> = row.get("signature");
+        assert_eq!(
+            sig, b"signature_v2",
+            "Upsert should update the signature"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_entries_mixed_prov_and_np_register_same_batch() {
+        let db = setup_test_db().await;
+
+        let entries = vec![
+            make_entry(LABEL_PROV_REGISTER, b"prov_key", b"prov_sig", 1_000_000_000, 1),
+            make_entry(LABEL_NP_REGISTER, b"np_key", b"np_sig", 1_100_000_000, 2),
+        ];
+        db.insert_entries(entries).await.unwrap();
+
+        assert_eq!(
+            count_rows(&db, "provider_registrations").await,
+            2,
+            "Both PROV_REGISTER and NP_REGISTER should insert into provider_registrations"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_entries_user_register() {
+        let db = setup_test_db().await;
+
+        let entries = vec![make_entry(
+            LABEL_USER_REGISTER,
+            b"user_pubkey",
+            b"user_signature",
+            1_000_000_000,
+            1,
+        )];
+        db.insert_entries(entries).await.unwrap();
+
+        assert_eq!(
+            count_rows(&db, "user_registrations").await,
+            1,
+            "USER_REGISTER should dispatch to user_registrations"
+        );
+    }
+
+    #[tokio::test]
     async fn test_insert_entries_provides_clear_error_context_on_failure() {
         let db = setup_test_db().await;
 
