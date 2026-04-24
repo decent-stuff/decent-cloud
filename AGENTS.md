@@ -85,7 +85,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ### 7. Close the Loop
 - Report realistic completion state (e.g. "80% done").
-- Add still-required work to `TODO.md` and remove completed items to reduce noise.
+- Add still-required work as a GitHub issue (`gh issue create --repo decent-stuff/decent-cloud --label <stripe|decent-agents|launch|deferred-post-launch>`). Close finished issues. (`TODO.md` is deprecated.)
 
 ## LOCAL DEVELOPMENT
 ### Default Rule
@@ -184,7 +184,7 @@ This auto-starts local website/API on `59010/59011`. If startup fails because po
   5. `scripts/dc-secrets set shared/env <KEY>=<value>`
 
 ## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION
-Stop work, document the issue in `TODO.md`, and ask how to proceed if you find:
+Stop work, file a GitHub issue describing the problem, and ask how to proceed if you find:
 - duplicate/conflicting API endpoints
 - conflicting schema definitions or business logic implementations
 - circular dependencies

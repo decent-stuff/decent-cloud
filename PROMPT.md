@@ -1,24 +1,35 @@
-Analyze `TODO.md`.
+Analyze the open GitHub issues for `decent-stuff/decent-cloud` (the canonical task list — `TODO.md` is deprecated).
+
+```bash
+gh issue list --repo decent-stuff/decent-cloud --state open --limit 200 \
+  --label stripe,decent-agents,launch \
+  --json number,title,labels,createdAt,updatedAt,body
+```
 
 Identify the highest-impact items that:
 1. Deliver user-visible value OR remove a real limitation users hit
 2. Require actual design decisions and new code, not just connecting existing pieces
-3. Can be completed in a single session, e.g. single week from a multi-week effort.
+3. Can be completed in a single session, e.g. single week from a multi-week effort
+4. Are aligned with the current focus (Stripe hardening / Decent Agents MVP / launch prep — see `GROWTH_PLAN.md` in the outer workspace). Issues labeled `deferred-post-launch` are out of scope; do not pick them.
 
-Pick AS MANY OF THEM AS YOU CAN and complete them with subagents - one subagent per item.
+Pick AS MANY OF THEM AS YOU CAN and complete them with subagents — one subagent per issue.
 
-For each item, first build a working PoC as per the mandatory workflow. The working PoC should be built as python or bash scripts, or unit/integration tests - whichever is more appropriate, and avoid one-off shell commands. After you have a working PoC, add a failing test for the expected item functionality, then get the tests to pass with code changes, all in line with TDD.
+For each issue, first build a working PoC as per the mandatory workflow. The PoC should be a python or bash script, or a unit/integration test — whichever fits best — and avoid one-off shell commands. After the PoC works, add a failing test for the expected functionality, then get the tests to pass with code changes, all in line with TDD.
 
-Then update `TODO.md` to a) remove all fully done items, b) update existing items with ANY NEW DETAILS, c) splitting into subitems, d) adding dependencies etc. that you may now have on them (IF VALUABLE for future implementation or activities).
+When done with an issue:
+- Update the GH issue: comment with what shipped (PR link, key decisions, follow-up sub-issues if any), then close it.
+  - `gh issue comment <N> --repo decent-stuff/decent-cloud --body "..."`
+  - `gh issue close <N> --repo decent-stuff/decent-cloud`
+- If new follow-up work surfaces, file new GH issues with the appropriate label (`stripe`, `decent-agents`, or `launch`) and link them from the parent.
 
-Finally each subagent commits the VALUABLE part of its changes.
+Finally each subagent commits the VALUABLE part of its changes (one PR per issue when possible).
 
-If there are not enough MEANINGFUL items in `TODO.md` that you can do now, create a few subagents for each of the following:
-- Review the entire codebase and find zombie code and docs, inconsistencies, and half-baked things. Is everything ready for prod? Fix any gaps that are found and if you cannot fix them immediately, add them to `TODO.md`.
-- consider the app from the *user point of view* - we have a LOT of functionality that is not visible or not user friendly / easily usable for users, or if there are some UI/UX changes that would RADICALLY improve intuitiveness and usability from the user point of view (simple, clean, obviously usable UI, etc. - less is more!). Fix these found gaps in another subagent if possible, otherwise add them to `TODO.md` and we'll handle them in the follow-up session(s).
-Regardless of how radical these changes are - let's do them! And use subagents extensively.
-Note that you or the subagents should NOT do UX review and improvements, we have a separate agent for this.
+If there are not enough MEANINGFUL in-scope issues to do now, create a few subagents for each of the following — but only file findings against the current focus areas:
+- Review the codebase for zombie code, inconsistencies, and half-baked things in the Stripe path or the Decent Agents-relevant code (provisioning, dispatcher, billing, webhooks). Fix gaps you can fix; otherwise file a GH issue with the right label.
+- Consider the app from a *Decent Agents customer* point of view — onboarding, dashboard, agent-run experience. If a UI/UX change would radically improve intuitiveness for that customer, file an issue with the `launch` label.
 
-When fully done, use subagents to a) verify completeness and find implementation gaps, and b) fix these gaps immediately if small and easy, or add them to `TODO.md` if very large, c) remove all fully done items from `TODO.md` and reorganize `TODO.md` for size and readability.
+Note: do not do UX review and improvements yourself — there is a separate agent for that.
 
-You then do a final pass through git diff, analyze the leftover changes, and then COMMIT all VALUABLE changes, or revert/leave changes that should not committed, as appropriate.
+When fully done, use subagents to (a) verify completeness and find implementation gaps, (b) fix small gaps immediately or file GH issues for large ones, and (c) confirm no orphaned in-flight work.
+
+Then do a final pass through `git diff`, analyze leftover changes, and COMMIT all VALUABLE changes, or revert/leave changes that should not be committed, as appropriate. Push when commits are ready.

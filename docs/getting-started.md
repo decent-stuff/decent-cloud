@@ -31,7 +31,11 @@ Decent Cloud offers two ways to interact with the platform:
 **Get started:**
 - Follow the [CLI installation guide](installation.md) below
 
-## Quick Start (Web Interface)
+## Quick Start (Web Interface) — No crypto required
+
+The web interface supports signup with Google OAuth or email, and lets you pay
+with a credit card (Stripe) for fiat-priced offerings. **You do not need DCT
+tokens or a crypto wallet for this path.**
 
 1. **Browse the Marketplace**
    - Visit [decent-cloud.org/dashboard/marketplace](https://decent-cloud.org/dashboard/marketplace)
@@ -42,13 +46,28 @@ Decent Cloud offers two ways to interact with the platform:
    - Check provider reputation
    - Compare pricing
 
-3. **Create Account & Rent**
-   - Click "Rent Resource"
-   - Choose "Create Account"
-   - Complete the 2-minute setup
-   - Finish your rental request
+3. **Create Account**
+   - Click "Rent Resource" (or sign in from the header)
+   - Sign in with Google, or create an account with email
+   - Verify your email when the confirmation link arrives — this is required
+     before your first rental request
 
-## Quick Start (CLI)
+4. **Pay and Rent**
+   - In the rental dialog, pick a payment method:
+     - **Credit card (Stripe)** — default for fiat-priced offerings (USD, EUR, ...)
+     - **ICPay** — required for offerings priced in ICP
+   - Enter SSH key and duration, confirm, complete payment on Stripe
+   - Provider provisions your resource and the contract moves to `active`
+
+> Self-rental note: if you rent from your own offering, the payment amount is
+> zero and no card is charged.
+
+## Quick Start (CLI) — Advanced, requires DCT
+
+The CLI path uses on-chain identity and a DCT-denominated registration fee.
+Pick this only if you want full CLI automation, are registering as a provider,
+or otherwise need direct on-chain interaction. Most users should use the web
+interface above.
 
 ### Prerequisites
 
@@ -82,7 +101,8 @@ openssl genpkey -algorithm ED25519 -out $HOME/.dcc/identity/my-id/private.pem
 
 ### 2. Get Initial Tokens
 
-Before registering, you'll need some DC tokens:
+The CLI path requires DCT to cover the on-chain registration fee. (The web
+interface does not — see "Quick Start (Web Interface)" above.)
 
 1. Visit [kongswap](https://www.kongswap.io/swap?from=cngnf-vqaaa-aaaar-qag4q-cai&to=ggi4a-wyaaa-aaaai-actqq-cai) or [icpswap](https://app.icpswap.com/swap?input=ryjl3-tyaaa-aaaaa-aaaba-cai&output=ggi4a-wyaaa-aaaai-actqq-cai)
 2. Exchange for DC tokens and send them to the Principal Id that you get from `dc account --identity <my-id>`
