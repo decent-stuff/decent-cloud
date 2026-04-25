@@ -448,13 +448,14 @@ impl Database {
     /// Stripe's auto-withdrawal already pulls the disputed amount; the refund
     /// here covers the unused billable window (paused time excluded). The
     /// idempotency key is fixed at `dispute:{stripe_dispute_id}` so webhook
-    /// replays collapse onto a single Stripe Refund record.
+    /// replays collapse onto a single Stripe Refund record on Stripe's side
+    /// AND onto a single `refund_audit` row on ours.
     ///
-    /// Returns `(refund_amount_e9s, stripe_refund_id)`. Either side may be
-    /// `None`: amount=None means the customer owes nothing back, refund_id=None
-    /// means the call was either skipped (no client / amount<=0) or the Stripe
-    /// API failed (already logged at `warn!`; the DB row remains in `disputed`
-    /// state and an operator can re-run the refund manually).
+    /// Returns `(refund_amount_e9s, stripe_refund_id)`. `(None, None)` means
+    /// nothing was owed (no successful payment, refund<=0, etc). On Stripe
+    /// API errors the audit row is marked `failed` and the error propagates;
+    /// Stripe will replay the webhook and the same idempotency key collapses
+    /// the retry onto the same refund attempt.
     pub async fn process_dispute_lost_refund(
         &self,
         contract_id: &[u8],
@@ -495,35 +496,28 @@ impl Database {
 
         let refund_cents = refund_e9s / 10_000_000;
         let key = dispute_refund_idempotency_key(stripe_dispute_id);
-        let stripe_refund_id = match stripe_client {
-            Some(client) => {
-                match client
-                    .create_refund(payment_intent_id, Some(refund_cents), Some(&key))
-                    .await
-                {
-                    Ok(id) => {
-                        tracing::info!(
-                            contract_id = %hex::encode(contract_id),
-                            stripe_dispute_id,
-                            stripe_refund_id = %id,
-                            refund_cents,
-                            "Stripe dispute-lost refund issued"
-                        );
-                        Some(id)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            contract_id = %hex::encode(contract_id),
-                            stripe_dispute_id,
-                            error = %format!("{:#}", e),
-                            "Failed to create Stripe dispute-lost refund (will not auto-retry)"
-                        );
-                        None
-                    }
-                }
-            }
-            None => None,
-        };
+        let stripe_refund_id = self
+            .issue_audited_refund(crate::database::refund_audit::AuditedRefundInput {
+                contract_id,
+                idempotency_key: &key,
+                payment_intent_id,
+                refund_cents,
+                currency: &contract.currency,
+                reason: "dispute_lost",
+                stripe_dispute_id: Some(stripe_dispute_id),
+                stripe_client,
+            })
+            .await?;
+
+        if let Some(ref id) = stripe_refund_id {
+            tracing::info!(
+                contract_id = %hex::encode(contract_id),
+                stripe_dispute_id,
+                stripe_refund_id = %id,
+                refund_cents,
+                "Stripe dispute-lost refund issued"
+            );
+        }
 
         // Persist refund accounting on the contract row regardless of whether
         // Stripe accepted the refund; an operator with the row contents can
@@ -542,8 +536,13 @@ impl Database {
     }
 }
 
+
 /// Idempotency key used for the prorated refund issued after a lost dispute.
-/// Exposed so callers can log it and tests can assert the exact value.
+/// Exposed so callers can log it and tests can assert the exact value. Thin
+/// wrapper over the generic `refund::refund_idempotency_key` so the dispute
+/// path shares one source of truth with cancel/reject/manual paths.
 pub fn dispute_refund_idempotency_key(stripe_dispute_id: &str) -> String {
-    format!("dispute:{}", stripe_dispute_id)
+    // contract_id is unused for dispute keys (stripe_dispute_id is globally
+    // unique); pass an empty slice to satisfy the shared signature.
+    crate::refund::refund_idempotency_key("dispute", &[], stripe_dispute_id)
 }

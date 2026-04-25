@@ -407,33 +407,37 @@ impl Database {
                         .as_deref()
                         .or(contract.stripe_checkout_session_id.as_deref());
                     if let Some(payment_intent_id) = stripe_id {
-                        if let Some(client) = stripe_client {
-                            let refund_cents = full_refund / 10_000_000;
-                            match client
-                                .create_refund(payment_intent_id, Some(refund_cents), None)
-                                .await
-                            {
-                                Ok(refund_id) => {
-                                    tracing::info!(
-                                            "Stripe full refund created: {} for rejected contract {} (amount: {} cents)",
-                                            refund_id,
-                                            hex::encode(contract_id),
-                                            refund_cents
-                                        );
-                                    (Some(full_refund), Some(refund_id), None)
-                                }
-                                Err(e) => {
-                                    tracing::error!(
-                                            "Failed to create Stripe refund for rejected contract {}: {}",
-                                            hex::encode(contract_id),
-                                            e
-                                        );
-                                    (Some(full_refund), None, None)
-                                }
-                            }
-                        } else {
-                            (Some(full_refund), None, None)
+                        let refund_cents = full_refund / 10_000_000;
+                        let reject_ts_ns = crate::now_ns()?;
+                        let unique_token = format!("reject:{}", reject_ts_ns);
+                        let key = crate::refund::refund_idempotency_key(
+                            "reject",
+                            contract_id,
+                            &unique_token,
+                        );
+                        let refund_id = self
+                            .issue_audited_refund(
+                                crate::database::refund_audit::AuditedRefundInput {
+                                    contract_id,
+                                    idempotency_key: &key,
+                                    payment_intent_id,
+                                    refund_cents,
+                                    currency: &contract.currency,
+                                    reason: "reject",
+                                    stripe_dispute_id: None,
+                                    stripe_client,
+                                },
+                            )
+                            .await?;
+                        if let Some(ref id) = refund_id {
+                            tracing::info!(
+                                "Stripe full refund created: {} for rejected contract {} (amount: {} cents)",
+                                id,
+                                hex::encode(contract_id),
+                                refund_cents
+                            );
                         }
+                        (Some(full_refund), refund_id, None)
                     } else {
                         (Some(full_refund), None, None)
                     }
@@ -618,39 +622,39 @@ impl Database {
                             total_paused_ns,
                         );
 
-                        // Only process refund if amount is positive and stripe_client is provided
+                        // Only process refund if amount is positive
                         if refund_e9s > 0 {
-                            if let Some(client) = stripe_client {
-                                // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                                let refund_cents = refund_e9s / 10_000_000;
-
-                                // Create refund via Stripe API
-                                match client
-                                    .create_refund(payment_intent_id, Some(refund_cents), None)
-                                    .await
-                                {
-                                    Ok(refund_id) => {
-                                        tracing::info!(
-                                            "Stripe refund created: {} for contract {} (amount: {} cents)",
-                                            refund_id,
-                                            hex::encode(contract_id),
-                                            refund_cents
-                                        );
-                                        (Some(refund_e9s), Some(refund_id), None)
-                                    }
-                                    Err(e) => {
-                                        tracing::warn!(
-                                            "Failed to create Stripe refund for contract {}: {:#}",
-                                            hex::encode(contract_id),
-                                            e
-                                        );
-                                        (Some(refund_e9s), None, None)
-                                    }
-                                }
-                            } else {
-                                // No stripe_client provided, just track the calculated amount
-                                (Some(refund_e9s), None, None)
+                            // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                            let refund_cents = refund_e9s / 10_000_000;
+                            let unique_token = format!("cancel:{}", current_timestamp_ns);
+                            let key = crate::refund::refund_idempotency_key(
+                                "cancel",
+                                contract_id,
+                                &unique_token,
+                            );
+                            let refund_id = self
+                                .issue_audited_refund(
+                                    crate::database::refund_audit::AuditedRefundInput {
+                                        contract_id,
+                                        idempotency_key: &key,
+                                        payment_intent_id,
+                                        refund_cents,
+                                        currency: &contract.currency,
+                                        reason: "cancel",
+                                        stripe_dispute_id: None,
+                                        stripe_client,
+                                    },
+                                )
+                                .await?;
+                            if let Some(ref id) = refund_id {
+                                tracing::info!(
+                                    "Stripe refund created: {} for contract {} (amount: {} cents)",
+                                    id,
+                                    hex::encode(contract_id),
+                                    refund_cents
+                                );
                             }
+                            (Some(refund_e9s), refund_id, None)
                         } else {
                             (None, None, None)
                         }

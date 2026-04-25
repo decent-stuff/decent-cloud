@@ -12,6 +12,7 @@ pub mod notifications;
 pub mod payment_release_service;
 pub mod receipts;
 pub mod recipe_review;
+pub mod refund;
 pub mod regions;
 pub mod rental_notifications;
 mod search;

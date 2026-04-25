@@ -121,11 +121,11 @@ impl StripeClient {
 
     /// Creates a refund for a payment intent.
     ///
-    /// When `idempotency_key` is set, the request is sent with a Stripe
-    /// `Idempotency-Key` header so retries (including webhook replays) collapse
-    /// onto a single Refund record. Pass `None` for one-shot user-driven flows
-    /// where Stripe's natural deduplication on `payment_intent + amount` is
-    /// sufficient.
+    /// `idempotency_key` is required: every refund call site must collapse
+    /// transient retries onto one Stripe Refund record. Construct the key with
+    /// [`crate::refund::refund_idempotency_key`] so all callers share one
+    /// deterministic format and the same string is also persisted in the
+    /// `refund_audit` table.
     ///
     /// # Arguments
     /// * `payment_intent_id` - The PaymentIntent ID to refund
@@ -138,7 +138,7 @@ impl StripeClient {
         &self,
         payment_intent_id: &str,
         amount: Option<i64>,
-        idempotency_key: Option<&str>,
+        idempotency_key: &str,
     ) -> Result<String> {
         let intent_id: PaymentIntentId = payment_intent_id.parse()?;
 
@@ -149,16 +149,11 @@ impl StripeClient {
             params.amount = Some(amt);
         }
 
-        let refund = match idempotency_key {
-            Some(key) => {
-                let scoped = self
-                    .client
-                    .clone()
-                    .with_strategy(RequestStrategy::Idempotent(key.to_string()));
-                Refund::create(&scoped, params).await?
-            }
-            None => Refund::create(&self.client, params).await?,
-        };
+        let scoped = self
+            .client
+            .clone()
+            .with_strategy(RequestStrategy::Idempotent(idempotency_key.to_string()));
+        let refund = Refund::create(&scoped, params).await?;
 
         Ok(refund.id.to_string())
     }

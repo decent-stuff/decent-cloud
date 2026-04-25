@@ -20,6 +20,7 @@ pub mod offering_sla;
 pub mod offerings;
 pub mod providers;
 pub mod recovery;
+pub mod refund_audit;
 pub mod reputation;
 pub mod reseller;
 pub mod rewards;

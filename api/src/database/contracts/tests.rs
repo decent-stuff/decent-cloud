@@ -4660,3 +4660,63 @@ async fn test_terminate_for_dispute_lost() {
         "second delivery must record an audit event"
     );
 }
+
+/// End-to-end wiring test for issue #411: when cancel_contract refunds a
+/// Stripe-paid contract, it MUST first write a `requested` row to
+/// `refund_audit` with the deterministic idempotency key. The
+/// `stripe_client=None` path documented elsewhere in this file lets us
+/// exercise the audit + key construction without a Stripe HTTP mock; the
+/// status stays at `requested` (no Stripe call to flip it).
+#[tokio::test]
+async fn test_cancel_refund_uses_idempotency_key() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![201u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
+    let start_ns = now_ns - 1_000_000_000;
+    let end_ns = now_ns + 10_000_000_000;
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-1".to_string(),
+            payment_intent_id: "pi_audit_test".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    db.cancel_contract(&contract_id, &requester_pk, Some("e2e"), None, None)
+        .await
+        .expect("cancel must succeed");
+
+    // Exactly one audit row for this contract, status=requested (no Stripe
+    // client -> no API call -> no completion).
+    let rows: Vec<(String, String, i64, Option<String>)> = sqlx::query_as(
+        "SELECT idempotency_key, status, amount_cents, stripe_refund_id
+           FROM refund_audit WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_all(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1, "cancel must record exactly one audit row");
+    let (key, status, amount_cents, refund_id) = rows.into_iter().next().unwrap();
+    assert!(
+        key.starts_with(&format!("cancel:{}:cancel:", hex::encode(&contract_id))),
+        "idempotency_key must follow the cancel:<contract_hex>:cancel:<ts> shape, got {}",
+        key
+    );
+    assert_eq!(status, "requested", "no Stripe client -> stays at requested");
+    assert!(amount_cents > 0, "refund must be positive on a fresh cancel");
+    assert!(refund_id.is_none(), "no Stripe call -> no refund_id");
+}
