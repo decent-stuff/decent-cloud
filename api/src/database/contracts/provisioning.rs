@@ -498,15 +498,8 @@ impl Database {
 
         tx.commit().await?;
 
-        self.insert_contract_event(
-            contract_id,
-            "ssh_key_rotation",
-            None,
-            None,
-            "tenant",
-            None,
-        )
-        .await?;
+        self.insert_contract_event(contract_id, "ssh_key_rotation", None, None, "tenant", None)
+            .await?;
 
         Ok(())
     }

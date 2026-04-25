@@ -277,7 +277,10 @@ fn check_os_exists(os_list: &[VultrOs], os_id: i64) -> anyhow::Result<()> {
     if os_list.iter().any(|o| o.id == os_id) {
         return Ok(());
     }
-    let known: Vec<String> = os_list.iter().map(|o| format!("{} (id={})", o.name, o.id)).collect();
+    let known: Vec<String> = os_list
+        .iter()
+        .map(|o| format!("{} (id={})", o.name, o.id))
+        .collect();
     anyhow::bail!(
         "Unknown Vultr OS id '{}'. Available OS: {}",
         os_id,
@@ -290,7 +293,10 @@ fn check_os_exists(os_list: &[VultrOs], os_id: i64) -> anyhow::Result<()> {
 }
 
 impl VultrBackend {
-    pub async fn validate_offering_config(&self, config: &VultrProvisionerConfig) -> anyhow::Result<()> {
+    pub async fn validate_offering_config(
+        &self,
+        config: &VultrProvisionerConfig,
+    ) -> anyhow::Result<()> {
         let plans_response = self
             .request_builder(reqwest::Method::GET, "/plans")
             .send()
@@ -328,14 +334,18 @@ impl VultrBackend {
             "suspending" | "suspended" => ServerStatus::Stopped,
             "destroying" => ServerStatus::Deleting,
             other => {
-                tracing::warn!("Unknown Vultr instance status '{}', treating as failed", other);
+                tracing::warn!(
+                    "Unknown Vultr instance status '{}', treating as failed",
+                    other
+                );
                 ServerStatus::Failed
             }
         };
 
-        let created_at = chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", i.date_created))
-            .map(|dt| dt.with_timezone(&chrono::Utc).to_rfc3339())
-            .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
+        let created_at =
+            chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", i.date_created))
+                .map(|dt| dt.with_timezone(&chrono::Utc).to_rfc3339())
+                .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339());
 
         let public_ip = if i.main_ip == "0.0.0.0" || i.main_ip.is_empty() {
             None
@@ -382,9 +392,11 @@ impl VultrBackend {
             return None;
         }
 
-        let os_version = o.name.split_whitespace().nth(1).map(|s| {
-            s.trim_end_matches("LTS").trim().to_string()
-        });
+        let os_version = o
+            .name
+            .split_whitespace()
+            .nth(1)
+            .map(|s| s.trim_end_matches("LTS").trim().to_string());
 
         Some(Image {
             id: o.id.to_string(),
@@ -492,7 +504,11 @@ impl CloudBackend for VultrBackend {
         }
 
         let data: PlansResponse = response.json().await?;
-        Ok(data.plans.into_iter().map(|p| self.convert_plan(p)).collect())
+        Ok(data
+            .plans
+            .into_iter()
+            .map(|p| self.convert_plan(p))
+            .collect())
     }
 
     async fn list_locations(&self) -> anyhow::Result<Vec<Location>> {
@@ -506,7 +522,11 @@ impl CloudBackend for VultrBackend {
         }
 
         let data: RegionsResponse = response.json().await?;
-        Ok(data.regions.into_iter().map(|r| self.convert_region(r)).collect())
+        Ok(data
+            .regions
+            .into_iter()
+            .map(|r| self.convert_region(r))
+            .collect())
     }
 
     async fn list_images(&self) -> anyhow::Result<Vec<Image>> {
@@ -520,7 +540,11 @@ impl CloudBackend for VultrBackend {
         }
 
         let data: OsResponse = response.json().await?;
-        Ok(data.os.into_iter().filter_map(|o| self.convert_os(o)).collect())
+        Ok(data
+            .os
+            .into_iter()
+            .filter_map(|o| self.convert_os(o))
+            .collect())
     }
 
     async fn create_server(&self, req: CreateServerRequest) -> anyhow::Result<ProvisionResult> {
@@ -613,7 +637,11 @@ impl CloudBackend for VultrBackend {
             }
         };
 
-        if self.ssh_wait_timeout_secs > 0 && !self.wait_for_ssh_reachable(&ip, self.ssh_wait_timeout_secs).await? {
+        if self.ssh_wait_timeout_secs > 0
+            && !self
+                .wait_for_ssh_reachable(&ip, self.ssh_wait_timeout_secs)
+                .await?
+        {
             cleanup_server_and_key(self, &server.id, &ssh_key_id).await;
             anyhow::bail!("SSH port not reachable after 120s");
         }
@@ -652,7 +680,8 @@ impl CloudBackend for VultrBackend {
             return Err(self.handle_error(response).await);
         }
 
-        self.wait_for_server_status(id, ServerStatus::Running, 120).await
+        self.wait_for_server_status(id, ServerStatus::Running, 120)
+            .await
     }
 
     async fn stop_server(&self, id: &str) -> anyhow::Result<()> {
@@ -665,7 +694,8 @@ impl CloudBackend for VultrBackend {
             return Err(self.handle_error(response).await);
         }
 
-        self.wait_for_server_status(id, ServerStatus::Stopped, 120).await
+        self.wait_for_server_status(id, ServerStatus::Stopped, 120)
+            .await
     }
 
     async fn delete_server(&self, id: &str) -> anyhow::Result<()> {
@@ -749,7 +779,11 @@ mod tests {
 
         for status in &["pending", "installing", "resizing"] {
             let converted = backend.convert_instance(make_test_instance(status, "1.2.3.4"));
-            assert_eq!(converted.status, ServerStatus::Provisioning, "status '{status}'");
+            assert_eq!(
+                converted.status,
+                ServerStatus::Provisioning,
+                "status '{status}'"
+            );
         }
 
         let converted = backend.convert_instance(make_test_instance("active", "1.2.3.4"));
@@ -822,16 +856,36 @@ mod tests {
     fn test_vultr_os_conversion_filters_non_system() {
         let backend = VultrBackend::new("test_key".to_string()).unwrap();
 
-        let iso = VultrOs { id: 159, name: "Custom".to_string(), arch: "x64".to_string(), family: "iso".to_string() };
+        let iso = VultrOs {
+            id: 159,
+            name: "Custom".to_string(),
+            arch: "x64".to_string(),
+            family: "iso".to_string(),
+        };
         assert!(backend.convert_os(iso).is_none());
 
-        let snapshot = VultrOs { id: 164, name: "Snapshot".to_string(), arch: "x64".to_string(), family: "snapshot".to_string() };
+        let snapshot = VultrOs {
+            id: 164,
+            name: "Snapshot".to_string(),
+            arch: "x64".to_string(),
+            family: "snapshot".to_string(),
+        };
         assert!(backend.convert_os(snapshot).is_none());
 
-        let backup = VultrOs { id: 180, name: "Backup".to_string(), arch: "x64".to_string(), family: "backup".to_string() };
+        let backup = VultrOs {
+            id: 180,
+            name: "Backup".to_string(),
+            arch: "x64".to_string(),
+            family: "backup".to_string(),
+        };
         assert!(backend.convert_os(backup).is_none());
 
-        let app = VultrOs { id: 186, name: "Application".to_string(), arch: "x64".to_string(), family: "application".to_string() };
+        let app = VultrOs {
+            id: 186,
+            name: "Application".to_string(),
+            arch: "x64".to_string(),
+            family: "application".to_string(),
+        };
         assert!(backend.convert_os(app).is_none());
     }
 
@@ -878,9 +932,17 @@ mod tests {
             type_: "vc2".to_string(),
             locations: vec!["ewr".to_string()],
         }];
-        let err = check_plan_region(&plans, "vc2-1c-1gb", "nrt").unwrap_err().to_string();
-        assert!(err.contains("not available in region 'nrt'"), "unexpected: {err}");
-        assert!(err.contains("ewr"), "error should list available regions: {err}");
+        let err = check_plan_region(&plans, "vc2-1c-1gb", "nrt")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("not available in region 'nrt'"),
+            "unexpected: {err}"
+        );
+        assert!(
+            err.contains("ewr"),
+            "error should list available regions: {err}"
+        );
     }
 
     #[test]
@@ -895,8 +957,13 @@ mod tests {
             type_: "vc2".to_string(),
             locations: vec!["ewr".to_string()],
         }];
-        let err = check_plan_region(&plans, "nonexistent", "ewr").unwrap_err().to_string();
-        assert!(err.contains("Unknown Vultr plan 'nonexistent'"), "unexpected: {err}");
+        let err = check_plan_region(&plans, "nonexistent", "ewr")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Unknown Vultr plan 'nonexistent'"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
@@ -919,7 +986,10 @@ mod tests {
             family: "ubuntu".to_string(),
         }];
         let err = check_os_exists(&os_list, 9999).unwrap_err().to_string();
-        assert!(err.contains("Unknown Vultr OS id '9999'"), "unexpected: {err}");
+        assert!(
+            err.contains("Unknown Vultr OS id '9999'"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
@@ -957,7 +1027,10 @@ mod tests {
     #[test]
     fn test_resolve_provisioner_config_invalid_json() {
         let err = resolve_provisioner_config(Some("not json"), "ewr", None).unwrap_err();
-        assert!(err.to_string().contains("Invalid provisioner_config JSON"), "unexpected: {err}");
+        assert!(
+            err.to_string().contains("Invalid provisioner_config JSON"),
+            "unexpected: {err}"
+        );
     }
 
     #[test]
@@ -1158,11 +1231,18 @@ mod tests {
 
         let backend = VultrBackend::new_for_mockito(server.url());
         let result = backend.create_server(make_create_request()).await;
-        assert!(result.is_ok(), "create_server should succeed after IP assigned: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "create_server should succeed after IP assigned: {:?}",
+            result.err()
+        );
 
         let provision_result = result.unwrap();
         assert_eq!(provision_result.server.id, "inst-1");
-        assert_eq!(provision_result.server.public_ip, Some("192.168.1.1".to_string()));
+        assert_eq!(
+            provision_result.server.public_ip,
+            Some("192.168.1.1".to_string())
+        );
         assert_eq!(provision_result.ssh_key_id, Some("ssh-key-1".to_string()));
     }
 
@@ -1217,7 +1297,10 @@ mod tests {
 
         let backend = VultrBackend::new_for_mockito(server.url());
         let result = backend.create_server(make_create_request()).await;
-        assert!(result.is_err(), "create_server should fail when IP never assigned");
+        assert!(
+            result.is_err(),
+            "create_server should fail when IP never assigned"
+        );
         let err = format!("{:#}", result.unwrap_err());
         assert!(
             err.contains("never got a public IP"),
@@ -1257,7 +1340,10 @@ mod tests {
 
         let backend = VultrBackend::new_for_mockito(server.url());
         let result = backend.create_server(make_create_request()).await;
-        assert!(result.is_err(), "create_server should fail on instance creation error");
+        assert!(
+            result.is_err(),
+            "create_server should fail on instance creation error"
+        );
         let err = format!("{:#}", result.unwrap_err());
         assert!(
             err.contains("422") || err.contains("Invalid"),
@@ -1318,7 +1404,10 @@ mod tests {
 
         let backend = VultrBackend::new_for_mockito(server.url());
         let result = backend.create_server(make_create_request()).await;
-        assert!(result.is_err(), "create_server should fail when server never reaches running");
+        assert!(
+            result.is_err(),
+            "create_server should fail when server never reaches running"
+        );
         let err = format!("{:#}", result.unwrap_err());
         assert!(
             err.contains("failed to reach running state"),
@@ -1355,11 +1444,18 @@ mod tests {
 
         let backend = VultrBackend::new_for_mockito(server.url());
         let result = backend.create_server(make_create_request()).await;
-        assert!(result.is_ok(), "create_server should succeed with immediate IP: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "create_server should succeed with immediate IP: {:?}",
+            result.err()
+        );
 
         let provision_result = result.unwrap();
         assert_eq!(provision_result.server.id, "inst-5");
-        assert_eq!(provision_result.server.public_ip, Some("203.0.113.50".to_string()));
+        assert_eq!(
+            provision_result.server.public_ip,
+            Some("203.0.113.50".to_string())
+        );
         assert_eq!(provision_result.ssh_key_id, Some("ssh-key-5".to_string()));
     }
 
@@ -1446,7 +1542,11 @@ mod tests {
         let result = backend.get_server("nope").await;
         assert!(result.is_err(), "get_server should return Err for 404");
         let err = format!("{:#}", result.unwrap_err());
-        assert!(err.contains("not found"), "Error should mention not found: {}", err);
+        assert!(
+            err.contains("not found"),
+            "Error should mention not found: {}",
+            err
+        );
     }
 
     #[tokio::test]

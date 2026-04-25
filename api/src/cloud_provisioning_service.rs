@@ -4,8 +4,8 @@
 //! For contract-linked resources, also executes post-provision scripts and updates contract status.
 
 use crate::cloud::{
-    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType, vultr::VultrBackend, CloudBackend,
-    CreateServerRequest,
+    hetzner::HetznerBackend, proxmox_api::ProxmoxApiBackend, types::BackendType,
+    vultr::VultrBackend, CloudBackend, CreateServerRequest,
 };
 use crate::cloudflare_dns::CloudflareDns;
 use crate::crypto::{decrypt_server_credential, ServerEncryptionKey};

@@ -92,13 +92,8 @@ pub static CANISTER_WASM: LazyLock<Vec<u8>> = LazyLock::new(|| {
         .map(PathBuf::from)
         .unwrap_or_else(|_| workspace.join("target"));
     let wasm_path = target_dir.join("wasm32-unknown-unknown/release/decent_cloud_canister.wasm");
-    fs_err::read(&wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "Canister WASM not found at {}: {}",
-            wasm_path.display(),
-            e
-        )
-    })
+    fs_err::read(&wasm_path)
+        .unwrap_or_else(|e| panic!("Canister WASM not found at {}: {}", wasm_path.display(), e))
 });
 
 /// Shared PocketIc instance across all tests.

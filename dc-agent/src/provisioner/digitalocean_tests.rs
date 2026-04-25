@@ -89,7 +89,8 @@ fn test_deserialize_droplets_response() {
         "meta": {"total": 1}
     }"#;
 
-    let resp: DropletsResponse = serde_json::from_str(json).expect("Failed to deserialize droplets");
+    let resp: DropletsResponse =
+        serde_json::from_str(json).expect("Failed to deserialize droplets");
     assert_eq!(resp.droplets.len(), 1);
 
     let droplet = &resp.droplets[0];
@@ -103,10 +104,7 @@ fn test_deserialize_droplets_response() {
     assert_eq!(droplet.size_slug, "s-1vcpu-1gb");
     assert_eq!(droplet.tags, vec!["web", "env:prod"]);
 
-    assert_eq!(
-        droplet.public_ipv4().as_deref(),
-        Some("192.241.165.154")
-    );
+    assert_eq!(droplet.public_ipv4().as_deref(), Some("192.241.165.154"));
     assert_eq!(
         droplet.public_ipv6().as_deref(),
         Some("2604:a880:0:1010::18a:a001")
@@ -274,7 +272,10 @@ fn test_droplet_network_extraction_no_networks() {
         locked: false,
         created_at: "2020-07-21T18:37:44Z".to_string(),
         networks: Networks::default(),
-        region: DoRegion { name: "test".to_string(), slug: "nyc3".to_string() },
+        region: DoRegion {
+            name: "test".to_string(),
+            slug: "nyc3".to_string(),
+        },
         size_slug: "s-1vcpu-1gb".to_string(),
         tags: vec![],
         image: None,
@@ -312,7 +313,10 @@ fn test_droplet_multiple_v4_picks_public() {
             ],
             v6: vec![],
         },
-        region: DoRegion { name: "test".to_string(), slug: "nyc3".to_string() },
+        region: DoRegion {
+            name: "test".to_string(),
+            slug: "nyc3".to_string(),
+        },
         size_slug: "s-1vcpu-1gb".to_string(),
         tags: vec![],
         image: None,
@@ -354,7 +358,10 @@ fn test_droplet_to_instance_mapping() {
                 network_type: "public".to_string(),
             }],
         },
-        region: DoRegion { name: "Amsterdam 3".to_string(), slug: "ams3".to_string() },
+        region: DoRegion {
+            name: "Amsterdam 3".to_string(),
+            slug: "ams3".to_string(),
+        },
         size_slug: "s-2vcpu-2gb".to_string(),
         tags: vec!["dc-agent".to_string()],
         image: Some(DoImage {
@@ -370,7 +377,10 @@ fn test_droplet_to_instance_mapping() {
     assert_eq!(instance.external_id, "12345");
     assert_eq!(instance.ip_address.as_deref(), Some("203.0.113.50"));
     assert_eq!(instance.public_ip.as_deref(), Some("203.0.113.50"));
-    assert_eq!(instance.ipv6_address.as_deref(), Some("2604:a880:0:1010::18a:a001"));
+    assert_eq!(
+        instance.ipv6_address.as_deref(),
+        Some("2604:a880:0:1010::18a:a001")
+    );
     assert_eq!(instance.ssh_port, 22);
     assert!(instance.root_password.is_none());
 
@@ -403,7 +413,10 @@ fn test_resolve_size_default() {
         default_image: "ubuntu-24-04-x64".to_string(),
     };
     let provisioner = DigitalOceanProvisioner::new(config).unwrap();
-    assert_eq!(provisioner.resolve_size(&make_provision_request()), "s-1vcpu-1gb");
+    assert_eq!(
+        provisioner.resolve_size(&make_provision_request()),
+        "s-1vcpu-1gb"
+    );
 }
 
 #[test]
@@ -464,7 +477,11 @@ async fn test_provision_creates_droplet() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.provision(&make_provision_request()).await;
-    assert!(result.is_ok(), "provision should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "provision should succeed: {:?}",
+        result.err()
+    );
 
     let instance = result.unwrap();
     assert_eq!(instance.external_id, "98765");
@@ -507,7 +524,11 @@ async fn test_provision_with_ssh_key() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.provision(&make_provision_request_with_ssh()).await;
-    assert!(result.is_ok(), "provision with SSH key should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "provision with SSH key should succeed: {:?}",
+        result.err()
+    );
 
     let instance = result.unwrap();
     assert_eq!(instance.external_id, "55555");
@@ -529,7 +550,11 @@ async fn test_provision_api_error_returns_err() {
     let result = prov.provision(&make_provision_request()).await;
     assert!(result.is_err(), "provision should fail on API error");
     let err = format!("{:#}", result.unwrap_err());
-    assert!(err.contains("422"), "Error should mention status 422: {}", err);
+    assert!(
+        err.contains("422"),
+        "Error should mention status 422: {}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -567,7 +592,10 @@ async fn test_provision_droplet_never_becomes_active() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.provision(&make_provision_request()).await;
-    assert!(result.is_err(), "provision should fail when droplet never becomes active");
+    assert!(
+        result.is_err(),
+        "provision should fail when droplet never becomes active"
+    );
 }
 
 #[tokio::test]
@@ -676,7 +704,11 @@ async fn test_health_check_droplet_off() {
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.health_check("12345").await.unwrap();
     if let HealthStatus::Unhealthy { reason } = &result {
-        assert!(reason.contains("powered off"), "Expected 'powered off', got: {}", reason);
+        assert!(
+            reason.contains("powered off"),
+            "Expected 'powered off', got: {}",
+            reason
+        );
     } else {
         panic!("Expected Unhealthy for 'off' status, got {:?}", result);
     }
@@ -695,7 +727,10 @@ async fn test_health_check_api_error_returns_err() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.health_check("12345").await;
-    assert!(result.is_err(), "health_check should return Err on API error, not Ok(Unhealthy)");
+    assert!(
+        result.is_err(),
+        "health_check should return Err on API error, not Ok(Unhealthy)"
+    );
 }
 
 #[tokio::test]
@@ -740,7 +775,10 @@ async fn test_list_running_instances() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*tag_name=dc-agent.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/droplets\?.*tag_name=dc-agent.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(format!(
@@ -765,7 +803,10 @@ async fn test_verify_setup_success() {
     let mut server = mockito::Server::new_async().await;
 
     let _droplets = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"droplets":[],"meta":{"total":0}}"#)
@@ -784,7 +825,11 @@ async fn test_verify_setup_success() {
     let result = prov.verify_setup().await;
     assert_eq!(result.api_reachable, Some(true));
     assert_eq!(result.template_exists, Some(true));
-    assert!(result.errors.is_empty(), "Expected no errors, got: {:?}", result.errors);
+    assert!(
+        result.errors.is_empty(),
+        "Expected no errors, got: {:?}",
+        result.errors
+    );
 }
 
 #[tokio::test]
@@ -792,7 +837,10 @@ async fn test_verify_setup_api_unreachable() {
     let mut server = mockito::Server::new_async().await;
 
     let _mock = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/droplets\?.*".to_string()),
+        )
         .with_status(401)
         .with_header("content-type", "application/json")
         .with_body(r#"{"id":"unauthorized","message":"Invalid API token"}"#)
@@ -810,7 +858,10 @@ async fn test_verify_setup_image_not_found() {
     let mut server = mockito::Server::new_async().await;
 
     let _droplets = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"droplets":[],"meta":{"total":0}}"#)
@@ -818,7 +869,10 @@ async fn test_verify_setup_image_not_found() {
         .await;
 
     let _images = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/images\?.*slug=ubuntu-24-04-x64.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/images\?.*slug=ubuntu-24-04-x64.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"images":[]}"#)
@@ -829,7 +883,10 @@ async fn test_verify_setup_image_not_found() {
     let result = prov.verify_setup().await;
     assert_eq!(result.api_reachable, Some(true));
     assert_eq!(result.template_exists, Some(false));
-    assert!(!result.errors.is_empty(), "Should have error about missing image");
+    assert!(
+        !result.errors.is_empty(),
+        "Should have error about missing image"
+    );
 }
 
 #[tokio::test]
@@ -837,7 +894,10 @@ async fn test_verify_setup_image_json_parse_failure() {
     let mut server = mockito::Server::new_async().await;
 
     let _droplets = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/droplets\?.*per_page=1.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"{"droplets":[],"meta":{"total":0}}"#)
@@ -845,7 +905,10 @@ async fn test_verify_setup_image_json_parse_failure() {
         .await;
 
     let _images = server
-        .mock("GET", mockito::Matcher::Regex(r"/v2/images\?.*slug=ubuntu-24-04-x64.*".to_string()))
+        .mock(
+            "GET",
+            mockito::Matcher::Regex(r"/v2/images\?.*slug=ubuntu-24-04-x64.*".to_string()),
+        )
         .with_status(200)
         .with_header("content-type", "application/json")
         .with_body(r#"this is not valid json"#)
@@ -855,7 +918,10 @@ async fn test_verify_setup_image_json_parse_failure() {
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.verify_setup().await;
     assert_eq!(result.api_reachable, Some(true));
-    assert!(!result.warnings.is_empty(), "Should have warning about JSON parse failure");
+    assert!(
+        !result.warnings.is_empty(),
+        "Should have warning about JSON parse failure"
+    );
 }
 
 #[tokio::test]
@@ -866,13 +932,18 @@ async fn test_collect_resources_success_returns_none() {
         .mock("GET", "/v2/account")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"{"account":{"droplet_limit":25,"email":"test@example.com","status":"active"}}"#)
+        .with_body(
+            r#"{"account":{"droplet_limit":25,"email":"test@example.com","status":"active"}}"#,
+        )
         .create_async()
         .await;
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.collect_resources().await;
-    assert!(result.is_none(), "collect_resources should return None (no host resource data available for cloud provider)");
+    assert!(
+        result.is_none(),
+        "collect_resources should return None (no host resource data available for cloud provider)"
+    );
 }
 
 #[tokio::test]
@@ -887,7 +958,10 @@ async fn test_collect_resources_api_failure_returns_none() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.collect_resources().await;
-    assert!(result.is_none(), "collect_resources should return None on API failure");
+    assert!(
+        result.is_none(),
+        "collect_resources should return None on API failure"
+    );
 }
 
 #[tokio::test]
@@ -931,7 +1005,11 @@ async fn test_provision_active_then_ip_assigned() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.provision(&make_provision_request()).await;
-    assert!(result.is_ok(), "provision should succeed after IP is assigned: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "provision should succeed after IP is assigned: {:?}",
+        result.err()
+    );
 
     let instance = result.unwrap();
     assert_eq!(instance.external_id, "77777");
@@ -972,7 +1050,10 @@ async fn test_provision_active_never_gets_ip() {
 
     let prov = DigitalOceanProvisioner::new_for_mockito(server.url());
     let result = prov.provision(&make_provision_request()).await;
-    assert!(result.is_err(), "provision should fail when droplet never gets IP");
+    assert!(
+        result.is_err(),
+        "provision should fail when droplet never gets IP"
+    );
     let err = format!("{:#}", result.unwrap_err());
     assert!(
         err.contains("no IP address assigned"),
@@ -999,12 +1080,22 @@ async fn integration_list_droplets() {
     let provisioner = DigitalOceanProvisioner::new(config).unwrap();
 
     let verification = provisioner.verify_setup().await;
-    assert!(verification.api_reachable == Some(true), "API should be reachable: {:?}", verification.errors);
+    assert!(
+        verification.api_reachable == Some(true),
+        "API should be reachable: {:?}",
+        verification.errors
+    );
 
-    let instances = provisioner.list_running_instances().await.expect("list should succeed");
+    let instances = provisioner
+        .list_running_instances()
+        .await
+        .expect("list should succeed");
     println!("Found {} running instances", instances.len());
     for inst in &instances {
-        println!("  instance: external_id={}, contract_id={:?}", inst.external_id, inst.contract_id);
+        println!(
+            "  instance: external_id={}, contract_id={:?}",
+            inst.external_id, inst.contract_id
+        );
     }
 }
 
@@ -1029,9 +1120,16 @@ async fn integration_catalog_endpoints() {
         .send()
         .await
         .expect("regions request failed");
-    assert!(resp.status().is_success(), "regions: status={}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "regions: status={}",
+        resp.status()
+    );
     let regions: RegionsResponse = resp.json().await.expect("regions parse failed");
-    println!("Regions: {} available", regions.regions.iter().filter(|r| r.available).count());
+    println!(
+        "Regions: {} available",
+        regions.regions.iter().filter(|r| r.available).count()
+    );
     for r in regions.regions.iter().take(5) {
         println!("  {} ({}) available={}", r.slug, r.name, r.available);
     }
@@ -1044,11 +1142,21 @@ async fn integration_catalog_endpoints() {
         .send()
         .await
         .expect("sizes request failed");
-    assert!(resp.status().is_success(), "sizes: status={}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "sizes: status={}",
+        resp.status()
+    );
     let sizes: SizesResponse = resp.json().await.expect("sizes parse failed");
-    println!("Sizes: {} available", sizes.sizes.iter().filter(|s| s.available).count());
+    println!(
+        "Sizes: {} available",
+        sizes.sizes.iter().filter(|s| s.available).count()
+    );
     for s in sizes.sizes.iter().filter(|s| s.available).take(5) {
-        println!("  {} ({}MB, {}vCPU) ${}/mo", s.slug, s.memory, s.vcpus, s.price_monthly);
+        println!(
+            "  {} ({}MB, {}vCPU) ${}/mo",
+            s.slug, s.memory, s.vcpus, s.price_monthly
+        );
     }
 
     // GET /v2/images?type=distribution
@@ -1059,7 +1167,11 @@ async fn integration_catalog_endpoints() {
         .send()
         .await
         .expect("images request failed");
-    assert!(resp.status().is_success(), "images: status={}", resp.status());
+    assert!(
+        resp.status().is_success(),
+        "images: status={}",
+        resp.status()
+    );
     let images: ImagesResponse = resp.json().await.expect("images parse failed");
     println!("Distribution images: {}", images.images.len());
     for img in images.images.iter().take(5) {
@@ -1088,10 +1200,7 @@ async fn integration_wait_for_droplet_ip() {
         verification.errors
     );
 
-    let contract_id = format!(
-        "ip-wait-test-{}",
-        chrono::Utc::now().format("%Y%m%d%H%M%S")
-    );
+    let contract_id = format!("ip-wait-test-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
     let name = droplet_name(&contract_id);
 
     let create_req = CreateDropletRequest {
@@ -1119,10 +1228,7 @@ async fn integration_wait_for_droplet_ip() {
         resp.status()
     );
 
-    let droplet_resp: DropletResponse = resp
-        .json()
-        .await
-        .expect("Failed to parse create response");
+    let droplet_resp: DropletResponse = resp.json().await.expect("Failed to parse create response");
     let droplet_id = droplet_resp.droplet.id;
     println!(
         "Created droplet '{}' (id={}), waiting for active state",
@@ -1130,9 +1236,7 @@ async fn integration_wait_for_droplet_ip() {
     );
 
     let wait_result: Result<Droplet, anyhow::Error> = async {
-        let active = provisioner
-            .wait_for_droplet_active(droplet_id, 60)
-            .await?;
+        let active = provisioner.wait_for_droplet_active(droplet_id, 60).await?;
         println!(
             "Droplet {} is active (has_ipv4={}, has_ipv6={})",
             droplet_id,
@@ -1140,9 +1244,7 @@ async fn integration_wait_for_droplet_ip() {
             active.public_ipv6().is_some()
         );
 
-        let with_ip = provisioner
-            .wait_for_droplet_ip(droplet_id, 12)
-            .await?;
+        let with_ip = provisioner.wait_for_droplet_ip(droplet_id, 12).await?;
 
         let ipv4 = with_ip.public_ipv4();
         let ipv6 = with_ip.public_ipv6();

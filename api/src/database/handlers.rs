@@ -143,13 +143,19 @@ mod tests {
     use crate::database::Database;
     use crate::database::LedgerEntryData;
     use dcc_common::{
-        LABEL_CONTRACT_SIGN_REPLY_LEGACY, LABEL_CONTRACT_SIGN_REQUEST_LEGACY,
-        LABEL_NP_CHECK_IN, LABEL_NP_OFFERING_LEGACY,
-        LABEL_NP_PROFILE_LEGACY, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN, LABEL_PROV_OFFERING_LEGACY,
-        LABEL_PROV_PROFILE_LEGACY, LABEL_PROV_REGISTER, LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER,
+        LABEL_CONTRACT_SIGN_REPLY_LEGACY, LABEL_CONTRACT_SIGN_REQUEST_LEGACY, LABEL_NP_CHECK_IN,
+        LABEL_NP_OFFERING_LEGACY, LABEL_NP_PROFILE_LEGACY, LABEL_NP_REGISTER, LABEL_PROV_CHECK_IN,
+        LABEL_PROV_OFFERING_LEGACY, LABEL_PROV_PROFILE_LEGACY, LABEL_PROV_REGISTER,
+        LABEL_REPUTATION_CHANGE, LABEL_USER_REGISTER,
     };
 
-    fn make_entry(label: &str, key: &[u8], value: &[u8], timestamp: u64, offset: u64) -> LedgerEntryData {
+    fn make_entry(
+        label: &str,
+        key: &[u8],
+        value: &[u8],
+        timestamp: u64,
+        offset: u64,
+    ) -> LedgerEntryData {
         LedgerEntryData {
             label: label.to_string(),
             key: key.to_vec(),
@@ -164,10 +170,7 @@ mod tests {
         use sqlx::Row;
         if table.starts_with("provider_") {
             let example_pubkey = Database::example_provider_pubkey();
-            let sql = format!(
-                "SELECT COUNT(*) as count FROM {} WHERE pubkey != $1",
-                table
-            );
+            let sql = format!("SELECT COUNT(*) as count FROM {} WHERE pubkey != $1", table);
             let row = sqlx::query(&sql)
                 .bind(example_pubkey)
                 .fetch_one(&db.pool)
@@ -176,10 +179,7 @@ mod tests {
             row.get("count")
         } else {
             let sql = format!("SELECT COUNT(*) as count FROM {}", table);
-            let row = sqlx::query(&sql)
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
+            let row = sqlx::query(&sql).fetch_one(&db.pool).await.unwrap();
             row.get("count")
         }
     }
@@ -200,11 +200,22 @@ mod tests {
         let entries: Vec<LedgerEntryData> = legacy_labels
             .iter()
             .enumerate()
-            .map(|(i, label)| make_entry(label, b"legacy_key", b"legacy_value", 1_000_000_000 + i as u64, i as u64))
+            .map(|(i, label)| {
+                make_entry(
+                    label,
+                    b"legacy_key",
+                    b"legacy_value",
+                    1_000_000_000 + i as u64,
+                    i as u64,
+                )
+            })
             .collect();
 
         let result = db.insert_entries(entries).await;
-        assert!(result.is_ok(), "Legacy labels should be accepted without error");
+        assert!(
+            result.is_ok(),
+            "Legacy labels should be accepted without error"
+        );
 
         let tables = [
             "provider_registrations",
@@ -277,7 +288,13 @@ mod tests {
             dcc_common::CheckInPayload::new("mixed_check_in".to_string(), vec![1, 2, 3, 4]);
 
         let entries = vec![
-            make_entry(LABEL_PROV_REGISTER, provider_key, b"sig_prov", 1_000_000_000, 1),
+            make_entry(
+                LABEL_PROV_REGISTER,
+                provider_key,
+                b"sig_prov",
+                1_000_000_000,
+                1,
+            ),
             make_entry(LABEL_USER_REGISTER, user_key, b"sig_user", 1_100_000_000, 2),
             make_entry(
                 LABEL_PROV_CHECK_IN,
@@ -301,10 +318,8 @@ mod tests {
         let provider_key = b"group_test_provider";
         let entries: Vec<LedgerEntryData> = (0..3)
             .map(|i| {
-                let payload = dcc_common::CheckInPayload::new(
-                    format!("check_{}", i),
-                    vec![i as u8; 4],
-                );
+                let payload =
+                    dcc_common::CheckInPayload::new(format!("check_{}", i), vec![i as u8; 4]);
                 make_entry(
                     LABEL_PROV_CHECK_IN,
                     provider_key,
@@ -467,18 +482,13 @@ mod tests {
         );
 
         use sqlx::Row;
-        let row = sqlx::query(
-            "SELECT signature FROM provider_registrations WHERE pubkey != $1",
-        )
-        .bind(Database::example_provider_pubkey())
-        .fetch_one(&db.pool)
-        .await
-        .unwrap();
+        let row = sqlx::query("SELECT signature FROM provider_registrations WHERE pubkey != $1")
+            .bind(Database::example_provider_pubkey())
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
         let sig: Vec<u8> = row.get("signature");
-        assert_eq!(
-            sig, b"signature_v2",
-            "Upsert should update the signature"
-        );
+        assert_eq!(sig, b"signature_v2", "Upsert should update the signature");
     }
 
     #[tokio::test]
@@ -486,7 +496,13 @@ mod tests {
         let db = setup_test_db().await;
 
         let entries = vec![
-            make_entry(LABEL_PROV_REGISTER, b"prov_key", b"prov_sig", 1_000_000_000, 1),
+            make_entry(
+                LABEL_PROV_REGISTER,
+                b"prov_key",
+                b"prov_sig",
+                1_000_000_000,
+                1,
+            ),
             make_entry(LABEL_NP_REGISTER, b"np_key", b"np_sig", 1_100_000_000, 2),
         ];
         db.insert_entries(entries).await.unwrap();

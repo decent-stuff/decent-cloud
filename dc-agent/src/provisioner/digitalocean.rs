@@ -247,16 +247,15 @@ impl DigitalOceanProvisioner {
             return Ok(());
         }
         let body = response.text().await.unwrap_or_default();
-        bail!(
-            "DigitalOcean API error: status={}, body={}",
-            status,
-            body
-        );
+        bail!("DigitalOcean API error: status={}, body={}", status, body);
     }
 
     async fn get_droplet(&self, droplet_id: i64) -> Result<Option<Droplet>> {
         let resp = self
-            .request_builder(reqwest::Method::GET, &format!("/v2/droplets/{}", droplet_id))
+            .request_builder(
+                reqwest::Method::GET,
+                &format!("/v2/droplets/{}", droplet_id),
+            )
             .send()
             .await
             .with_context(|| format!("Failed to GET droplet {}", droplet_id))?;
@@ -267,7 +266,12 @@ impl DigitalOceanProvisioner {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            bail!("Failed to get droplet {}: status={}, body={}", droplet_id, status, body);
+            bail!(
+                "Failed to get droplet {}: status={}, body={}",
+                droplet_id,
+                status,
+                body
+            );
         }
 
         let droplet_resp: DropletResponse = resp
@@ -385,7 +389,10 @@ impl DigitalOceanProvisioner {
 
     async fn delete_ssh_key(&self, key_id: i64) -> Result<()> {
         let resp = self
-            .request_builder(reqwest::Method::DELETE, &format!("/v2/account/keys/{}", key_id))
+            .request_builder(
+                reqwest::Method::DELETE,
+                &format!("/v2/account/keys/{}", key_id),
+            )
             .send()
             .await
             .with_context(|| format!("Failed to delete SSH key {}", key_id))?;
@@ -462,7 +469,11 @@ impl DigitalOceanProvisioner {
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            bail!("Failed to get account info: status={}, body={}", status, body);
+            bail!(
+                "Failed to get account info: status={}, body={}",
+                status,
+                body
+            );
         }
 
         let account_resp: AccountResponse = resp
@@ -554,7 +565,10 @@ impl Provisioner for DigitalOceanProvisioner {
             } else {
                 Some(ssh_key_ids)
             },
-            tags: Some(vec![DC_AGENT_TAG.to_string(), format!("dc-contract-{}", request.contract_id)]),
+            tags: Some(vec![
+                DC_AGENT_TAG.to_string(),
+                format!("dc-contract-{}", request.contract_id),
+            ]),
             user_data: None,
         };
 
@@ -573,11 +587,7 @@ impl Provisioner for DigitalOceanProvisioner {
                     tracing::warn!(key_id, error = %e, "Failed to clean up SSH key after droplet creation failure");
                 }
             }
-            bail!(
-                "Failed to create droplet: status={}, body={}",
-                status,
-                body
-            );
+            bail!("Failed to create droplet: status={}, body={}", status, body);
         }
 
         let droplet_resp: DropletResponse = resp
@@ -592,7 +602,8 @@ impl Provisioner for DigitalOceanProvisioner {
             Ok(droplet) => droplet,
             Err(e) => {
                 tracing::error!(droplet_id, error = %e, "Droplet failed to become active, cleaning up");
-                self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id).await;
+                self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id)
+                    .await;
                 return Err(e);
             }
         };
@@ -600,12 +611,16 @@ impl Provisioner for DigitalOceanProvisioner {
         let droplet = if active_droplet.public_ipv4().is_none()
             && active_droplet.public_ipv6().is_none()
         {
-            tracing::info!(droplet_id, "Droplet active but no IP yet, waiting for IP assignment");
+            tracing::info!(
+                droplet_id,
+                "Droplet active but no IP yet, waiting for IP assignment"
+            );
             match self.wait_for_droplet_ip(droplet_id, 12).await {
                 Ok(droplet) => droplet,
                 Err(e) => {
                     tracing::error!(droplet_id, error = %e, "Droplet never got IP, cleaning up");
-                    self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id).await;
+                    self.cleanup_droplet_and_key(droplet_id, created_ssh_key_id)
+                        .await;
                     return Err(e);
                 }
             }
@@ -642,7 +657,10 @@ impl Provisioner for DigitalOceanProvisioner {
     }
 
     async fn health_check(&self, external_id: &str) -> Result<HealthStatus> {
-        let droplet = match self.get_droplet(external_id.parse().context("Invalid droplet ID")?).await {
+        let droplet = match self
+            .get_droplet(external_id.parse().context("Invalid droplet ID")?)
+            .await
+        {
             Ok(Some(d)) => d,
             Ok(None) => {
                 return Ok(HealthStatus::Unhealthy {
@@ -696,7 +714,10 @@ impl Provisioner for DigitalOceanProvisioner {
             let resp = self
                 .request_builder(
                     reqwest::Method::GET,
-                    &format!("/v2/droplets?tag_name={}&page={}&per_page=200", DC_AGENT_TAG, page),
+                    &format!(
+                        "/v2/droplets?tag_name={}&page={}&per_page=200",
+                        DC_AGENT_TAG, page
+                    ),
                 )
                 .send()
                 .await
@@ -769,31 +790,29 @@ impl Provisioner for DigitalOceanProvisioner {
             .send()
             .await
         {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<ImagesResponse>().await {
-                    Ok(images_resp) => {
-                        if images_resp.images.is_empty() {
-                            result.template_exists = Some(false);
-                            result.errors.push(format!(
-                                "Default image '{}' not found on DigitalOcean",
-                                self.config.default_image
-                            ));
-                        } else {
-                            result.template_exists = Some(true);
-                        }
-                    }
-                    Err(e) => {
-                        result.warnings.push(format!(
-                            "Failed to parse images response for '{}': {:#}",
-                            self.config.default_image, e
+            Ok(resp) if resp.status().is_success() => match resp.json::<ImagesResponse>().await {
+                Ok(images_resp) => {
+                    if images_resp.images.is_empty() {
+                        result.template_exists = Some(false);
+                        result.errors.push(format!(
+                            "Default image '{}' not found on DigitalOcean",
+                            self.config.default_image
                         ));
+                    } else {
+                        result.template_exists = Some(true);
                     }
                 }
-            }
+                Err(e) => {
+                    result.warnings.push(format!(
+                        "Failed to parse images response for '{}': {:#}",
+                        self.config.default_image, e
+                    ));
+                }
+            },
             _ => {
-                result.warnings.push(
-                    "Could not verify default image existence".to_string(),
-                );
+                result
+                    .warnings
+                    .push("Could not verify default image existence".to_string());
             }
         }
 

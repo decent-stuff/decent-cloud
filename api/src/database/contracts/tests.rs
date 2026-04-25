@@ -794,7 +794,10 @@ async fn test_request_ssh_key_rotation_stages_pending_key_until_completion() {
         .get::<Option<i64>, _>("ssh_key_rotation_requested_at_ns")
         .is_some());
 
-    let pending = db.get_pending_ssh_key_rotations(&provider_pk).await.unwrap();
+    let pending = db
+        .get_pending_ssh_key_rotations(&provider_pk)
+        .await
+        .unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].contract_id, hex::encode(&contract_id));
     assert_eq!(pending[0].requester_ssh_pubkey, new_key);
@@ -881,9 +884,7 @@ async fn test_get_ssh_key_rotation_events_for_user_returns_rotation_events() {
     assert_eq!(events[0].actor, "tenant");
     assert!(events[0].created_at >= before_rotation);
 
-    db.complete_ssh_key_rotation(&contract_id)
-        .await
-        .unwrap();
+    db.complete_ssh_key_rotation(&contract_id).await.unwrap();
     db.insert_contract_event(
         &contract_id,
         "ssh_key_rotation_complete",
@@ -3415,9 +3416,15 @@ async fn test_cancel_contract_releases_self_provisioned_resource_not_deletes() {
             .unwrap();
     assert_eq!(stock_after_reserve.0, "out_of_stock");
 
-    db.cancel_contract(&contract_id, &requester, Some("Tenant cancelled"), None, None)
-        .await
-        .unwrap();
+    db.cancel_contract(
+        &contract_id,
+        &requester,
+        Some("Tenant cancelled"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
 
     let contract_status: (String,) =
         sqlx::query_as("SELECT status FROM contract_sign_requests WHERE contract_id = $1")
@@ -3427,13 +3434,12 @@ async fn test_cancel_contract_releases_self_provisioned_resource_not_deletes() {
             .unwrap();
     assert_eq!(contract_status.0, "cancelled");
 
-    let resource_state: (Option<Vec<u8>>, String) = sqlx::query_as(
-        "SELECT contract_id, status FROM cloud_resources WHERE id = $1",
-    )
-    .bind(resource_id)
-    .fetch_one(&db.pool)
-    .await
-    .unwrap();
+    let resource_state: (Option<Vec<u8>>, String) =
+        sqlx::query_as("SELECT contract_id, status FROM cloud_resources WHERE id = $1")
+            .bind(resource_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
     assert_eq!(
         resource_state.0, None,
         "self-provisioned resource should be released (contract_id NULL), not deleted"

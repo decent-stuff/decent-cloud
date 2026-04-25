@@ -815,10 +815,7 @@ mod tests {
 
     #[test]
     fn test_extract_contract_id_empty_after_prefix() {
-        assert_eq!(
-            extract_contract_id("dc-"),
-            Some("".to_string())
-        );
+        assert_eq!(extract_contract_id("dc-"), Some("".to_string()));
     }
 
     #[tokio::test]

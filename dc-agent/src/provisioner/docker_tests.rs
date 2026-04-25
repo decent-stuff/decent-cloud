@@ -37,7 +37,10 @@ fn test_resolve_image_from_config() {
     let config = default_config();
     let prov = DockerProvisioner::new_for_test(config);
     let request = make_provision_request();
-    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
+    assert_eq!(
+        prov.resolve_image(&request),
+        "ghcr.io/decent-stuff/dc-agent-ssh:latest"
+    );
 }
 
 #[test]
@@ -59,7 +62,10 @@ fn test_resolve_image_instance_config_non_string_ignored() {
     request.instance_config = Some(serde_json::json!({
         "image": 42
     }));
-    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
+    assert_eq!(
+        prov.resolve_image(&request),
+        "ghcr.io/decent-stuff/dc-agent-ssh:latest"
+    );
 }
 
 #[test]
@@ -68,7 +74,10 @@ fn test_resolve_image_no_instance_config() {
     let prov = DockerProvisioner::new_for_test(config);
     let mut request = make_provision_request();
     request.instance_config = None;
-    assert_eq!(prov.resolve_image(&request), "ghcr.io/decent-stuff/dc-agent-ssh:latest");
+    assert_eq!(
+        prov.resolve_image(&request),
+        "ghcr.io/decent-stuff/dc-agent-ssh:latest"
+    );
 }
 
 #[test]
@@ -78,7 +87,10 @@ fn test_build_container_config_defaults() {
     let request = make_provision_request();
     let cfg = prov.build_container_config(&request, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
 
-    assert_eq!(cfg.image.as_deref(), Some("ghcr.io/decent-stuff/dc-agent-ssh:latest"));
+    assert_eq!(
+        cfg.image.as_deref(),
+        Some("ghcr.io/decent-stuff/dc-agent-ssh:latest")
+    );
     assert!(cfg.exposed_ports.is_some());
     assert!(cfg.exposed_ports.as_ref().unwrap().contains_key("22"));
 
@@ -558,7 +570,9 @@ async fn test_pull_image_propagates_list_error() {
         .await;
 
     let prov = DockerProvisioner::new_for_mockito(server.url());
-    let result = prov.pull_image_if_needed("ghcr.io/decent-stuff/dc-agent-ssh:latest").await;
+    let result = prov
+        .pull_image_if_needed("ghcr.io/decent-stuff/dc-agent-ssh:latest")
+        .await;
     assert!(
         result.is_err(),
         "pull_image_if_needed() should propagate list_images error"

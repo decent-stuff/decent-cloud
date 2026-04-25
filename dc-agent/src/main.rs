@@ -2786,7 +2786,10 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             println!("  Default size: {}", do_config.default_size);
             println!("  Default region: {}", do_config.default_region);
             println!("  Default image: {}", do_config.default_image);
-            println!("  API token: {}...", &do_config.api_token.chars().take(8).collect::<String>());
+            println!(
+                "  API token: {}...",
+                &do_config.api_token.chars().take(8).collect::<String>()
+            );
             println!();
             println!("Verifying DigitalOcean setup...");
             let verification = provisioner.verify_setup().await;

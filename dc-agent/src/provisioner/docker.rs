@@ -714,7 +714,10 @@ impl DockerProvisioner {
     }
 
     fn new_for_mockito(url: String) -> Self {
-        Self::new_for_mockito_with_image(url, "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string())
+        Self::new_for_mockito_with_image(
+            url,
+            "ghcr.io/decent-stuff/dc-agent-ssh:latest".to_string(),
+        )
     }
 
     fn new_for_mockito_with_image(url: String, default_image: String) -> Self {

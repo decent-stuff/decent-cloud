@@ -215,10 +215,26 @@ mod tests {
         // No notifications yet
         assert_eq!(db.get_unread_count(&pubkey).await.unwrap(), 0);
 
-        db.insert_user_notification(&pubkey, "contract_provisioned", "VM Ready", "Your VM is provisioned.", None, None, None)
+        db.insert_user_notification(
+            &pubkey,
+            "contract_provisioned",
+            "VM Ready",
+            "Your VM is provisioned.",
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
-        db.insert_user_notification(&pubkey, "auto_renewed", "Auto-renewed", "Contract was renewed.", None, None, None)
+        db.insert_user_notification(
+            &pubkey,
+            "auto_renewed",
+            "Auto-renewed",
+            "Contract was renewed.",
+            None,
+            None,
+            None,
+        )
         .await
         .unwrap();
 
@@ -310,7 +326,15 @@ mod tests {
         let user_b = vec![0x06u8; 32];
 
         let id = db
-            .insert_user_notification(&user_a, "contract_status", "Title", "Body", None, None, None)
+            .insert_user_notification(
+                &user_a,
+                "contract_status",
+                "Title",
+                "Body",
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -350,11 +374,27 @@ mod tests {
         let pubkey = vec![0x08u8; 32];
 
         let id1 = db
-            .insert_user_notification(&pubkey, "contract_status", "First", "body", None, None, None)
+            .insert_user_notification(
+                &pubkey,
+                "contract_status",
+                "First",
+                "body",
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
         let id2 = db
-            .insert_user_notification(&pubkey, "contract_status", "Second", "body", None, None, None)
+            .insert_user_notification(
+                &pubkey,
+                "contract_status",
+                "Second",
+                "body",
+                None,
+                None,
+                None,
+            )
             .await
             .unwrap();
 
@@ -426,6 +466,8 @@ mod tests {
             .await
             .expect_err("invalid price direction should fail");
 
-        assert!(err.to_string().contains("user_notifications_price_direction_check"));
+        assert!(err
+            .to_string()
+            .contains("user_notifications_price_direction_check"));
     }
 }

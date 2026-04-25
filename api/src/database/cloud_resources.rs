@@ -1581,12 +1581,14 @@ mod tests {
         let contract_id = vec![0x85u8; 32];
         let past_end_ns = 1_000_000i64;
         insert_test_contract(&db.pool, &contract_id, &[15u8; 32], &provider, offering_id).await;
-        sqlx::query("UPDATE contract_sign_requests SET end_timestamp_ns = $1 WHERE contract_id = $2")
-            .bind(past_end_ns)
-            .bind(&contract_id)
-            .execute(&db.pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "UPDATE contract_sign_requests SET end_timestamp_ns = $1 WHERE contract_id = $2",
+        )
+        .bind(past_end_ns)
+        .bind(&contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
 
         db.reserve_self_provisioned_resource(offering_id, &contract_id)
             .await
@@ -2196,7 +2198,11 @@ mod tests {
 
         let pubkey = [48u8; 32];
         let account = db
-            .create_account("unlist_reserved_test", &pubkey, "unlist-reserved@example.com")
+            .create_account(
+                "unlist_reserved_test",
+                &pubkey,
+                "unlist-reserved@example.com",
+            )
             .await
             .unwrap();
         let cloud_account = db

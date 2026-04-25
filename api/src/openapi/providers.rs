@@ -186,104 +186,96 @@ pub async fn contract_status_events(
         poll_count: 0,
         last_rotation_event_ns: 0,
     };
-    let stream =
-        futures::stream::unfold(initial, |state: SseState| async move {
-            if state.poll_count >= 60 {
+    let stream = futures::stream::unfold(initial, |state: SseState| async move {
+        if state.poll_count >= 60 {
+            return None;
+        }
+        let contracts = match state.db.get_user_contracts(&state.pk).await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("SSE contract-status-events DB error: {:#}", e);
                 return None;
             }
-            let contracts = match state.db.get_user_contracts(&state.pk).await {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::error!("SSE contract-status-events DB error: {:#}", e);
-                        return None;
-                    }
-                };
+        };
 
-                let current: Snapshot = contracts
-                    .iter()
-                    .map(|c| {
-                        (
-                            c.contract_id.clone(),
-                            (c.status.clone(), c.status_updated_at_ns),
-                        )
-                    })
-                    .collect();
+        let current: Snapshot = contracts
+            .iter()
+            .map(|c| {
+                (
+                    c.contract_id.clone(),
+                    (c.status.clone(), c.status_updated_at_ns),
+                )
+            })
+            .collect();
 
-                let mut events: Vec<Event> = match &state.prev_snapshot {
-                    None => {
-                        contracts
-                            .iter()
-                            .map(|c| {
-                                let data = serde_json::json!({
-                                    "contract_id": c.contract_id,
-                                    "status": c.status,
-                                    "updated_at_ns": c.status_updated_at_ns,
-                                });
-                                Event::message(data.to_string()).event_type("contract-status")
-                            })
-                            .collect()
-                    }
-                    Some(prev) => {
-                        contracts
-                            .iter()
-                            .filter(|c| {
-                                prev.get(&c.contract_id)
-                                    .map(|(ps, pt)| {
-                                        ps != &c.status || pt != &c.status_updated_at_ns
-                                    })
-                                    .unwrap_or(true)
-                            })
-                            .map(|c| {
-                                let data = serde_json::json!({
-                                    "contract_id": c.contract_id,
-                                    "status": c.status,
-                                    "updated_at_ns": c.status_updated_at_ns,
-                                });
-                                Event::message(data.to_string()).event_type("contract-status")
-                            })
-                            .collect()
-                    }
-                };
+        let mut events: Vec<Event> = match &state.prev_snapshot {
+            None => contracts
+                .iter()
+                .map(|c| {
+                    let data = serde_json::json!({
+                        "contract_id": c.contract_id,
+                        "status": c.status,
+                        "updated_at_ns": c.status_updated_at_ns,
+                    });
+                    Event::message(data.to_string()).event_type("contract-status")
+                })
+                .collect(),
+            Some(prev) => contracts
+                .iter()
+                .filter(|c| {
+                    prev.get(&c.contract_id)
+                        .map(|(ps, pt)| ps != &c.status || pt != &c.status_updated_at_ns)
+                        .unwrap_or(true)
+                })
+                .map(|c| {
+                    let data = serde_json::json!({
+                        "contract_id": c.contract_id,
+                        "status": c.status,
+                        "updated_at_ns": c.status_updated_at_ns,
+                    });
+                    Event::message(data.to_string()).event_type("contract-status")
+                })
+                .collect(),
+        };
 
-                let mut next_rotation_ns = state.last_rotation_event_ns;
-                match state
-                    .db
-                    .get_ssh_key_rotation_events_for_user(&state.pk, state.last_rotation_event_ns)
-                    .await
-                {
-                    Ok(rotation_events) => {
-                        for ev in &rotation_events {
-                            let data = serde_json::json!({
-                                "contract_id": ev.contract_id,
-                                "created_at": ev.created_at,
-                                "actor": ev.actor,
-                                "details": ev.details,
-                            });
-                            events.push(Event::message(data.to_string()).event_type(&ev.event_type));
-                            if ev.created_at > next_rotation_ns {
-                                next_rotation_ns = ev.created_at;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("SSE ssh-key-rotation-events DB error: {:#}", e);
+        let mut next_rotation_ns = state.last_rotation_event_ns;
+        match state
+            .db
+            .get_ssh_key_rotation_events_for_user(&state.pk, state.last_rotation_event_ns)
+            .await
+        {
+            Ok(rotation_events) => {
+                for ev in &rotation_events {
+                    let data = serde_json::json!({
+                        "contract_id": ev.contract_id,
+                        "created_at": ev.created_at,
+                        "actor": ev.actor,
+                        "details": ev.details,
+                    });
+                    events.push(Event::message(data.to_string()).event_type(&ev.event_type));
+                    if ev.created_at > next_rotation_ns {
+                        next_rotation_ns = ev.created_at;
                     }
                 }
+            }
+            Err(e) => {
+                tracing::warn!("SSE ssh-key-rotation-events DB error: {:#}", e);
+            }
+        }
 
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                Some((
-                    events,
-                    SseState {
-                        db: state.db,
-                        pk: state.pk,
-                        prev_snapshot: Some(current),
-                        poll_count: state.poll_count + 1,
-                        last_rotation_event_ns: next_rotation_ns,
-                    },
-                ))
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        Some((
+            events,
+            SseState {
+                db: state.db,
+                pk: state.pk,
+                prev_snapshot: Some(current),
+                poll_count: state.poll_count + 1,
+                last_rotation_event_ns: next_rotation_ns,
             },
-        )
-        .flat_map(|events: Vec<Event>| futures::stream::iter(events));
+        ))
+    })
+    .flat_map(|events: Vec<Event>| futures::stream::iter(events));
 
     Ok(SSE::new(stream).keep_alive(std::time::Duration::from_secs(30)))
 }
@@ -3222,7 +3214,10 @@ impl ProvidersApi {
             }
         };
 
-        match db.get_provider_sla_summary(&pubkey_bytes, days.0.clamp(1, 90)).await {
+        match db
+            .get_provider_sla_summary(&pubkey_bytes, days.0.clamp(1, 90))
+            .await
+        {
             Ok(summary) => Json(ApiResponse {
                 success: true,
                 data: Some(summary),
@@ -3287,19 +3282,20 @@ impl ProvidersApi {
 
         let mut reports = Vec::with_capacity(req.reports.len());
         for report in &req.reports {
-            let report_date = match chrono::NaiveDate::parse_from_str(&report.report_date, "%Y-%m-%d") {
-                Ok(d) => d,
-                Err(_) => {
-                    return Json(ApiResponse {
-                        success: false,
-                        data: None,
-                        error: Some(format!(
-                            "Invalid report_date '{}' - expected YYYY-MM-DD",
-                            report.report_date
-                        )),
-                    });
-                }
-            };
+            let report_date =
+                match chrono::NaiveDate::parse_from_str(&report.report_date, "%Y-%m-%d") {
+                    Ok(d) => d,
+                    Err(_) => {
+                        return Json(ApiResponse {
+                            success: false,
+                            data: None,
+                            error: Some(format!(
+                                "Invalid report_date '{}' - expected YYYY-MM-DD",
+                                report.report_date
+                            )),
+                        });
+                    }
+                };
             if report_date > chrono::Utc::now().date_naive() {
                 return Json(ApiResponse {
                     success: false,
@@ -3342,7 +3338,12 @@ impl ProvidersApi {
         }
 
         match db
-            .upsert_provider_offering_sli_reports(&pubkey_bytes, id.0, req.sla_target_percent, &reports)
+            .upsert_provider_offering_sli_reports(
+                &pubkey_bytes,
+                id.0,
+                req.sla_target_percent,
+                &reports,
+            )
             .await
         {
             Ok(()) => {
@@ -6288,7 +6289,10 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed["contract_id"], contract_id);
         assert_eq!(parsed["actor"], "provider");
-        assert_eq!(parsed["details"], "SSH key rotated to ssh-ed25519 AAA... by agent");
+        assert_eq!(
+            parsed["details"],
+            "SSH key rotated to ssh-ed25519 AAA... by agent"
+        );
     }
 
     #[tokio::test]
@@ -6298,10 +6302,14 @@ mod tests {
         use poem::IntoResponse;
 
         let events: Vec<Event> = vec![
-            Event::message(r#"{"contract_id":"abc","created_at":123,"actor":"tenant","details":null}"#)
-                .event_type("ssh_key_rotation"),
-            Event::message(r#"{"contract_id":"abc","created_at":456,"actor":"provider","details":"rotated"}"#)
-                .event_type("ssh_key_rotation_complete"),
+            Event::message(
+                r#"{"contract_id":"abc","created_at":123,"actor":"tenant","details":null}"#,
+            )
+            .event_type("ssh_key_rotation"),
+            Event::message(
+                r#"{"contract_id":"abc","created_at":456,"actor":"provider","details":"rotated"}"#,
+            )
+            .event_type("ssh_key_rotation_complete"),
         ];
         let sse = SSE::new(stream::iter(events));
         let resp = sse.into_response();

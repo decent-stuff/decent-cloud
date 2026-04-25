@@ -236,7 +236,13 @@ mod tests {
     use crate::database::test_helpers::setup_test_db;
     use crate::database::LedgerEntryData;
 
-    fn make_entry(label: &str, key: &[u8], value: &[u8], timestamp: u64, offset: u64) -> LedgerEntryData {
+    fn make_entry(
+        label: &str,
+        key: &[u8],
+        value: &[u8],
+        timestamp: u64,
+        offset: u64,
+    ) -> LedgerEntryData {
         LedgerEntryData {
             label: label.to_string(),
             key: key.to_vec(),
@@ -300,11 +306,12 @@ mod tests {
             .unwrap();
         tx.commit().await.unwrap();
 
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_registrations WHERE pubkey != $1")
-            .bind(crate::database::Database::example_provider_pubkey())
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM provider_registrations WHERE pubkey != $1")
+                .bind(crate::database::Database::example_provider_pubkey())
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
         assert_eq!(count, 2);
     }
 
@@ -366,12 +373,16 @@ mod tests {
             .unwrap();
         tx.commit().await.unwrap();
 
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_check_ins WHERE pubkey = $1")
-            .bind(pubkey.as_slice())
-            .fetch_one(&db.pool)
-            .await
-            .unwrap();
-        assert_eq!(count, 0, "Short invalid payload should be skipped (not 64 bytes, not valid borsh)");
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM provider_check_ins WHERE pubkey = $1")
+                .bind(pubkey.as_slice())
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            count, 0,
+            "Short invalid payload should be skipped (not 64 bytes, not valid borsh)"
+        );
     }
 
     #[tokio::test]

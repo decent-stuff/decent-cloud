@@ -3691,12 +3691,16 @@ async fn test_update_offering_multiple_price_changes_notifies_all_components() {
         notifications[0].body
     );
     assert!(
-        notifications[0].body.contains("monthly_price from USD 10.00 to USD 12.00"),
+        notifications[0]
+            .body
+            .contains("monthly_price from USD 10.00 to USD 12.00"),
         "expected monthly_price in body: {}",
         notifications[0].body
     );
     assert!(
-        notifications[0].body.contains("setup_fee from USD 0.00 to USD 5.00"),
+        notifications[0]
+            .body
+            .contains("setup_fee from USD 0.00 to USD 5.00"),
         "expected setup_fee in body: {}",
         notifications[0].body
     );
@@ -3785,7 +3789,11 @@ async fn test_bulk_update_offering_prices_notifies_only_changed_saved_offerings(
         .get_user_notifications(&changed_user, 10)
         .await
         .expect("get_user_notifications for changed user should succeed");
-    assert_eq!(changed_notifications.len(), 1, "changed offering should notify");
+    assert_eq!(
+        changed_notifications.len(),
+        1,
+        "changed offering should notify"
+    );
     assert_eq!(
         changed_notifications[0].notification_type,
         "saved_offering_price_change"
@@ -4010,14 +4018,14 @@ async fn test_published_offering_visible_in_public_search() {
 
 #[tokio::test]
 async fn test_search_offerings_prioritizes_provider_reputation() {
-	let db = setup_test_db().await;
-	delete_example_data(&db).await;
-	let high_pubkey = [210u8; 32];
-	let low_pubkey = [211u8; 32];
-	ensure_provider_with_pool(&db, &high_pubkey, "US").await;
-	ensure_provider_with_pool(&db, &low_pubkey, "US").await;
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+    let high_pubkey = [210u8; 32];
+    let low_pubkey = [211u8; 32];
+    ensure_provider_with_pool(&db, &high_pubkey, "US").await;
+    ensure_provider_with_pool(&db, &low_pubkey, "US").await;
 
-	sqlx::query(
+    sqlx::query(
 		"INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, trust_score, reliability_score, has_critical_flags) VALUES ($1, 'High Trust', '1.0', '1.0', 0, 95, 97.5, FALSE)",
 	)
 	.bind(&high_pubkey[..])
@@ -4025,7 +4033,7 @@ async fn test_search_offerings_prioritizes_provider_reputation() {
 	.await
 	.unwrap();
 
-	sqlx::query(
+    sqlx::query(
 		"INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, trust_score, reliability_score, has_critical_flags) VALUES ($1, 'Low Trust', '1.0', '1.0', 0, 40, 52.0, FALSE)",
 	)
 	.bind(&low_pubkey[..])
@@ -4033,7 +4041,7 @@ async fn test_search_offerings_prioritizes_provider_reputation() {
 	.await
 	.unwrap();
 
-	sqlx::query(
+    sqlx::query(
 		"INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'rep-high', 'High Reputation Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Austin', FALSE, FALSE, 0)",
 	)
 	.bind(&high_pubkey[..])
@@ -4041,7 +4049,7 @@ async fn test_search_offerings_prioritizes_provider_reputation() {
 	.await
 	.unwrap();
 
-	sqlx::query(
+    sqlx::query(
 		"INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, is_draft, created_at_ns) VALUES ($1, 'rep-low', 'Low Reputation Offer', 'USD', 5.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Austin', FALSE, FALSE, 0)",
 	)
 	.bind(&low_pubkey[..])
@@ -4049,22 +4057,22 @@ async fn test_search_offerings_prioritizes_provider_reputation() {
 	.await
 	.unwrap();
 
-	let results = db
-		.search_offerings(SearchOfferingsParams {
-			product_type: None,
-			country: Some("US"),
-			in_stock_only: false,
-			has_recipe: false,
-			min_price_monthly: None,
-			max_price_monthly: None,
-			limit: 10,
-			offset: 0,
-			text_search: None,
-		})
-		.await
-		.expect("search offerings");
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: Some("US"),
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 10,
+            offset: 0,
+            text_search: None,
+        })
+        .await
+        .expect("search offerings");
 
-	assert_eq!(results[0].offering_id, "rep-high");
+    assert_eq!(results[0].offering_id, "rep-high");
 }
 
 #[tokio::test]
@@ -4325,11 +4333,15 @@ async fn test_fetch_user_signal_offerings_from_views() {
         .expect("fetch_user_signal_offerings failed");
     assert_eq!(signals.len(), 2, "should have 2 signal offerings");
     assert!(
-        signals.iter().any(|s| s.datacenter_country == "US" && s.monthly_price == 100.0),
+        signals
+            .iter()
+            .any(|s| s.datacenter_country == "US" && s.monthly_price == 100.0),
         "US offering should appear in signals"
     );
     assert!(
-        signals.iter().any(|s| s.datacenter_country == "DE" && s.monthly_price == 200.0),
+        signals
+            .iter()
+            .any(|s| s.datacenter_country == "DE" && s.monthly_price == 200.0),
         "DE offering should appear in signals"
     );
 }
@@ -4344,9 +4356,7 @@ async fn test_fetch_user_signal_offerings_from_saves() {
 
     let user = vec![0xF2u8; 32];
     let id1 = test_id_to_db_id(63);
-    db.save_offering(&user, id1)
-        .await
-        .expect("save offering");
+    db.save_offering(&user, id1).await.expect("save offering");
 
     let signals = db
         .fetch_user_signal_offerings(&user)
@@ -4370,9 +4380,7 @@ async fn test_fetch_user_signal_offerings_dedupes_view_and_save() {
     db.record_offering_view(id1, Some(&user), &[0xC1u8; 32])
         .await
         .expect("view");
-    db.save_offering(&user, id1)
-        .await
-        .expect("save");
+    db.save_offering(&user, id1).await.expect("save");
 
     let signals = db
         .fetch_user_signal_offerings(&user)
@@ -4403,17 +4411,21 @@ async fn test_fetch_seen_offering_ids_returns_correct_set() {
     db.record_offering_view(id_viewed, Some(&user), &[0xC1u8; 32])
         .await
         .expect("view");
-    db.save_offering(&user, id_saved)
-        .await
-        .expect("save");
+    db.save_offering(&user, id_saved).await.expect("save");
 
     let seen = db
         .fetch_seen_offering_ids(&user)
         .await
         .expect("fetch_seen_offering_ids failed");
     assert_eq!(seen.len(), 2, "should have 2 seen offering IDs");
-    assert!(seen.contains(&id_viewed), "viewed offering should be in seen set");
-    assert!(seen.contains(&id_saved), "saved offering should be in seen set");
+    assert!(
+        seen.contains(&id_viewed),
+        "viewed offering should be in seen set"
+    );
+    assert!(
+        seen.contains(&id_saved),
+        "saved offering should be in seen set"
+    );
     assert!(
         !seen.contains(&id_unseen),
         "unseen offering should NOT be in seen set"
@@ -4469,9 +4481,7 @@ async fn test_get_recommended_offerings_excludes_seen() {
     db.record_offering_view(id_viewed, Some(&user), &[0xD1u8; 32])
         .await
         .expect("view 71");
-    db.save_offering(&user, id_saved)
-        .await
-        .expect("save 72");
+    db.save_offering(&user, id_saved).await.expect("save 72");
 
     let results = db
         .get_recommended_offerings(&user, 10)
@@ -4714,7 +4724,6 @@ async fn test_fetch_candidate_offerings_empty_seen_ids() {
         candidates.len()
     );
 }
-
 
 #[tokio::test]
 async fn test_get_trending_offerings_with_views_appears() {

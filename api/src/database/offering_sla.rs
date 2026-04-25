@@ -125,13 +125,16 @@ impl Database {
         Ok(())
     }
 
-    pub async fn get_offering_sla_summary(&self, offering_id: i64, days: i64) -> Result<OfferingSlaSummary> {
-        let exists: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS(SELECT 1 FROM provider_offerings WHERE id = $1)"#,
-        )
-        .bind(offering_id)
-        .fetch_one(&self.pool)
-        .await?;
+    pub async fn get_offering_sla_summary(
+        &self,
+        offering_id: i64,
+        days: i64,
+    ) -> Result<OfferingSlaSummary> {
+        let exists: bool =
+            sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM provider_offerings WHERE id = $1)"#)
+                .bind(offering_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         if !exists {
             return Err(anyhow!("Offering not found"));
@@ -228,8 +231,12 @@ impl Database {
             breach_days_30d,
             compliance_30d_percent,
             average_uptime_30d,
-            latest_report_date: latest.as_ref().map(|row| row.get::<String, _>("report_date")),
-            latest_uptime_percent: latest.as_ref().map(|row| row.get::<f64, _>("uptime_percent")),
+            latest_report_date: latest
+                .as_ref()
+                .map(|row| row.get::<String, _>("report_date")),
+            latest_uptime_percent: latest
+                .as_ref()
+                .map(|row| row.get::<f64, _>("uptime_percent")),
             latest_response_sli_percent: latest
                 .as_ref()
                 .and_then(|row| row.get::<Option<f64>, _>("response_sli_percent")),
@@ -237,7 +244,11 @@ impl Database {
         })
     }
 
-    pub async fn get_provider_sla_summary(&self, provider_pubkey: &[u8], days: i64) -> Result<ProviderSlaSummary> {
+    pub async fn get_provider_sla_summary(
+        &self,
+        provider_pubkey: &[u8],
+        days: i64,
+    ) -> Result<ProviderSlaSummary> {
         let offerings_tracked: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*)::BIGINT
                FROM provider_offering_sla_targets
@@ -296,12 +307,20 @@ impl Database {
         })
     }
 
-    pub async fn get_provider_sli_penalty_points(&self, provider_pubkey: &[u8], days: i64) -> Result<f64> {
+    pub async fn get_provider_sli_penalty_points(
+        &self,
+        provider_pubkey: &[u8],
+        days: i64,
+    ) -> Result<f64> {
         let samples = self.get_provider_sli_samples(provider_pubkey, days).await?;
         Ok(Self::calculate_provider_sli_penalty_points(&samples))
     }
 
-    async fn ensure_provider_owns_offering(&self, provider_pubkey: &[u8], offering_id: i64) -> Result<()> {
+    async fn ensure_provider_owns_offering(
+        &self,
+        provider_pubkey: &[u8],
+        offering_id: i64,
+    ) -> Result<()> {
         let exists: bool = sqlx::query_scalar(
             r#"SELECT EXISTS(
                    SELECT 1
@@ -321,7 +340,11 @@ impl Database {
         }
     }
 
-    async fn get_provider_sli_samples(&self, provider_pubkey: &[u8], days: i64) -> Result<Vec<ProviderSliSample>> {
+    async fn get_provider_sli_samples(
+        &self,
+        provider_pubkey: &[u8],
+        days: i64,
+    ) -> Result<Vec<ProviderSliSample>> {
         let cutoff_date = (Utc::now().date_naive() - Duration::days(days.saturating_sub(1)))
             .format("%Y-%m-%d")
             .to_string();
@@ -466,13 +489,14 @@ mod tests {
             incident_count: 0,
             sla_target_percent: 99.9,
         }]);
-        let severe_penalty = Database::calculate_provider_sli_penalty_points(&[ProviderSliSample {
-            report_date: "2026-01-01".to_string(),
-            uptime_percent: 99.3,
-            response_sli_percent: Some(88.0),
-            incident_count: 3,
-            sla_target_percent: 99.9,
-        }]);
+        let severe_penalty =
+            Database::calculate_provider_sli_penalty_points(&[ProviderSliSample {
+                report_date: "2026-01-01".to_string(),
+                uptime_percent: 99.3,
+                response_sli_percent: Some(88.0),
+                incident_count: 3,
+                sla_target_percent: 99.9,
+            }]);
 
         assert!(mild_penalty > 0.0);
         assert!(severe_penalty > mild_penalty);

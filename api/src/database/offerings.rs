@@ -1080,29 +1080,40 @@ impl Database {
         if (change.old_monthly_price - change.new_monthly_price).abs() >= 1e-9 {
             changes.push(format!(
                 "monthly_price from {} {:.2} to {} {:.2}",
-                change.old_currency, change.old_monthly_price,
-                change.new_currency, change.new_monthly_price
+                change.old_currency,
+                change.old_monthly_price,
+                change.new_currency,
+                change.new_monthly_price
             ));
         }
         if (change.old_setup_fee - change.new_setup_fee).abs() >= 1e-9 {
             changes.push(format!(
                 "setup_fee from {} {:.2} to {} {:.2}",
-                change.old_currency, change.old_setup_fee,
-                change.new_currency, change.new_setup_fee
+                change.old_currency,
+                change.old_setup_fee,
+                change.new_currency,
+                change.new_setup_fee
             ));
         }
         if opt_f64_changed(change.old_price_per_unit, change.new_price_per_unit) {
             changes.push(format!(
                 "price_per_unit from {} {:.2} to {} {:.2}",
-                change.old_currency, change.old_price_per_unit.unwrap(),
-                change.new_currency, change.new_price_per_unit.unwrap()
+                change.old_currency,
+                change.old_price_per_unit.unwrap(),
+                change.new_currency,
+                change.new_price_per_unit.unwrap()
             ));
         }
-        if opt_f64_changed(change.old_overage_price_per_unit, change.new_overage_price_per_unit) {
+        if opt_f64_changed(
+            change.old_overage_price_per_unit,
+            change.new_overage_price_per_unit,
+        ) {
             changes.push(format!(
                 "overage_price_per_unit from {} {:.2} to {} {:.2}",
-                change.old_currency, change.old_overage_price_per_unit.unwrap(),
-                change.new_currency, change.new_overage_price_per_unit.unwrap()
+                change.old_currency,
+                change.old_overage_price_per_unit.unwrap(),
+                change.new_currency,
+                change.new_overage_price_per_unit.unwrap()
             ));
         }
 
@@ -1123,10 +1134,12 @@ impl Database {
 
         let monthly_dropped = change.new_monthly_price < change.old_monthly_price;
         let setup_dropped = change.new_setup_fee < change.old_setup_fee;
-        let ppu_dropped = change.old_price_per_unit
+        let ppu_dropped = change
+            .old_price_per_unit
             .zip(change.new_price_per_unit)
             .is_some_and(|(o, n)| n < o);
-        let opu_dropped = change.old_overage_price_per_unit
+        let opu_dropped = change
+            .old_overage_price_per_unit
             .zip(change.new_overage_price_per_unit)
             .is_some_and(|(o, n)| n < o);
         let direction = if monthly_dropped || setup_dropped || ppu_dropped || opu_dropped {
@@ -1139,7 +1152,11 @@ impl Database {
         let body = if changes.len() == 1 {
             format!("{}: {}.", change.offer_name, changes[0])
         } else {
-            format!("{} pricing changed: {}.", change.offer_name, changes.join("; "))
+            format!(
+                "{} pricing changed: {}.",
+                change.offer_name,
+                changes.join("; ")
+            )
         };
 
         for user_pubkey in &saved_user_pubkeys {
@@ -1518,7 +1535,15 @@ impl Database {
             provisioner_config
         };
 
-        let (_, _, existing_currency, existing_monthly_price, existing_setup_fee, existing_price_per_unit, existing_overage_price_per_unit) = &existing_offering;
+        let (
+            _,
+            _,
+            existing_currency,
+            existing_monthly_price,
+            existing_setup_fee,
+            existing_price_per_unit,
+            existing_overage_price_per_unit,
+        ) = &existing_offering;
         let price_changed = (*existing_monthly_price - monthly_price).abs() >= 1e-9
             || (*existing_setup_fee - setup_fee).abs() >= 1e-9
             || opt_f64_changed(*existing_price_per_unit, price_per_unit)
@@ -1900,18 +1925,44 @@ impl Database {
 
         let existing_offerings: HashMap<i64, ExistingOfferingPrices> = existing_offerings
             .into_iter()
-            .map(|(id, offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit)| {
-                (id, (offer_name, currency, monthly_price, setup_fee, price_per_unit, overage_price_per_unit))
-            })
+            .map(
+                |(
+                    id,
+                    offer_name,
+                    currency,
+                    monthly_price,
+                    setup_fee,
+                    price_per_unit,
+                    overage_price_per_unit,
+                )| {
+                    (
+                        id,
+                        (
+                            offer_name,
+                            currency,
+                            monthly_price,
+                            setup_fee,
+                            price_per_unit,
+                            overage_price_per_unit,
+                        ),
+                    )
+                },
+            )
             .collect();
 
         // Update each offering's price within the transaction
         let mut rows_affected = 0u64;
         for (id, price_e9s) in updates {
-            let (offer_name, currency, old_monthly_price, old_setup_fee, old_price_per_unit, old_overage_price_per_unit) = existing_offerings
-                .get(id)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("Offering {} missing after ownership verification", id))?;
+            let (
+                offer_name,
+                currency,
+                old_monthly_price,
+                old_setup_fee,
+                old_price_per_unit,
+                old_overage_price_per_unit,
+            ) = existing_offerings.get(id).cloned().ok_or_else(|| {
+                anyhow::anyhow!("Offering {} missing after ownership verification", id)
+            })?;
             let monthly_price = *price_e9s as f64 / 1_000_000_000.0;
             let result = sqlx::query!(
                 "UPDATE provider_offerings SET monthly_price = $1 WHERE id = $2",
@@ -2481,17 +2532,18 @@ impl Database {
             .filter(|r| r.score > 0.0)
             .collect();
 
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         scored.truncate(limit as usize);
 
         Ok(scored)
     }
 
     /// Fetch attributes of offerings the user has viewed or saved
-    async fn fetch_user_signal_offerings(
-        &self,
-        user_pubkey: &[u8],
-    ) -> Result<Vec<SignalOffering>> {
+    async fn fetch_user_signal_offerings(&self, user_pubkey: &[u8]) -> Result<Vec<SignalOffering>> {
         let rows = sqlx::query_as::<_, SignalOffering>(
             r#"SELECT o.product_type, o.datacenter_country, o.gpu_name, o.monthly_price
                FROM provider_offerings o
@@ -2509,10 +2561,7 @@ impl Database {
     }
 
     /// Fetch IDs of offerings the user has already seen (viewed or saved)
-    async fn fetch_seen_offering_ids(
-        &self,
-        user_pubkey: &[u8],
-    ) -> Result<HashSet<i64>> {
+    async fn fetch_seen_offering_ids(&self, user_pubkey: &[u8]) -> Result<HashSet<i64>> {
         let rows = sqlx::query(
             r#"SELECT offering_id FROM offering_views WHERE viewer_pubkey = $1
                UNION
@@ -2521,7 +2570,10 @@ impl Database {
         .bind(user_pubkey)
         .fetch_all(&self.pool)
         .await?;
-        let ids: HashSet<i64> = rows.iter().filter_map(|r| r.try_get("offering_id").ok()).collect();
+        let ids: HashSet<i64> = rows
+            .iter()
+            .filter_map(|r| r.try_get("offering_id").ok())
+            .collect();
         Ok(ids)
     }
 
@@ -2579,7 +2631,9 @@ fn build_preference_profile(signals: &[SignalOffering]) -> UserPreferenceProfile
 
     for s in signals {
         *type_counts.entry(s.product_type.clone()).or_default() += 1.0;
-        *country_counts.entry(s.datacenter_country.clone()).or_default() += 1.0;
+        *country_counts
+            .entry(s.datacenter_country.clone())
+            .or_default() += 1.0;
         if let Some(ref g) = s.gpu_name {
             *gpu_counts.entry(g.clone()).or_default() += 1.0;
         }
@@ -2605,7 +2659,10 @@ fn build_preference_profile(signals: &[SignalOffering]) -> UserPreferenceProfile
     }
 }
 
-fn score_candidate(candidate: &CandidateOffering, profile: &UserPreferenceProfile) -> RecommendedOffering {
+fn score_candidate(
+    candidate: &CandidateOffering,
+    profile: &UserPreferenceProfile,
+) -> RecommendedOffering {
     let mut score = 0.0;
 
     if let Some(w) = profile.preferred_types.get(&candidate.product_type) {
@@ -2656,7 +2713,12 @@ mod tests;
 mod recommendation_tests {
     use super::*;
 
-    fn make_signal(product_type: &str, country: &str, gpu: Option<&str>, price: f64) -> SignalOffering {
+    fn make_signal(
+        product_type: &str,
+        country: &str,
+        gpu: Option<&str>,
+        price: f64,
+    ) -> SignalOffering {
         SignalOffering {
             product_type: product_type.to_string(),
             datacenter_country: country.to_string(),

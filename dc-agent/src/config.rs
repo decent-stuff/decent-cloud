@@ -1897,7 +1897,10 @@ type = "docker"
         let docker = config.provisioner.as_docker().expect("Should be Docker");
         assert_eq!(docker.socket_path, "/var/run/docker.sock");
         assert_eq!(docker.network, "bridge");
-        assert_eq!(docker.default_image, "ghcr.io/decent-stuff/dc-agent-ssh:latest");
+        assert_eq!(
+            docker.default_image,
+            "ghcr.io/decent-stuff/dc-agent-ssh:latest"
+        );
         assert_eq!(docker.ssh_port, 22);
     }
 

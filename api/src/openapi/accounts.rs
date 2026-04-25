@@ -2219,11 +2219,7 @@ impl AccountsApi {
     ///
     /// Returns whether TOTP two-factor authentication is enabled for the
     /// authenticated account.
-    #[oai(
-        path = "/accounts/me/totp",
-        method = "get",
-        tag = "ApiTags::Accounts"
-    )]
+    #[oai(path = "/accounts/me/totp", method = "get", tag = "ApiTags::Accounts")]
     async fn get_totp_status(
         &self,
         db: Data<&Arc<Database>>,
@@ -2914,7 +2910,10 @@ mod tests {
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["secret"], "JBSWY3DPEHPK3PXP");
-        assert_eq!(json["otpauthUri"], "otpauth://totp/DecentCloud:alice?secret=JBSWY3DPEHPK3PXP");
+        assert_eq!(
+            json["otpauthUri"],
+            "otpauth://totp/DecentCloud:alice?secret=JBSWY3DPEHPK3PXP"
+        );
     }
 
     #[test]

@@ -72,7 +72,15 @@ pub async fn check_spending_alert_and_notify(db: &Database, requester_pubkey: &[
     };
 
     if let Err(e) = db
-        .insert_user_notification(requester_pubkey, "spending_alert", &title, &body, None, None, None)
+        .insert_user_notification(
+            requester_pubkey,
+            "spending_alert",
+            &title,
+            &body,
+            None,
+            None,
+            None,
+        )
         .await
     {
         tracing::warn!(
@@ -369,14 +377,13 @@ impl ContractsApi {
             Ok(_) => {
                 match db.get_contract(&contract_id).await {
                     Ok(Some(full_contract)) => {
-                        if let Err(e) =
-                            crate::rental_notifications::notify_provider_password_reset(
-                                db.as_ref(),
-                                email_service.as_ref(),
-                                &full_contract,
-                                false,
-                            )
-                            .await
+                        if let Err(e) = crate::rental_notifications::notify_provider_password_reset(
+                            db.as_ref(),
+                            email_service.as_ref(),
+                            &full_contract,
+                            false,
+                        )
+                        .await
                         {
                             tracing::warn!(
                                 "Failed to notify provider of password reset for contract {}: {}",
@@ -494,10 +501,9 @@ impl ContractsApi {
             });
         }
 
-        let ssh_key_pattern = regex::Regex::new(
-            r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$",
-        )
-        .unwrap();
+        let ssh_key_pattern =
+            regex::Regex::new(r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$")
+                .unwrap();
         if !ssh_key_pattern.is_match(&new_key) {
             return Json(ApiResponse {
                 success: false,
@@ -509,10 +515,7 @@ impl ContractsApi {
             });
         }
 
-        match db
-            .request_ssh_key_rotation(&contract_id, &new_key)
-            .await
-        {
+        match db.request_ssh_key_rotation(&contract_id, &new_key).await {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: Some(
@@ -743,8 +746,7 @@ impl ContractsApi {
                             }
 
                             // Auto-accepted, try to trigger cloud provisioning
-                            if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await
-                            {
+                            if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await {
                                 tracing::warn!(
                                     "Cloud provisioning trigger failed for contract {}: {}",
                                     hex::encode(&contract_id),
@@ -1406,10 +1408,7 @@ impl ContractsApi {
         // Try auto-accept if provider has it enabled
         match db.try_auto_accept_contract(&contract_id_bytes).await {
             Ok(true) => {
-                if let Err(e) = db
-                    .try_trigger_cloud_provisioning(&contract_id_bytes)
-                    .await
-                {
+                if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id_bytes).await {
                     tracing::warn!(
                         "Cloud provisioning trigger failed for contract {}: {}",
                         session_result.contract_id,

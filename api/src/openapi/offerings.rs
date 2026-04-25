@@ -696,7 +696,11 @@ impl OfferingsApi {
     }
 
     /// Get provider-reported SLA summary for an offering
-    #[oai(path = "/offerings/:id/sla-summary", method = "get", tag = "ApiTags::Offerings")]
+    #[oai(
+        path = "/offerings/:id/sla-summary",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
     async fn get_offering_sla_summary(
         &self,
         db: Data<&Arc<Database>>,

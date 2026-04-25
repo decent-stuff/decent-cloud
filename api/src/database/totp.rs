@@ -50,8 +50,7 @@ const ISSUER: &str = "DecentCloud";
 /// Compute one TOTP code for the given secret bytes and counter.
 fn hotp(secret: &[u8], counter: u64) -> u32 {
     let msg = counter.to_be_bytes();
-    let mut mac = Hmac::<Sha1>::new_from_slice(secret)
-        .expect("HMAC-SHA1 accepts any key length");
+    let mut mac = Hmac::<Sha1>::new_from_slice(secret).expect("HMAC-SHA1 accepts any key length");
     mac.update(&msg);
     let result = mac.finalize().into_bytes();
 
@@ -131,11 +130,7 @@ impl Database {
     /// Returns `(secret_b32, otpauth_uri)`. The secret is stored immediately so
     /// a subsequent `enable_totp` call can read it. Until `totp_enabled = TRUE`
     /// this has no effect on authentication.
-    pub async fn setup_totp(
-        &self,
-        account_id: &[u8],
-        username: &str,
-    ) -> Result<(String, String)> {
+    pub async fn setup_totp(&self, account_id: &[u8], username: &str) -> Result<(String, String)> {
         let enc_key = ServerEncryptionKey::from_env()
             .context("TOTP setup requires CREDENTIAL_ENCRYPTION_KEY")?;
 
