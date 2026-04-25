@@ -1,15 +1,19 @@
 # Stripe charge.dispute.* Webhook Handlers -- Implementation Plan
 
-- Issues: decent-stuff/decent-cloud#408 (handlers), #421 (pause-vs-terminate decision)
+- Issues: decent-stuff/decent-cloud#408 (handlers), #421 (pause-vs-terminate decision), #424 (Phase 2)
 - Date: 2026-04-25 (revised 2026-04-25 to Option B per #421)
 - Author: Backend API agent
-- Status: Phase 1 (DB layer + migration + spec) IMPLEMENTED. Phase 2 (webhook
-  handlers + dc-agent runtime change + ops-alert helper) PENDING -- tracked in
-  a follow-up ticket. The diffs in section 4 remain authoritative as the
-  specification for Phase 2; the `cancel_contract_for_dispute` references in
-  the original spec are replaced by `pause_contract` / `resume_contract` /
-  `terminate_contract_for_dispute_lost` (already shipped in Phase 1, see
-  `api/src/database/contracts/dispute.rs`).
+- Status: Phase 1 (DB layer + migration + spec) IMPLEMENTED in commit
+  `d677f3e7`. Phase 2 (webhook handlers + dc-agent runtime change +
+  ops-alert helper) IMPLEMENTED -- see `api/src/openapi/webhooks.rs`,
+  `api/src/notifications/telegram.rs::send_ops_alert`,
+  `dc-agent/src/main.rs` reconcile pause loop, and the
+  `ReconcilePauseInstance` addition in `common/src/api_types.rs`. The
+  `cancel_contract_for_dispute` references in the original spec are
+  replaced by `pause_contract` / `resume_contract` /
+  `terminate_contract_for_dispute_lost` (Phase 1) and
+  `process_dispute_lost_refund` (Phase 2 refund helper that constructs
+  the `dispute:<id>` idempotency key for Stripe's deduplication).
 
 ## 0. Goal and non-goals
 
@@ -147,6 +151,20 @@ Notes:
   filters paused rows.
 
 ## 4. Code diffs (PHASE 2)
+
+> Phase 2 implementation note: the diffs below are the design sketch
+> from before implementation. The shipped code differs in two minor
+> ways: (a) the lost-dispute refund logic was extracted from the
+> handler into `Database::process_dispute_lost_refund` so the helper
+> can be tested in isolation and so the deterministic idempotency key
+> (`dispute:<stripe_dispute_id>`) lives next to the
+> `calculate_prorated_refund` call site; (b) the dc-agent runtime
+> change is implemented at the reconciliation layer (new
+> `ReconcilePauseInstance` bucket in `ReconcileResponse`,
+> `Provisioner::stop()` trait method) rather than inside the polling
+> loop, because the polling loop already filters paused contracts via
+> `get_pending_provider_contracts` (which only returns
+> `requested`/`pending`).
 
 ### 4.a `api/src/openapi/webhooks.rs` -- new Stripe types
 
@@ -576,15 +594,53 @@ Phase 1 (IMPLEMENTED) tests in
    pause) gives ~40% refund; with 30% paused window credited, gives ~70%
    refund; full pause gives full refund; negative input is sanitized.
 
-Phase 2 tests (DEFERRED) at the HTTP layer:
+Phase 2 (IMPLEMENTED) tests at the dispatch layer
+(`api/src/openapi/webhooks.rs::tests`):
 
-6. `test_dispute_signature_mismatch_returns_400` -- bogus
-   `stripe-signature` header, response is 400, no DB row inserted.
-7. `test_dispute_with_unknown_charge_persists_orphan_row` -- metadata has
-   no contract_id, PI lookup misses; `contract_id IS NULL` row inserted,
-   no `contract_events` row, Telegram alert "NO matching contract".
-8. `test_dispute_funds_withdrawn_sets_timestamp` -- row exists with
-   `funds_withdrawn_at_ns IS NOT NULL`, contract state untouched.
+6. `test_dispute_created_pauses_contract` -- a `charge.dispute.created`
+   event for a known contract: dispute row inserted, contract status
+   becomes `paused`, `paused_at_ns` set, exactly one paused history row.
+7. `test_dispute_created_idempotent_on_replay` -- the same event
+   delivered twice yields one dispute row, one paused history row, one
+   `paused` audit event. (Stripe replays on non-2xx, so this is
+   load-bearing.)
+8. `test_dispute_closed_won_resumes_contract` -- pause via `created`,
+   sleep, then `closed` with status=won restores `active`, populates
+   `total_paused_ns >= 10ms`, sets dispute row's `closed_at_ns`.
+9. `test_dispute_closed_lost_terminates_and_records_refund` -- pause via
+   `created`, then `closed` with status=lost transitions to `cancelled`
+   with `payment_status='disputed'`, records a positive
+   `refund_amount_e9s`, emits a `dispute_lost` event, and constructs the
+   exact `dispute:<id>` idempotency key Stripe's dedup relies on.
+10. `test_orphan_dispute_persists_and_does_not_5xx` -- a dispute for a
+    payment we never issued returns Ok (NOT 5xx; Stripe would retry
+    forever) and persists a `contract_disputes` row with NULL
+    `contract_id` for the operator audit trail.
+11. `test_dispute_funds_withdrawn_sets_timestamp_no_state_change` -- the
+    `funds_withdrawn` event sets `funds_withdrawn_at_ns` on the dispute
+    row and leaves the contract status untouched.
+
+Phase 2 also covers the dc-agent runtime + helper:
+
+12. `dc-agent/src/provisioner/mod.rs::tests::test_paused_contract_dispatch_routes_to_stop_when_supported`
+    -- a Provisioner that overrides `stop()` (mirrors Proxmox's
+    stop-without-destroy semantics) is called by the pause path; a
+    Provisioner that only implements `terminate()` falls through to it
+    via the trait's default `stop()` (with a tracing warn) so dispute
+    handling is still effective at the cost of state loss.
+13. `api/src/notifications/telegram.rs::tests::test_send_ops_alert_swallows_misconfiguration`
+    -- when neither `TELEGRAM_OPS_CHAT_ID` nor `TELEGRAM_BOT_TOKEN` is
+    set, `send_ops_alert` warn-logs and returns Ok (Stripe MUST NOT
+    retry on Telegram outages).
+14. `common/src/api_types.rs::tests::test_reconcile_response_pause_field_serializes_and_default_deserializes`
+    -- the new `pause` bucket round-trips, and an old API server's
+    response (no `pause` field) deserializes cleanly with `pause = []`.
+
+Note on signature verification: the existing
+`test_verify_signature_*` tests fully cover the dispatch's signature
+gate, which is shared by every Stripe event type. A redundant
+"dispute_signature_mismatch" test would overlap that coverage and is
+deliberately omitted (CLAUDE.md rule on non-overlapping tests).
 
 ## 7. Acceptance checklist
 
@@ -600,14 +656,29 @@ Mapped to the four bullets in issue #408 and the decision in #421.
   - file: `api/src/database/contracts/payment.rs`
 - [x] State machine has `Paused` with reversible transitions
   - file: `common/src/contract_status.rs`
-- [ ] Webhook routes for all four events (PHASE 2)
-  - file: `api/src/openapi/webhooks.rs`
-- [ ] dc-agent polling loop skips paused contracts (PHASE 2)
-  - file: `dc-agent/src/main.rs` (or wherever the loop reads `status`)
-- [ ] `send_ops_alert` helper (PHASE 2)
-  - file: `api/src/notifications/telegram.rs`
-- [ ] HTTP-layer tests (PHASE 2): signature mismatch, orphan dispute,
-  funds_withdrawn
+- [x] Webhook routes for all four events
+  - file: `api/src/openapi/webhooks.rs` -- handler functions
+    `handle_dispute_created`, `handle_dispute_updated`,
+    `handle_dispute_closed`, `handle_dispute_funds_withdrawn`. Idempotent
+    by design (call into Phase 1 DB primitives which are themselves
+    idempotent); orphan disputes return 200 to break Stripe retry loops.
+- [x] dc-agent polling loop skips paused contracts
+  - The provisioning poll is a no-op for paused contracts because
+    `get_pending_provider_contracts` only returns `requested`/`pending`.
+    The reconcile loop (`dc-agent/src/main.rs::reconcile_instances`)
+    grew a dedicated pause path that calls `Provisioner::stop()` (added
+    to the trait; default falls through to `terminate()` with a warn,
+    Proxmox overrides to call only `stop_vm`) so paused contracts get
+    their VMs stopped without disk destruction.
+- [x] `send_ops_alert` helper
+  - file: `api/src/notifications/telegram.rs::send_ops_alert`. Reads
+    `TELEGRAM_OPS_CHAT_ID` (falls back to `TELEGRAM_CHAT_ID`); warn-logs
+    loudly when neither is set; never propagates Telegram failures to
+    the caller.
+- [x] HTTP-layer tests: orphan dispute, idempotent replay, won resumes,
+  lost terminates+refunds, funds_withdrawn no-op
+  - file: `api/src/openapi/webhooks.rs::tests` (six new
+    `test_dispute_*` functions)
 
 ## 8. Follow-up issues to file
 
@@ -630,12 +701,14 @@ Each risk: confidence I am right, what I do not know, what to verify.
   Stripe API docs for the version pinned in `Cargo.toml`. The struct
   `StripeDispute` may need additional `#[serde(default)]` or `Option`
   wrappers if Stripe omits fields in older API versions.
-- R2 (conf 8/10): `send_ops_alert` is a Phase 2 helper; the rest of the
-  codebase uses `TelegramClient::from_env()?.send_message(chat_id, msg)`.
-  Phase 2 adds the wrapper to `api/src/notifications/telegram.rs` reading
-  `TELEGRAM_OPS_CHAT_ID` from env. If the env var is absent, the helper
-  emits `tracing::warn!` (per project rule "BE LOUD ABOUT
-  MISCONFIGURATIONS"), it does NOT silently no-op.
+- R2 (RESOLVED 2026-04-25 in Phase 2):
+  `api/src/notifications/telegram.rs::send_ops_alert` reads
+  `TELEGRAM_OPS_CHAT_ID` (falls back to `TELEGRAM_CHAT_ID`), warn-logs
+  loudly when neither chat ID nor `TELEGRAM_BOT_TOKEN` is configured
+  (per project rule "BE LOUD ABOUT MISCONFIGURATIONS"), and never
+  propagates Telegram failures to the caller (Stripe would retry
+  forever on 5xx, so the helper MUST swallow). Unit-tested in
+  `tests::test_send_ops_alert_swallows_misconfiguration`.
 - R3 (RESOLVED 2026-04-25 per #421): pause-and-resume chosen over
   terminate-on-dispute. Reversible state preserves customer state on
   won disputes (no manual re-onboarding). The `Paused` state in

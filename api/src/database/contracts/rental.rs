@@ -410,7 +410,7 @@ impl Database {
                         if let Some(client) = stripe_client {
                             let refund_cents = full_refund / 10_000_000;
                             match client
-                                .create_refund(payment_intent_id, Some(refund_cents))
+                                .create_refund(payment_intent_id, Some(refund_cents), None)
                                 .await
                             {
                                 Ok(refund_id) => {
@@ -626,7 +626,7 @@ impl Database {
 
                                 // Create refund via Stripe API
                                 match client
-                                    .create_refund(payment_intent_id, Some(refund_cents))
+                                    .create_refund(payment_intent_id, Some(refund_cents), None)
                                     .await
                                 {
                                     Ok(refund_id) => {

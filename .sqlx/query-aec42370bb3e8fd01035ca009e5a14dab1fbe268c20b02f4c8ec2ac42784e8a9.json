@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET refund_amount_e9s = $1, stripe_refund_id = $2, refund_created_at_ns = $3 WHERE contract_id = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aec42370bb3e8fd01035ca009e5a14dab1fbe268c20b02f4c8ec2ac42784e8a9"
+}

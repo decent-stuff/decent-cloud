@@ -2194,6 +2194,48 @@ async fn reconcile_instances(
         }
     };
 
+    // Process pauses FIRST -- a contract that flipped paused->cancelled in the
+    // same cycle must be picked up on the cancellation pass below, not double-handled.
+    // (The server only ever puts a single instance in one bucket, so pause/terminate
+    // for the same external_id never collide; we just process pauses first to keep
+    // the log order intuitive: stop, then if needed terminate.)
+    for vm in &response.pause {
+        info!(
+            external_id = %vm.external_id,
+            contract_id = %vm.contract_id,
+            reason = %vm.reason,
+            "Pausing VM (stop without destroy)"
+        );
+        let mut paused_ok = false;
+        let mut errors: Vec<(String, String)> = Vec::new();
+        for (ptype, provisioner) in provisioners {
+            match provisioner.stop(&vm.external_id).await {
+                Ok(()) => {
+                    info!(
+                        external_id = %vm.external_id,
+                        contract_id = %vm.contract_id,
+                        provisioner_type = %ptype,
+                        "VM stopped for pause"
+                    );
+                    paused_ok = true;
+                    break;
+                }
+                Err(e) => {
+                    errors.push((ptype.to_string(), format!("{e:#}")));
+                    continue;
+                }
+            }
+        }
+        if !paused_ok {
+            error!(
+                external_id = %vm.external_id,
+                contract_id = %vm.contract_id,
+                errors = ?errors,
+                "Pause failed - no provisioner could stop this instance"
+            );
+        }
+    }
+
     // Process terminations - try each provisioner until one succeeds
     for vm in &response.terminate {
         info!(

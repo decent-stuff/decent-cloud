@@ -39,6 +39,7 @@ pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
 pub use agent_pools::{AgentPool, AgentPoolWithStats, SetupToken};
 pub use cloud_accounts::CloudAccount;
 pub use cloud_resources::CloudResourceWithDetails;
+pub use contracts::ContractDisputeUpsert;
 pub use notification_config::UserNotificationConfig;
 pub use subscriptions::{AccountSubscription, SubscriptionEventInput, SubscriptionPlan};
 pub use types::{Database, LedgerEntryData};

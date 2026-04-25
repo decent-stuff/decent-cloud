@@ -361,8 +361,9 @@ impl Database {
     }
 
     /// Look up a contract's current `pause_reason`. Used by `pause_contract`
-    /// to detect conflicting concurrent pauses.
-    pub(super) async fn get_pause_reason(&self, contract_id: &[u8]) -> Result<Option<String>> {
+    /// to detect conflicting concurrent pauses, and by the reconcile endpoint
+    /// to forward the reason to the dc-agent's pause action.
+    pub async fn get_pause_reason(&self, contract_id: &[u8]) -> Result<Option<String>> {
         let row = sqlx::query!(
             "SELECT pause_reason FROM contract_sign_requests WHERE contract_id = $1",
             contract_id
@@ -396,4 +397,153 @@ impl Database {
         .await?;
         Ok(row.total_paused_ns)
     }
+
+    /// Look up a contract by its real Stripe PaymentIntent ID (`pi_*`).
+    ///
+    /// Phase 2 dispute handler resolves `event.data.object.payment_intent` to
+    /// our internal contract via this lookup. Legacy rows (predating the
+    /// `stripe_checkout_session_id` / `stripe_payment_intent_id` split) may
+    /// have the PI ID stored in the checkout-session column; the second
+    /// query covers that fallback in one round trip.
+    pub async fn get_contract_id_by_stripe_payment_intent(
+        &self,
+        payment_intent_id: &str,
+    ) -> Result<Option<Vec<u8>>> {
+        let row = sqlx::query!(
+            r#"SELECT contract_id FROM contract_sign_requests
+               WHERE stripe_payment_intent_id = $1
+                  OR stripe_checkout_session_id = $1
+               ORDER BY created_at_ns DESC
+               LIMIT 1"#,
+            payment_intent_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.contract_id))
+    }
+
+    /// Look up a contract by Stripe charge ID. Used as a final fallback in the
+    /// dispute-handler lookup chain when the dispute payload lacks a PI but
+    /// carries a charge ID we have already seen via a previous dispute event
+    /// (inserted into `contract_disputes.stripe_charge_id`).
+    pub async fn get_contract_id_by_stripe_charge(
+        &self,
+        charge_id: &str,
+    ) -> Result<Option<Vec<u8>>> {
+        let row = sqlx::query!(
+            r#"SELECT contract_id FROM contract_disputes
+               WHERE stripe_charge_id = $1 AND contract_id IS NOT NULL
+               ORDER BY created_at_ns DESC
+               LIMIT 1"#,
+            charge_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.and_then(|r| r.contract_id))
+    }
+
+    /// Compute and (optionally) issue the prorated refund owed to the customer
+    /// after a `charge.dispute.closed` event with status=lost.
+    ///
+    /// Stripe's auto-withdrawal already pulls the disputed amount; the refund
+    /// here covers the unused billable window (paused time excluded). The
+    /// idempotency key is fixed at `dispute:{stripe_dispute_id}` so webhook
+    /// replays collapse onto a single Stripe Refund record.
+    ///
+    /// Returns `(refund_amount_e9s, stripe_refund_id)`. Either side may be
+    /// `None`: amount=None means the customer owes nothing back, refund_id=None
+    /// means the call was either skipped (no client / amount<=0) or the Stripe
+    /// API failed (already logged at `warn!`; the DB row remains in `disputed`
+    /// state and an operator can re-run the refund manually).
+    pub async fn process_dispute_lost_refund(
+        &self,
+        contract_id: &[u8],
+        stripe_dispute_id: &str,
+        stripe_client: Option<&crate::stripe_client::StripeClient>,
+    ) -> Result<(Option<i64>, Option<String>)> {
+        let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
+            anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
+        })?;
+        if contract.payment_status != "succeeded" && contract.payment_status != "disputed" {
+            // No money to refund. (`disputed` is what terminate_contract_for_dispute_lost
+            // sets; we accept both so this method can run before OR after the terminate.)
+            return Ok((None, None));
+        }
+        if contract.payment_method != "stripe" {
+            return Ok((None, None));
+        }
+        let stripe_id = contract
+            .stripe_payment_intent_id
+            .as_deref()
+            .or(contract.stripe_checkout_session_id.as_deref());
+        let Some(payment_intent_id) = stripe_id else {
+            return Ok((None, None));
+        };
+
+        let total_paused_ns = self.get_total_paused_ns(contract_id).await?;
+        let now_ns = crate::now_ns()?;
+        let refund_e9s = Self::calculate_prorated_refund(
+            contract.payment_amount_e9s,
+            contract.provisioning_completed_at_ns,
+            contract.end_timestamp_ns,
+            now_ns,
+            total_paused_ns,
+        );
+        if refund_e9s <= 0 {
+            return Ok((None, None));
+        }
+
+        let refund_cents = refund_e9s / 10_000_000;
+        let key = dispute_refund_idempotency_key(stripe_dispute_id);
+        let stripe_refund_id = match stripe_client {
+            Some(client) => {
+                match client
+                    .create_refund(payment_intent_id, Some(refund_cents), Some(&key))
+                    .await
+                {
+                    Ok(id) => {
+                        tracing::info!(
+                            contract_id = %hex::encode(contract_id),
+                            stripe_dispute_id,
+                            stripe_refund_id = %id,
+                            refund_cents,
+                            "Stripe dispute-lost refund issued"
+                        );
+                        Some(id)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            contract_id = %hex::encode(contract_id),
+                            stripe_dispute_id,
+                            error = %format!("{:#}", e),
+                            "Failed to create Stripe dispute-lost refund (will not auto-retry)"
+                        );
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+
+        // Persist refund accounting on the contract row regardless of whether
+        // Stripe accepted the refund; an operator with the row contents can
+        // reconcile manually.
+        sqlx::query!(
+            "UPDATE contract_sign_requests SET refund_amount_e9s = $1, stripe_refund_id = $2, refund_created_at_ns = $3 WHERE contract_id = $4",
+            refund_e9s,
+            stripe_refund_id,
+            now_ns,
+            contract_id
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok((Some(refund_e9s), stripe_refund_id))
+    }
+}
+
+/// Idempotency key used for the prorated refund issued after a lost dispute.
+/// Exposed so callers can log it and tests can assert the exact value.
+pub fn dispute_refund_idempotency_key(stripe_dispute_id: &str) -> String {
+    format!("dispute:{}", stripe_dispute_id)
 }

@@ -5,8 +5,8 @@ use stripe::{
     CreateCheckoutSessionInvoiceCreation, CreateCheckoutSessionLineItems,
     CreateCheckoutSessionLineItemsPriceData, CreateCheckoutSessionLineItemsPriceDataProductData,
     CreateCheckoutSessionSubscriptionData, CreateCustomer, CreateRefund, Currency, Customer,
-    CustomerId, Expandable, Invoice, InvoiceId, PaymentIntentId, Refund, Subscription,
-    SubscriptionId, UpdateSubscription,
+    CustomerId, Expandable, Invoice, InvoiceId, PaymentIntentId, Refund, RequestStrategy,
+    Subscription, SubscriptionId, UpdateSubscription,
 };
 
 /// Stripe API client wrapper for payment processing
@@ -119,11 +119,18 @@ impl StripeClient {
             .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
     }
 
-    /// Creates a refund for a payment intent
+    /// Creates a refund for a payment intent.
+    ///
+    /// When `idempotency_key` is set, the request is sent with a Stripe
+    /// `Idempotency-Key` header so retries (including webhook replays) collapse
+    /// onto a single Refund record. Pass `None` for one-shot user-driven flows
+    /// where Stripe's natural deduplication on `payment_intent + amount` is
+    /// sufficient.
     ///
     /// # Arguments
     /// * `payment_intent_id` - The PaymentIntent ID to refund
     /// * `amount` - Amount to refund in cents (None = full refund)
+    /// * `idempotency_key` - Caller-supplied key; same key = same Refund row
     ///
     /// # Returns
     /// Refund ID on success
@@ -131,6 +138,7 @@ impl StripeClient {
         &self,
         payment_intent_id: &str,
         amount: Option<i64>,
+        idempotency_key: Option<&str>,
     ) -> Result<String> {
         let intent_id: PaymentIntentId = payment_intent_id.parse()?;
 
@@ -141,7 +149,16 @@ impl StripeClient {
             params.amount = Some(amt);
         }
 
-        let refund = Refund::create(&self.client, params).await?;
+        let refund = match idempotency_key {
+            Some(key) => {
+                let scoped = self
+                    .client
+                    .clone()
+                    .with_strategy(RequestStrategy::Idempotent(key.to_string()));
+                Refund::create(&scoped, params).await?
+            }
+            None => Refund::create(&self.client, params).await?,
+        };
 
         Ok(refund.id.to_string())
     }

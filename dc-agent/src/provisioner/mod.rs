@@ -104,6 +104,25 @@ pub trait Provisioner: Send + Sync {
     /// Terminate an instance
     async fn terminate(&self, external_id: &str) -> Result<()>;
 
+    /// Stop (suspend) an instance WITHOUT destroying its disk or DNS state.
+    /// Used by the reconcile loop when a contract is paused (e.g. due to a
+    /// Stripe dispute) and we expect to resume it later.
+    ///
+    /// Default: log a clear warning and fall through to `terminate`. A
+    /// provisioner that distinguishes stop-vs-delete (e.g. Proxmox) should
+    /// override this; provisioners that cannot stop without destroying are
+    /// effectively unable to honor pause-and-resume, and the warning makes
+    /// that visible at runtime instead of silently consuming the customer's
+    /// state.
+    async fn stop(&self, external_id: &str) -> Result<()> {
+        tracing::warn!(
+            external_id,
+            "Provisioner does not implement stop(); destroying VM instead. \
+             Pause-and-resume will lose customer state on this provisioner."
+        );
+        self.terminate(external_id).await
+    }
+
     /// Check instance health
     async fn health_check(&self, external_id: &str) -> Result<HealthStatus>;
 
@@ -133,6 +152,91 @@ pub trait Provisioner: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// A test-only Provisioner that records terminate/stop calls. Used to
+    /// assert that the trait's default `stop()` falls through to `terminate()`
+    /// (so non-Proxmox provisioners still respond to a pause reconcile, even
+    /// if they cannot preserve state). Phase 2: dc-agent runtime change.
+    struct RecordingProvisioner {
+        terminates: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Provisioner for RecordingProvisioner {
+        async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+            unreachable!("not used in stop-fallback test")
+        }
+        async fn terminate(&self, _external_id: &str) -> Result<()> {
+            self.terminates.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+            unreachable!("not used in stop-fallback test")
+        }
+        async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+            Ok(None)
+        }
+    }
+
+    /// A Provisioner that overrides `stop()` -- mirrors the Proxmox
+    /// implementation's contract: stop MUST NOT delete the disk/VM.
+    struct StopAwareProvisioner {
+        terminates: Arc<AtomicUsize>,
+        stops: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Provisioner for StopAwareProvisioner {
+        async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+            unreachable!()
+        }
+        async fn terminate(&self, _external_id: &str) -> Result<()> {
+            self.terminates.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        async fn stop(&self, _external_id: &str) -> Result<()> {
+            self.stops.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+        async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+            unreachable!()
+        }
+        async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_paused_contract_dispatch_routes_to_stop_when_supported() {
+        // The reconcile pause loop calls `provisioner.stop(...)`. A
+        // Provisioner that implements stop natively MUST NOT touch terminate;
+        // a Provisioner that only implements terminate (default) MUST get
+        // the call routed to terminate (with a warn-log) so dispute handling
+        // is still effective at the cost of state loss.
+        let stop_aware = StopAwareProvisioner {
+            terminates: Arc::new(AtomicUsize::new(0)),
+            stops: Arc::new(AtomicUsize::new(0)),
+        };
+        stop_aware.stop("vm-1").await.unwrap();
+        assert_eq!(stop_aware.stops.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            stop_aware.terminates.load(Ordering::SeqCst),
+            0,
+            "stop-aware provisioner MUST NOT destroy on pause"
+        );
+
+        let recording = RecordingProvisioner {
+            terminates: Arc::new(AtomicUsize::new(0)),
+        };
+        recording.stop("vm-2").await.unwrap();
+        assert_eq!(
+            recording.terminates.load(Ordering::SeqCst),
+            1,
+            "default stop() MUST fall through to terminate()"
+        );
+    }
 
     #[test]
     fn test_instance_serialization_includes_public_ip_when_set() {

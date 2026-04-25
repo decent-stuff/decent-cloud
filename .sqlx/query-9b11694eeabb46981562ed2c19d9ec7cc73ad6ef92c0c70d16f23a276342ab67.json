@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT contract_id FROM contract_disputes\n               WHERE stripe_charge_id = $1 AND contract_id IS NOT NULL\n               ORDER BY created_at_ns DESC\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contract_id",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9b11694eeabb46981562ed2c19d9ec7cc73ad6ef92c0c70d16f23a276342ab67"
+}

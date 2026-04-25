@@ -1011,6 +1011,35 @@ impl Provisioner for ProxmoxProvisioner {
         Ok(())
     }
 
+    /// Stop the VM WITHOUT deleting it. Used by reconcile pause action so a
+    /// later resume can power the same VM back on with all customer state
+    /// (disk, DNS, gateway port allocations) intact. Idempotent: stopping an
+    /// already-stopped VM is a no-op; a missing VM is logged as warn and
+    /// returns Ok (the agent will pick it up as orphan/unknown next cycle).
+    async fn stop(&self, external_id: &str) -> Result<()> {
+        let vmid: u32 = external_id.parse().context("Invalid VMID format")?;
+        tracing::info!("Stopping (NOT deleting) VM {} for paused contract", vmid);
+        match self.get_vm_status(vmid).await {
+            Ok(status) if status.status == "running" => self
+                .stop_vm(vmid)
+                .await
+                .context("Failed to stop VM for pause"),
+            Ok(_) => {
+                tracing::debug!("VM {} already stopped; pause is a no-op", vmid);
+                Ok(())
+            }
+            Err(e) => {
+                if let Some(api_err) = e.downcast_ref::<ProxmoxApiError>() {
+                    if api_err.is_not_found() {
+                        tracing::warn!("VM {} not found during pause; nothing to stop", vmid);
+                        return Ok(());
+                    }
+                }
+                Err(e)
+            }
+        }
+    }
+
     async fn health_check(&self, external_id: &str) -> Result<HealthStatus> {
         let vmid: u32 = external_id.parse().context("Invalid VMID format")?;
 

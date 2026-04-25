@@ -139,6 +139,54 @@ pub fn format_notification(summary: &str, chatwoot_link: &str) -> String {
     )
 }
 
+/// Send an operator alert to the configured Telegram ops channel.
+///
+/// Reads the destination chat ID from `TELEGRAM_OPS_CHAT_ID` (preferred) or
+/// `TELEGRAM_CHAT_ID` (fallback shared with the support bot). When neither
+/// the bot token nor a chat ID is configured, the function emits a loud
+/// `tracing::warn!` (per project rule "BE LOUD ABOUT MISCONFIGURATIONS")
+/// instead of silently no-op'ing -- so misconfiguration is visible.
+///
+/// The function never panics and never propagates Telegram-side failures:
+/// callers (Stripe webhook handlers) MUST NOT 500 just because Telegram is
+/// down -- Stripe would retry the webhook forever.
+pub async fn send_ops_alert(message: &str) {
+    let chat_id = match std::env::var("TELEGRAM_OPS_CHAT_ID")
+        .or_else(|_| std::env::var("TELEGRAM_CHAT_ID"))
+    {
+        Ok(id) if !id.trim().is_empty() => id,
+        _ => {
+            tracing::warn!(
+                alert = %message,
+                "TELEGRAM_OPS_CHAT_ID (and TELEGRAM_CHAT_ID) not set -- ops alerts will NOT be delivered! \
+                 Set TELEGRAM_OPS_CHAT_ID to enable ops paging."
+            );
+            return;
+        }
+    };
+
+    let client = match TelegramClient::from_env() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                alert = %message,
+                error = %format!("{:#}", e),
+                "TELEGRAM_BOT_TOKEN not configured -- ops alert dropped! \
+                 Set TELEGRAM_BOT_TOKEN to enable ops paging."
+            );
+            return;
+        }
+    };
+
+    if let Err(e) = client.send_message(&chat_id, message).await {
+        tracing::warn!(
+            alert = %message,
+            error = %format!("{:#}", e),
+            "Failed to deliver Telegram ops alert"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +347,38 @@ mod tests {
         let msg = update.message.unwrap();
         assert!(msg.reply_to_message.is_some());
         assert_eq!(msg.reply_to_message.unwrap().message_id, 456);
+    }
+
+    #[tokio::test]
+    async fn test_send_ops_alert_swallows_misconfiguration() {
+        // Misconfiguration MUST NOT propagate -- Stripe would retry forever
+        // if a webhook handler 500s on a Telegram outage.
+        let original_token = std::env::var("TELEGRAM_BOT_TOKEN").ok();
+        let original_ops = std::env::var("TELEGRAM_OPS_CHAT_ID").ok();
+        let original_chat = std::env::var("TELEGRAM_CHAT_ID").ok();
+
+        std::env::remove_var("TELEGRAM_BOT_TOKEN");
+        std::env::remove_var("TELEGRAM_OPS_CHAT_ID");
+        std::env::remove_var("TELEGRAM_CHAT_ID");
+
+        // No chat ID -> warn and return without touching the Telegram API.
+        send_ops_alert("dispute opened").await;
+
+        // Chat ID set, bot token absent -> still must return cleanly.
+        std::env::set_var("TELEGRAM_OPS_CHAT_ID", "123");
+        send_ops_alert("dispute lost").await;
+
+        // Restore env
+        std::env::remove_var("TELEGRAM_OPS_CHAT_ID");
+        if let Some(v) = original_token {
+            std::env::set_var("TELEGRAM_BOT_TOKEN", v);
+        }
+        if let Some(v) = original_ops {
+            std::env::set_var("TELEGRAM_OPS_CHAT_ID", v);
+        }
+        if let Some(v) = original_chat {
+            std::env::set_var("TELEGRAM_CHAT_ID", v);
+        }
     }
 
     #[test]

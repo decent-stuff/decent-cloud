@@ -83,6 +83,50 @@ struct StripePrice {
     id: String,
 }
 
+// =============================================================================
+// Stripe charge.dispute.* webhook types (Phase 2)
+// =============================================================================
+//
+// Stripe sends these events whenever a customer files a chargeback. The
+// server must persist every event (so we have an audit trail), pause the
+// matching contract while the dispute is open, and either resume or
+// terminate when the dispute closes. Replays MUST be idempotent: 2xx is the
+// signal Stripe uses to stop retrying, and the DB primitives in
+// `contracts/dispute.rs` are designed for exactly that.
+
+#[derive(Debug, Deserialize)]
+struct StripeDispute {
+    id: String,
+    /// Stripe charge ID (`ch_*`). Always present on a `charge.dispute.*` event.
+    charge: String,
+    /// PaymentIntent ID (`pi_*`). Stripe omits this on legacy charges that
+    /// were not created via PaymentIntents -- contracts older than the
+    /// session/PI split therefore fall back to charge-id lookup.
+    #[serde(default)]
+    payment_intent: Option<String>,
+    /// Disputed amount in the smallest currency unit (cents for USD/EUR).
+    amount: i64,
+    currency: String,
+    /// Free-form Stripe-provided dispute reason (e.g. "fraudulent",
+    /// "product_not_received"). Persisted verbatim.
+    #[serde(default)]
+    reason: Option<String>,
+    /// Stripe-side dispute status: e.g. `needs_response`, `under_review`,
+    /// `won`, `lost`, `warning_closed`. We forward the raw value to the DB.
+    status: String,
+    #[serde(default)]
+    evidence_details: Option<StripeDisputeEvidenceDetails>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StripeDisputeEvidenceDetails {
+    /// Unix seconds; Stripe's deadline for evidence submission.
+    #[serde(default)]
+    due_by: Option<i64>,
+}
+
 /// Verify Stripe webhook signature
 fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> {
     use hmac::{Hmac, Mac};
@@ -676,6 +720,23 @@ pub async fn stripe_webhook(
             }
         }
 
+        // Stripe dispute lifecycle (Phase 2). Each handler wraps a Phase 1 DB
+        // primitive in `contracts/dispute.rs`. All four handlers MUST be 2xx
+        // even if the dispute can't be matched to a contract -- a 5xx puts
+        // Stripe into an indefinite retry loop while the operator paging is
+        // already happening via `send_ops_alert` in the orphan path.
+        "charge.dispute.created" => {
+            handle_dispute_created(db.as_ref(), &event.data.object).await?;
+        }
+        "charge.dispute.updated" => {
+            handle_dispute_updated(db.as_ref(), &event.data.object).await?;
+        }
+        "charge.dispute.closed" => {
+            handle_dispute_closed(db.as_ref(), &event.data.object).await?;
+        }
+        "charge.dispute.funds_withdrawn" => {
+            handle_dispute_funds_withdrawn(db.as_ref(), &event.data.object).await?;
+        }
         // Note: payment_intent.succeeded and payment_intent.payment_failed webhooks are NOT used.
         // We use checkout.session.completed which already sets payment_status and has the contract_id.
         // Stripe Checkout generates its own PaymentIntent internally, but we link contracts by
@@ -688,6 +749,354 @@ pub async fn stripe_webhook(
     Ok(Response::builder()
         .status(poem::http::StatusCode::OK)
         .body(""))
+}
+
+// =============================================================================
+// Dispute handler implementations (Phase 2)
+// =============================================================================
+
+fn parse_dispute(object: &serde_json::Value) -> Result<StripeDispute, PoemError> {
+    serde_json::from_value(object.clone()).map_err(|e| {
+        tracing::error!("Failed to parse dispute payload: {:#}", e);
+        PoemError::from_string(
+            format!("Invalid dispute data: {}", e),
+            poem::http::StatusCode::BAD_REQUEST,
+        )
+    })
+}
+
+fn map_db_err(context: &'static str, e: anyhow::Error) -> PoemError {
+    tracing::error!("{}: {:#}", context, e);
+    PoemError::from_string(
+        format!("{}: {}", context, e),
+        poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+    )
+}
+
+/// Resolve a Stripe dispute to one of our contracts.
+///
+/// Lookup chain (most-specific first):
+///  1. `metadata.contract_id` (set by us when creating the checkout session).
+///  2. `payment_intent` -> `stripe_payment_intent_id` (canonical post-rename).
+///  3. `payment_intent` against the legacy `stripe_checkout_session_id`
+///     column (covered by the same DB helper for legacy rows).
+///  4. `charge` -> previously-seen dispute row (so a `dispute.updated` for
+///     a known dispute still finds the contract).
+///
+/// Returns `None` for charges we never issued -- the caller logs and pages
+/// ops but does NOT 500 (Stripe would retry forever).
+async fn lookup_contract_for_charge(
+    db: &Database,
+    dispute: &StripeDispute,
+) -> Option<Vec<u8>> {
+    if let Some(meta) = dispute.metadata.as_ref() {
+        if let Some(hex_id) = meta.get("contract_id").and_then(|v| v.as_str()) {
+            if let Ok(bytes) = hex::decode(hex_id) {
+                return Some(bytes);
+            }
+        }
+    }
+    if let Some(pi) = dispute.payment_intent.as_deref() {
+        match db.get_contract_id_by_stripe_payment_intent(pi).await {
+            Ok(Some(id)) => return Some(id),
+            Ok(None) => {}
+            Err(e) => tracing::warn!(
+                payment_intent = %pi,
+                error = %format!("{:#}", e),
+                "DB lookup by stripe_payment_intent failed; continuing fallback chain"
+            ),
+        }
+    }
+    match db.get_contract_id_by_stripe_charge(&dispute.charge).await {
+        Ok(Some(id)) => Some(id),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::warn!(
+                charge = %dispute.charge,
+                error = %format!("{:#}", e),
+                "DB lookup by stripe_charge failed; treating dispute as orphan"
+            );
+            None
+        }
+    }
+}
+
+fn evidence_due_by_ns(d: &StripeDispute) -> Option<i64> {
+    d.evidence_details
+        .as_ref()
+        .and_then(|e| e.due_by)
+        .map(|s| s * 1_000_000_000)
+}
+
+fn upsert_input<'a>(
+    contract_id: Option<&'a [u8]>,
+    d: &'a StripeDispute,
+    raw: &'a serde_json::Value,
+    funds_withdrawn_at_ns: Option<i64>,
+    closed_at_ns: Option<i64>,
+) -> crate::database::ContractDisputeUpsert<'a> {
+    crate::database::ContractDisputeUpsert {
+        contract_id,
+        stripe_dispute_id: &d.id,
+        stripe_charge_id: &d.charge,
+        stripe_payment_intent_id: d.payment_intent.as_deref(),
+        reason: d.reason.as_deref(),
+        status: &d.status,
+        amount_cents: d.amount,
+        currency: &d.currency,
+        evidence_due_by_ns: evidence_due_by_ns(d),
+        funds_withdrawn_at_ns,
+        closed_at_ns,
+        raw_event: raw,
+    }
+}
+
+async fn handle_dispute_created(
+    db: &Database,
+    object: &serde_json::Value,
+) -> Result<(), PoemError> {
+    let dispute = parse_dispute(object)?;
+    tracing::warn!(
+        stripe_dispute_id = %dispute.id,
+        charge = %dispute.charge,
+        amount = dispute.amount,
+        currency = %dispute.currency,
+        reason = %dispute.reason.as_deref().unwrap_or(""),
+        status = %dispute.status,
+        "Stripe dispute opened"
+    );
+
+    let contract_id = lookup_contract_for_charge(db, &dispute).await;
+
+    db.upsert_contract_dispute(upsert_input(
+        contract_id.as_deref(),
+        &dispute,
+        object,
+        None,
+        None,
+    ))
+    .await
+    .map_err(|e| map_db_err("upsert_contract_dispute", e))?;
+
+    if let Some(cid) = contract_id {
+        let pause_reason = format!("stripe_dispute:{}", dispute.id);
+        if let Err(e) = db.pause_contract(&cid, &pause_reason).await {
+            // Pause failure is operator-relevant but MUST NOT 500: the
+            // dispute row is already persisted, and Stripe replays would
+            // produce no new state. Page ops, return Ok.
+            tracing::error!(
+                contract_id = %hex::encode(&cid),
+                stripe_dispute_id = %dispute.id,
+                error = %format!("{:#}", e),
+                "Failed to pause contract for dispute; row persisted, manual intervention may be required"
+            );
+            crate::notifications::telegram::send_ops_alert(&format!(
+                "Stripe dispute OPENED but pause FAILED for contract {}: id={} err={:#}",
+                hex::encode(&cid),
+                dispute.id,
+                e
+            ))
+            .await;
+        } else {
+            crate::notifications::telegram::send_ops_alert(&format!(
+                "Stripe dispute OPENED for contract {}: id={} reason={} amount={} {}",
+                hex::encode(&cid),
+                dispute.id,
+                dispute.reason.as_deref().unwrap_or(""),
+                dispute.amount,
+                dispute.currency
+            ))
+            .await;
+        }
+    } else {
+        tracing::warn!(
+            stripe_dispute_id = %dispute.id,
+            charge = %dispute.charge,
+            "Stripe dispute has no matching contract (orphan); persisted with NULL contract_id"
+        );
+        crate::notifications::telegram::send_ops_alert(&format!(
+            "Stripe dispute OPENED with NO matching contract: id={} charge={} amount={} {}",
+            dispute.id, dispute.charge, dispute.amount, dispute.currency
+        ))
+        .await;
+    }
+    Ok(())
+}
+
+async fn handle_dispute_updated(
+    db: &Database,
+    object: &serde_json::Value,
+) -> Result<(), PoemError> {
+    let dispute = parse_dispute(object)?;
+    tracing::info!(
+        stripe_dispute_id = %dispute.id,
+        status = %dispute.status,
+        "Stripe dispute updated"
+    );
+    let contract_id = lookup_contract_for_charge(db, &dispute).await;
+    db.upsert_contract_dispute(upsert_input(
+        contract_id.as_deref(),
+        &dispute,
+        object,
+        None,
+        None,
+    ))
+    .await
+    .map_err(|e| map_db_err("upsert_contract_dispute", e))?;
+    Ok(())
+}
+
+async fn handle_dispute_closed(
+    db: &Database,
+    object: &serde_json::Value,
+) -> Result<(), PoemError> {
+    let dispute = parse_dispute(object)?;
+    let now_ns = crate::now_ns().map_err(|e| map_db_err("now_ns", e))?;
+    let outcome = dispute.status.as_str();
+    match outcome {
+        "won" => tracing::info!(
+            stripe_dispute_id = %dispute.id,
+            "Stripe dispute WON"
+        ),
+        "lost" => tracing::warn!(
+            stripe_dispute_id = %dispute.id,
+            amount = dispute.amount,
+            currency = %dispute.currency,
+            "Stripe dispute LOST"
+        ),
+        other => tracing::info!(
+            stripe_dispute_id = %dispute.id,
+            status = other,
+            "Stripe dispute closed (non-binary outcome)"
+        ),
+    }
+
+    let contract_id = lookup_contract_for_charge(db, &dispute).await;
+
+    db.upsert_contract_dispute(upsert_input(
+        contract_id.as_deref(),
+        &dispute,
+        object,
+        None,
+        Some(now_ns),
+    ))
+    .await
+    .map_err(|e| map_db_err("upsert_contract_dispute", e))?;
+
+    let Some(cid) = contract_id else {
+        // Closed dispute with no matching contract -- still operator-relevant.
+        crate::notifications::telegram::send_ops_alert(&format!(
+            "Stripe dispute CLOSED ({}) with NO matching contract: id={} charge={}",
+            outcome, dispute.id, dispute.charge
+        ))
+        .await;
+        return Ok(());
+    };
+
+    match outcome {
+        "won" => {
+            if let Err(e) = db.resume_contract(&cid).await {
+                tracing::error!(
+                    contract_id = %hex::encode(&cid),
+                    stripe_dispute_id = %dispute.id,
+                    error = %format!("{:#}", e),
+                    "Failed to resume contract after dispute won; manual intervention may be required"
+                );
+                crate::notifications::telegram::send_ops_alert(&format!(
+                    "Stripe dispute WON but resume FAILED for contract {}: id={} err={:#}",
+                    hex::encode(&cid),
+                    dispute.id,
+                    e
+                ))
+                .await;
+            }
+        }
+        "lost" => {
+            // Order matters: terminate FIRST (sets payment_status='disputed',
+            // emits the audit event, marks the resource for deletion). Refund
+            // SECOND so it sees the final paused interval -- terminate does
+            // not call resume so total_paused_ns reflects the full pause
+            // window.
+            if let Err(e) = db
+                .terminate_contract_for_dispute_lost(&cid, &dispute.id)
+                .await
+            {
+                tracing::error!(
+                    contract_id = %hex::encode(&cid),
+                    stripe_dispute_id = %dispute.id,
+                    error = %format!("{:#}", e),
+                    "Failed to terminate contract for dispute_lost; manual intervention required"
+                );
+            }
+
+            // Best-effort prorated refund. The Phase 1 helper handles
+            // idempotency (key = `dispute:<id>`) so replays collapse onto
+            // the same Stripe Refund record.
+            let stripe_client = crate::stripe_client::StripeClient::new().ok();
+            if let Err(e) = db
+                .process_dispute_lost_refund(&cid, &dispute.id, stripe_client.as_ref())
+                .await
+            {
+                tracing::error!(
+                    contract_id = %hex::encode(&cid),
+                    stripe_dispute_id = %dispute.id,
+                    error = %format!("{:#}", e),
+                    "Failed to compute/issue dispute-lost refund"
+                );
+            }
+
+            crate::notifications::telegram::send_ops_alert(&format!(
+                "Stripe dispute LOST for contract {}: id={} amount={} {}",
+                hex::encode(&cid),
+                dispute.id,
+                dispute.amount,
+                dispute.currency
+            ))
+            .await;
+        }
+        // warning_closed and other non-binary statuses: row updated, no transition.
+        _ => {}
+    }
+    Ok(())
+}
+
+async fn handle_dispute_funds_withdrawn(
+    db: &Database,
+    object: &serde_json::Value,
+) -> Result<(), PoemError> {
+    let dispute = parse_dispute(object)?;
+    let now_ns = crate::now_ns().map_err(|e| map_db_err("now_ns", e))?;
+    tracing::warn!(
+        stripe_dispute_id = %dispute.id,
+        charge = %dispute.charge,
+        amount = dispute.amount,
+        currency = %dispute.currency,
+        "Stripe dispute funds withdrawn"
+    );
+    let contract_id = lookup_contract_for_charge(db, &dispute).await;
+    db.upsert_contract_dispute(upsert_input(
+        contract_id.as_deref(),
+        &dispute,
+        object,
+        Some(now_ns),
+        None,
+    ))
+    .await
+    .map_err(|e| map_db_err("upsert_contract_dispute", e))?;
+
+    crate::notifications::telegram::send_ops_alert(&format!(
+        "Stripe dispute FUNDS WITHDRAWN: id={} charge={} contract={} amount={} {}",
+        dispute.id,
+        dispute.charge,
+        contract_id
+            .as_ref()
+            .map(hex::encode)
+            .unwrap_or_else(|| "<none>".to_string()),
+        dispute.amount,
+        dispute.currency
+    ))
+    .await;
+    Ok(())
 }
 
 // Chatwoot webhook types
@@ -1874,5 +2283,393 @@ mod tests {
             .and_then(|v| v.as_str())
             .unwrap();
         assert_eq!(contract_id, "abc123");
+    }
+
+    // =========================================================================
+    // Stripe charge.dispute.* end-to-end handler tests (Phase 2).
+    //
+    // These exercise the dispatch logic directly against a real test DB so we
+    // assert the full pause-resume / terminate-refund flow, including
+    // idempotent replay (Stripe retries forever on non-2xx responses).
+    // The signature-verification path is unit-tested above; here we focus on
+    // the handler-side invariants the spec mandates in section 6.
+    // =========================================================================
+
+    use crate::database::contracts::dispute_refund_idempotency_key;
+    use crate::database::test_helpers::setup_test_db;
+
+    async fn insert_active_contract(db: &Database, contract_id: &[u8], pi_id: Option<&str>) {
+        // Contract started 1 minute ago, ends 1 day from now -> mostly-unused
+        // billable window so the prorated lost-dispute refund is large enough
+        // (>> 1 cent) to be observably positive in the DB row.
+        let now_ns = crate::now_ns().expect("now_ns");
+        let one_min_ns: i64 = 60 * 1_000_000_000;
+        let one_day_ns: i64 = 24 * 60 * 60 * 1_000_000_000;
+        let provisioning_completed_at_ns = now_ns - one_min_ns;
+        let end_timestamp_ns = now_ns + one_day_ns;
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, payment_status, currency, provisioning_completed_at_ns, end_timestamp_ns) \
+             VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 100000000000, 'memo', 0, 'active', 'stripe', $4, NULL, 'succeeded', 'usd', $5, $6)",
+            contract_id,
+            &[1u8; 32][..],
+            &[2u8; 32][..],
+            pi_id,
+            provisioning_completed_at_ns,
+            end_timestamp_ns,
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    fn dispute_event(
+        event_type: &str,
+        dispute_id: &str,
+        charge: &str,
+        payment_intent: Option<&str>,
+        status: &str,
+        contract_id_hex: Option<&str>,
+    ) -> serde_json::Value {
+        let mut metadata = serde_json::Map::new();
+        if let Some(cid) = contract_id_hex {
+            metadata.insert("contract_id".into(), serde_json::json!(cid));
+        }
+        serde_json::json!({
+            "type": event_type,
+            "data": {
+                "object": {
+                    "id": dispute_id,
+                    "charge": charge,
+                    "payment_intent": payment_intent,
+                    "amount": 5_000,
+                    "currency": "usd",
+                    "reason": "fraudulent",
+                    "status": status,
+                    "metadata": serde_json::Value::Object(metadata),
+                }
+            }
+        })
+    }
+
+    fn unwrap_object(event: &serde_json::Value) -> serde_json::Value {
+        event["data"]["object"].clone()
+    }
+
+    async fn count_disputes(db: &Database, dispute_id: &str) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM contract_disputes WHERE stripe_dispute_id = $1",
+        )
+        .bind(dispute_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap()
+    }
+
+    async fn count_history_to(db: &Database, contract_id: &[u8], new_status: &str) -> i64 {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM contract_status_history WHERE contract_id = $1 AND new_status = $2",
+        )
+        .bind(contract_id)
+        .bind(new_status)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap()
+    }
+
+    async fn read_status(db: &Database, contract_id: &[u8]) -> String {
+        sqlx::query_scalar::<_, String>(
+            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_dispute_created_pauses_contract() {
+        // dispute.created on a contract we own MUST: insert a row in
+        // contract_disputes, transition the contract to `paused`, set
+        // paused_at_ns, and emit a single 'paused' history row + event.
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC1; 32];
+        insert_active_contract(&db, &contract_id, Some("pi_test_c1")).await;
+
+        let event = dispute_event(
+            "charge.dispute.created",
+            "du_c1",
+            "ch_c1",
+            Some("pi_test_c1"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&event))
+            .await
+            .expect("dispute.created handler must succeed against a known contract");
+
+        assert_eq!(count_disputes(&db, "du_c1").await, 1);
+        assert_eq!(read_status(&db, &contract_id).await, "paused");
+        let paused_at: Option<i64> = sqlx::query_scalar(
+            "SELECT paused_at_ns FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            paused_at.is_some(),
+            "paused_at_ns MUST be populated by pause_contract"
+        );
+        assert_eq!(count_history_to(&db, &contract_id, "paused").await, 1);
+    }
+
+    #[tokio::test]
+    async fn test_dispute_created_idempotent_on_replay() {
+        // Stripe replays the SAME dispute.created event indefinitely until
+        // the server returns 2xx. Replays MUST collapse: one dispute row,
+        // one transition (one paused history row), no extra audit noise.
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC2; 32];
+        insert_active_contract(&db, &contract_id, Some("pi_test_c2")).await;
+
+        let event = dispute_event(
+            "charge.dispute.created",
+            "du_c2",
+            "ch_c2",
+            Some("pi_test_c2"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&event))
+            .await
+            .unwrap();
+        handle_dispute_created(&db, &unwrap_object(&event))
+            .await
+            .expect("replay must NOT 5xx");
+
+        assert_eq!(
+            count_disputes(&db, "du_c2").await,
+            1,
+            "exactly one dispute row across replays"
+        );
+        assert_eq!(
+            count_history_to(&db, &contract_id, "paused").await,
+            1,
+            "exactly one paused history row across replays"
+        );
+        let paused_events: i64 = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1 AND event_type = 'paused'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            paused_events, 1,
+            "replay MUST NOT emit a second 'paused' audit event"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_dispute_closed_won_resumes_contract() {
+        // Pause via dispute.created, sleep, then close=won. Contract must
+        // return to `active`, total_paused_ns must reflect the pause window,
+        // and the dispute row's status MUST be 'won' with closed_at_ns set.
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC3; 32];
+        insert_active_contract(&db, &contract_id, Some("pi_test_c3")).await;
+
+        let created = dispute_event(
+            "charge.dispute.created",
+            "du_c3",
+            "ch_c3",
+            Some("pi_test_c3"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&created))
+            .await
+            .unwrap();
+        // Sleep enough for ns-resolution to register a positive credit.
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+        let closed = dispute_event(
+            "charge.dispute.closed",
+            "du_c3",
+            "ch_c3",
+            Some("pi_test_c3"),
+            "won",
+            None,
+        );
+        handle_dispute_closed(&db, &unwrap_object(&closed))
+            .await
+            .unwrap();
+
+        assert_eq!(read_status(&db, &contract_id).await, "active");
+        let total_paused: i64 = sqlx::query_scalar(
+            "SELECT total_paused_ns FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            total_paused >= 10_000_000,
+            "total_paused_ns must reflect the pause interval; got {}",
+            total_paused
+        );
+        let row: (String, Option<i64>) = sqlx::query_as(
+            "SELECT status, closed_at_ns FROM contract_disputes WHERE stripe_dispute_id = 'du_c3'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "won");
+        assert!(row.1.is_some(), "closed_at_ns must be set on close");
+    }
+
+    #[tokio::test]
+    async fn test_dispute_closed_lost_terminates_and_records_refund() {
+        // Pause + close=lost MUST: terminate (cancelled, payment_status=disputed),
+        // emit dispute_lost event with the dispute id, and record a positive
+        // refund_amount_e9s on the contract row using the deterministic
+        // idempotency key `dispute:<id>`. We cannot live-call Stripe in a
+        // unit test, so we pass `stripe_client=None` via process_dispute_lost_refund;
+        // the handler swallows that and we assert the DB-side accounting
+        // (refund_amount_e9s) plus the idempotency-key construction
+        // (which is what Stripe-side replay collapsing relies on).
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC4; 32];
+        insert_active_contract(&db, &contract_id, Some("pi_test_c4")).await;
+
+        // Pause first so total_paused_ns is non-zero by the time we refund.
+        let created = dispute_event(
+            "charge.dispute.created",
+            "du_c4",
+            "ch_c4",
+            Some("pi_test_c4"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&created))
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        // The handler attempts to construct StripeClient::new(); without
+        // STRIPE_SECRET_KEY it returns None and the refund is "calculated but
+        // not pushed", which is still observable on the contract row.
+        let was_set = std::env::var("STRIPE_SECRET_KEY").ok();
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        let closed = dispute_event(
+            "charge.dispute.closed",
+            "du_c4",
+            "ch_c4",
+            Some("pi_test_c4"),
+            "lost",
+            None,
+        );
+        handle_dispute_closed(&db, &unwrap_object(&closed))
+            .await
+            .unwrap();
+        if let Some(v) = was_set {
+            std::env::set_var("STRIPE_SECRET_KEY", v);
+        }
+
+        let row: (String, String, Option<i64>) = sqlx::query_as(
+            "SELECT status, payment_status, refund_amount_e9s FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(row.0, "cancelled");
+        assert_eq!(row.1, "disputed");
+        assert!(
+            row.2.unwrap_or(0) > 0,
+            "refund_amount_e9s must be positive on lost-dispute path"
+        );
+
+        let dispute_lost_events: i64 = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1 AND event_type = 'dispute_lost'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(dispute_lost_events, 1);
+
+        // Idempotency-key construction is the contract Stripe relies on; assert
+        // the exact value here so a refactor that breaks it surfaces loudly.
+        assert_eq!(dispute_refund_idempotency_key("du_c4"), "dispute:du_c4");
+    }
+
+    #[tokio::test]
+    async fn test_orphan_dispute_persists_and_does_not_5xx() {
+        // dispute.created for a charge we never issued (no metadata, no PI
+        // we recognise) MUST NOT 5xx -- Stripe would retry forever. Instead:
+        // upsert the dispute row with NULL contract_id, log + page ops.
+        let db = setup_test_db().await;
+        let event = dispute_event(
+            "charge.dispute.created",
+            "du_orphan",
+            "ch_orphan",
+            Some("pi_unknown"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&event))
+            .await
+            .expect("orphan dispute MUST return Ok (Stripe retries on 5xx)");
+
+        assert_eq!(count_disputes(&db, "du_orphan").await, 1);
+        let contract_id: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT contract_id FROM contract_disputes WHERE stripe_dispute_id = 'du_orphan'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            contract_id.is_none(),
+            "orphan dispute row MUST have NULL contract_id"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_dispute_funds_withdrawn_sets_timestamp_no_state_change() {
+        // funds_withdrawn is informational: persist the row with
+        // funds_withdrawn_at_ns and DO NOT touch the contract status. Active
+        // contracts stay active; paused contracts stay paused.
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC5; 32];
+        insert_active_contract(&db, &contract_id, Some("pi_test_c5")).await;
+
+        let event = dispute_event(
+            "charge.dispute.funds_withdrawn",
+            "du_c5",
+            "ch_c5",
+            Some("pi_test_c5"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_funds_withdrawn(&db, &unwrap_object(&event))
+            .await
+            .unwrap();
+
+        let funds_withdrawn_at: Option<i64> = sqlx::query_scalar(
+            "SELECT funds_withdrawn_at_ns FROM contract_disputes WHERE stripe_dispute_id = 'du_c5'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            funds_withdrawn_at.is_some(),
+            "funds_withdrawn handler MUST set funds_withdrawn_at_ns"
+        );
+        assert_eq!(
+            read_status(&db, &contract_id).await,
+            "active",
+            "funds_withdrawn MUST NOT mutate contract status"
+        );
     }
 }

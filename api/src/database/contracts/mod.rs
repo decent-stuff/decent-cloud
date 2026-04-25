@@ -511,8 +511,7 @@ mod provisioning;
 mod rental;
 mod usage;
 
-// `ResumeOutcome` is re-exported in Phase 2 when webhook handlers consume it.
-pub use dispute::ContractDisputeUpsert;
+pub use dispute::{dispute_refund_idempotency_key, ContractDisputeUpsert};
 
 /// Contract usage tracking for billing periods
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]

@@ -614,8 +614,8 @@ pub struct ReconcileRequest {
 
 // Re-export shared types from dcc-common
 pub use dcc_common::api_types::{
-    LockResponse, ReconcileKeepInstance, ReconcileResponse, ReconcileTerminateInstance,
-    ReconcileUnknownInstance,
+    LockResponse, ReconcileKeepInstance, ReconcilePauseInstance, ReconcileResponse,
+    ReconcileTerminateInstance, ReconcileUnknownInstance,
 };
 
 // Agent Pool request/response types

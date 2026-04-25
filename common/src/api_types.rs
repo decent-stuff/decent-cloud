@@ -32,6 +32,20 @@ pub struct ReconcileTerminateInstance {
     pub reason: String,
 }
 
+/// Instance whose VM must be stopped (NOT destroyed) while the contract is
+/// paused. Stripe dispute handling parks the contract in `paused` while the
+/// dispute is open; resuming the contract returns it to `active` and the
+/// next provisioning poll restarts the VM.
+#[derive(Debug, Clone, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ReconcilePauseInstance {
+    pub external_id: String,
+    pub contract_id: String,
+    /// Reason supplied by the API: e.g. "stripe_dispute:<dispute_id>".
+    pub reason: String,
+}
+
 /// Unknown instance (orphan - no matching contract)
 #[derive(Debug, Clone, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
@@ -52,6 +66,10 @@ pub struct ReconcileResponse {
     pub terminate: Vec<ReconcileTerminateInstance>,
     /// Instances with no matching contract (orphans)
     pub unknown: Vec<ReconcileUnknownInstance>,
+    /// Instances whose VM should be stopped (NOT destroyed) for a paused
+    /// contract. Empty for older API servers (`#[serde(default)]`).
+    #[serde(default)]
+    pub pause: Vec<ReconcilePauseInstance>,
 }
 
 // ============================================================================
@@ -216,6 +234,7 @@ mod tests {
             }],
             terminate: vec![],
             unknown: vec![],
+            pause: vec![],
         };
 
         let json = serde_json::to_string(&response).unwrap();
@@ -226,6 +245,32 @@ mod tests {
         let parsed: ReconcileResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.keep.len(), 1);
         assert_eq!(parsed.keep[0].external_id, "vm-123");
+    }
+
+    #[test]
+    fn test_reconcile_response_pause_field_serializes_and_default_deserializes() {
+        // pause must round-trip cleanly when populated...
+        let with_pause = ReconcileResponse {
+            keep: vec![],
+            terminate: vec![],
+            unknown: vec![],
+            pause: vec![ReconcilePauseInstance {
+                external_id: "vm-9".to_string(),
+                contract_id: "c-9".to_string(),
+                reason: "stripe_dispute:du_x".to_string(),
+            }],
+        };
+        let json = serde_json::to_string(&with_pause).unwrap();
+        assert!(json.contains("\"pause\""));
+        let parsed: ReconcileResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.pause.len(), 1);
+        assert_eq!(parsed.pause[0].reason, "stripe_dispute:du_x");
+
+        // ...and `pause` MUST default to empty when an older server omits it,
+        // so a freshly-deployed agent never panics against an old API server.
+        let legacy = r#"{"keep":[],"terminate":[],"unknown":[]}"#;
+        let parsed: ReconcileResponse = serde_json::from_str(legacy).unwrap();
+        assert!(parsed.pause.is_empty(), "pause must default to empty");
     }
 
     #[test]

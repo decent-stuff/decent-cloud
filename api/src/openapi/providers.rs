@@ -6,7 +6,8 @@ use super::common::{
     GenerateOfferingsRequest, GenerateOfferingsResponse, HelpcenterSyncResponse, LockResponse,
     NotificationConfigResponse, NotificationUsageResponse, OfferingSuggestionsResponse,
     OnboardingUpdateResponse, PoolUpgradeRequest, ProvisioningStatusRequest, ReconcileKeepInstance,
-    ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance, ReconcileUnknownInstance,
+    ReconcilePauseInstance, ReconcileRequest, ReconcileResponse, ReconcileTerminateInstance,
+    ReconcileUnknownInstance,
     RentalResponseRequest, ResponseMetricsResponse, ResponseTimeDistributionResponse,
     TestNotificationRequest, TestNotificationResponse, UpdateNotificationConfigRequest,
     UpdatePasswordRequest, UpdatePoolRequest, UpdateSlaUptimeConfigRequest,
@@ -3685,6 +3686,7 @@ impl ProvidersApi {
         let mut keep = Vec::new();
         let mut terminate = Vec::new();
         let mut unknown = Vec::new();
+        let mut pause = Vec::new();
 
         for instance in &req.running_instances {
             // If no contract_id, mark as unknown
@@ -3737,6 +3739,7 @@ impl ProvidersApi {
                     let end_ns = contract.end_timestamp_ns.unwrap_or(0);
                     let is_expired = end_ns > 0 && end_ns < now_ns;
                     let is_cancelled = contract.status == "cancelled";
+                    let is_paused = contract.status == "paused";
 
                     if is_cancelled {
                         terminate.push(ReconcileTerminateInstance {
@@ -3749,6 +3752,19 @@ impl ProvidersApi {
                             external_id: instance.external_id.clone(),
                             contract_id: contract_id.clone(),
                             reason: "expired".to_string(),
+                        });
+                    } else if is_paused {
+                        // Stripe dispute pause: stop the VM but keep the row,
+                        // disk, and DNS in place so resume_contract can put
+                        // the customer back online without re-onboarding.
+                        let reason = match db.get_pause_reason(&contract_id_bytes).await {
+                            Ok(Some(r)) => r,
+                            Ok(None) | Err(_) => "paused".to_string(),
+                        };
+                        pause.push(ReconcilePauseInstance {
+                            external_id: instance.external_id.clone(),
+                            contract_id: contract_id.clone(),
+                            reason,
                         });
                     } else {
                         // Contract is active
@@ -3781,6 +3797,7 @@ impl ProvidersApi {
                 keep,
                 terminate,
                 unknown,
+                pause,
             }),
             error: None,
         })
@@ -5556,8 +5573,8 @@ mod tests {
         UpdatePoolRequest,
     };
     use dcc_common::api_types::{
-        LockResponse, ReconcileKeepInstance, ReconcileResponse, ReconcileTerminateInstance,
-        ReconcileUnknownInstance,
+        LockResponse, ReconcileKeepInstance, ReconcilePauseInstance, ReconcileResponse,
+        ReconcileTerminateInstance, ReconcileUnknownInstance,
     };
     use poem::web::Data;
     use poem_openapi::param::Path;
@@ -5871,12 +5888,19 @@ mod tests {
                 external_id: "vm-3".to_string(),
                 message: "No contract found".to_string(),
             }],
+            pause: vec![ReconcilePauseInstance {
+                external_id: "vm-4".to_string(),
+                contract_id: "c-4".to_string(),
+                reason: "stripe_dispute:du_x".to_string(),
+            }],
         };
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["keep"][0]["externalId"], "vm-1");
         assert_eq!(json["keep"][0]["endsAt"], 9_999_999_i64);
         assert_eq!(json["terminate"][0]["reason"], "cancelled");
         assert_eq!(json["unknown"][0]["message"], "No contract found");
+        assert_eq!(json["pause"][0]["externalId"], "vm-4");
+        assert_eq!(json["pause"][0]["reason"], "stripe_dispute:du_x");
     }
 
     #[test]
