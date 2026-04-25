@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 /// - Pending -> Accepted, Rejected, Cancelled
 /// - Accepted -> Provisioning, Rejected, Cancelled
 /// - Provisioning -> Provisioned, Cancelled (failed provisioning)
-/// - Provisioned -> Active, Cancelled
-/// - Active -> Cancelled, Expired
+/// - Provisioned -> Active, Paused, Cancelled
+/// - Active -> Paused, Cancelled, Expired
+/// - Paused -> Active, Provisioned, Cancelled, Expired (resume restores prior operational state;
+///   cancel/expire bypass resume)
 /// - Rejected, Cancelled, Expired are terminal states
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -25,6 +27,10 @@ pub enum ContractStatus {
     Provisioned,
     /// Contract is fully operational
     Active,
+    /// Operational contract whose VM is stopped pending dispute resolution.
+    /// Reversible: resumes to Active or Provisioned. Pause intervals are
+    /// tracked in `total_paused_ns` and credited to the prorated refund.
+    Paused,
     /// Provider rejected the request (terminal)
     Rejected,
     /// User or provider cancelled (terminal)
@@ -56,10 +62,17 @@ impl ContractStatus {
             (Provisioning, Cancelled) => true, // Failed provisioning
             // From Provisioned
             (Provisioned, Active) => true,
+            (Provisioned, Paused) => true,
             (Provisioned, Cancelled) => true,
             // From Active
+            (Active, Paused) => true,
             (Active, Cancelled) => true,
             (Active, Expired) => true,
+            // From Paused (reversible -- resume_contract picks Active or Provisioned)
+            (Paused, Active) => true,
+            (Paused, Provisioned) => true,
+            (Paused, Cancelled) => true,
+            (Paused, Expired) => true,
             // Terminal states cannot transition
             (Rejected | Cancelled | Expired, _) => false,
             // All other transitions are invalid
@@ -85,6 +98,7 @@ impl ContractStatus {
                 | ContractStatus::Provisioning
                 | ContractStatus::Provisioned
                 | ContractStatus::Active
+                | ContractStatus::Paused
         )
     }
 
@@ -101,8 +115,9 @@ impl ContractStatus {
             Pending => &[Accepted, Rejected, Cancelled],
             Accepted => &[Provisioning, Rejected, Cancelled],
             Provisioning => &[Provisioned, Cancelled],
-            Provisioned => &[Active, Cancelled],
-            Active => &[Cancelled, Expired],
+            Provisioned => &[Active, Paused, Cancelled],
+            Active => &[Paused, Cancelled, Expired],
+            Paused => &[Active, Provisioned, Cancelled, Expired],
             Rejected | Cancelled | Expired => &[],
         }
     }
@@ -117,6 +132,7 @@ impl std::fmt::Display for ContractStatus {
             ContractStatus::Provisioning => write!(f, "provisioning"),
             ContractStatus::Provisioned => write!(f, "provisioned"),
             ContractStatus::Active => write!(f, "active"),
+            ContractStatus::Paused => write!(f, "paused"),
             ContractStatus::Rejected => write!(f, "rejected"),
             ContractStatus::Cancelled => write!(f, "cancelled"),
             ContractStatus::Expired => write!(f, "expired"),
@@ -135,11 +151,12 @@ impl std::str::FromStr for ContractStatus {
             "provisioning" => Ok(ContractStatus::Provisioning),
             "provisioned" => Ok(ContractStatus::Provisioned),
             "active" => Ok(ContractStatus::Active),
+            "paused" => Ok(ContractStatus::Paused),
             "rejected" => Ok(ContractStatus::Rejected),
             "cancelled" | "canceled" => Ok(ContractStatus::Cancelled),
             "expired" => Ok(ContractStatus::Expired),
             _ => Err(format!(
-                "Invalid contract status '{}'. Valid statuses: requested, pending, accepted, provisioning, provisioned, active, rejected, cancelled, expired",
+                "Invalid contract status '{}'. Valid statuses: requested, pending, accepted, provisioning, provisioned, active, paused, rejected, cancelled, expired",
                 s
             )),
         }
@@ -276,8 +293,36 @@ mod tests {
         let status = ContractStatus::Active;
         assert!(status.can_transition_to(ContractStatus::Cancelled));
         assert!(status.can_transition_to(ContractStatus::Expired));
+        assert!(status.can_transition_to(ContractStatus::Paused));
         assert!(!status.can_transition_to(ContractStatus::Requested));
         assert!(!status.can_transition_to(ContractStatus::Provisioned));
+    }
+
+    #[test]
+    fn test_valid_transitions_paused() {
+        let status = ContractStatus::Paused;
+        // Resume targets and terminal-bypass routes
+        assert!(status.can_transition_to(ContractStatus::Active));
+        assert!(status.can_transition_to(ContractStatus::Provisioned));
+        assert!(status.can_transition_to(ContractStatus::Cancelled));
+        assert!(status.can_transition_to(ContractStatus::Expired));
+        // Cannot rewind to pre-operational stages or re-pause
+        assert!(!status.can_transition_to(ContractStatus::Requested));
+        assert!(!status.can_transition_to(ContractStatus::Pending));
+        assert!(!status.can_transition_to(ContractStatus::Accepted));
+        assert!(!status.can_transition_to(ContractStatus::Provisioning));
+        assert!(!status.can_transition_to(ContractStatus::Paused));
+        assert!(!status.can_transition_to(ContractStatus::Rejected));
+    }
+
+    #[test]
+    fn test_paused_is_cancellable_not_operational_not_terminal() {
+        // Paused must allow cancel + expire (lost dispute / contract end during pause),
+        // must NOT count as operational (VM is stopped, no user access),
+        // must NOT count as terminal (resume is allowed).
+        assert!(ContractStatus::Paused.is_cancellable());
+        assert!(!ContractStatus::Paused.is_operational());
+        assert!(!ContractStatus::Paused.is_terminal());
     }
 
     #[test]
@@ -294,6 +339,7 @@ mod tests {
                 ContractStatus::Provisioning,
                 ContractStatus::Provisioned,
                 ContractStatus::Active,
+                ContractStatus::Paused,
                 ContractStatus::Rejected,
                 ContractStatus::Cancelled,
                 ContractStatus::Expired,
@@ -316,6 +362,7 @@ mod tests {
         assert!(!ContractStatus::Provisioning.is_terminal());
         assert!(!ContractStatus::Provisioned.is_terminal());
         assert!(!ContractStatus::Active.is_terminal());
+        assert!(!ContractStatus::Paused.is_terminal());
         assert!(ContractStatus::Rejected.is_terminal());
         assert!(ContractStatus::Cancelled.is_terminal());
         assert!(ContractStatus::Expired.is_terminal());
@@ -329,6 +376,7 @@ mod tests {
         assert!(ContractStatus::Provisioning.is_cancellable());
         assert!(ContractStatus::Provisioned.is_cancellable());
         assert!(ContractStatus::Active.is_cancellable());
+        assert!(ContractStatus::Paused.is_cancellable());
         assert!(!ContractStatus::Rejected.is_cancellable());
         assert!(!ContractStatus::Cancelled.is_cancellable());
         assert!(!ContractStatus::Expired.is_cancellable());
@@ -342,6 +390,8 @@ mod tests {
         assert!(!ContractStatus::Provisioning.is_operational());
         assert!(ContractStatus::Provisioned.is_operational());
         assert!(ContractStatus::Active.is_operational());
+        // Paused is intentionally NOT operational: VM is stopped during pause.
+        assert!(!ContractStatus::Paused.is_operational());
         assert!(!ContractStatus::Rejected.is_operational());
         assert!(!ContractStatus::Cancelled.is_operational());
         assert!(!ContractStatus::Expired.is_operational());

@@ -1,17 +1,24 @@
 # Stripe charge.dispute.* Webhook Handlers -- Implementation Plan
 
-- Issue: decent-stuff/decent-cloud#408
-- Date: 2026-04-25
+- Issues: decent-stuff/decent-cloud#408 (handlers), #421 (pause-vs-terminate decision)
+- Date: 2026-04-25 (revised 2026-04-25 to Option B per #421)
 - Author: Backend API agent
-- Status: Plan only. No code in this commit.
+- Status: Phase 1 (DB layer + migration + spec) IMPLEMENTED. Phase 2 (webhook
+  handlers + dc-agent runtime change + ops-alert helper) PENDING -- tracked in
+  a follow-up ticket. The diffs in section 4 remain authoritative as the
+  specification for Phase 2; the `cancel_contract_for_dispute` references in
+  the original spec are replaced by `pause_contract` / `resume_contract` /
+  `terminate_contract_for_dispute_lost` (already shipped in Phase 1, see
+  `api/src/database/contracts/dispute.rs`).
 
 ## 0. Goal and non-goals
 
 Goal: stop silently dropping Stripe `charge.dispute.created`,
 `charge.dispute.updated`, `charge.dispute.closed`, and
 `charge.dispute.funds_withdrawn` events. Persist every dispute, transition
-the related contract to a state that stops billable usage, and surface the
-event in logs and ops alerts.
+the related contract to a `paused` state that stops billable usage but
+preserves customer state for reversal, and surface the event in logs and
+ops alerts.
 
 Non-goals (deferred):
 - Automated evidence submission to Stripe (`/v1/disputes/{id}/close` with
@@ -30,68 +37,76 @@ Non-goals (deferred):
   `update_checkout_session_payment` is an UPDATE, not an INSERT).
 - `api/src/database/contracts/payment.rs:7-40` -- pattern for "update +
   emit `contract_events` row" inside one method.
-- `api/src/database/contracts/payment.rs:101-146` -- prorated refund math.
-- `api/src/database/contracts/rental.rs:560-731` -- `cancel_contract`,
-  including stripe refund call at `:594-643`.
+- `api/src/database/contracts/payment.rs:107-160` -- prorated refund math.
+  PHASE 1 EXTENDED: now takes `total_paused_ns`; paused intervals are
+  excluded from billable use.
+- `api/src/database/contracts/dispute.rs` (NEW in Phase 1) -- `pause_contract`,
+  `resume_contract`, `terminate_contract_for_dispute_lost`,
+  `upsert_contract_dispute`. All idempotent. Webhook handlers in Phase 2
+  call these directly.
+- `api/src/database/contracts/rental.rs:560-743` -- `cancel_contract`,
+  including stripe refund call at `:594-643`. Pattern reused inside
+  `terminate_contract_for_dispute_lost`.
 - `api/src/database/contracts/rental.rs:367-537` -- `reject_contract`, full
   refund path at `:396-470`.
 - `api/src/database/contracts/extensions.rs:210-237` -- `insert_contract_event`
   signature.
-- `common/src/contract_status.rs:36-108` -- state machine. Cancellable from
-  Requested..Active. Terminal: Rejected, Cancelled, Expired.
-- `api/src/stripe_client.rs:130-147` -- `create_refund`. Note: it accepts a
-  `payment_intent_id`, but disputes are issued against a `charge_id`, not a
-  payment_intent. Stripe creates the refund against the underlying charge
-  automatically when given the PI; for disputes we never need to call
-  `create_refund` because the dispute itself withdraws the funds.
-- `api/migrations_pg/024_contract_events.sql` -- `contract_events` schema
-  pattern; new dispute table follows same conventions.
+- `common/src/contract_status.rs:36-130` -- state machine. PHASE 1
+  EXTENDED with `Paused`. Reversible: `Active <-> Paused`,
+  `Provisioned <-> Paused`. Terminal-bypass: `Paused -> Cancelled`,
+  `Paused -> Expired`. `is_cancellable=true`, `is_operational=false`,
+  `is_terminal=false`.
+- `api/src/stripe_client.rs:130-147` -- `create_refund`. Phase 2 calls this
+  ONLY on `dispute.closed:lost` (we have to record the prorated refund
+  remainder; Stripe's auto-withdrawal recovers the disputed amount, but
+  we owe the customer the unused window minus the disputed amount).
 
-## 2. Event handling matrix
+## 2. Event handling matrix (Option B: pause-and-resume)
 
-Each row maps a Stripe event to: contract status transition, side effects on
-the resource, what gets logged, what alerts fire, what row is upserted in
-`contract_disputes`. "PI" = `payment_intent`. "alert" = `tracing::error!`
-plus Telegram pipeline bot ping (existing `notifications/telegram` client
-already wired into webhooks; reused here without new code paths).
+Each row maps a Stripe event to: contract status transition, side effects
+on the resource, what gets logged, what alerts fire, what row is upserted
+in `contract_disputes`. "PI" = `payment_intent`. "alert" = `tracing::warn!`
+plus Telegram pipeline bot ping via `send_ops_alert` helper (Phase 2 adds
+the helper to `notifications/telegram.rs`).
 
 | Event                              | DB row action                                    | Contract state action                                                    | Resource action                                                       | Log level | Alert |
 |------------------------------------|--------------------------------------------------|--------------------------------------------------------------------------|-----------------------------------------------------------------------|-----------|-------|
-| `charge.dispute.created`           | INSERT or UPDATE on `stripe_dispute_id`          | If contract is in any cancellable status (Requested..Active): same path as `cancel_contract` BUT with `cancel_memo = "stripe_dispute:<id>"` and NO new refund call (Stripe already pulled the funds). For terminal contracts: log + audit only. | Reuse `mark_contract_resource_for_deletion` (rental.rs:722). VM/agent terminated. | warn      | yes   |
-| `charge.dispute.updated`           | UPDATE row (status, evidence_due_by, raw_event)  | None unless status changed to `lost`/`won` (we still get `closed` for that, so usually no-op). | None                                                                  | info      | no    |
-| `charge.dispute.closed` (won)      | UPDATE row (status='won', closed_at)             | Contract is already Cancelled by `created`. No revival. Just mark dispute won and emit `dispute_resolved` contract event. Operations decides whether to manually re-onboard the customer. | None (resource already gone) | info | no |
-| `charge.dispute.closed` (lost)     | UPDATE row (status='lost', closed_at)            | No-op on contract (already Cancelled). Funds already withdrawn. Emit `dispute_lost` contract event with amount. | None                  | warn      | yes   |
-| `charge.dispute.funds_withdrawn`   | UPDATE row (funds_withdrawn_at)                  | No-op on contract. Audit trail only.                                     | None                                                                  | warn      | yes   |
+| `charge.dispute.created`           | INSERT or UPDATE on `stripe_dispute_id`          | `pause_contract(reason="stripe_dispute:<id>")`. Idempotent: replay = no-op. Records `paused_at_ns`. Operational contracts only -- terminal contracts get an audit event but no transition. | dc-agent polling loop (Phase 2) sees `status=paused` and STOPS the VM (does not destroy). | warn      | yes   |
+| `charge.dispute.updated`           | UPDATE row (status, evidence_due_by, raw_event)  | None.                                                                    | None.                                                                 | info      | no    |
+| `charge.dispute.closed` (won)      | UPDATE row (status='won', closed_at)             | `resume_contract`: clears `paused_at_ns`, credits elapsed pause to `total_paused_ns`, transitions back to `active`. Idempotent. Emits `dispute_resolved` event. | dc-agent restarts the VM on next poll. | info      | no    |
+| `charge.dispute.closed` (lost)     | UPDATE row (status='lost', closed_at)            | `terminate_contract_for_dispute_lost`: pause -> cancelled, payment_status='disputed'. `mark_contract_resource_for_deletion` invoked. Idempotent. | VM destroyed by existing termination loop. Refund recorded with prorated remainder (paused time credited). Idempotency key: `dispute:<stripe_dispute_id>`. | warn      | yes   |
+| `charge.dispute.funds_withdrawn`   | UPDATE row (funds_withdrawn_at)                  | No-op on contract. Audit trail only.                                     | None.                                                                 | warn      | yes   |
 
 Justifications, with citations:
 
-- "Use existing `cancel_contract` path with a system actor" not chosen, see
-  5.e: that function takes `cancelled_by_pubkey` and is gated to the
-  requester. Instead we add a thin sibling `cancel_contract_for_dispute`
-  that reuses the same status transition and resource cleanup code path.
-- We skip the Stripe refund API call (rental.rs:611) because for disputes
-  Stripe pulls the funds via the dispute mechanism, not via refund. Calling
-  `create_refund` on a disputed charge yields a Stripe API error
-  `charge_disputed`. Confidence 9/10.
-- Cancellable check before transitioning matches the pre-existing rule at
-  rental.rs:581-586 -- a contract already terminal stays terminal; we
-  record the dispute but do not try a forbidden state transition.
+- Pause is reversible (PHASE 1 implements it via `Paused` state; no VM
+  destruction on `dispute.created`). Lost disputes terminate the contract
+  AFTER the pause, ensuring `total_paused_ns` is non-zero and the prorated
+  refund credits the customer for the dispute window.
+- The Stripe refund API call (`create_refund`) IS issued on `dispute.closed`
+  (lost) -- but only for the prorated remainder beyond the disputed amount.
+  Stripe's auto-withdrawal handles the disputed amount; the refund flow
+  records what we owe the customer for unused future time.
+- `cancel_contract` (rental.rs:566) is NOT reused directly: it requires a
+  `cancelled_by_pubkey` and gates on requester equality. Instead, the
+  Phase 1 helpers in `dispute.rs` use a synthetic `system-stripe-dispute`
+  actor and skip the auth check (the system is the actor).
+- Cancellable check before transitioning matches `is_cancellable()` at
+  contract_status.rs:79-90 -- `Paused` is cancellable, so
+  `terminate_contract_for_dispute_lost` works on a paused contract.
 
-## 3. Schema change
+## 3. Schema change (PHASE 1, IMPLEMENTED)
 
-Path: `api/migrations_pg/041_contract_disputes.sql` (next free number;
-current max is 040).
+Path: `api/migrations_pg/043_dispute_pause_state.sql`.
 
 ```sql
--- Stripe charge.dispute.* webhook persistence
--- Idempotency: stripe_dispute_id is UNIQUE; webhook handler upserts.
 CREATE TABLE contract_disputes (
     id BIGSERIAL PRIMARY KEY,
-    contract_id BYTEA REFERENCES contract_sign_requests(contract_id),
+    contract_id BYTEA REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE,
     stripe_dispute_id TEXT NOT NULL UNIQUE,
     stripe_charge_id TEXT NOT NULL,
     stripe_payment_intent_id TEXT,
-    reason TEXT NOT NULL,
+    reason TEXT,
     status TEXT NOT NULL,
     amount_cents BIGINT NOT NULL,
     currency TEXT NOT NULL,
@@ -102,10 +117,18 @@ CREATE TABLE contract_disputes (
     created_at_ns BIGINT NOT NULL,
     updated_at_ns BIGINT NOT NULL
 );
-
-CREATE INDEX idx_contract_disputes_contract ON contract_disputes(contract_id);
+CREATE INDEX idx_contract_disputes_contract ON contract_disputes(contract_id)
+    WHERE contract_id IS NOT NULL;
 CREATE INDEX idx_contract_disputes_charge ON contract_disputes(stripe_charge_id);
 CREATE INDEX idx_contract_disputes_status ON contract_disputes(status);
+
+ALTER TABLE contract_sign_requests
+    ADD COLUMN paused_at_ns BIGINT,
+    ADD COLUMN total_paused_ns BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN pause_reason TEXT;
+CREATE INDEX idx_contract_sign_requests_paused
+    ON contract_sign_requests (paused_at_ns)
+    WHERE paused_at_ns IS NOT NULL;
 ```
 
 Notes:
@@ -120,8 +143,10 @@ Notes:
 - `evidence_due_by_ns` is nanoseconds since Unix epoch, matching the rest
   of the codebase (`crate::now_ns`). Conversion from Stripe seconds is
   `seconds * 1_000_000_000`.
+- `paused_at_ns` is partial-indexed; the dc-agent poll (Phase 2) cheaply
+  filters paused rows.
 
-## 4. Code diffs
+## 4. Code diffs (PHASE 2)
 
 ### 4.a `api/src/openapi/webhooks.rs` -- new Stripe types
 
@@ -180,10 +205,6 @@ default arm (line 677). Five lines of context each side:
 +        "charge.dispute.funds_withdrawn" => {
 +            handle_dispute_funds_withdrawn(db.as_ref(), &event.data.object).await?;
 +        }
-         // Note: payment_intent.succeeded and payment_intent.payment_failed webhooks are NOT used.
-         // We use checkout.session.completed which already sets payment_status and has the contract_id.
-         // Stripe Checkout generates its own PaymentIntent internally, but we link contracts by
-         // checkout session ID, not payment intent ID.
          _ => {
              tracing::debug!("Unhandled event type: {}", event.event_type);
          }
@@ -232,7 +253,7 @@ async fn handle_dispute_created(
         stripe_dispute_id: &dispute.id,
         stripe_charge_id: &dispute.charge,
         stripe_payment_intent_id: dispute.payment_intent.as_deref(),
-        reason: &dispute.reason,
+        reason: Some(&dispute.reason),
         status: &dispute.status,
         amount_cents: dispute.amount,
         currency: &dispute.currency,
@@ -245,16 +266,13 @@ async fn handle_dispute_created(
     .map_err(map_db_err)?;
 
     if let Some(cid) = contract_id {
-        if let Err(e) = db
-            .cancel_contract_for_dispute(&cid, &dispute.id, dispute.amount)
-            .await
-        {
+        let pause_reason = format!("stripe_dispute:{}", dispute.id);
+        if let Err(e) = db.pause_contract(&cid, &pause_reason).await {
             tracing::error!(
-                "Failed to cancel contract {} for dispute {}: {:#}",
+                "Failed to pause contract {} for dispute {}: {:#}",
                 hex::encode(&cid), dispute.id, e
             );
             // Persist anyway -- alert and continue, do not 500 (Stripe will retry forever).
-            // The dispute row is committed; an operator can finish the cancel manually.
         }
         crate::notifications::telegram::send_ops_alert(&format!(
             "Stripe dispute OPENED for contract {}: id={} reason={} amount={} {}",
@@ -292,7 +310,7 @@ async fn handle_dispute_updated(
         stripe_dispute_id: &dispute.id,
         stripe_charge_id: &dispute.charge,
         stripe_payment_intent_id: dispute.payment_intent.as_deref(),
-        reason: &dispute.reason,
+        reason: Some(&dispute.reason),
         status: &dispute.status,
         amount_cents: dispute.amount,
         currency: &dispute.currency,
@@ -331,7 +349,7 @@ async fn handle_dispute_closed(
         stripe_dispute_id: &dispute.id,
         stripe_charge_id: &dispute.charge,
         stripe_payment_intent_id: dispute.payment_intent.as_deref(),
-        reason: &dispute.reason,
+        reason: Some(&dispute.reason),
         status: outcome,
         amount_cents: dispute.amount,
         currency: &dispute.currency,
@@ -344,23 +362,35 @@ async fn handle_dispute_closed(
     .map_err(map_db_err)?;
 
     if let Some(cid) = contract_id {
-        let event_type = if outcome == "won" { "dispute_resolved" } else { "dispute_lost" };
-        let details = format!(
-            "Stripe dispute {}: id={} amount={} {}",
-            outcome, dispute.id, dispute.amount, dispute.currency
-        );
-        if let Err(e) = db
-            .insert_contract_event(&cid, event_type, None, None, "system", Some(&details))
-            .await
-        {
-            tracing::warn!("Failed to record dispute close event for contract {}: {:#}",
-                hex::encode(&cid), e);
-        }
-        if outcome == "lost" {
-            crate::notifications::telegram::send_ops_alert(&format!(
-                "Stripe dispute LOST for contract {}: id={} amount={} {}",
-                hex::encode(&cid), dispute.id, dispute.amount, dispute.currency
-            )).await;
+        match outcome {
+            "won" => {
+                // Resume the contract; dc-agent restarts the VM on next poll.
+                if let Err(e) = db.resume_contract(&cid).await {
+                    tracing::error!(
+                        "Failed to resume contract {} for dispute {}: {:#}",
+                        hex::encode(&cid), dispute.id, e
+                    );
+                }
+            }
+            "lost" => {
+                if let Err(e) = db
+                    .terminate_contract_for_dispute_lost(&cid, &dispute.id)
+                    .await
+                {
+                    tracing::error!(
+                        "Failed to terminate contract {} for dispute {}: {:#}",
+                        hex::encode(&cid), dispute.id, e
+                    );
+                }
+                // Issue prorated refund (paused time credited automatically by
+                // calculate_prorated_refund). Idempotency key: dispute:<id>.
+                // ... see spec section 4.f for refund flow ...
+                crate::notifications::telegram::send_ops_alert(&format!(
+                    "Stripe dispute LOST for contract {}: id={} amount={} {}",
+                    hex::encode(&cid), dispute.id, dispute.amount, dispute.currency
+                )).await;
+            }
+            _ => {} // warning_closed and other outcomes: no state change
         }
     }
     Ok(())
@@ -382,7 +412,7 @@ async fn handle_dispute_funds_withdrawn(
         stripe_dispute_id: &dispute.id,
         stripe_charge_id: &dispute.charge,
         stripe_payment_intent_id: dispute.payment_intent.as_deref(),
-        reason: &dispute.reason,
+        reason: Some(&dispute.reason),
         status: &dispute.status,
         amount_cents: dispute.amount,
         currency: &dispute.currency,
@@ -433,26 +463,28 @@ async fn lookup_contract_for_charge(
 }
 ```
 
-Note: `crate::notifications::telegram::send_ops_alert` is a thin wrapper
-that already exists per the rest of the codebase pattern (see imports at
-the top of `webhooks.rs`). If only the typed `TelegramClient` exists, the
-implementation step lifts the alert call into the same form used by other
-handlers (`TelegramClient::from_env()?.send_message(...)`). Confidence on
-exact symbol name: 6/10 -- verify before implementation. See risk 9.
+`crate::notifications::telegram::send_ops_alert` is a thin Phase 2 wrapper
+around `TelegramClient::from_env()?.send_message(chat_id, msg)` that reads
+`TELEGRAM_OPS_CHAT_ID` from env and `tracing::warn!`s (does not silently
+no-op) when Telegram is not configured. Add it to
+`api/src/notifications/telegram.rs` (the `notifications` module is split
+across `mod.rs`, `sms.rs`, `telegram.rs`; the helper belongs with the
+Telegram client).
 
-### 4.d `api/src/database/contracts/mod.rs` -- `ContractDisputeUpsert` struct
+### 4.d `api/src/database/contracts/mod.rs` -- `ContractDisputeUpsert` struct (PHASE 1, IMPLEMENTED)
 
-Added next to `SubscriptionEventInput` (a similar input-struct pattern that
-already exists in the same module). Public so the webhook handler can
-construct it.
+Re-exported from `dispute.rs`:
 
 ```rust
+pub use dispute::ContractDisputeUpsert;
+// (Phase 2 will also re-export `ResumeOutcome`.)
+
 pub struct ContractDisputeUpsert<'a> {
     pub contract_id: Option<&'a [u8]>,
     pub stripe_dispute_id: &'a str,
     pub stripe_charge_id: &'a str,
     pub stripe_payment_intent_id: Option<&'a str>,
-    pub reason: &'a str,
+    pub reason: Option<&'a str>,
     pub status: &'a str,
     pub amount_cents: i64,
     pub currency: &'a str,
@@ -463,373 +495,126 @@ pub struct ContractDisputeUpsert<'a> {
 }
 ```
 
-### 4.e `api/src/database/contracts/payment.rs` -- new methods
+### 4.e `api/src/database/contracts/dispute.rs` -- helpers (PHASE 1, IMPLEMENTED)
+
+See the file for full implementations. Public surface:
+
+- `pub async fn upsert_contract_dispute(input: ContractDisputeUpsert<'_>) -> Result<()>`
+  -- idempotent on `stripe_dispute_id`. ON CONFLICT preserves
+  `created_at_ns`, refreshes mutable fields with COALESCE so a later replay
+  cannot blank out a value set by an earlier event.
+- `pub async fn pause_contract(contract_id: &[u8], reason: &str) -> Result<()>`
+  -- transitions Active/Provisioned -> Paused, sets `paused_at_ns`,
+  `pause_reason`. Replay with same reason: no-op. Replay with different
+  reason: loud failure.
+- `pub async fn resume_contract(contract_id: &[u8]) -> Result<ResumeOutcome>`
+  -- credits `now - paused_at_ns` to `total_paused_ns`, transitions to
+  Active. Idempotent (no-op when not paused).
+- `pub async fn terminate_contract_for_dispute_lost(contract_id: &[u8], stripe_dispute_id: &str) -> Result<()>`
+  -- transitions to Cancelled with `payment_status='disputed'`,
+  `mark_contract_resource_for_deletion`. Idempotent (terminal short-circuit
+  emits an audit event but no second history row).
+- `pub async fn get_contract_id_by_stripe_payment_intent(pi: &str) -> Result<Option<Vec<u8>>>`
+  -- Phase 2 fallback lookup.
+
+### 4.f `api/src/database/contracts/payment.rs` -- prorated refund credit (PHASE 1, IMPLEMENTED)
+
+`calculate_prorated_refund` now takes `total_paused_ns: i64`. Paused
+intervals are subtracted from billable time:
 
 ```rust
-impl Database {
-    /// Idempotent upsert keyed on stripe_dispute_id.
-    /// Stripe replays webhooks; we MUST NOT insert duplicates. ON CONFLICT
-    /// preserves the original created_at_ns and only refreshes mutable
-    /// fields and raw_event.
-    pub async fn upsert_contract_dispute(
-        &self,
-        input: ContractDisputeUpsert<'_>,
-    ) -> Result<()> {
-        let now_ns = crate::now_ns()?;
-        sqlx::query!(
-            r#"INSERT INTO contract_disputes
-               (contract_id, stripe_dispute_id, stripe_charge_id, stripe_payment_intent_id,
-                reason, status, amount_cents, currency, evidence_due_by_ns,
-                funds_withdrawn_at_ns, closed_at_ns, raw_event,
-                created_at_ns, updated_at_ns)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
-               ON CONFLICT (stripe_dispute_id) DO UPDATE SET
-                 status = EXCLUDED.status,
-                 reason = EXCLUDED.reason,
-                 evidence_due_by_ns = COALESCE(EXCLUDED.evidence_due_by_ns,
-                                               contract_disputes.evidence_due_by_ns),
-                 funds_withdrawn_at_ns = COALESCE(EXCLUDED.funds_withdrawn_at_ns,
-                                                  contract_disputes.funds_withdrawn_at_ns),
-                 closed_at_ns = COALESCE(EXCLUDED.closed_at_ns, contract_disputes.closed_at_ns),
-                 raw_event = EXCLUDED.raw_event,
-                 updated_at_ns = EXCLUDED.updated_at_ns"#,
-            input.contract_id,
-            input.stripe_dispute_id,
-            input.stripe_charge_id,
-            input.stripe_payment_intent_id,
-            input.reason,
-            input.status,
-            input.amount_cents,
-            input.currency,
-            input.evidence_due_by_ns,
-            input.funds_withdrawn_at_ns,
-            input.closed_at_ns,
-            input.raw_event,
-            now_ns,
-        )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Look up contract_id by stripe_payment_intent_id (fallback path
-    /// when dispute metadata.contract_id is missing).
-    pub async fn get_contract_id_by_stripe_payment_intent(
-        &self,
-        pi: &str,
-    ) -> Result<Option<Vec<u8>>> {
-        let row = sqlx::query!(
-            "SELECT contract_id FROM contract_sign_requests WHERE stripe_payment_intent_id = $1 LIMIT 1",
-            pi
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row.map(|r| r.contract_id))
-    }
-
-    /// Cancel a contract because Stripe issued a chargeback. Skips the
-    /// refund API call (Stripe already pulled funds) and skips the
-    /// caller-pubkey check (the system is the actor).
-    /// Idempotent: if the contract is already in a terminal status, only
-    /// emits an audit event.
-    pub async fn cancel_contract_for_dispute(
-        &self,
-        contract_id: &[u8],
-        stripe_dispute_id: &str,
-        amount_cents: i64,
-    ) -> Result<()> {
-        let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
-            anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
-        })?;
-        let cancel_memo = format!(
-            "Stripe chargeback {}: amount={} cents", stripe_dispute_id, amount_cents
-        );
-        let now_ns = crate::now_ns()?;
-        let cancelled = ContractStatus::Cancelled.to_string();
-
-        let current: ContractStatus = contract.status.parse().map_err(|e| {
-            anyhow::anyhow!("Contract status invalid '{}': {}", contract.status, e)
-        })?;
-        if current.is_terminal() {
-            // Already terminal -- record the dispute event but do not transition.
-            self.insert_contract_event(
-                contract_id, "dispute_opened", Some(&contract.status), None,
-                "system", Some(&cancel_memo)
-            ).await?;
-            return Ok(());
-        }
-        if !current.can_transition_to(ContractStatus::Cancelled) {
-            return Err(anyhow::anyhow!(
-                "Contract status {} cannot transition to Cancelled (chargeback)", contract.status
-            ));
-        }
-
-        let mut tx = self.pool.begin().await?;
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, payment_status = 'disputed' WHERE contract_id = $3",
-            cancelled, now_ns, contract_id
-        ).execute(&mut *tx).await?;
-        sqlx::query!(
-            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, $2, $3, $4, $5, $6)",
-            contract_id, contract.status, cancelled,
-            &b"system-stripe-dispute"[..], now_ns, Some(cancel_memo.as_str())
-        ).execute(&mut *tx).await?;
-        sqlx::query!(
-            "INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at) VALUES ($1, 'dispute_opened', $2, $3, 'system', $4, $5)",
-            contract_id, contract.status, cancelled,
-            Some(cancel_memo.as_str()), now_ns
-        ).execute(&mut *tx).await?;
-        tx.commit().await?;
-
-        if let Err(e) = self.mark_contract_resource_for_deletion(contract_id).await {
-            tracing::warn!(
-                "Failed to mark cloud resource for deletion for disputed contract {}: {}",
-                hex::encode(contract_id), e
-            );
-        }
-        Ok(())
-    }
-}
+let billable_used_ns = elapsed_ns.saturating_sub(total_paused_ns.max(0));
 ```
 
-## 5. State machine analysis
+Existing call sites in `cancel_contract` (rental.rs) and `process_icpay_refund`
+(payment.rs) read `total_paused_ns` from the row via the new
+`get_total_paused_ns(&[u8])` helper before calling the function. Six
+existing test cases pass `0`; one new test
+`test_calculate_prorated_refund_credits_paused_time` covers the credit math.
 
-Existing state machine: see `common/src/contract_status.rs:36-108`.
+## 5. State machine analysis (PHASE 1, IMPLEMENTED)
 
-- All non-terminal statuses (`Requested`, `Pending`, `Accepted`,
-  `Provisioning`, `Provisioned`, `Active`) can transition to `Cancelled`
-  (`is_cancellable() == true` at lines 79-89).
-- Terminal states (`Rejected`, `Cancelled`, `Expired`) cannot transition
-  further (line 64).
+`common/src/contract_status.rs`: `Paused` variant added. Transitions:
 
-Decision: NO new state added. `Cancelled` already covers the chargeback
-outcome. Justification:
-- The product semantics of "user disputed the charge" map cleanly onto
-  "contract is dead, resource is gone, no further billing." That is what
-  `Cancelled` already means everywhere else (`is_cancellable=true ->
-  Cancelled` is reached today via tenant action; for disputes it is reached
-  via a system actor).
-- A new `Disputed` state would force every consumer of `ContractStatus`
-  (`api/src/database/contracts/extensions.rs`, `api/src/openapi/contracts.rs`,
-  every test, the SvelteKit UI) to handle a fourth terminal value. That
-  is cost without benefit -- the dispute itself is recorded in
-  `contract_disputes` and `contract_events`, which is the right place for
-  the financial-event detail. Confidence 9/10.
-- An "open dispute" is not a long-running contract state because we MUST
-  stop the resource immediately on `dispute.created`. There is no
-  reversible "frozen" state in the existing pause-vs-terminate model:
-  rental.rs:722 `mark_contract_resource_for_deletion` is the only
-  termination path and it is destructive. A reversible pause would be a
-  separate, larger ticket.
+- `Active -> Paused`, `Provisioned -> Paused`
+- `Paused -> Active`, `Paused -> Provisioned` (resume targets)
+- `Paused -> Cancelled`, `Paused -> Expired` (terminal-bypass on lost
+  dispute or contract end during pause)
+
+Properties: `is_terminal=false`, `is_cancellable=true`,
+`is_operational=false`. The "not operational" claim is load-bearing for
+the dc-agent polling loop (Phase 2): a paused contract has its VM
+stopped, so the loop must skip provisioning/maintenance for it.
+
+Two new tests added: `test_valid_transitions_paused`,
+`test_paused_is_cancellable_not_operational_not_terminal`. Existing
+exhaustive-enumeration tests
+(`test_terminal_states_cannot_transition`, `test_is_*`) extended to
+cover the new variant.
 
 ## 6. Test plan
 
-Test file: `api/src/database/contracts/tests.rs` (extend) and a new
-`api/src/openapi/webhooks_dispute_tests.rs` (or a new sub-module in
-webhooks.rs `#[cfg(test)] mod dispute_tests`). Final placement chosen at
-implementation time to match the convention in the file (mod tests already
-exists at line 1351 of webhooks.rs -- prefer extending it).
+Phase 1 (IMPLEMENTED) tests in
+`api/src/database/contracts/tests.rs`:
 
-Test cases:
+1. `test_upsert_dispute_idempotent` -- replay with refreshed payload keeps
+   row count = 1; `created_at_ns` preserved; `status`/`raw_event` updated.
+2. `test_pause_contract_idempotent` -- pause transitions to `paused`,
+   sets columns, writes one history row + one event. Replay with same
+   reason: no extra rows, `paused_at_ns` does NOT bump. Conflicting
+   reason: loud failure.
+3. `test_resume_contract_credits_paused_time` -- pause + sleep + resume
+   yields `resumed=true`, `credited_pause_ns >= 10ms`,
+   `total_paused_ns == credited_pause_ns`, columns cleared, `resumed`
+   event recorded. Second resume: no-op.
+4. `test_terminate_for_dispute_lost` -- pause + terminate yields
+   `cancelled` + `payment_status='disputed'` + history row +
+   `dispute_lost` event referencing the dispute id. Replay on terminal:
+   no second history row, but a fresh audit event preserves replay
+   visibility.
+5. `test_calculate_prorated_refund_credits_paused_time` -- baseline (no
+   pause) gives ~40% refund; with 30% paused window credited, gives ~70%
+   refund; full pause gives full refund; negative input is sanitized.
 
-1. `test_dispute_created_on_active_contract_cancels_and_inserts_row`
-   Assertions:
-   - Pre: contract status = `active`, payment_status = `succeeded`.
-   - After `upsert_contract_dispute` + `cancel_contract_for_dispute`:
-     - `contract_disputes` has exactly 1 row, `status=needs_response`,
-       `stripe_dispute_id=du_test_1`.
-     - `contract_sign_requests.status = 'cancelled'`.
-     - `contract_sign_requests.payment_status = 'disputed'`.
-     - `contract_events` has a row with `event_type='dispute_opened'`,
-       `actor='system'`.
+Phase 2 tests (DEFERRED) at the HTTP layer:
 
-2. `test_dispute_created_replay_is_idempotent`
-   Assertions:
-   - Run upsert + cancel twice with the same payload.
-   - Exactly 1 row in `contract_disputes` after both calls.
-   - Exactly 1 status_history row going `active -> cancelled` (the second
-     call must short-circuit on `is_terminal()` and NOT insert another
-     history row).
-   - Exactly 1 `dispute_opened` event in `contract_events` from the first
-     call AND exactly 1 from the second -- no, wait: the second call DOES
-     emit an audit event (per spec section 4.e). So assert 2 events,
-     never 3. Document this on the test.
-
-3. `test_dispute_closed_won_emits_resolved_event_no_state_change`
-   Pre: contract is already `cancelled` after a prior dispute_created.
-   Action: handle_dispute_closed with status="won".
-   Assertions:
-   - `contract_disputes.status = 'won'`, `closed_at_ns IS NOT NULL`.
-   - `contract_events` gains a `dispute_resolved` row.
-   - `contract_sign_requests.status` remains `cancelled`.
-
-4. `test_dispute_closed_lost_emits_lost_event`
-   Same as 3 but status="lost":
-   - `contract_disputes.status = 'lost'`.
-   - `contract_events` gains a `dispute_lost` row with the amount in
-     `details`.
-   - Telegram alert helper invoked (assert via injected mock or capture
-     the formatted string -- see risk 9).
-
-5. `test_dispute_signature_mismatch_returns_401`
-   At HTTP layer: post a `charge.dispute.created` body with a bogus
-   `stripe-signature` header.
-   Assert: response is 401, no DB row inserted.
-
-6. `test_dispute_with_unknown_charge_persists_orphan_row`
-   The dispute's metadata has no `contract_id` and PI lookup returns None.
-   Assert:
-   - `contract_disputes` row inserted with `contract_id IS NULL`.
-   - No `contract_events` row (no contract to attach to).
-   - Telegram alert invoked with "NO matching contract".
-
-7. `test_dispute_funds_withdrawn_sets_timestamp`
-   Assert:
-   - Row exists with `funds_withdrawn_at_ns IS NOT NULL`.
-   - Contract state untouched (the cancel happened on `created`).
-
-### Test skeleton 1 (simplest -- positive path)
-
-```rust
-#[tokio::test]
-async fn test_dispute_created_on_active_contract_cancels_and_inserts_row() {
-    let db = setup_test_db().await;
-    let contract_id = vec![42u8; 32];
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-
-    insert_contract_request(&db, &contract_id, &requester_pk, &provider_pk,
-        "off-disp", 0, "active").await;
-
-    let raw = serde_json::json!({
-        "id": "du_test_1", "charge": "ch_test_1",
-        "payment_intent": "pi_test_1", "amount": 500,
-        "currency": "usd", "reason": "fraudulent",
-        "status": "needs_response", "evidence_details": {"due_by": 1_700_000_000}
-    });
-
-    db.upsert_contract_dispute(ContractDisputeUpsert {
-        contract_id: Some(&contract_id),
-        stripe_dispute_id: "du_test_1",
-        stripe_charge_id: "ch_test_1",
-        stripe_payment_intent_id: Some("pi_test_1"),
-        reason: "fraudulent",
-        status: "needs_response",
-        amount_cents: 500,
-        currency: "usd",
-        evidence_due_by_ns: Some(1_700_000_000_000_000_000),
-        funds_withdrawn_at_ns: None,
-        closed_at_ns: None,
-        raw_event: &raw,
-    }).await.unwrap();
-
-    db.cancel_contract_for_dispute(&contract_id, "du_test_1", 500).await.unwrap();
-
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM contract_disputes WHERE stripe_dispute_id = 'du_test_1'"
-    ).fetch_one(&db.pool).await.unwrap();
-    assert_eq!(count, 1);
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "disputed");
-
-    let events = db.get_contract_events(&contract_id).await.unwrap();
-    assert!(events.iter().any(|e|
-        e.event_type == "dispute_opened" && e.actor == "system"
-    ));
-}
-```
-
-### Test skeleton 2 (trickiest -- idempotent replay)
-
-```rust
-#[tokio::test]
-async fn test_dispute_created_replay_is_idempotent() {
-    let db = setup_test_db().await;
-    let contract_id = vec![43u8; 32];
-    insert_contract_request(&db, &contract_id, &[1u8; 32], &[2u8; 32],
-        "off-disp-2", 0, "active").await;
-
-    let raw = serde_json::json!({
-        "id": "du_replay", "charge": "ch_replay", "payment_intent": null,
-        "amount": 1000, "currency": "usd", "reason": "duplicate",
-        "status": "needs_response"
-    });
-    let upsert = || ContractDisputeUpsert {
-        contract_id: Some(&contract_id),
-        stripe_dispute_id: "du_replay",
-        stripe_charge_id: "ch_replay",
-        stripe_payment_intent_id: None,
-        reason: "duplicate", status: "needs_response",
-        amount_cents: 1000, currency: "usd",
-        evidence_due_by_ns: None, funds_withdrawn_at_ns: None, closed_at_ns: None,
-        raw_event: &raw,
-    };
-
-    // First delivery
-    db.upsert_contract_dispute(upsert()).await.unwrap();
-    db.cancel_contract_for_dispute(&contract_id, "du_replay", 1000).await.unwrap();
-
-    // Second delivery (Stripe replay)
-    db.upsert_contract_dispute(upsert()).await.unwrap();
-    db.cancel_contract_for_dispute(&contract_id, "du_replay", 1000).await.unwrap();
-
-    let dispute_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM contract_disputes WHERE stripe_dispute_id = 'du_replay'"
-    ).fetch_one(&db.pool).await.unwrap();
-    assert_eq!(dispute_count, 1, "ON CONFLICT must keep a single row");
-
-    let history_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM contract_status_history WHERE contract_id = $1 AND new_status = 'cancelled'"
-    ).bind(&contract_id).fetch_one(&db.pool).await.unwrap();
-    assert_eq!(history_count, 1, "second call must short-circuit on is_terminal()");
-
-    let opened_events: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1 AND event_type = 'dispute_opened'"
-    ).bind(&contract_id).fetch_one(&db.pool).await.unwrap();
-    assert_eq!(opened_events, 2, "first transitions, second is audit-only -- both emit dispute_opened");
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-}
-```
+6. `test_dispute_signature_mismatch_returns_400` -- bogus
+   `stripe-signature` header, response is 400, no DB row inserted.
+7. `test_dispute_with_unknown_charge_persists_orphan_row` -- metadata has
+   no contract_id, PI lookup misses; `contract_id IS NULL` row inserted,
+   no `contract_events` row, Telegram alert "NO matching contract".
+8. `test_dispute_funds_withdrawn_sets_timestamp` -- row exists with
+   `funds_withdrawn_at_ns IS NOT NULL`, contract state untouched.
 
 ## 7. Acceptance checklist
 
-Mapped to the four bullets in issue #408.
+Mapped to the four bullets in issue #408 and the decision in #421.
 
-- [ ] Webhook routes for all four events
-  - file: `api/src/openapi/webhooks.rs:~672-680` (new match arms, see 4.b)
-- [ ] Persist dispute records linked to the originating contract/subscription
-  - file: `api/migrations_pg/041_contract_disputes.sql` (table)
-  - file: `api/src/database/contracts/payment.rs:~upsert_contract_dispute`
-- [ ] On dispute.created: terminate/suspend the related Decent Agent, mark contract
-  - file: `api/src/database/contracts/payment.rs:~cancel_contract_for_dispute`
-  - file: `api/src/openapi/webhooks.rs:~handle_dispute_created` (calls cancel + alert)
-  - resource teardown: reuses `mark_contract_resource_for_deletion`
-    (rental.rs:722).
-- [ ] On dispute.closed (won/lost): update state and any financial adjustments
-  - file: `api/src/openapi/webhooks.rs:~handle_dispute_closed`
-  - financial adjustment: NONE on our side; Stripe already moved funds.
-    Documented at section 2.
-- [ ] Idempotent replay handling (Stripe retries)
-  - SQL: `UNIQUE(stripe_dispute_id)` + `ON CONFLICT DO UPDATE`
-  - State: `cancel_contract_for_dispute` short-circuits on
-    `is_terminal()`.
-- [ ] Unit tests per event type using Stripe test fixtures
-  - covered by tests 1-7 above.
-- [ ] Simulated dispute events transition state correctly -> tests 1, 3, 4.
-- [ ] Duplicate webhook deliveries don't double-apply -> test 2.
-- [ ] Logs + ops alert on every dispute event -> assertions in tests 4 and 6;
-  `tracing::warn!` calls in handlers; `send_ops_alert` in handlers.
+- [x] Pause-vs-terminate decision recorded (#421 -> Option B)
+  - file: this spec section 9, R3
+- [x] Schema for dispute persistence
+  - file: `api/migrations_pg/043_dispute_pause_state.sql`
+- [x] DB helpers (idempotent) for pause/resume/terminate-lost + dispute upsert
+  - file: `api/src/database/contracts/dispute.rs`
+- [x] Refund credits paused time
+  - file: `api/src/database/contracts/payment.rs`
+- [x] State machine has `Paused` with reversible transitions
+  - file: `common/src/contract_status.rs`
+- [ ] Webhook routes for all four events (PHASE 2)
+  - file: `api/src/openapi/webhooks.rs`
+- [ ] dc-agent polling loop skips paused contracts (PHASE 2)
+  - file: `dc-agent/src/main.rs` (or wherever the loop reads `status`)
+- [ ] `send_ops_alert` helper (PHASE 2)
+  - file: `api/src/notifications/telegram.rs`
+- [ ] HTTP-layer tests (PHASE 2): signature mismatch, orphan dispute,
+  funds_withdrawn
 
-## 8. Follow-up issues to file (after this plan, before implementation)
+## 8. Follow-up issues to file
 
 1. "Stripe dispute evidence submission" -- automated upload of order
    metadata, ToS acceptance, IP logs to `/v1/disputes/{id}/close`. Today
-   we fully cede the dispute; we should at least submit basic evidence
-   for non-fraudulent reasons.
+   we cede the dispute by default; basic evidence for non-fraudulent
+   reasons would improve win rate.
 2. "Admin UI: dispute dashboard" -- list `contract_disputes` rows with
    filters by status, contract, date.
 3. "Subscription dispute coverage" -- once Decent Agents subscriptions
@@ -844,58 +629,53 @@ Each risk: confidence I am right, what I do not know, what to verify.
   optional `payment_intent` string fields. Verify the JSON shape against
   Stripe API docs for the version pinned in `Cargo.toml`. The struct
   `StripeDispute` may need additional `#[serde(default)]` or `Option`
-  wrappers if Stripe omits fields in older API versions. (Was checked
-  against current docs at plan-time but version pinning lives in the
-  `stripe-rust` crate and may differ.)
-- R2 (conf 6/10): `crate::notifications::telegram::send_ops_alert` symbol
-  -- the rest of the codebase uses `TelegramClient::from_env()?
-  .send_message(chat_id, msg)`. There is no `send_ops_alert` helper today.
-  Implementation step must either add one (1 small wrapper in
-  `notifications/telegram.rs` reading `TELEGRAM_OPS_CHAT_ID` from env) or
-  call `send_message` directly. The plan above is written assuming the
-  wrapper exists; first implementation PR should add it.
-- R3 (conf 8/10): pause-agent path. There is no reversible pause for
-  marketplace contracts; only `mark_contract_resource_for_deletion`
-  (rental.rs:722). Before implementing, confirm with stakeholders that
-  destroying the VM on `dispute.created` is acceptable. The alternative
-  -- reversible freeze -- is a separate, larger feature.
-- R4 (conf 7/10): `stripe_payment_intent_id` column today actually stores
-  the checkout session ID `cs_*`, not the payment_intent ID `pi_*` (see
-  payment.rs:17 -- the column is named `stripe_payment_intent_id` but
-  written with `session.id`). The fallback lookup
-  `get_contract_id_by_stripe_payment_intent` will therefore NOT match
-  most existing rows. For dispute events specifically we expect to find
-  the contract via `dispute.metadata.contract_id`, NOT via PI lookup, so
-  this fallback is best-effort. Document at the call site. Pre-existing
-  bug; out of scope to fix here -- file as a separate cleanup issue.
+  wrappers if Stripe omits fields in older API versions.
+- R2 (conf 8/10): `send_ops_alert` is a Phase 2 helper; the rest of the
+  codebase uses `TelegramClient::from_env()?.send_message(chat_id, msg)`.
+  Phase 2 adds the wrapper to `api/src/notifications/telegram.rs` reading
+  `TELEGRAM_OPS_CHAT_ID` from env. If the env var is absent, the helper
+  emits `tracing::warn!` (per project rule "BE LOUD ABOUT
+  MISCONFIGURATIONS"), it does NOT silently no-op.
+- R3 (RESOLVED 2026-04-25 per #421): pause-and-resume chosen over
+  terminate-on-dispute. Reversible state preserves customer state on
+  won disputes (no manual re-onboarding). The `Paused` state in
+  `contract_status.rs` and the helpers in `dispute.rs` implement this
+  cleanly; the prorated refund credits paused time so the customer pays
+  only for billable usage. Phase 2 wires it into webhooks and the
+  dc-agent loop.
+- R4 (conf 9/10): the `stripe_payment_intent_id` column WAS storing
+  Checkout Session IDs (`cs_*`) instead of real PaymentIntent IDs
+  (`pi_*`). Migration 042 renamed the old column to
+  `stripe_checkout_session_id` and added a real `stripe_payment_intent_id`
+  populated from `session.payment_intent` at checkout completion. Phase 2
+  fallback lookup `get_contract_id_by_stripe_payment_intent` therefore
+  matches new rows; legacy rows fall back to checkout-session lookup.
 - R5 (conf 9/10): The `charge.dispute.closed` payload has dispute
   `status` of `won` or `lost`. Stripe's `warning_closed` is also a
   closing terminal status for warnings (early dispute alerts). The plan
   handles all three by passing `status` through verbatim into the DB
   column.
-- R6 (conf 8/10): the migration number 041 is correct as of plan-time;
-  re-check on implementation in case another PR lands first.
+- R6 (conf 10/10): migration number 043 confirmed at Phase 1 commit time
+  (next free after 042).
 - R7 (conf 9/10): `tracing::warn!` is the right level for `created`,
   `lost`, `funds_withdrawn` (per existing `invoice.payment_failed`
   pattern at webhooks.rs:655). `info!` for `won` and `updated`.
-- R8 (conf 7/10): Telegram is a notification side-effect; if the
+- R8 (conf 8/10): Telegram is a notification side-effect; if the
   Telegram client is misconfigured, the handler must NOT 500 (Stripe
-  will retry forever). The plan logs and continues. Verify in the
-  `send_ops_alert` wrapper that errors are swallowed-with-log only.
-- R9 (conf 5/10): I do NOT know whether dispute webhooks for the new
-  Decent Agents subscription product will carry `metadata.contract_id`
-  at all. If subscriptions create their own checkout sessions without
-  per-contract metadata, every Decent Agents dispute will arrive as an
-  orphan and we will fail to terminate the agent. Verify by inspecting
-  how the new subscription product sets `subscription_data.metadata`
-  (or `payment_intent_data.metadata`). If missing, file a follow-up to
-  add `contract_id` (or equivalent stable key) to subscription metadata.
-- R10 (conf 9/10): test infra (`setup_test_db` at
-  `api/src/database/test_helpers.rs:968`) creates a fresh DB per test --
-  the dispute tests can rely on an empty `contract_disputes` table at
-  start. No cross-test pollution.
+  will retry forever). Phase 2 ensures `send_ops_alert` errors are
+  warn-logged and absorbed.
+- R9 (conf 5/10): Subscription metadata propagation -- I do NOT know
+  whether dispute webhooks for the new Decent Agents subscription
+  product will carry `metadata.contract_id`. Phase 2 must verify by
+  inspecting how the subscription product sets
+  `subscription_data.metadata` (or `payment_intent_data.metadata`).
+  If missing, file a follow-up to add `contract_id` (or equivalent
+  stable key) to subscription metadata.
+- R10 (conf 9/10): test infra (`setup_test_db`) creates a fresh DB per
+  test from a template; Phase 1 added 043 to both the migration list
+  and the migration_hash function in `test_helpers.rs` so the template
+  invalidates correctly.
 
-Overall confidence the plan, if implemented as written, ships
-production-ready: 8/10. The two pinch points are R2 (alert wrapper
-naming) and R9 (subscription metadata for the new product). Both are
-verifiable in <30 min during implementation.
+Overall confidence the plan, if implemented as written for Phase 2,
+ships production-ready: 8/10. Phase 1 confidence: 9/10 -- 22 dispute
+tests + 7 prorated-refund tests pass against ephemeral PostgreSQL.

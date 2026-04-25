@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pause_reason FROM contract_sign_requests WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pause_reason",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6f05114d5000b706f1982b5236e851f8197d2d99051bb671e501c2e225dd922f"
+}

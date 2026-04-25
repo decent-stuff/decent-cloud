@@ -350,6 +350,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/040_notification_price_direction.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/041_agents_waitlist.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/042_rename_payment_intent_to_session.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/043_dispute_pause_state.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -687,6 +688,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "042_rename_payment_intent_to_session.sql",
                     include_str!("../../migrations_pg/042_rename_payment_intent_to_session.sql"),
+                ),
+                (
+                    "043_dispute_pause_state.sql",
+                    include_str!("../../migrations_pg/043_dispute_pause_state.sql"),
                 ),
             ];
 

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO contract_disputes\n               (contract_id, stripe_dispute_id, stripe_charge_id, stripe_payment_intent_id,\n                reason, status, amount_cents, currency, evidence_due_by_ns,\n                funds_withdrawn_at_ns, closed_at_ns, raw_event,\n                created_at_ns, updated_at_ns)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)\n               ON CONFLICT (stripe_dispute_id) DO UPDATE SET\n                 status = EXCLUDED.status,\n                 reason = COALESCE(EXCLUDED.reason, contract_disputes.reason),\n                 stripe_payment_intent_id = COALESCE(EXCLUDED.stripe_payment_intent_id,\n                                                    contract_disputes.stripe_payment_intent_id),\n                 contract_id = COALESCE(EXCLUDED.contract_id, contract_disputes.contract_id),\n                 evidence_due_by_ns = COALESCE(EXCLUDED.evidence_due_by_ns,\n                                               contract_disputes.evidence_due_by_ns),\n                 funds_withdrawn_at_ns = COALESCE(EXCLUDED.funds_withdrawn_at_ns,\n                                                  contract_disputes.funds_withdrawn_at_ns),\n                 closed_at_ns = COALESCE(EXCLUDED.closed_at_ns, contract_disputes.closed_at_ns),\n                 raw_event = EXCLUDED.raw_event,\n                 updated_at_ns = EXCLUDED.updated_at_ns",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Jsonb",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e62b2426144e9c2f0e0e95ed27c8aba56d9963be9d45980b3c0e12e66d4b4c3"
+}

@@ -504,11 +504,15 @@ impl Database {
     }
 }
 
+mod dispute;
 mod extensions;
 mod payment;
 mod provisioning;
 mod rental;
 mod usage;
+
+// `ResumeOutcome` is re-exported in Phase 2 when webhook handlers consume it.
+pub use dispute::ContractDisputeUpsert;
 
 /// Contract usage tracking for billing periods
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]

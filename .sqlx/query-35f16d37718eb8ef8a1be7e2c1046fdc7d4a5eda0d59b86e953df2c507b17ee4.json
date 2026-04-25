@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT total_paused_ns FROM contract_sign_requests WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total_paused_ns",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "35f16d37718eb8ef8a1be7e2c1046fdc7d4a5eda0d59b86e953df2c507b17ee4"
+}

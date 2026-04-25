@@ -91,24 +91,34 @@ impl Database {
         Ok(offering)
     }
 
-    /// Calculate prorated refund amount based on time used
+    /// Calculate prorated refund amount based on time used.
     ///
-    /// Formula: refund = (unused_time / total_time) * payment_amount
-    /// Only returns a refund for contracts that haven't started or are in early stages
+    /// Refund formula:
+    ///   billable_time = max(0, current - service_start - total_paused_ns)
+    ///   refund        = payment * (total_duration - billable_time) / total_duration
+    ///
+    /// `total_paused_ns` (from `contract_sign_requests.total_paused_ns`) is the
+    /// cumulative time the contract spent in `paused` state. Paused intervals
+    /// are not billable -- customers must not be charged for windows where
+    /// their VM was stopped pending dispute resolution. Pass `0` when the
+    /// contract was never paused.
     ///
     /// # Arguments
     /// * `payment_amount_e9s` - Original payment amount in e9s
     /// * `service_start_ns` - When user actually got access (provisioning_completed_at_ns)
     /// * `end_timestamp_ns` - Contract end time in nanoseconds
     /// * `current_timestamp_ns` - Current time in nanoseconds
+    /// * `total_paused_ns` - Cumulative pause duration to credit back (>= 0)
     ///
     /// # Returns
-    /// Refund amount in e9s. Full refund if service never started.
+    /// Refund amount in e9s. Full refund if service never started or was
+    /// paused for the entire usage window.
     pub(super) fn calculate_prorated_refund(
         payment_amount_e9s: i64,
         service_start_ns: Option<i64>,
         end_timestamp_ns: Option<i64>,
         current_timestamp_ns: i64,
+        total_paused_ns: i64,
     ) -> i64 {
         // If service never started (not provisioned), full refund
         let service_start = match service_start_ns {
@@ -127,18 +137,21 @@ impl Database {
             return 0;
         }
 
-        // Time user actually used the service
-        let time_used_ns = current_timestamp_ns.saturating_sub(service_start);
+        // Time user actually used the service. Negative paused values are
+        // treated as zero (defensive: bad data should never inflate refunds).
+        let elapsed_ns = current_timestamp_ns.saturating_sub(service_start);
+        let billable_used_ns = elapsed_ns.saturating_sub(total_paused_ns.max(0));
 
-        // If current time is before service started, full refund
-        if time_used_ns <= 0 {
+        // If billable window is empty (current time is before service
+        // started, OR pauses cover the entire elapsed window), full refund.
+        if billable_used_ns <= 0 {
             return payment_amount_e9s;
         }
 
-        // Time remaining
-        let time_remaining_ns = end.saturating_sub(current_timestamp_ns);
-
-        // If contract already expired, no refund
+        // Time remaining = total - billable_used. We do NOT just use
+        // (end - now): that would ignore pause credit. Pause credits extend
+        // the remaining bucket, capped by total_duration.
+        let time_remaining_ns = (total_duration_ns - billable_used_ns).max(0);
         if time_remaining_ns <= 0 {
             return 0;
         }
@@ -147,8 +160,8 @@ impl Database {
         let refund_amount = ((payment_amount_e9s as i128) * (time_remaining_ns as i128)
             / (total_duration_ns as i128)) as i64;
 
-        // Ensure non-negative
-        refund_amount.max(0)
+        // Ensure non-negative; cap at payment_amount as a defensive bound.
+        refund_amount.clamp(0, payment_amount_e9s)
     }
 
     /// Update ICPay transaction ID for a contract
@@ -226,13 +239,17 @@ impl Database {
             (None, None) => return Ok((None, None)),
         };
 
-        // Calculate prorated refund based on when service became active
-        // If never provisioned, user gets full refund
+        // Calculate prorated refund based on when service became active.
+        // If never provisioned, user gets full refund. Pause credit is read
+        // directly from the row (Phase 2: dispute paths populate it).
+        let contract_id_bytes = hex::decode(&contract.contract_id)?;
+        let total_paused_ns = self.get_total_paused_ns(&contract_id_bytes).await?;
         let gross_refund_e9s = Self::calculate_prorated_refund(
             contract.payment_amount_e9s,
             contract.provisioning_completed_at_ns,
             contract.end_timestamp_ns,
             current_timestamp_ns,
+            total_paused_ns,
         );
 
         // Subtract any amounts already released to provider

@@ -1237,6 +1237,7 @@ fn test_calculate_prorated_refund_service_never_started() {
         None, // Service never started
         Some(2000),
         current_timestamp_ns,
+        0,
     );
     assert_eq!(refund, payment_amount_e9s); // Full refund
 }
@@ -1254,6 +1255,7 @@ fn test_calculate_prorated_refund_full_refund_before_service_start() {
         Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
+        0,
     );
 
     assert_eq!(refund, payment_amount_e9s);
@@ -1272,6 +1274,7 @@ fn test_calculate_prorated_refund_half_used() {
         Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
+        0,
     );
 
     // Should be approximately 50% (500M e9s)
@@ -1291,6 +1294,7 @@ fn test_calculate_prorated_refund_no_refund_after_end() {
         Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
+        0,
     );
 
     assert_eq!(refund, 0);
@@ -1307,6 +1311,7 @@ fn test_calculate_prorated_refund_missing_end_timestamp() {
         Some(1000),
         None,
         current_timestamp_ns,
+        0,
     );
     assert_eq!(refund, 0);
 }
@@ -1324,10 +1329,78 @@ fn test_calculate_prorated_refund_90_percent_remaining() {
         Some(service_start_ns),
         Some(end_timestamp_ns),
         current_timestamp_ns,
+        0,
     );
 
     // Should be approximately 90% (900M e9s)
     assert!((899_000_000..=901_000_000).contains(&refund));
+}
+
+#[test]
+fn test_calculate_prorated_refund_credits_paused_time() {
+    // Without pause credit, customer used 60% of the window -> 40% refund.
+    // With 30% of the window credited as pause, billable use drops to 30% -> 70% refund.
+    // This invariant -- "every paused nanosecond comes back to the customer" --
+    // is the load-bearing reason for adding total_paused_ns to the formula.
+    let payment_amount_e9s = 1_000_000_000;
+    let service_start_ns: i64 = 0;
+    let end_timestamp_ns: i64 = 10_000; // duration = 10_000
+    let current_timestamp_ns: i64 = 6_000; // elapsed = 6_000
+
+    // Baseline (no pause): 40% remaining -> 400M.
+    let baseline = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(service_start_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+        0,
+    );
+    assert!(
+        (399_000_000..=401_000_000).contains(&baseline),
+        "baseline must be ~40%, got {}",
+        baseline
+    );
+
+    // With 3000ns paused, billable_used = 3000 -> remaining = 7000 -> 70% refund.
+    let credited = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(service_start_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+        3_000,
+    );
+    assert!(
+        (699_000_000..=701_000_000).contains(&credited),
+        "with 30% paused credit, refund must be ~70%, got {}",
+        credited
+    );
+
+    // Pause covering the whole elapsed window -> full refund (customer was
+    // never charged for any time they had service).
+    let fully_paused = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(service_start_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+        6_000,
+    );
+    assert_eq!(
+        fully_paused, payment_amount_e9s,
+        "if the paused window covers all elapsed time, full refund is owed"
+    );
+
+    // Defensive: negative pause input is treated as zero (cannot inflate refunds).
+    let neg = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(service_start_ns),
+        Some(end_timestamp_ns),
+        current_timestamp_ns,
+        -1_000,
+    );
+    assert_eq!(
+        neg, baseline,
+        "negative pause must be sanitized, refund must equal baseline"
+    );
 }
 
 #[tokio::test]
@@ -4207,5 +4280,383 @@ async fn test_checkout_session_completed_without_pi_leaves_pi_null() {
     assert!(
         contract.stripe_payment_intent_id.is_none(),
         "PI column must remain NULL when Stripe sent no payment_intent"
+    );
+}
+
+// =============================================================================
+// Stripe dispute pause/resume helpers (Phase 1: DB layer only).
+// Webhook handlers + dc-agent runtime change land in Phase 2.
+// =============================================================================
+
+fn dispute_upsert<'a>(
+    contract_id: Option<&'a [u8]>,
+    dispute_id: &'a str,
+    charge_id: &'a str,
+    status: &'a str,
+    amount_cents: i64,
+    raw_event: &'a serde_json::Value,
+) -> ContractDisputeUpsert<'a> {
+    ContractDisputeUpsert {
+        contract_id,
+        stripe_dispute_id: dispute_id,
+        stripe_charge_id: charge_id,
+        stripe_payment_intent_id: None,
+        reason: Some("fraudulent"),
+        status,
+        amount_cents,
+        currency: "usd",
+        evidence_due_by_ns: None,
+        funds_withdrawn_at_ns: None,
+        closed_at_ns: None,
+        raw_event,
+    }
+}
+
+async fn count_disputes(db: &Database, dispute_id: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM contract_disputes WHERE stripe_dispute_id = $1",
+    )
+    .bind(dispute_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap()
+}
+
+async fn count_history(db: &Database, contract_id: &[u8], new_status: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM contract_status_history WHERE contract_id = $1 AND new_status = $2",
+    )
+    .bind(contract_id)
+    .bind(new_status)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap()
+}
+
+async fn count_events(db: &Database, contract_id: &[u8], event_type: &str) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1 AND event_type = $2",
+    )
+    .bind(contract_id)
+    .bind(event_type)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn test_upsert_dispute_idempotent() {
+    // Stripe replays webhooks indefinitely on non-2xx; the upsert MUST keep
+    // exactly one row per stripe_dispute_id, refresh mutable fields on
+    // replay, and never blow away the original created_at_ns.
+    let db = setup_test_db().await;
+    let contract_id = vec![0xAA; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &[1u8; 32],
+        &[2u8; 32],
+        "off-disp",
+        0,
+        "active",
+    )
+    .await;
+
+    let raw_v1 = serde_json::json!({"id": "du_idemp", "v": 1});
+    db.upsert_contract_dispute(dispute_upsert(
+        Some(&contract_id),
+        "du_idemp",
+        "ch_idemp",
+        "needs_response",
+        500,
+        &raw_v1,
+    ))
+    .await
+    .unwrap();
+
+    // First insert: row count = 1
+    assert_eq!(count_disputes(&db, "du_idemp").await, 1);
+    let initial: (i64, String, serde_json::Value) = sqlx::query_as(
+        "SELECT created_at_ns, status, raw_event FROM contract_disputes WHERE stripe_dispute_id = 'du_idemp'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(initial.1, "needs_response");
+
+    // Replay with new status + payload
+    let raw_v2 = serde_json::json!({"id": "du_idemp", "v": 2, "extra": true});
+    db.upsert_contract_dispute(dispute_upsert(
+        Some(&contract_id),
+        "du_idemp",
+        "ch_idemp",
+        "under_review",
+        500,
+        &raw_v2,
+    ))
+    .await
+    .unwrap();
+
+    // Still one row -- idempotent on stripe_dispute_id UNIQUE
+    assert_eq!(
+        count_disputes(&db, "du_idemp").await,
+        1,
+        "ON CONFLICT must keep a single row per stripe_dispute_id"
+    );
+
+    let after: (i64, String, serde_json::Value) = sqlx::query_as(
+        "SELECT created_at_ns, status, raw_event FROM contract_disputes WHERE stripe_dispute_id = 'du_idemp'",
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        after.0, initial.0,
+        "created_at_ns must be preserved across replays"
+    );
+    assert_eq!(
+        after.1, "under_review",
+        "status must reflect the latest delivery"
+    );
+    assert_eq!(
+        after.2, raw_v2,
+        "raw_event must reflect the latest delivery"
+    );
+}
+
+#[tokio::test]
+async fn test_pause_contract_idempotent() {
+    // pause_contract on an Active contract: status -> paused, paused_at_ns set,
+    // pause_reason set, ONE history row, ONE 'paused' event.
+    // Calling again with the same reason: NO new history/event row.
+    // Calling with a DIFFERENT reason on a paused contract: loud failure.
+    let db = setup_test_db().await;
+    let contract_id = vec![0xB1; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &[1u8; 32],
+        &[2u8; 32],
+        "off-pause",
+        0,
+        "active",
+    )
+    .await;
+
+    db.pause_contract(&contract_id, "stripe_dispute:du_p1")
+        .await
+        .unwrap();
+
+    let row: (String, Option<i64>, Option<String>) = sqlx::query_as(
+        "SELECT status, paused_at_ns, pause_reason FROM contract_sign_requests WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "paused", "status must be paused");
+    assert!(row.1.is_some(), "paused_at_ns must be set");
+    assert_eq!(
+        row.2.as_deref(),
+        Some("stripe_dispute:du_p1"),
+        "pause_reason must be persisted"
+    );
+    assert_eq!(count_history(&db, &contract_id, "paused").await, 1);
+    assert_eq!(count_events(&db, &contract_id, "paused").await, 1);
+
+    // Replay -- same reason. Must be a no-op (no extra history, no extra event,
+    // and paused_at_ns must NOT advance to "now" -- otherwise resume would
+    // under-credit the customer for the original pause window).
+    let paused_at_before = row.1.unwrap();
+    db.pause_contract(&contract_id, "stripe_dispute:du_p1")
+        .await
+        .unwrap();
+    assert_eq!(
+        count_history(&db, &contract_id, "paused").await,
+        1,
+        "replay must NOT insert another history row"
+    );
+    assert_eq!(
+        count_events(&db, &contract_id, "paused").await,
+        1,
+        "replay must NOT insert another event row"
+    );
+    let paused_at_after: Option<i64> =
+        sqlx::query_scalar("SELECT paused_at_ns FROM contract_sign_requests WHERE contract_id = $1")
+            .bind(&contract_id)
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        paused_at_after,
+        Some(paused_at_before),
+        "replay must NOT bump paused_at_ns"
+    );
+
+    // Conflicting concurrent pause -- loud failure (operator-level event).
+    let err = db
+        .pause_contract(&contract_id, "stripe_dispute:du_OTHER")
+        .await
+        .unwrap_err();
+    let msg = format!("{:#}", err);
+    assert!(
+        msg.contains("already paused"),
+        "conflicting reason must surface error referencing the existing pause, got: {}",
+        msg
+    );
+}
+
+#[tokio::test]
+async fn test_resume_contract_credits_paused_time() {
+    // pause -> small wait -> resume. After resume:
+    //  - status back to active
+    //  - paused_at_ns / pause_reason cleared
+    //  - total_paused_ns >= the wait we slept
+    //  - one resume event recorded
+    //  - resume returns ResumeOutcome { resumed: true, status: Active, credited > 0 }
+    // Then a SECOND resume on an already-active contract is a no-op.
+    let db = setup_test_db().await;
+    let contract_id = vec![0xB2; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &[1u8; 32],
+        &[2u8; 32],
+        "off-resume",
+        0,
+        "active",
+    )
+    .await;
+
+    db.pause_contract(&contract_id, "stripe_dispute:du_r1")
+        .await
+        .unwrap();
+
+    // Wait long enough that the credited interval is unambiguously > 0.
+    // (now_ns is monotonic + ns-resolution; even ~10ms gives ~10M ns.)
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let outcome = db.resume_contract(&contract_id).await.unwrap();
+    assert!(outcome.resumed, "first resume on a paused contract must run");
+    assert_eq!(outcome.status, dcc_common::ContractStatus::Active);
+    assert!(
+        outcome.credited_pause_ns >= 10_000_000,
+        "credited_pause_ns must be >= 10ms (we slept 20ms), got {}",
+        outcome.credited_pause_ns
+    );
+
+    let row: (String, Option<i64>, Option<String>, i64) = sqlx::query_as(
+        "SELECT status, paused_at_ns, pause_reason, total_paused_ns FROM contract_sign_requests WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "active");
+    assert!(row.1.is_none(), "paused_at_ns must be cleared on resume");
+    assert!(row.2.is_none(), "pause_reason must be cleared on resume");
+    assert_eq!(
+        row.3, outcome.credited_pause_ns,
+        "total_paused_ns must equal the credited interval (no prior pauses)"
+    );
+    assert_eq!(count_events(&db, &contract_id, "resumed").await, 1);
+
+    // Second resume -- already active. Must be a no-op (resumed=false), and
+    // total_paused_ns must NOT change.
+    let noop = db.resume_contract(&contract_id).await.unwrap();
+    assert!(!noop.resumed);
+    assert_eq!(noop.credited_pause_ns, 0);
+    assert_eq!(noop.status, dcc_common::ContractStatus::Active);
+    let total_after: i64 = sqlx::query_scalar(
+        "SELECT total_paused_ns FROM contract_sign_requests WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        total_after, row.3,
+        "no-op resume must not change total_paused_ns"
+    );
+    assert_eq!(
+        count_events(&db, &contract_id, "resumed").await,
+        1,
+        "no-op resume must not insert another event"
+    );
+}
+
+#[tokio::test]
+async fn test_terminate_for_dispute_lost() {
+    // pause then terminate -> status=cancelled, payment_status=disputed,
+    // history row pause->cancelled, event 'dispute_lost' with the dispute id.
+    // Replay (already terminal) -> no second history row, but a fresh
+    // dispute_lost event for the audit trail.
+    let db = setup_test_db().await;
+    let contract_id = vec![0xB3; 32];
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &[1u8; 32],
+        &[2u8; 32],
+        "off-lost",
+        0,
+        "active",
+    )
+    .await;
+
+    db.pause_contract(&contract_id, "stripe_dispute:du_lost1")
+        .await
+        .unwrap();
+    db.terminate_contract_for_dispute_lost(&contract_id, "du_lost1")
+        .await
+        .unwrap();
+
+    let row: (String, String) = sqlx::query_as(
+        "SELECT status, payment_status FROM contract_sign_requests WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "cancelled");
+    assert_eq!(row.1, "disputed");
+    assert_eq!(
+        count_history(&db, &contract_id, "cancelled").await,
+        1,
+        "exactly one paused->cancelled history row"
+    );
+    assert_eq!(
+        count_events(&db, &contract_id, "dispute_lost").await,
+        1,
+        "exactly one dispute_lost event after first call"
+    );
+    let detail: Option<String> = sqlx::query_scalar(
+        "SELECT details FROM contract_events WHERE contract_id = $1 AND event_type = 'dispute_lost' ORDER BY id DESC LIMIT 1",
+    )
+    .bind(&contract_id)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(
+        detail.as_deref().unwrap_or("").contains("du_lost1"),
+        "event details must include the stripe_dispute_id, got: {:?}",
+        detail
+    );
+
+    // Replay on a terminal contract -- no second history row, but a NEW
+    // dispute_lost event row preserves the audit trail of the second
+    // delivery (Stripe replays are themselves operator-relevant signal).
+    db.terminate_contract_for_dispute_lost(&contract_id, "du_lost1")
+        .await
+        .unwrap();
+    assert_eq!(
+        count_history(&db, &contract_id, "cancelled").await,
+        1,
+        "terminal short-circuit must NOT insert another history row"
+    );
+    assert_eq!(
+        count_events(&db, &contract_id, "dispute_lost").await,
+        2,
+        "second delivery must record an audit event"
     );
 }

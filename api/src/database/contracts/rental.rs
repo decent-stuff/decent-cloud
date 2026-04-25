@@ -605,12 +605,17 @@ impl Database {
                         .as_deref()
                         .or(contract.stripe_checkout_session_id.as_deref());
                     if let Some(payment_intent_id) = stripe_id {
-                        // Calculate prorated refund based on when service became active
+                        // Calculate prorated refund based on when service became active.
+                        // Pause credit comes from `total_paused_ns`; failure to read it is
+                        // fatal here because under-crediting a refund silently is worse than
+                        // a loud cancel failure (operator sees, retries).
+                        let total_paused_ns = self.get_total_paused_ns(contract_id).await?;
                         let refund_e9s = Self::calculate_prorated_refund(
                             contract.payment_amount_e9s,
                             contract.provisioning_completed_at_ns,
                             contract.end_timestamp_ns,
                             current_timestamp_ns,
+                            total_paused_ns,
                         );
 
                         // Only process refund if amount is positive and stripe_client is provided

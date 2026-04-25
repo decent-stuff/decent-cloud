@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, paused_at_ns = $2, pause_reason = $4 WHERE contract_id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Bytea",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de09b12f5d28c93756929525252698db01554825c725b7131783100190bc3fab"
+}
