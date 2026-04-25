@@ -40,7 +40,7 @@ gateway_port_range_end: number | undefined,
 /**
  * Timestamp (ns) when user requested a password reset; cleared by agent after completion.
  */
-password_reset_requested_at_ns: number | undefined, 
+password_reset_requested_at_ns: number | undefined, ssh_key_rotation_requested_at_ns: number | undefined, 
 /**
  * Selected operating system for the rented VM (e.g., "Ubuntu 22.04")
  */

@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ce.id as \"id!\", lower(encode(ce.contract_id, 'hex')) as \"contract_id!: String\",\n                ce.event_type as \"event_type!\", ce.old_status, ce.new_status,\n                ce.actor as \"actor!\", ce.details, ce.created_at as \"created_at!\"\n                FROM contract_events ce\n                JOIN contract_sign_requests csr ON csr.contract_id = ce.contract_id\n                WHERE csr.requester_pubkey = $1\n                  AND ce.event_type IN ('ssh_key_rotation', 'ssh_key_rotation_complete')\n                  AND ce.created_at > $2\n                ORDER BY ce.created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id!: String",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "old_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "new_status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "actor!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "343e5b53cb9d1bf520be0d5e01166236b9b0ba67c067a727c2acb3715b1abb6f"
+}

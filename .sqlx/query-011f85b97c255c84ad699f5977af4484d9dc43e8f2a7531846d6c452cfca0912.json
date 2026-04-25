@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, type, title, body, contract_id, read_at, created_at\n               FROM user_notifications\n               WHERE user_pubkey = $1\n               ORDER BY created_at DESC, id DESC\n               LIMIT $2",
+  "query": "SELECT id, type, title, body, contract_id, offering_id, price_direction, read_at, created_at\n               FROM user_notifications\n               WHERE user_pubkey = $1\n               ORDER BY created_at DESC, id DESC\n               LIMIT $2",
   "describe": {
     "columns": [
       {
@@ -30,11 +30,21 @@
       },
       {
         "ordinal": 5,
-        "name": "read_at",
+        "name": "offering_id",
         "type_info": "Int8"
       },
       {
         "ordinal": 6,
+        "name": "price_direction",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "read_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Int8"
       }
@@ -52,8 +62,10 @@
       false,
       true,
       true,
+      true,
+      true,
       false
     ]
   },
-  "hash": "6e091123276ef2125f3501a095658a79d09f8a0b5e9beb99ff76c6d85167cbc1"
+  "hash": "011f85b97c255c84ad699f5977af4484d9dc43e8f2a7531846d6c452cfca0912"
 }
