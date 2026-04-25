@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod admin;
 pub mod agents;
+pub mod agents_waitlist;
 pub mod chatwoot;
 pub mod cloud;
 pub mod common;
@@ -22,6 +23,7 @@ pub mod webhooks;
 pub use accounts::AccountsApi;
 pub use admin::AdminApi;
 pub use agents::AgentsApi;
+pub use agents_waitlist::AgentsWaitlistApi;
 pub use chatwoot::ChatwootApi;
 pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
@@ -64,6 +66,7 @@ pub fn create_combined_api() -> impl OpenApi {
             SubscriptionsApi,
             VatApi,
             PricesApi,
+            AgentsWaitlistApi,
         ),
     )
 }

@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod acme_dns;
 pub mod agent_delegations;
 pub mod agent_pools;
+pub mod agents_waitlist;
 pub mod api_tokens;
 pub mod bandwidth;
 pub mod chatwoot;

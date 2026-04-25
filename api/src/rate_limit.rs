@@ -211,6 +211,9 @@ fn is_strict_path(path: &str) -> bool {
     if p.starts_with("/subscriptions/checkout") {
         return true;
     }
+    if p == "/agents-waitlist" {
+        return true;
+    }
     false
 }
 
@@ -262,6 +265,10 @@ mod tests {
         ));
         assert!(matches!(
             classify("/api/v1/subscriptions/checkout", "POST"),
+            Tier::Strict
+        ));
+        assert!(matches!(
+            classify("/api/v1/agents-waitlist", "POST"),
             Tier::Strict
         ));
     }
