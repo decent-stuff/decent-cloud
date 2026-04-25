@@ -66,9 +66,11 @@ pub async fn send_payment_receipt(
         other => other,
     };
 
-    // Transaction ID - prefer icpay_payment_id (webhook-set), fall back to icpay_transaction_id (frontend-set)
+    // Transaction ID - prefer real PI (pi_*), fall back to checkout session (cs_*) for
+    // legacy rows pre-dating the column split, then to ICPay identifiers.
     let transaction_id = contract
         .stripe_payment_intent_id
+        .or(contract.stripe_checkout_session_id)
         .or(contract.icpay_payment_id)
         .or(contract.icpay_transaction_id)
         .unwrap_or_else(|| "N/A".to_string());

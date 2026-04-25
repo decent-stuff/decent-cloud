@@ -191,6 +191,12 @@ impl StripeClient {
 
         let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
 
+        // Extract real PaymentIntent ID (pi_*) for refund/dispute lookups.
+        let payment_intent_id = session.payment_intent.as_ref().map(|pi| match pi {
+            Expandable::Id(id) => id.to_string(),
+            Expandable::Object(intent) => intent.id.to_string(),
+        });
+
         // Extract invoice ID if invoice was created
         let mut invoice_id = session.invoice.as_ref().map(|inv| match inv {
             Expandable::Id(id) => id.to_string(),
@@ -227,6 +233,7 @@ impl StripeClient {
         Ok(Some(CheckoutSessionResult {
             contract_id,
             session_id: session.id.to_string(),
+            payment_intent_id,
             tax_amount_cents,
             customer_tax_id,
             reverse_charge,
@@ -617,6 +624,8 @@ pub struct SubscriptionInfo {
 pub struct CheckoutSessionResult {
     pub contract_id: String,
     pub session_id: String,
+    /// Real PaymentIntent ID (`pi_*`) extracted from `session.payment_intent`.
+    pub payment_intent_id: Option<String>,
     pub tax_amount_cents: Option<i64>,
     pub customer_tax_id: Option<String>,
     pub reverse_charge: bool,

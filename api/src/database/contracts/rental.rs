@@ -400,7 +400,13 @@ impl Database {
             let full_refund = contract.payment_amount_e9s;
             match contract.payment_method.as_str() {
                 "stripe" => {
-                    if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                    // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
+                    // ID (cs_*) for legacy rows that predate the column split.
+                    let stripe_id = contract
+                        .stripe_payment_intent_id
+                        .as_deref()
+                        .or(contract.stripe_checkout_session_id.as_deref());
+                    if let Some(payment_intent_id) = stripe_id {
                         if let Some(client) = stripe_client {
                             let refund_cents = full_refund / 10_000_000;
                             match client
@@ -592,7 +598,13 @@ impl Database {
         {
             match contract.payment_method.as_str() {
                 "stripe" => {
-                    if let Some(payment_intent_id) = &contract.stripe_payment_intent_id {
+                    // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
+                    // ID (cs_*) for legacy rows that predate the column split.
+                    let stripe_id = contract
+                        .stripe_payment_intent_id
+                        .as_deref()
+                        .or(contract.stripe_checkout_session_id.as_deref());
+                    if let Some(payment_intent_id) = stripe_id {
                         // Calculate prorated refund based on when service became active
                         let refund_e9s = Self::calculate_prorated_refund(
                             contract.payment_amount_e9s,

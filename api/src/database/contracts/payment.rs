@@ -4,19 +4,25 @@ use anyhow::Result;
 
 impl Database {
     /// Update contract with checkout session payment details (includes tax info)
+    ///
+    /// `payment_intent_id` is the real PaymentIntent ID (`pi_*`) read from
+    /// `session.payment_intent` at checkout completion. It can be `None` when
+    /// the session has not yet had a PaymentIntent attached (e.g. async flows).
     pub async fn update_checkout_session_payment(
         &self,
         contract_id: &[u8],
         checkout_session_id: &str,
+        payment_intent_id: Option<&str>,
         tax_amount_e9s: Option<i64>,
         customer_tax_id: Option<&str>,
         reverse_charge: bool,
         stripe_invoice_id: Option<&str>,
     ) -> Result<()> {
         sqlx::query(
-            "UPDATE contract_sign_requests SET stripe_payment_intent_id = $1, payment_status = $2, tax_amount_e9s = $3, customer_tax_id = $4, reverse_charge = $5, stripe_invoice_id = $6 WHERE contract_id = $7"
+            "UPDATE contract_sign_requests SET stripe_checkout_session_id = $1, stripe_payment_intent_id = $2, payment_status = $3, tax_amount_e9s = $4, customer_tax_id = $5, reverse_charge = $6, stripe_invoice_id = $7 WHERE contract_id = $8"
         )
         .bind(checkout_session_id)
+        .bind(payment_intent_id)
         .bind("succeeded")
         .bind(tax_amount_e9s)
         .bind(customer_tax_id)
@@ -272,7 +278,7 @@ impl Database {
             r#"SELECT lower(encode(c.contract_id, 'hex')) as "contract_id!: String", lower(encode(c.requester_pubkey, 'hex')) as "requester_pubkey!: String", c.requester_ssh_pubkey as "requester_ssh_pubkey!", c.requester_contact as "requester_contact!", lower(encode(c.provider_pubkey, 'hex')) as "provider_pubkey!: String",
                c.offering_id as "offering_id!", NULL::TEXT as offering_name, c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,
                c.duration_hours, c.original_duration_hours, c.request_memo as "request_memo!", c.created_at_ns, c.status as "status!",
-               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
+               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as "payment_method!", c.stripe_checkout_session_id, c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as "payment_status!",
                c.currency as "currency!", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,
                c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,
                c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as "cancel_at_period_end!: bool",

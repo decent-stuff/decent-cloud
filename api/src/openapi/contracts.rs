@@ -1331,6 +1331,7 @@ impl ContractsApi {
             .update_checkout_session_payment(
                 &contract_id_bytes,
                 &session_result.session_id,
+                session_result.payment_intent_id.as_deref(),
                 tax_amount_e9s,
                 session_result.customer_tax_id.as_deref(),
                 session_result.reverse_charge,
@@ -1870,6 +1871,7 @@ mod tests {
             provisioning_instance_details: None,
             provisioning_completed_at_ns: None,
             payment_method: "stripe".to_string(),
+            stripe_checkout_session_id: None,
             stripe_payment_intent_id: None,
             stripe_customer_id: None,
             icpay_transaction_id: None,

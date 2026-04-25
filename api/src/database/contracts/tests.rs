@@ -4101,3 +4101,111 @@ async fn test_get_contract_health_summary_no_checks_returns_none_last_checked_at
         "avg_latency_ms should be None when there are no checks"
     );
 }
+
+/// Verifies the checkout.session.completed flow populates BOTH
+/// `stripe_checkout_session_id` (cs_*) AND `stripe_payment_intent_id` (pi_*).
+/// Issue #422: previously the cs_* ID was misnamed and stored in the PI column.
+#[tokio::test]
+async fn test_checkout_session_completed_captures_pi_id() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![222u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let session_id = "cs_test_session_422";
+    let payment_intent_id = "pi_test_intent_422";
+
+    db.update_checkout_session_payment(
+        &contract_id,
+        session_id,
+        Some(payment_intent_id),
+        Some(150_000_000),
+        Some("eu_vat: DE123456789"),
+        false,
+        Some("in_test_invoice_422"),
+    )
+    .await
+    .expect("update_checkout_session_payment should succeed");
+
+    let contract = db
+        .get_contract(&contract_id)
+        .await
+        .unwrap()
+        .expect("contract should exist");
+
+    assert_eq!(
+        contract.stripe_checkout_session_id.as_deref(),
+        Some(session_id),
+        "checkout session ID must land in stripe_checkout_session_id"
+    );
+    assert_eq!(
+        contract.stripe_payment_intent_id.as_deref(),
+        Some(payment_intent_id),
+        "real PaymentIntent ID must land in stripe_payment_intent_id"
+    );
+    assert_eq!(contract.payment_status, "succeeded");
+    assert_eq!(contract.tax_amount_e9s, Some(150_000_000));
+    assert_eq!(
+        contract.stripe_invoice_id.as_deref(),
+        Some("in_test_invoice_422")
+    );
+}
+
+/// Negative path: when Stripe has not yet attached a PaymentIntent to the
+/// session, the PI column is left NULL but the session column is still set.
+#[tokio::test]
+async fn test_checkout_session_completed_without_pi_leaves_pi_null() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![223u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    db.update_checkout_session_payment(
+        &contract_id,
+        "cs_test_session_no_pi",
+        None,
+        None,
+        None,
+        false,
+        None,
+    )
+    .await
+    .expect("update_checkout_session_payment should succeed without PI");
+
+    let contract = db
+        .get_contract(&contract_id)
+        .await
+        .unwrap()
+        .expect("contract should exist");
+
+    assert_eq!(
+        contract.stripe_checkout_session_id.as_deref(),
+        Some("cs_test_session_no_pi")
+    );
+    assert!(
+        contract.stripe_payment_intent_id.is_none(),
+        "PI column must remain NULL when Stripe sent no payment_intent"
+    );
+}

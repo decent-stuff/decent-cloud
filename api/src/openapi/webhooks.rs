@@ -24,6 +24,9 @@ struct StripeEventData {
 struct StripeCheckoutSession {
     id: String,
     invoice: Option<String>,
+    /// Real PaymentIntent ID (`pi_*`) attached by Stripe at session completion.
+    /// Stripe sends this as the PI string in webhook payloads.
+    payment_intent: Option<String>,
     metadata: Option<serde_json::Value>,
     total_details: Option<StripeTotalDetails>,
     customer_details: Option<StripeCustomerDetails>,
@@ -236,11 +239,14 @@ pub async fn stripe_webhook(
             // Stripe Tax automatically applies reverse charge for B2B cross-border EU
             let reverse_charge = customer_tax_id.is_some() && tax_amount_cents.unwrap_or(1) == 0;
 
-            // Update contract with tax info and set payment status to succeeded
+            // Update contract with tax info and set payment status to succeeded.
+            // `session.payment_intent` is the real PaymentIntent ID (`pi_*`) that we
+            // need for downstream refund and dispute lookups.
             if let Err(e) = db
                 .update_checkout_session_payment(
                     &contract_id_bytes,
                     &session.id,
+                    session.payment_intent.as_deref(),
                     tax_amount_e9s,
                     customer_tax_id.as_deref(),
                     reverse_charge,
