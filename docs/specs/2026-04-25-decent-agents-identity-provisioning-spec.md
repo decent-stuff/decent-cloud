@@ -80,18 +80,22 @@ Non-goals (each filed or noted as `deferred-post-launch`):
   `roberts-kalejs`, ...), a HOME under `tools/homes/dc-<slug>/`,
   GitHub PAT and credentials sourced from
   `secrets/hires/<slug>/env.yaml` via SOPS. Decent Agents
-  productizes exactly this, but with customer-driven slugs and
-  DB-encrypted PATs instead of file-system SOPS.
+  productizes the slug/HOME/container shape, but replaces persistent
+  per-identity PATs with #414 GitHub App installation tokens minted
+  per dispatch.
 
 ## 2. Where this fits in the codebase
 
 ```text
 repo/
+|- agent/                                             NEW (productized runtime
+|                                                       image; ported from the
+|                                                       outer workspace agent/)
 |- api/
-|  |- migrations_pg/045_agent_identities.sql        NEW (this spec;
-|  |                                                  044 is reserved for
-|  |                                                  refund_audit work in
-|  |                                                  flight on a peer branch)
+|  |- migrations_pg/046_agent_identities.sql        NEW (this spec; use the
+|  |                                                  next free number if a
+|  |                                                  peer migration lands
+|  |                                                  first)
 |  |- src/database/
 |  |  |- agent_subscriptions.rs                     NEW
 |  |  |- agent_identities.rs                        NEW
@@ -180,22 +184,25 @@ Three concepts, three tables, three lifetimes:
    identity at a time during launch tier; multi-identity subscriptions
    are `deferred-post-launch`.
 3. **Identity** (`agent_identities`, NEW). The agent's environment:
-   slug, HOME dir on the Hetzner host, GitHub PAT, container, secrets.
+   slug, HOME dir on the Hetzner host, GitHub App actor, container,
+   runtime state.
    Lifetime: from the async provisioning job that fires after subscription
    create through the 7-day-grace teardown after subscription delete.
    1:1 with subscription at any moment; new subscription -> new identity
    (slugs are not reused).
 
-Confidence: 9/10 -- this matches the founder's internal model exactly
-(slug = `dc_team` slug, HOME dir = `tools/homes/dc-<slug>/`, PAT in
-SOPS), plus DB persistence for productization.
+Confidence: 9/10 -- this matches the founder's internal execution model
+(slug = `dc_team` slug, HOME dir = `tools/homes/dc-<slug>/`) while
+using the #414 GitHub App model for product authentication.
 
 B. DATA MODEL
 =============
 
 All four new tables are added by a single forward-only migration
-`044_agent_identities.sql`. Nanosecond timestamps everywhere (matches
-contract / dispute schema; `accounts` and `agents_waitlist` use
+`046_agent_identities.sql` in this checkout. If another peer branch lands
+first, renumber to the next free migration before merge. Nanosecond
+timestamps everywhere (matches contract / dispute schema; `accounts`
+and `agents_waitlist` use
 TIMESTAMPTZ -- we choose `_ns` to align with the dc-agent and dispute
 ecosystem because most consumers of these rows are operational not
 human-readable).
@@ -214,11 +221,12 @@ CREATE TABLE agent_subscriptions (
                                                    ON DELETE RESTRICT,
     stripe_subscription_id   TEXT         NOT NULL UNIQUE,
     stripe_customer_id       TEXT         NOT NULL,
-    -- Mirrors the Stripe-side status, narrowed to the values we care about.
-    -- 'incomplete' / 'incomplete_expired' fold into 'past_due' (consistent
-    -- with the existing webhook mapping at webhooks.rs:540-550).
+    -- Normalized billing status only. Compute pauses live in
+    -- agent_identities.state; do NOT write cap/dispute pauses here.
+    -- Existing webhook mapping (webhooks.rs:539-545) treats incomplete as
+    -- past_due and incomplete_expired/unpaid/canceled as canceled.
     status                   TEXT         NOT NULL CHECK (status IN
-                                            ('active','past_due','canceled','paused')),
+                                            ('active','trialing','past_due','canceled')),
     -- v1 has one tier; the column exists so #415 can introduce 'pro_plus'
     -- without a schema migration.
     tier                     TEXT         NOT NULL DEFAULT 'pro',
@@ -240,7 +248,7 @@ CREATE INDEX idx_agent_subscriptions_status
 -- and grace-period periodic jobs cheaply.
 CREATE INDEX idx_agent_subscriptions_active
     ON agent_subscriptions (current_period_end_ns)
-    WHERE status IN ('active','past_due','paused');
+    WHERE status IN ('active','trialing','past_due');
 ```
 
 ### B.2 `agent_identities`
@@ -259,15 +267,9 @@ CREATE TABLE agent_identities (
                                           CHECK (slug ~ '^[a-z][a-z0-9-]{2,62}$'),
     -- Absolute path on the Hetzner host: /home/dc-agent-<slug>.
     home_dir_path            TEXT         NOT NULL,
-    -- GitHub login under which the agent operates. Decoupled from the
-    -- slug because GitHub usernames are constrained differently
-    -- (alphanumeric + hyphen, max 39).
-    github_username          TEXT         NOT NULL,
-    -- libsodium sealed-box ciphertext (see section F + I.3).
-    -- The platform private key is held in env var
-    -- AGENT_PAT_SEALED_BOX_PRIVATE_KEY; rotation is a manual operator
-    -- task ("re-seal all rows under new key" SQL helper deferred).
-    github_pat_sealed        BYTEA        NOT NULL,
+    -- GitHub actor used for customer-visible API writes. v1 uses the
+    -- GitHub App bot login from #414; this is NOT a credential.
+    github_actor_login       TEXT         NOT NULL,
     -- Docker container ID on the Hetzner host. NULL while provisioning,
     -- cleared on destroy.
     container_id             TEXT,
@@ -289,6 +291,10 @@ CREATE TABLE agent_identities (
     provisioned_at_ns        BIGINT,
     ready_at_ns              BIGINT,
     last_activity_ns         BIGINT,
+    -- Set exactly once when state enters tearing_down. The 7-day grace
+    -- cleanup job keys off this value; destroyed_at_ns is only populated
+    -- after archive + delete have completed.
+    teardown_started_at_ns   BIGINT,
     destroyed_at_ns          BIGINT,
     -- Soft-archive pointer (S3 URI or local path) populated at
     -- teardown. NULL until destroyed; see section I.8.
@@ -308,7 +314,7 @@ CREATE INDEX idx_agent_identities_host
 -- Partial index for the 7-day grace cleanup job (only tearing_down
 -- rows are interesting; ready/paused/destroyed are filtered out).
 CREATE INDEX idx_agent_identities_tearing_down
-    ON agent_identities (destroyed_at_ns)
+    ON agent_identities (teardown_started_at_ns)
     WHERE state = 'tearing_down';
 ```
 
@@ -326,10 +332,16 @@ CREATE TABLE agent_runs (
                                                    ON DELETE CASCADE,
     -- Stripe-replay-style idempotency: GitHub Delivery-ID UUID.
     -- Identical event = no-op upsert (reject duplicate inserts).
-    github_event_id          TEXT         NOT NULL UNIQUE,
+    github_delivery_id       TEXT         NOT NULL UNIQUE,
+    -- GitHub App installation that produced the token used for this run.
+    github_installation_id   BIGINT       NOT NULL,
     -- Numeric GitHub repo ID (stable even if repo is renamed).
     repo_id                  BIGINT       NOT NULL,
-    started_at_ns            BIGINT       NOT NULL,
+    repo_full_name           TEXT         NOT NULL,
+    github_event_kind        TEXT         NOT NULL,
+    github_event_ref         TEXT         NOT NULL,
+    queued_at_ns             BIGINT       NOT NULL,
+    started_at_ns            BIGINT,
     ended_at_ns              BIGINT,
     duration_ms              BIGINT,
     -- Token counts; populated by the opencode bridge after each
@@ -337,47 +349,70 @@ CREATE TABLE agent_runs (
     claude_input_tokens      BIGINT,
     claude_output_tokens     BIGINT,
     status                   TEXT         NOT NULL CHECK (status IN
-                                            ('running','completed','failed')),
+                                            ('queued','running','succeeded',
+                                             'failed','cancelled')),
     failure_reason           TEXT,
     result_summary           TEXT,
-    created_at_ns            BIGINT       NOT NULL
+    created_at_ns            BIGINT       NOT NULL,
+    updated_at_ns            BIGINT       NOT NULL
 );
 
 CREATE INDEX idx_agent_runs_identity_started
-    ON agent_runs (identity_id, started_at_ns DESC);
+    ON agent_runs (identity_id, queued_at_ns DESC);
 CREATE INDEX idx_agent_runs_status
     ON agent_runs (status)
-    WHERE status = 'running';
+    WHERE status IN ('queued','running');
 CREATE UNIQUE INDEX idx_agent_runs_event
-    ON agent_runs (github_event_id);
+    ON agent_runs (github_delivery_id);
 ```
+
+If #414 lands its `github_webhook_deliveries` table first, add a
+foreign key from `agent_runs.github_delivery_id` to
+`github_webhook_deliveries.github_delivery_id` in the same migration.
+If #413 lands first, #414 adds that FK in its migration.
 
 ### B.4 `agent_repos`
 
-Join table mapping an installed GitHub repository to the identity that
-processes its events. Soft-delete via `removed_at_ns` (a customer might
-uninstall the App from one repo while keeping others; we don't lose
-historical run rows that reference the repo via `agent_runs.repo_id`).
+Join table mapping an installed GitHub repository to an agent
+subscription. The active identity is resolved by joining
+`agent_repos.subscription_id -> agent_subscriptions.id ->
+agent_identities.subscription_id`. Soft-delete via `removed_at_ns` (a
+customer might uninstall the App from one repo while keeping others; we
+don't lose historical run rows that reference the repo via
+`agent_runs.repo_id`).
 
 ```sql
 CREATE TABLE agent_repos (
     id                       BIGSERIAL    PRIMARY KEY,
-    identity_id              BIGINT       NOT NULL REFERENCES agent_identities(id)
-                                                   ON DELETE CASCADE,
+    -- Nullable until the GitHub installation is linked to a Decent Cloud
+    -- account with an active agent_subscriptions row. Unlinked installs are
+    -- persisted for audit but never dispatched.
+    subscription_id          BIGINT       REFERENCES agent_subscriptions(id)
+                                                   ON DELETE RESTRICT,
+    github_installation_id   BIGINT       NOT NULL,
     github_repo_id           BIGINT       NOT NULL,
     github_repo_full_name    TEXT         NOT NULL,
+    enabled                  BOOLEAN      NOT NULL DEFAULT TRUE,
     installed_at_ns          BIGINT       NOT NULL,
-    removed_at_ns            BIGINT
+    removed_at_ns            BIGINT,
+    created_at_ns            BIGINT       NOT NULL,
+    updated_at_ns            BIGINT       NOT NULL
 );
 
--- Same repo can be added/removed/added again (re-install). UNIQUE on
--- the active rows only.
+-- Same repo can be added/removed/added again under the same installation.
+-- UNIQUE on active rows only.
 CREATE UNIQUE INDEX idx_agent_repos_active
-    ON agent_repos (github_repo_id)
+    ON agent_repos (github_installation_id, github_repo_id)
     WHERE removed_at_ns IS NULL;
-CREATE INDEX idx_agent_repos_identity
-    ON agent_repos (identity_id);
+CREATE INDEX idx_agent_repos_subscription
+    ON agent_repos (subscription_id)
+    WHERE subscription_id IS NOT NULL AND removed_at_ns IS NULL;
 ```
+
+#414 owns `github_app_installations`. If that table exists before this
+migration, add `github_installation_id REFERENCES
+github_app_installations(github_installation_id)`; otherwise #414 adds
+the FK when it lands.
 
 C. LIFECYCLE STATE MACHINES
 ===========================
@@ -388,47 +423,44 @@ C. LIFECYCLE STATE MACHINES
                          Stripe customer.subscription.created
                                        |
                                        v
-                                  +---------+
-                                  | active  |
-                                  +----+----+
-                                       |
-              invoice.payment_failed   |   subscription.updated -> active
-                  --------+            |   (recovery)
-                          v            ^
-                       +----+----+     |
-                       | past_due+-----+
+                              +----------------+
+                              | active/trialing|
+                              +-------+--------+
+                                      |
+              invoice.payment_failed  | subscription.updated -> active
+                  --------+           | (recovery)
+                          v           ^
+                       +----+----+    |
+                       | past_due+----+
                        +----+----+
-                             |
-              after N days, Stripe -> subscription.deleted
+                            |
+             subscription.deleted / unpaid / incomplete_expired
                             |
                             v
-   subscription.deleted     |    dispute / cap exhaustion
-        +-------------------+
-        |                                +---------+
-        |                                | paused  |  (dispute or cap)
-        |                                +----+----+
-        v                                     |
-  +----------+   <-- (resume on next cycle    |
-  | canceled |       OR dispute won)          |
-  +----------+ <-----------------------------+
+                      +----------+
+                      | canceled |
+                      +----------+
 ```
+
+`agent_subscriptions.status` is billing status only. Disputes and cap
+exhaustion pause compute by changing `agent_identities.state`; they do
+not write `agent_subscriptions.status='paused'`.
 
 Transitions and triggers (exhaustive):
 
-| From     | To        | Trigger                                                                                      |
-|----------|-----------|----------------------------------------------------------------------------------------------|
-| (insert) | active    | Stripe `customer.subscription.created` with status=active or trialing                        |
-| active   | past_due  | Stripe `customer.subscription.updated` with status=past_due, OR `invoice.payment_failed`     |
-| past_due | active    | Stripe `customer.subscription.updated` with status=active (recovered)                        |
-| active   | paused    | `charge.dispute.created` (reuses Phase-2 pause path) OR cap exhaustion (#415)                |
-| paused   | active    | `charge.dispute.closed` won, OR cap-cycle reset (#415)                                       |
-| any      | canceled  | `customer.subscription.deleted`, OR `charge.dispute.closed` lost                             |
+| From             | To       | Trigger                                                                                  |
+|------------------|----------|------------------------------------------------------------------------------------------|
+| (insert)         | active   | Stripe `customer.subscription.created` with status=active                                 |
+| (insert)         | trialing | Stripe `customer.subscription.created` with status=trialing                               |
+| (insert)         | past_due | Stripe `customer.subscription.created` with status=past_due or incomplete                 |
+| active, trialing | past_due | Stripe `customer.subscription.updated` with status=past_due, OR `invoice.payment_failed` |
+| past_due         | active   | Stripe `customer.subscription.updated` with status=active (recovered)                    |
+| any              | canceled | `customer.subscription.deleted`, `unpaid`, `incomplete_expired`, OR dispute lost          |
 
 Edge cases:
-- `paused` while in `past_due` is rejected (loud error) -- one stress
-  signal at a time. The dispute handler must check current status; if
-  past_due, the dispute is recorded but the pause is deferred until
-  the customer either recovers (then pause kicks in) or churns.
+- `past_due` and identity `paused` may coexist. Billing recovery moves
+  subscription status back to `active`; compute resumes only when the
+  corresponding dispute/cap pause reason is cleared.
 - `canceled` is terminal. Re-subscribing creates a NEW
   `agent_subscriptions` row (Stripe issues a new subscription_id);
   the old identity is NOT revived.
@@ -441,7 +473,7 @@ Edge cases:
                                        v
                                 +-------------+
                                 | provisioning|   (container creating, HOME
-                                +------+------+    setup, PAT minted)
+                                +------+------+    setup, App actor recorded)
                                        |
                           health check passes
                                        v
@@ -481,7 +513,7 @@ Transitions and triggers:
 | ready         | paused        | dispute pause OR cap exhaustion -- writes `pause_reason`             |
 | paused        | ready         | dispute resumed OR cap window rolled over                            |
 | ready, paused | tearing_down  | `subscription.deleted` OR `charge.dispute.closed` lost               |
-| tearing_down  | destroyed     | grace timer (7 days from `tearing_down` entry) fires periodic job    |
+| tearing_down  | destroyed     | grace timer (7 days from `teardown_started_at_ns`) fires periodic job |
 | any           | destroyed     | operator-initiated kill (admin SQL only, audit-logged)               |
 
 Edge cases:
@@ -492,7 +524,7 @@ Edge cases:
   Reasons used: `stripe_dispute:<id>`, `cap_exhausted:<cycle_end_ns>`,
   `operator:<memo>`. The `agent_identities.pause_reason` column is
   TEXT to keep this open-ended.
-- `paused` does NOT pause the Stripe subscription -- billing keeps
+- Identity `paused` does NOT pause the Stripe subscription -- billing keeps
   running. The customer is still paying for the cycle; pause just
   stops compute. This matches the dispute Phase-2 pattern.
 - The 7-day grace can be cut short by a customer-initiated
@@ -545,9 +577,10 @@ documented at `dc-agent/src/provisioner/mod.rs:107-124`.
 
 Image: `decent-agents-runtime:<commit-sha>` (versioned with the api
 server's commit SHA, NOT `latest`, so a customer's container can be
-pinned across server upgrades). Built from `repo/agent/Dockerfile`
-(reuses the existing internal-pipeline image; section I.2 covers the
-build pipeline).
+pinned across server upgrades). Built from `agent/Dockerfile` inside
+the product repo. The implementation PR must port the current outer
+workspace `../agent/` runtime into `repo/agent/`; product CI must not
+depend on files outside the submodule.
 
 Required dependencies (justified):
 - **Rust toolchain** (`rustup` + stable + clippy + rustfmt) -- the
@@ -556,7 +589,7 @@ Required dependencies (justified):
   (shared via `target-cache` / `cargo-cache` named volumes,
   matching `agent/docker-compose.yml:47-49`).
 - **Node.js + Bun** -- for repos with TypeScript/JS, and because
-  the opencode bridge (`repo/agent/opencode_bridge.js`) is a Node
+  the opencode bridge (`agent/opencode_bridge.js`) is a Node
   script. Cost: ~200 MB.
 - **Playwright** -- for any UI verification step the agent performs.
   Cost: ~500 MB (Chromium + headless deps).
@@ -579,12 +612,10 @@ container instances reuse the layer cache.
 
 ```text
 /home/dc-agent-<slug>/                       (mounted into container as $HOME)
-|- .ssh/
-|  |- id_ed25519                             (generated at provision; mode 0600)
-|  `- id_ed25519.pub                         (mode 0644)
 |- .config/
-|  |- gh/hosts.yml                           (GitHub PAT, written from sealed
-|  |                                           secret at container start)
+|  |- git/config                             (safe.directory + author defaults)
+|  |- gh/                                    (CLI config only; auth comes from
+|  |                                           GITHUB_TOKEN env per dispatch)
 |  `- opencode/                              (model config, OAuth state -- bind
 |                                              mount from host opencode root)
 |- .anthropic/                               (Anthropic API key for v1 = shared
@@ -603,7 +634,7 @@ container instances reuse the layer cache.
 The HOME is owned by uid `1000:1000` inside the container (matching
 `agent/docker-compose.yml:21`). On the Hetzner host the directory is
 owned by a per-identity uid (`dc-agent-<slug>`) so a kernel exploit
-inside one container cannot read a sibling's PAT through the host.
+inside one container cannot read or mutate a sibling's workspaces.
 Confidence: 7/10 -- per-identity uids on the host adds ops cost; for
 v1 a single shared `dc-agent` user with chmod 0700 dirs may be
 acceptable. Decision deferred to implementation; mark as a security
@@ -643,7 +674,7 @@ Stripe                     api-server                       dc-agent host
   |                            |--insert agent_identities--------->|
   |                            |  (state='provisioning',          |
   |                            |   slug=server-generated,         |
-  |                            |   github_pat_sealed=ciphertext)  |
+  |                            |   github_actor_login=<app bot>)  |
   |                            |                                  |
   |                            |--enqueue async task---------+    |
   |<----200 OK------------------|                            |    |
@@ -651,14 +682,9 @@ Stripe                     api-server                       dc-agent host
   |                                                          v    |
   |                            +-------- async provisioning task -+
   |                            |                                  |
-  |                            |--mint GitHub PAT--------+        |
-  |                            |  (#414: App OR PAT      |        |
-  |                            |   depending on choice)  |        |
-  |                            |                         |        |
-  |                            |--seal PAT, UPDATE row---+        |
-  |                            |                                  |
   |                            |--SSH to host: mkdir HOME--------->|
-  |                            |--SSH to host: ssh-keygen-------->>|
+  |                            |--SSH to host: write git/opencode |
+  |                            |  config; no GitHub token stored  |
   |                            |--SSH to host: docker run -d ----->>
   |                            |              --name dc-<slug>    |
   |                            |              --restart unless-stopped
@@ -678,14 +704,12 @@ Stripe                     api-server                       dc-agent host
 Acceptance: identity exists in `ready` state within 60 seconds of
 `subscription.created` (per #413 acceptance criterion). Realistic
 budget: ~25s pulling cached image + ~5s container start + ~10s health
-probe + ~10s GitHub PAT mint. Slack: 10s.
+probe + ~10s host setup. Slack: 10s.
 
 Failure handling:
-- If GitHub PAT mint fails: retry 3 times with exponential backoff
-  (matches Phase-2 dispute-handler pattern). On final failure:
-  state -> `tearing_down`, ops alert, customer is NOT charged for the
-  current cycle (refund issued via the existing prorated refund
-  helper; `payment.rs:107-160` covers the math).
+- If GitHub App configuration is missing or malformed: api-server
+  refuses to start and `api-server doctor` fails (#414 owns those
+  checks). Identity provisioning never begins without valid App config.
 - If container start fails: same retry budget, same alert. Hetzner
   capacity is the most likely cause; alert triggers manual host
   rotation.
@@ -702,7 +726,8 @@ Stripe                       api-server                     dc-agent host
   |                             |      canceled_at_ns=now        |
   |                             |                                |
   |                             |--UPDATE agent_identities------>|
-  |                             |  SET state='tearing_down'      |
+  |                             |  SET state='tearing_down',     |
+  |                             |      teardown_started_at_ns=now|
   |                             |    (so new GitHub events       |
   |                             |    are dropped immediately)    |
   |                             |                                |
@@ -716,7 +741,7 @@ Stripe                       api-server                     dc-agent host
   |                             |                                |
   |                             |--SELECT * FROM agent_identities
   |                             |  WHERE state='tearing_down'    |
-  |                             |    AND now-tearing_down_at >= 7d
+  |                             |    AND now - teardown_started_at_ns >= 7d
   |                             |                                |
   |                             |--SSH host: tar HOME -> S3----->|
   |                             |--SSH host: docker rm----------->|
@@ -744,20 +769,27 @@ E. WEBHOOK INTEGRATION WITH #414 (GITHUB APP)
 GitHub App -> POST /api/v1/decent-agents/github-events
                           |
                           v
-          parse payload (delivery_id, repo_id, event_type, body)
+         parse payload (delivery_id, installation_id, repo_id,
+                        event_type, body)
                           |
                           v
-          SELECT identity_id FROM agent_repos
-            WHERE github_repo_id = $1
-              AND removed_at_ns IS NULL
+          SELECT ai.id, ai.state, ai.slug
+          FROM agent_repos ar
+          JOIN agent_subscriptions sub ON sub.id = ar.subscription_id
+          JOIN agent_identities ai ON ai.subscription_id = sub.id
+          WHERE ar.github_installation_id = $1
+            AND ar.github_repo_id = $2
+            AND ar.enabled = TRUE
+            AND ar.removed_at_ns IS NULL
+            AND sub.status IN ('active','trialing')
                           |
             +-------------+-------------+
             |                           |
-       not found                     found
+       not found / unlinked          found
             |                           |
             v                           v
-   200 OK with          SELECT state, slug FROM agent_identities
-   "no identity                          WHERE id = $identity_id
+   200 OK with          use row.state and row.slug from resolver
+   "no identity
     installed"
                                         |
                             +-----------+-----------+
@@ -765,12 +797,14 @@ GitHub App -> POST /api/v1/decent-agents/github-events
                        state != ready          state = ready
                             |                       |
                             v                       v
-                     200 OK +              INSERT agent_runs
-                     reason in body         (status='running',
-                                             github_event_id=delivery_id)
+                     200 OK +              mint GitHub App installation
+                     reason in body         token (#414), INSERT agent_runs
+                                             (status='queued',
+                                              github_delivery_id=delivery_id)
                                              |
                                              v
                           api-server -> SSH host -> docker exec dc-<slug> \
+                                                       -e GITHUB_TOKEN=...
                                                        /usr/local/bin/agent-handle-event \
                                                        --event-json /tmp/<delivery_id>.json
                                              |
@@ -781,7 +815,7 @@ GitHub App -> POST /api/v1/decent-agents/github-events
                             status, result_summary
 ```
 
-Idempotency: `agent_runs.github_event_id UNIQUE`. Replays from
+Idempotency: `agent_runs.github_delivery_id UNIQUE`. Replays from
 GitHub (which retries on non-2xx) hit the unique constraint and are
 no-ops with a 200. The ON CONFLICT handler returns the existing row's
 status so the caller knows the event has already been processed. This
@@ -798,43 +832,33 @@ matches the founder's pattern at `webhooks.rs:723-739`.
 F. SECRET MANAGEMENT
 ====================
 
-### F.1 SSH keypair (per identity)
+### F.1 GitHub App credentials
 
-- Generated at provisioning (`ssh-keygen -t ed25519 -N ""`) inside the
-  customer's HOME dir on the Hetzner host.
-- Private key: `~/.ssh/id_ed25519`, mode `0600`, owned by the
-  in-container `agent` uid.
-- Public key: written into the GitHub identity (#414 -- if PAT is the
-  decision, the PAT user adds the key to its GitHub account; if App,
-  not needed since App acts as itself).
-- NOT persisted in Postgres. The Hetzner host disk is the source of
-  truth; loss = re-provision (ssh keys are short-lived from the
-  customer's point of view since they only authenticate the agent's
-  pushes).
+- v1 uses the #414 GitHub App path only. There is no per-identity PAT,
+  no per-identity GitHub credential column, and no GitHub credential
+  written into the customer's HOME.
+- The API server holds `GITHUB_APP_PRIVATE_KEY` and `GITHUB_APP_ID` in
+  SOPS-backed shared env. `serve_command()` and `api-server doctor`
+  must validate that the key can mint a JWT and call `GET /app` before
+  accepting traffic (#414 owns the exact helper).
+- For each dispatch, the API server mints a short-lived installation
+  token scoped to `github_installation_id`, then passes it to the
+  container as `GITHUB_TOKEN`. The `gh` CLI and git HTTPS transport read
+  the token from env; the token is not stored in Postgres or on disk.
+- Long runs use the #414 refresh endpoint with a per-run nonce. That
+  nonce belongs to `agent_runs`, not `agent_identities`, because it is
+  event-scoped and must die with the run.
 
-### F.2 GitHub PAT (per identity)
+### F.2 Per-identity filesystem secrets
 
-- Stored in `agent_identities.github_pat_sealed` (BYTEA).
-- Sealed via libsodium sealed-box (`crypto_box_seal`). Public key is
-  the platform-wide `AGENT_PAT_PUBLIC_KEY` (env var); private key is
-  `AGENT_PAT_SEALED_BOX_PRIVATE_KEY` (env var, held only by the
-  api-server process). The Hetzner host receives the *decrypted* PAT
-  over SSH at provisioning time, writes it to
-  `~/.config/gh/hosts.yml` inside the container, and never sees the
-  ciphertext.
-- Recommendation justification:
-  - **libsodium sealed-box vs SOPS**: SOPS is great for static
-    config but operationally heavy for runtime row-level secrets
-    (need a SOPS-aware reader at every query call). Sealed-box
-    matches the data-at-rest threat model (DB compromise) without
-    introducing a new artifact in the deploy pipeline.
-  - **vs Postgres `pgcrypto`**: pgcrypto requires the encryption key
-    to live IN Postgres (or be passed every query), which leaks
-    through pg logs / pg_stat_statements. Sealed-box keeps the key
-    in the api-server process only.
-  - Confidence: 8/10. Trade-off: rotation requires re-sealing all
-    rows; we accept that for v1 and file a follow-up for
-    automated rotation.
+- v1 does not generate SSH keys for GitHub access. GitHub App tokens are
+  HTTPS credentials; adding deploy-key or customer SSH-key support is a
+  separate post-launch feature with a separate table.
+- The HOME may contain tool config (`git`, `gh`, `opencode`) and cached
+  repository state, but no long-lived GitHub credential.
+- Loss of the HOME means loss of local checkout/cache state only. The
+  authoritative source for GitHub access is the installation recorded by
+  #414, not a filesystem secret.
 
 ### F.3 Anthropic API key
 
@@ -846,7 +870,8 @@ F. SECRET MANAGEMENT
 - Per-customer Claude usage is billed against the platform key;
   margin protection is the cap layer (#415), not key-level isolation.
 - v2 BYOK: `agent_identities.anthropic_api_key_sealed` column added
-  later, encrypted with the same libsodium scheme. NOT spec'd here.
+  later, encrypted by the BYOK spec's chosen row-level secret scheme.
+  NOT spec'd here.
 
 G. CAP ENFORCEMENT (HANDOFF TO #415)
 ====================================
@@ -864,7 +889,7 @@ What this spec MUST guarantee for #415:
    (foreign keys from `agent_runs.identity_id`).
 2. **`agent_runs` rows feed the cap calculation.** They MUST be
    durable (no UPDATE-with-loss), populated by the time the agent
-   exits, and idempotent on `github_event_id`. Already specified
+   exits, and idempotent on `github_delivery_id`. Already specified
    above.
 3. **When cap is hit, identity transitions to `paused` with
    `pause_reason='cap_exhausted:<cycle_end_ns>'`.** The pause
@@ -928,7 +953,7 @@ allowance (variable) and Stripe fees (~3%).
 
 Question: separate CI job or piggyback on existing dc-agent build?
 Recommendation: **separate CI job**, triggered on changes to
-`repo/agent/Dockerfile` and the lockfiles (Cargo.lock, package-lock.json,
+`agent/Dockerfile` and the lockfiles (Cargo.lock, package-lock.json,
 bun.lockb). Tag images `decent-agents-runtime:<commit-sha>` and push to
 ghcr.io/decent-stuff/decent-agents-runtime. The Hetzner hosts pull from
 ghcr.
@@ -936,20 +961,20 @@ Confidence: 9/10. The founder's internal pipeline already builds an
 agent image; productizing means adding a `.github/workflows/agent-runtime.yml`
 that builds + pushes on the same triggers. Net new work: ~50 lines of YAML.
 
-### I.3 Encryption at rest for `github_pat_sealed`
+### I.3 GitHub App private key handling
 
-Question: libsodium sealed-box vs SOPS vs Postgres pgcrypto.
-Recommendation: **libsodium sealed-box** (justified in section F.2).
-Confidence: 8/10.
+Question: where does the credential that can mint installation tokens live?
+Recommendation: **api-server env only, backed by SOPS**, exactly as #414
+specifies.
+Confidence: 9/10.
 
 Trade-offs:
-- SOPS: rejected. Operational overhead, file-shaped not row-shaped.
-- pgcrypto: rejected. Key-in-DB or key-passed-on-every-query both
-  leak through pg logs.
-- Sealed-box: accepted. Encryption is one-way (write-only without
-  the platform private key); even a DB dump + read access to the
-  api-server source code does not yield PATs without the env-var
-  private key.
+- SOPS shared env: accepted. One App private key, one server-side
+  validator, one rotation path.
+- Postgres storage: rejected. The App private key is not row-shaped
+  identity data and should never be queryable from the database.
+- Per-container storage: rejected. Containers receive installation
+  tokens only, never the App private key.
 
 ### I.4 Identity slug collisions
 
@@ -980,20 +1005,16 @@ DR plan:
 - Post-mortem: the 90-day archive policy (section I.8) means even a
   catastrophic loss is recoverable to within 24h of customer state.
 
-### I.6 GitHub PAT vs App
+### I.6 GitHub App vs PAT
 
-Question: PAT vs GitHub App -- defer to #414.
-Note: identity provisioning must accommodate either:
-- **PAT path**: provisioning task mints a PAT (manual or via automated
-  signup of a per-identity GitHub user, the founder's existing pattern)
-  and seals it into `github_pat_sealed`.
-- **App path**: provisioning task installs the App on the customer's
-  org via a redirect; `github_pat_sealed` holds the App installation
-  token, refreshed every 1h by a periodic job (App installation tokens
-  expire). The schema column name remains `github_pat_sealed` for
-  brevity; logically it is "auth token, sealed".
-Confidence: 8/10 that the same column accommodates either; pin to
-final answer in #414 spec.
+Question: should v1 keep a PAT fallback?
+Recommendation: **no**. #414 chooses GitHub App with 15-minute
+installation tokens. This spec is intentionally App-only so identity
+provisioning does not need row-level GitHub secret storage, token
+expiry polling, or per-customer PAT support.
+Confidence: 9/10. A future PAT/BYOK-style escape hatch would add a
+separate credential table and auth-mode enum; do not overload
+`agent_identities`.
 
 ### I.7 Container restart on host reboot
 
@@ -1032,28 +1053,28 @@ this spec; this is the contract for the future PR.
 
 | # | Acceptance criterion                                                       | File:Line                                                    |
 |---|----------------------------------------------------------------------------|--------------------------------------------------------------|
-| 1 | Migration creates 4 new tables (subscriptions, identities, runs, repos)    | `api/migrations_pg/045_agent_identities.sql:1-200`           |
+| 1 | Migration creates 4 new tables (subscriptions, identities, runs, repos)    | `api/migrations_pg/046_agent_identities.sql:1-220`           |
 | 2 | DB module `agent_subscriptions.rs` with insert/get/update + idempotent     | `api/src/database/agent_subscriptions.rs:1-150`              |
 |   | upsert on stripe_subscription_id                                            |                                                              |
 | 3 | DB module `agent_identities.rs` with state-machine helpers (provision,     | `api/src/database/agent_identities.rs:1-300`                 |
 |   | mark_ready, pause, resume, tear_down, destroy) -- pause/resume mirror     |                                                              |
 |   | the dispute primitives in `contracts/dispute.rs`                            |                                                              |
-| 4 | DB module `agent_runs.rs` with idempotent insert on github_event_id +      | `api/src/database/agent_runs.rs:1-120`                       |
+| 4 | DB module `agent_runs.rs` with idempotent insert on github_delivery_id +   | `api/src/database/agent_runs.rs:1-140`                       |
 |   | end_run helper (tokens, status, summary)                                   |                                                              |
-| 5 | DB module `agent_repos.rs` with add_repo / soft_delete_repo /              | `api/src/database/agent_repos.rs:1-100`                      |
-|   | resolve_identity_for_repo                                                   |                                                              |
+| 5 | DB module `agent_repos.rs` with add_repo / link_subscription /             | `api/src/database/agent_repos.rs:1-140`                      |
+|   | soft_delete_repo / resolve_active_repo                                      |                                                              |
 | 6 | Stripe webhook arms route DA subscription events through new code path     | `api/src/openapi/webhooks.rs:465-692` (edit)                 |
 |   | (price_id check distinguishes DA-tier subscriptions from existing Pro)     |                                                              |
 | 7 | New endpoint POST /api/v1/decent-agents/github-events                      | `api/src/openapi/decent_agents.rs:1-150` (NEW)               |
 | 8 | dc-agent provisioner `agent_container.rs` with provision/stop/start/      | `dc-agent/src/provisioner/agent_container.rs:1-400`          |
 |   | terminate; reuses `docker_common.rs` helpers                               |                                                              |
 | 9 | Periodic job for 7-day grace + cap-paused resume (shared with #410)        | `api/src/database/periodic_jobs.rs:1-200` (shared)           |
-|10 | Sealed-box helpers (encrypt_for_storage, decrypt_for_dispatch)             | `api/src/crypto/sealed_box.rs:1-80` (NEW)                    |
+|10 | GitHub App token handoff uses #414 mint/cache helper; no persisted PAT     | `api/src/openapi/decent_agents.rs:1-180`                     |
 |11 | Slug generator (wordlist + suffix)                                         | `api/src/decent_agents/slug.rs:1-60`                         |
-|12 | Container image pipeline (CI workflow)                                     | `.github/workflows/decent-agents-runtime.yml:1-50`           |
-|13 | Tests: idempotent subscription insert, state-machine reject of bad        | `api/src/database/agent_subscriptions.rs:tests:*`            |
-|   | transitions, pause/resume credit, slug uniqueness, sealed-box round-trip,  | `api/src/database/agent_identities.rs:tests:*`               |
-|   | webhook idempotency on replay                                              | `api/src/openapi/webhooks.rs:tests:*`                        |
+|12 | Runtime image source ported into product repo + CI workflow                | `agent/Dockerfile:1-140`; `.github/workflows/decent-agents-runtime.yml:1-50` |
+|13 | Tests: idempotent subscription insert, state-machine reject of bad         | `api/src/database/agent_subscriptions.rs:tests:*`            |
+|   | transitions, pause/resume credit, slug uniqueness, no persisted GitHub     | `api/src/database/agent_identities.rs:tests:*`               |
+|   | credentials, webhook idempotency on replay                                  | `api/src/openapi/webhooks.rs:tests:*`                        |
 
 K. EFFORT ESTIMATE
 ==================
@@ -1068,7 +1089,7 @@ disputes shape).
 | C (state machine wiring -- helpers in agent_identities.rs)    | 2             | ~6h        | Mirrors dispute primitives; copy-and-adapt.          |
 | D (provisioner)                                               | 3             | ~9h        | docker_common.rs extraction is the risk.             |
 | E (webhook routing + agent_repos)                             | 2             | ~6h        | Lots of glue; idempotency tests.                     |
-| F (sealed-box helpers + key management)                       | 1             | ~3h        | Small surface; 1 crate dependency (sodiumoxide).     |
+| F (GitHub App token handoff + key validation coordination)     | 1             | ~3h        | Mostly #414 helper reuse; no new DB secret storage.  |
 | Periodic job framework (shared with #410)                     | 1             | ~3h        | Coordinate with #410 implementer.                    |
 | Container image build pipeline                                | 1             | ~3h        | YAML + Dockerfile diff.                              |
 | Integration test (provision -> run -> destroy on staging)     | 1             | ~3h        | Real Hetzner host (cheap CCX22; clean up same day).  |
@@ -1080,7 +1101,7 @@ External / wait-time:
 - Hetzner image build + register host for Decent Agents: ~2h once.
 - DNS for any future status page: ~30 min.
 - ghcr.io setup for the runtime image: ~1h (likely already done).
-- libsodium key generation + secrets vault entry: 15 min.
+- GitHub App private-key secrets vault entry: 15 min (owned by #414).
 
 External wait-time total: ~5h, cleanly off the critical path.
 
@@ -1097,7 +1118,7 @@ of focused agent time. NOT including #414 (GitHub App) or #415
 | C       | 9/10       | Pause/resume semantics already battle-tested via Phase-2 disputes            |
 | D       | 7/10       | Container density depends on real customer mix; load-test before launch     |
 | E       | 8/10       | Idempotency is straightforward; webhook signature handling reuse needs care |
-| F       | 8/10       | Sealed-box is solid; key rotation deferred adds operator-debt                |
+| F       | 9/10       | App-key rotation is centralized; #414 helper must be reused consistently    |
 | G       | 9/10       | Handoff is clean; #415 inherits this schema                                  |
 | H       | 6/10       | Margin per customer not modelled in this spec                                |
 | I       | 7/10       | DR / multi-host posture pushes the most v2 work                              |
@@ -1106,11 +1127,11 @@ of focused agent time. NOT including #414 (GitHub App) or #415
 
 - This spec adds NO product code. All file paths in the acceptance
   checklist are FUTURE locations.
-- The migration MUST land before #414 / #415 (both depend on
-  `agent_identities` and `agent_runs` foreign keys).
+- The migration should land before or together with #414 / #415. If #414
+  lands first, the #414 migration creates its tables without the
+  `agent_runs.github_delivery_id` FK and a follow-up migration adds the
+  FK after this spec's tables exist.
 - The 7-day grace timer is the riskiest single piece because it
   shares plumbing with #410. Coordinate sequencing.
-- Open question for review: should `agent_subscriptions` carry the
-  `accounts.id` BYTEA or the `account_id TEXT` username? The spec
-  uses BYTEA to match the existing FK pattern; if billing prefers
-  the username string, change is one column type.
+- Decision: `agent_subscriptions.account_id` carries `accounts.id`
+  (BYTEA). Do not use username strings for billing joins.

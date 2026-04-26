@@ -237,11 +237,11 @@ Three things to notice:
 
 ### Tables owned by #413 (referenced, not redefined here)
 
-- `agent_identities` -- one row per agent persona; columns `id`,
-  `slug` (e.g. `andris-k85`), `display_name`, `github_username` (the bot
-  account paired with the identity), `home_dir`, etc.
-- `agent_subscriptions` -- one row per paying customer; columns `id`, `user_id`,
-  `agent_identity_id`, `status`, `current_period_end_ns`, ...
+- `agent_identities` -- one row per agent persona; columns `id` (BIGSERIAL),
+  `subscription_id`, `slug` (e.g. `andris-k85`), `github_actor_login`,
+  `home_dir_path`, lifecycle timestamps, etc.
+- `agent_subscriptions` -- one row per paying customer subscription; columns
+  `id`, `account_id`, `status`, `current_period_end_ns`, ...
 - `agent_repos` -- link table; columns `id`, `subscription_id`,
   `github_installation_id`, `github_repo_id`, `github_repo_full_name`,
   `enabled`, `created_at_ns`, `removed_at_ns` (nullable, soft-delete).
@@ -261,8 +261,8 @@ CREATE TABLE github_app_installations (
     github_account_type TEXT NOT NULL,
         -- 'User' | 'Organization' (free-text, no CHECK; the GitHub-side enum
         -- is the source of truth and we forward the raw value)
-    user_id BYTEA REFERENCES accounts(pubkey) ON DELETE SET NULL,
-        -- Decent Cloud user who installed the App; may be NULL if the
+    account_id BYTEA REFERENCES accounts(id) ON DELETE SET NULL,
+        -- Decent Cloud account that installed the App; may be NULL if the
         -- installation predates the OAuth-confirm step (defensive).
     suspended_at_ns BIGINT,
         -- non-NULL while GitHub has the installation suspended; we MUST stop
@@ -273,9 +273,9 @@ CREATE TABLE github_app_installations (
     updated_at_ns BIGINT NOT NULL
 );
 
-CREATE INDEX idx_github_app_installations_user
-    ON github_app_installations(user_id)
-    WHERE user_id IS NOT NULL AND removed_at_ns IS NULL;
+CREATE INDEX idx_github_app_installations_account
+    ON github_app_installations(account_id)
+    WHERE account_id IS NOT NULL AND removed_at_ns IS NULL;
 ```
 
 Pattern note: `BIGINT NOT NULL UNIQUE` on `github_installation_id` mirrors
@@ -303,7 +303,7 @@ CREATE TABLE github_webhook_deliveries (
         -- true when X-Hub-Signature-256 matched. We still persist failures
         -- (with verified=false) to detect attempted forgeries, but never
         -- dispatch them.
-    dispatched_to_identity_id BYTEA REFERENCES agent_identities(id),
+    dispatched_to_identity_id BIGINT REFERENCES agent_identities(id),
         -- NULL when no dispatch happened (control event or trigger not met).
     dispatch_status TEXT NOT NULL DEFAULT 'pending',
         -- 'pending' | 'dispatched' | 'skipped' | 'failed'
@@ -321,36 +321,14 @@ CREATE INDEX idx_github_webhook_deliveries_installation
     WHERE github_installation_id IS NOT NULL;
 ```
 
-#### `agent_runs` (new -- minimal; full schema in #413 if it claims this table; otherwise here)
+#### `agent_runs` relationship
 
-```sql
-CREATE TABLE agent_runs (
-    id BIGSERIAL PRIMARY KEY,
-    agent_identity_id BYTEA NOT NULL REFERENCES agent_identities(id),
-    github_delivery_id TEXT NOT NULL REFERENCES github_webhook_deliveries(github_delivery_id),
-    github_repo_full_name TEXT NOT NULL,
-    github_event_kind TEXT NOT NULL,
-        -- 'issue' | 'pr' | 'review' | 'comment'
-    github_event_ref TEXT NOT NULL,
-        -- e.g. 'issue#123' or 'pr#45' or 'review#789'
-    status TEXT NOT NULL,
-        -- 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
-    started_at_ns BIGINT,
-    finished_at_ns BIGINT,
-    exit_code INT,
-    cost_usd_e9s BIGINT,
-        -- nanodollars (matches decent-cloud's e9s currency convention)
-    error_message TEXT,
-    created_at_ns BIGINT NOT NULL
-);
-
-CREATE INDEX idx_agent_runs_identity ON agent_runs(agent_identity_id);
-CREATE INDEX idx_agent_runs_status ON agent_runs(status)
-    WHERE status IN ('queued', 'running');
-```
-
-If #413 already defines `agent_runs`, drop this block and add only the
-`github_delivery_id` FK column there.
+#413 owns the full `agent_runs` schema. #414 uses its `identity_id BIGINT`,
+`github_delivery_id TEXT UNIQUE`, repo metadata, event-ref fields, and
+`queued/running/succeeded/failed/cancelled` statuses. If
+`github_webhook_deliveries` lands first, add the
+`agent_runs.github_delivery_id -> github_webhook_deliveries.github_delivery_id`
+foreign key in the #413 migration; otherwise #414 adds the FK.
 
 ### Migration file
 
@@ -464,7 +442,7 @@ INSERT INTO github_app_installations (
     github_installation_id = inst["id"],
     github_account_login   = inst["account"]["login"],
     github_account_type    = inst["account"]["type"],
-    user_id                = NULL,  -- linked later via dashboard OAuth flow
+    account_id             = NULL,  -- linked later via dashboard OAuth flow
     created_at_ns = now, updated_at_ns = now
 )
 ON CONFLICT (github_installation_id) DO UPDATE SET
@@ -478,7 +456,7 @@ For each repo in payload["repositories"]:
     INSERT INTO agent_repos (subscription_id=NULL, github_installation_id,
                              github_repo_id, github_repo_full_name)
     -- subscription_id stays NULL until the dashboard OAuth step links the
-    -- installation to a user and finds their active subscription. Webhook
+    -- installation to an account and finds their active subscription. Webhook
     -- events for unlinked installations are persisted but not dispatched
     -- (DispatchOutcome::skipped, error="installation not linked to user").
 ```
@@ -510,8 +488,8 @@ While `suspended_at_ns IS NOT NULL`, ALL other event types skip dispatch.
 For each repo in payload["repositories_added"]:
     INSERT INTO agent_repos (subscription_id, github_installation_id,
                              github_repo_id, github_repo_full_name)
-    -- subscription_id resolved by joining github_app_installations.user_id
-    -- to agent_subscriptions.user_id.
+    -- subscription_id resolved by joining github_app_installations.account_id
+    -- to agent_subscriptions.account_id.
 ```
 
 **`installation_repositories.removed`:**
@@ -532,8 +510,8 @@ WHERE github_installation_id=payload["installation"]["id"]
 2. Apply trigger filter (section G).
    If not triggered: DispatchOutcome::skipped(reason="trigger not matched").
 3. Mint installation access token (section F).
-4. INSERT INTO agent_runs (status='queued', identity_id, repo_full_name,
-   event_ref=...).
+4. INSERT INTO agent_runs (status='queued', identity_id,
+   github_delivery_id, repo_full_name, event_ref=...).
 5. Spawn the dispatch (described in section F).
 6. DispatchOutcome::dispatched(identity_id).
 ```
@@ -548,8 +526,9 @@ GitHub's 10-second delivery timeout.
 
 ### v1 rule: implicit-by-subscription
 
-Each customer has at most one active subscription, which carries one
-`agent_identity_id`. All repos in their installation map to that one identity.
+Each customer has at most one active subscription, and #413 enforces
+one identity per active subscription. All repos in their installation
+map to that identity.
 
 ### Algorithm
 
@@ -557,7 +536,7 @@ Each customer has at most one active subscription, which carries one
 fn resolve_identity(installation_id: i64, db: &Database)
     -> Result<Option<AgentIdentityId>>:
 
-    let inst = SELECT user_id, suspended_at_ns, removed_at_ns
+    let inst = SELECT account_id, suspended_at_ns, removed_at_ns
                FROM github_app_installations
                WHERE github_installation_id = $1;
     if inst is None:
@@ -566,20 +545,21 @@ fn resolve_identity(installation_id: i64, db: &Database)
         return Ok(None);
     if inst.removed_at_ns IS NOT NULL: return Ok(None);
     if inst.suspended_at_ns IS NOT NULL: return Ok(None);
-    if inst.user_id IS NULL:
+    if inst.account_id IS NULL:
         // Installation not yet linked to a Decent Cloud user. Ignore until
         // the user finishes the dashboard OAuth-confirm step.
         return Ok(None);
 
-    let sub = SELECT id, agent_identity_id, status
-              FROM agent_subscriptions
-              WHERE user_id = $1
-                AND status IN ('active', 'trialing')
-              ORDER BY created_at_ns DESC
+    let row = SELECT ai.id AS identity_id, ai.state
+              FROM agent_subscriptions sub
+              JOIN agent_identities ai ON ai.subscription_id = sub.id
+              WHERE sub.account_id = $1
+                AND sub.status IN ('active', 'trialing')
+              ORDER BY sub.created_at_ns DESC
               LIMIT 1;
-    if sub is None: return Ok(None);
+    if row is None: return Ok(None);
 
-    Ok(Some(sub.agent_identity_id))
+    Ok(Some(row.identity_id))
 ```
 
 ### Why implicit, not explicit-per-repo
@@ -594,11 +574,12 @@ fn resolve_identity(installation_id: i64, db: &Database)
 
 When the product offers multiple identities per subscription (post-launch,
 filed under label `deferred-post-launch`), switch to **explicit-per-repo**:
-add `agent_identity_id` column directly on `agent_repos`, write a small
+add `identity_id BIGINT REFERENCES agent_identities(id)` directly on
+`agent_repos`, write a small
 dashboard UI to assign each repo to one identity. The above algorithm becomes:
 
 ```text
-SELECT agent_identity_id FROM agent_repos
+SELECT identity_id FROM agent_repos
 WHERE github_installation_id=$1 AND github_repo_id=$2 AND removed_at_ns IS NULL;
 ```
 
@@ -723,7 +704,7 @@ without requiring an explicit re-mention.
 The resolver in section E is keyed on `installation_id`. Two customers with two
 installations can never receive each other's events because the resolution
 strictly follows the chain
-`installation_id -> user_id -> active subscription -> identity_id`. This is
+`installation_id -> account_id -> active subscription -> identity_id`. This is
 the meaningful security invariant; callable out in tests.
 
 ---
@@ -738,7 +719,7 @@ the meaningful security invariant; callable out in tests.
 | 4 | "Contents: read+write" includes git push | **7/10** | Documented in GitHub's permissions page. Verify by smoke test before launch. If wrong, we need to add "Workflows" too -- unlikely. |
 | 5 | Webhook delivery to public endpoint works for installations on private repos | **9/10** | GitHub does not require the endpoint to have access to the repo; it just signs and posts. We've implemented this pattern for Stripe; same shape. |
 | 6 | Process group / docker exec teardown works on long agent runs | **7/10** | Reuse existing `os.setsid` + `os.killpg` from dispatcher (per MEMORY.md). Add an integration test that kills a 30-min agent at 5 min via the API. |
-| 7 | No race between `installation.created` and the customer's dashboard OAuth-confirm | **8/10** | Webhook events for unlinked installations are persisted but skipped. The dashboard step links retroactively (`UPDATE github_app_installations SET user_id=...`). Worst case: customer's first event gets dropped -- log it loudly and surface in dashboard so they retry. |
+| 7 | No race between `installation.created` and the customer's dashboard OAuth-confirm | **8/10** | Webhook events for unlinked installations are persisted but skipped. The dashboard step links retroactively (`UPDATE github_app_installations SET account_id=...`). Worst case: customer's first event gets dropped -- log it loudly and surface in dashboard so they retry. |
 | 8 | One App private key in env-var (vs HSM/KMS) is acceptable for v1 | **7/10** | Private key is PEM in SOPS, encrypted at rest, decrypted only on the API host. KMS deferred until customer count or compliance demands it. Rotation procedure: register a new key in App settings (GitHub allows two simultaneously), update env, retire old. Document in runbook before launch. |
 
 ---
