@@ -22,8 +22,11 @@ Use a **GitHub App**. Confidence **9/10**. Reasoning lives in section A.
 The webhook handler reuses the Stripe pattern at
 [`api/src/openapi/webhooks.rs:130-231`](../../api/src/openapi/webhooks.rs):
 HMAC verification of the raw body, idempotent dedupe on a delivery-id UNIQUE
-column, fail-fast on parse errors, return 2xx after persisting so GitHub stops
-retrying. New tables: `github_app_installations` and `github_webhook_deliveries`.
+column, fail-fast on parse errors, return 2xx after persisting regardless of
+downstream dispatch outcome. **Critical: GitHub does NOT automatically retry
+failed webhook deliveries** — once we return non-2xx, the event is lost. We
+MUST return 2xx after persisting the delivery row even if token minting or
+container dispatch fails (the persisted row enables manual replay later). New tables: `github_app_installations` and `github_webhook_deliveries`.
 Repo-to-identity resolution is implicit-by-subscription for v1: one
 subscription = one `agent_identities.id` = the agent for every repo in that
 customer's installation. Outgoing calls use short-lived installation access
@@ -39,13 +42,34 @@ key never leaves the API server.
 **Customer onboarding (one-click):**
 
 1. Customer clicks **"Connect GitHub"** in the Decent Agents dashboard.
-2. We redirect to `https://github.com/apps/decent-agents/installations/new` with
-   `state=<csrf_nonce>` and `redirect_uri=https://decent-cloud.org/dashboard/agents/connected`.
+2. We redirect to
+   `https://github.com/apps/decent-agents/installations/new?state=<csrf_nonce>`.
+   Note: the installation URL does **NOT** accept `redirect_uri` — that parameter
+   belongs to the OAuth authorize endpoint. The App must be configured with
+   **"Request user authorization (OAuth) during installation"** enabled, which
+   causes GitHub to redirect to the pre-registered **User authorization callback
+   URL** (e.g. `https://decent-cloud.org/dashboard/agents/connected/callback`)
+   with `?code=<code>&state=<state>` after installation completes.
 3. Customer picks repos to install on (all repos OR a subset).
-4. GitHub redirects back with `installation_id` and `code`. We exchange `code`
-   for a user-to-server token (one-time, used to confirm the installer's
-   GitHub login matches the dashboard user). We store `installation_id` against
-   the user.
+4. GitHub fires `installation.created` webhook (our handler persists the
+   installation and repos with `account_id=NULL`) and then redirects to our
+   callback URL with `code` and `state`.
+   We validate `state` matches the CSRF nonce, then exchange `code` for a
+   user-to-server token via `POST https://github.com/login/oauth/access_token`
+   with `client_id`, `client_secret`, `code`. We then call `GET /user`; the
+   response includes the user's numeric GitHub ID, which we match against
+   `oauth_accounts(provider='github_oauth', external_id=<github_id_as_text>)`.
+   If no linked GitHub OAuth account exists, the callback refuses to link the
+   installation and redirects to the dashboard with an explicit linking error.
+   We then UPDATE `github_app_installations SET account_id=<matched_account_id>`
+   for the installation we received via webhook.
+   Security note: the `installation_id` in the redirect is spoofable — we do
+   NOT trust it for identity linkage. We correlate the OAuth-confirmed user
+   with the `installation.created` webhook (which is HMAC-verified) via the
+   user's stable numeric GitHub ID, never via mutable login.
+   PKCE is strongly recommended: generate `code_verifier` before redirect,
+   send `code_challenge=SHA256(verifier)` in the installation URL, and send
+   `code_verifier` in the token exchange.
 5. From then on, GitHub sends webhook events for those repos to
    `https://api.decent-cloud.org/api/v1/webhooks/github`.
 
@@ -83,8 +107,9 @@ key never leaves the API server.
   `secrets/shared/env.yaml` under SOPS, exported by the `dc-secrets` flow).
 - Server creates a 10-minute JWT signed `RS256` with `iss=<app_id>` to call
   `POST /app/installations/:installation_id/access_tokens` and gets back a
-  15-minute installation access token scoped to that one installation.
-- Tokens are cached in-memory keyed by `installation_id` until 60 seconds before
+  **1-hour** installation access token scoped to that one installation.
+  (GitHub docs: "Installation tokens expire one hour from the time you create them.")
+- Tokens are cached in-memory keyed by `installation_id` until 5 minutes before
   expiry, then refreshed.
 
 **Customer DX:** one click, GitHub-managed token rotation, App permissions are
@@ -153,7 +178,7 @@ Reasoning, ranked:
 
 1. **DX:** one click vs five steps. Makes the difference between "I tried it on
    a Friday afternoon" and "I'll come back to this on Monday".
-2. **Security:** GitHub-rotated 15-minute tokens scoped per-installation
+2. **Security:** GitHub-rotated 1-hour tokens scoped per-installation
    strictly beat a 1-year PAT we have to encrypt and watch.
 3. **Ops:** zero PAT-expiry chasing. Solo founder, so this matters
    disproportionately.
@@ -201,7 +226,7 @@ GitHub App webhook delivery
             |           If not triggered: log + return 200.
             |        c. INSERT INTO agent_runs (status='queued',
             |           identity_id, repo_full_name, event_ref, ...)
-            |        d. Mint installation access token (15 min TTL)
+            |        d. Mint installation access token (1 hour TTL)
             |        e. enqueue dispatch job: docker exec -e
             |           AGENT_NAME=<slug> -e GITHUB_TOKEN=<inst_token>
             |           dc-agent-<slug> agent-runner ...
@@ -221,7 +246,7 @@ Three things to notice:
 
 1. **The webhook endpoint is the only ingress.** GitHub never talks to the
    container.
-2. **The container never holds the App private key.** It receives a 15-minute
+2. **The container never holds the App private key.** It receives a 1-hour
    installation access token; if it needs a new one mid-run it asks the API
    server back via an internal IPC (e.g. localhost socket inside the container,
    or a `dc-agent api-cli` call to a new endpoint `/agents/:run_id/refresh-token`).
@@ -246,10 +271,42 @@ Three things to notice:
   `github_installation_id`, `github_repo_id`, `github_repo_full_name`,
   `enabled`, `created_at_ns`, `removed_at_ns` (nullable, soft-delete).
 
-This spec assumes #413 lands first. If #413 is reordered after #414, this spec's
-DDL block should be merged into the same migration to keep the schema atomic.
+Migration order is fixed: #413 may land first and creates its agent tables
+without GitHub-table foreign keys. #414 creates the GitHub tables and then adds
+the cross-spec foreign keys listed below. If implementation deliberately merges
+#413 and #414 into one PR, keep the same ownership boundaries inside one
+migration file.
 
 ### NEW tables owned by #414
+
+#### OAuth provider migration
+
+This implementation also extends the existing `oauth_accounts.provider` CHECK in
+`api/migrations_pg/001_schema.sql` from `('google_oauth')` to
+`('google_oauth','github_oauth')` in a forward migration. The GitHub OAuth
+callback links installations by looking up
+`oauth_accounts(provider='github_oauth', external_id=<numeric_github_user_id>)`.
+Do NOT add a parallel GitHub identity column to `accounts`; `oauth_accounts`
+already owns external OAuth identity linkage.
+
+Cross-spec migration order is fixed: #413 creates `agent_repos` and `agent_runs`
+without references to #414 tables. #414's migration creates
+`github_app_installations` and `github_webhook_deliveries`, then adds:
+
+```sql
+ALTER TABLE agent_repos
+    ADD CONSTRAINT fk_agent_repos_github_installation
+    FOREIGN KEY (github_installation_id)
+    REFERENCES github_app_installations(github_installation_id);
+
+ALTER TABLE agent_runs
+    ADD CONSTRAINT fk_agent_runs_github_delivery
+    FOREIGN KEY (github_delivery_id)
+    REFERENCES github_webhook_deliveries(github_delivery_id);
+```
+
+This lets #413 land independently and makes #414 the only migration that knows
+about GitHub-owned tables.
 
 #### `github_app_installations`
 
@@ -258,12 +315,19 @@ CREATE TABLE github_app_installations (
     id BIGSERIAL PRIMARY KEY,
     github_installation_id BIGINT NOT NULL UNIQUE,
     github_account_login TEXT NOT NULL,
+    github_account_id BIGINT NOT NULL,
+        -- Numeric GitHub account ID (stable across login renames).
+        -- `github_account_login` can change; this is the canonical identity key.
     github_account_type TEXT NOT NULL,
         -- 'User' | 'Organization' (free-text, no CHECK; the GitHub-side enum
         -- is the source of truth and we forward the raw value)
     account_id BYTEA REFERENCES accounts(id) ON DELETE SET NULL,
         -- Decent Cloud account that installed the App; may be NULL if the
         -- installation predates the OAuth-confirm step (defensive).
+    trigger_phrase TEXT NOT NULL DEFAULT '@decent-agent',
+        -- Per-installation trigger phrase. The dashboard surfaces it as a
+        -- single text input on the connected-repos page. Match is
+        -- case-insensitive via `to_lowercase()`.
     suspended_at_ns BIGINT,
         -- non-NULL while GitHub has the installation suspended; we MUST stop
         -- dispatching until it's NULL again.
@@ -297,16 +361,19 @@ CREATE TABLE github_webhook_deliveries (
     github_installation_id BIGINT,
         -- payload['installation']['id'] when present; NULL for ping events
         -- and (rare) installation-less events.
-    raw_payload JSONB NOT NULL,
-        -- Full body for audit, replay, and debugging. Not joined on.
+    raw_payload BYTEA NOT NULL,
+        -- Full body bytes for audit, replay, and debugging. Stored as BYTEA
+        -- (not JSONB) because forged/malformed payloads may not be valid JSON.
+        -- We parse JSON for event routing after persistence; the raw bytes are
+        -- the audit trail.
     signature_verified BOOLEAN NOT NULL,
         -- true when X-Hub-Signature-256 matched. We still persist failures
         -- (with verified=false) to detect attempted forgeries, but never
         -- dispatch them.
     dispatched_to_identity_id BIGINT REFERENCES agent_identities(id),
         -- NULL when no dispatch happened (control event or trigger not met).
-    dispatch_status TEXT NOT NULL DEFAULT 'pending',
-        -- 'pending' | 'dispatched' | 'skipped' | 'failed'
+    dispatch_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (dispatch_status IN ('pending','dispatched','skipped','failed')),
     error_message TEXT,
         -- non-NULL when dispatch_status='failed'
     processed_at_ns BIGINT NOT NULL,
@@ -321,6 +388,14 @@ CREATE INDEX idx_github_webhook_deliveries_installation
     WHERE github_installation_id IS NOT NULL;
 ```
 
+### Retention policy
+
+Raw webhook payloads contain repo content and may include private repo data.
+Retention schedule:
+- Non-dispatched deliveries (ping, skipped events, forgeries): purge after 90 days.
+- Dispatched deliveries: retain for 1 year (cross-references `agent_runs` for audit).
+- A periodic cleanup job (shared with #410's framework) handles the purge.
+
 #### `agent_runs` relationship
 
 #413 owns the full `agent_runs` schema. #414 uses its `identity_id BIGINT`,
@@ -334,9 +409,9 @@ foreign key in the #413 migration; otherwise #414 adds the FK.
 
 `api/migrations_pg/0NN_decent_agents_github_integration.sql` where `0NN` is the
 next available number at implementation time. Top of `main` at spec authoring
-is `043_dispute_pause_state.sql`; `044_refund_audit.sql` is in flight on
-another branch. Pick whichever number is free when this lands; the migration
-runner is order-by-filename, so number conflicts are surfaced loudly.
+is `045_contract_timeout_states.sql`. Pick whichever number is free when this
+lands; the migration runner is order-by-filename, so number conflicts are
+surfaced loudly.
 
 ---
 
@@ -367,7 +442,7 @@ to keep diffs reviewable.
 
 ### Route registration
 
-In `api/src/main.rs` (currently registers webhooks at `main.rs:1289-1304`):
+In `api/src/main.rs` (currently registers webhooks at `main.rs:1318-1333`):
 
 ```rust
 .at(
@@ -396,9 +471,12 @@ pub async fn github_webhook(db, body, req) -> Result<Response, PoemError>:
        Mismatch -> insert delivery row with signature_verified=false,
        return 401.
 
-       Failure mode caveat: a NON-2xx tells GitHub to retry. Returning 401 on
-       a forged delivery is fine because GitHub didn't sign it; the legitimate
-       App will only ever produce 200 here. We log forgery attempts at WARN.
+       Failure mode caveat: GitHub does **NOT** auto-retry failed deliveries.
+       Returning 401 on a forged delivery is acceptable because the sender is
+       not GitHub and no legitimate event is lost. For all other errors (token
+       mint failure, dispatch failure), we MUST return 2xx after persisting the
+       delivery row -- the event is safely stored and can be replayed manually
+       or by an internal reprocess job.
 
     4. INSERT INTO github_webhook_deliveries (delivery_id, event_type, action,
        installation_id, raw_payload, signature_verified=true,
@@ -432,6 +510,43 @@ pub async fn github_webhook(db, body, req) -> Result<Response, PoemError>:
     8. Return 200 always (post signature check + dedupe).
 ```
 
+### OAuth callback route
+
+New route: `GET /api/v1/decent-agents/github-oauth/callback?code=<code>&state=<state>`
+
+```text
+pub async fn github_oauth_callback(db, query, session) -> Result<Response, PoemError>:
+    1. Validate query.state matches the CSRF nonce stored in the user's session.
+       Mismatch -> 400.
+    2. POST https://github.com/login/oauth/access_token with:
+       client_id=GITHUB_APP_CLIENT_ID,
+       client_secret=GITHUB_APP_CLIENT_SECRET,
+       code=query.code
+       Accept: application/json
+    3. Response: { access_token, token_type, scope, expires_in (28800 = 8h) }
+    4. Use the user access token to call GET https://api.github.com/user and
+       obtain the installer's GitHub login and numeric ID.
+    5. Match numeric ID against oauth_accounts where provider='github_oauth'
+       and external_id=<numeric_id_as_text>. If no match -> redirect to
+       dashboard with error "GitHub account not linked to this Decent Cloud
+       account. Link GitHub first, then install the App."
+    6. Find the most recent github_app_installations row for this account
+       (by github_account_id, not mutable login) where account_id IS NULL.
+       UPDATE SET account_id=<matched_account_id>.
+    7. Find the active agent_subscriptions row for this account and UPDATE
+       agent_repos SET subscription_id=<subscription_id> WHERE
+       github_installation_id=<installation_id> AND subscription_id IS NULL.
+    8. Discard the user access token — it is used once for identity confirmation
+       and NOT stored. All ongoing API operations use installation access tokens.
+    9. Redirect to /dashboard/agents/connected.
+```
+
+Unlinked installation cleanup: a periodic job marks installations older than 24h
+with `account_id IS NULL AND removed_at_ns IS NULL` as stale by setting
+`removed_at_ns=now` and soft-deleting their `agent_repos`. The dashboard shows a
+clear "install again" error for stale rows. This prevents abandoned install flows
+from accumulating forever.
+
 ### Handler-by-handler behaviour
 
 **`installation.created`:**
@@ -441,6 +556,7 @@ let inst = payload["installation"];
 INSERT INTO github_app_installations (
     github_installation_id = inst["id"],
     github_account_login   = inst["account"]["login"],
+    github_account_id      = inst["account"]["id"],
     github_account_type    = inst["account"]["type"],
     account_id             = NULL,  -- linked later via dashboard OAuth flow
     created_at_ns = now, updated_at_ns = now
@@ -505,20 +621,52 @@ WHERE github_installation_id=payload["installation"]["id"]
 `pull_request_review.submitted`, `pull_request_review_comment.created`:**
 
 ```text
-1. Resolve installation_id -> agent_identities.id (section E).
+1. **Bot self-trigger guard** — if `payload.sender.type == 'Bot'` AND
+   `payload.sender.login` matches the GitHub App bot identity
+   (e.g. `decent-agents[bot]`), skip: DispatchOutcome::skipped(
+   reason="self-trigger guard: sender is our bot"). This prevents infinite
+   loops from day one.
+2. Resolve installation_id -> agent_identities.id (section E).
    If unresolved: DispatchOutcome::skipped(reason="no active subscription").
-2. Apply trigger filter (section G).
+3. Apply trigger filter (section G).
    If not triggered: DispatchOutcome::skipped(reason="trigger not matched").
-3. Mint installation access token (section F).
-4. INSERT INTO agent_runs (status='queued', identity_id,
-   github_delivery_id, repo_full_name, event_ref=...).
-5. Spawn the dispatch (described in section F).
-6. DispatchOutcome::dispatched(identity_id).
+4. Mint installation access token (section F).
+5. INSERT INTO agent_runs (status='queued', identity_id,
+   github_delivery_id, repo_full_name, github_event_ref=typed_ref,
+   run_secret=<32-byte cryptographic random>).
+   Store `github_event_ref` as a typed ref (`issue/<number>`, `pull/<number>`,
+   `review/<id>`, or `review-comment/<id>`). Guard: reject if an active run
+   already exists for the same `(repo_full_name, github_event_ref)` with status
+   IN ('queued','running').
+   This prevents double-dispatch from two webhook events arriving
+   within milliseconds for the same issue/PR.
+6. Spawn the dispatch (described in section F).
+7. DispatchOutcome::dispatched(identity_id).
 ```
 
 The spawn itself is ASYNC: the webhook handler returns 200 the moment the row
 is in `agent_runs` and the docker exec is invoked. Long agent runs do NOT block
-GitHub's 10-second delivery timeout.
+GitHub's 10-second delivery timeout — but since GitHub does not auto-retry,
+returning 2xx promptly is essential to avoid the delivery being marked as failed
+in GitHub's delivery logs (which are visible to the customer).
+
+### Orphaned run reconciliation
+
+If the API server crashes after INSERT INTO `agent_runs` but before the
+container exec completes, or if the container dies mid-run, the `agent_runs`
+row is stuck in `status='queued'` or `status='running'` forever. A periodic
+reconciliation job (shared with #410's framework) scans:
+
+```sql
+SELECT id FROM agent_runs
+WHERE status IN ('queued','running')
+  AND created_at_ns < now_ns() - (AGENT_RUN_TIMEOUT_MINUTES * 60_000_000_000)
+```
+
+For each orphaned row: mark `status='failed'`, set
+`failure_reason='reconciler: run timed out or server crashed'`, clear
+`run_secret`. Default timeout is 60 minutes; staging may use a shorter value in
+tests. Alert ops. This job MUST exist before launch.
 
 ---
 
@@ -533,7 +681,7 @@ map to that identity.
 ### Algorithm
 
 ```text
-fn resolve_identity(installation_id: i64, db: &Database)
+fn resolve_identity(installation_id: i64, repo_id: i64, db: &Database)
     -> Result<Option<AgentIdentityId>>:
 
     let inst = SELECT account_id, suspended_at_ns, removed_at_ns
@@ -550,17 +698,31 @@ fn resolve_identity(installation_id: i64, db: &Database)
         // the user finishes the dashboard OAuth-confirm step.
         return Ok(None);
 
+    // Check that the specific repo is enabled and not removed.
+    let repo = SELECT ar.subscription_id
+               FROM agent_repos ar
+               WHERE ar.github_installation_id = $1
+                 AND ar.github_repo_id = $2
+                 AND ar.enabled = TRUE
+                 AND ar.removed_at_ns IS NULL;
+    if repo is None: return Ok(None);
+    if repo.subscription_id IS NULL:
+        // Repo not yet linked to a subscription (OAuth step incomplete).
+        return Ok(None);
+
     let row = SELECT ai.id AS identity_id, ai.state
-              FROM agent_subscriptions sub
-              JOIN agent_identities ai ON ai.subscription_id = sub.id
-              WHERE sub.account_id = $1
-                AND sub.status IN ('active', 'trialing')
-              ORDER BY sub.created_at_ns DESC
+              FROM agent_identities ai
+              WHERE ai.subscription_id = $1
+                AND ai.state = 'ready'
               LIMIT 1;
     if row is None: return Ok(None);
 
     Ok(Some(row.identity_id))
 ```
+
+Note: this resolver takes `repo_id` as a parameter (extracted from the webhook
+payload). This prevents dispatch when a repo has been removed from the
+installation but the installation itself is still active.
 
 ### Why implicit, not explicit-per-repo
 
@@ -593,7 +755,8 @@ the shape.
 ### Goal
 
 Agent containers must NEVER hold the App private key. They get short-lived
-installation access tokens scoped to one installation, valid 15 minutes.
+installation access tokens scoped to one installation, valid **1 hour**
+(GitHub docs: "Installation tokens expire one hour from the time you create them.").
 
 ### Flow
 
@@ -605,14 +768,15 @@ installation access tokens scoped to one installation, valid 15 minutes.
 3. POST https://api.github.com/app/installations/:installation_id/access_tokens
    with `Authorization: Bearer <JWT>` -> { token, expires_at }.
 4. Cache (installation_id -> (token, expires_at)) in tokio::sync::RwLock<HashMap>.
-   Refresh when expires_at - now < 60s.
+   Refresh when expires_at - now < 300s (5 minutes before expiry).
 
 [Dispatch to container]
 5. docker exec -e AGENT_NAME=<slug>
-                -e GITHUB_TOKEN=<installation_token>
-                -e GITHUB_TOKEN_EXPIRES_AT=<unix_seconds>
-                -e DC_AGENT_RUN_ID=<run_id>
-                <container_name> /home/agent/agent-runner
+                 -e GITHUB_TOKEN=<installation_token>
+                 -e GITHUB_TOKEN_EXPIRES_AT=<unix_seconds>
+                 -e DC_AGENT_RUN_ID=<run_id>
+                 -e DC_AGENT_RUN_SECRET=<run_secret_hex>
+                 <container_name> /home/agent/agent-runner
    The container reuses the existing per-identity HOME (
    tools/homes/dc-<slug>/) and the gh CLI auth model: `gh` reads
    GITHUB_TOKEN from env, no `gh auth login` needed.
@@ -629,7 +793,7 @@ installation access tokens scoped to one installation, valid 15 minutes.
 
 ### Why split key (server) from token (container)
 
-1. **Blast radius.** A compromised container leaks one customer's 15-minute
+1. **Blast radius.** A compromised container leaks one customer's 1-hour
    token, scoped to one installation. A compromised App private key would
    leak access to *all* customers' repos.
 2. **Audit story.** GitHub logs every access-token mint by JWT claim. The
@@ -664,21 +828,23 @@ Required env vars (added to `api/.env.example` and `cf/.env.example`):
 
 `@decent-agent`
 
-Configurable per-installation in v1 via a new column
-`github_app_installations.trigger_phrase TEXT NOT NULL DEFAULT '@decent-agent'`.
-The dashboard surfaces it as a single text input on the connected-repos page.
-v1 ships with the default; configurability is a 5-minute UI element.
+Case-insensitive match via `to_lowercase()`.
+
+Configurable per-installation via the `github_app_installations.trigger_phrase`
+column (see DDL in section C). The dashboard surfaces it as a single text input
+on the connected-repos page. v1 ships with the default; configurability is a
+5-minute UI element.
 
 ### Rules
 
 | Event | Trigger? |
 |-------|----------|
 | `issues.opened` | Trigger if title or body contains the trigger phrase OR has label `decent-agent`. |
-| `issues.edited` | Trigger if the edit ADDED the phrase or label (compare changes from `payload.changes`). |
+| `issues.edited` | Trigger if the edit ADDED the phrase or label (compare changes from `payload.changes`). If `changes` is absent, evaluate the current title/body/labels and log that precise add-vs-existing detection was unavailable. |
 | `issues.labeled` | Trigger if the added label is `decent-agent`. |
 | `issue_comment.created` | Trigger if comment body contains the trigger phrase. |
 | `pull_request.opened` | Trigger if PR description contains the trigger phrase. |
-| `pull_request.synchronize` | Trigger if the PR was previously dispatched (the agent is iterating on its own PR) OR explicitly mentioned. |
+| `pull_request.synchronize` | Trigger iff `sender_is_not_our_bot && (previously_dispatched || contains_trigger_phrase)`. Bot-authored pushes are excluded to prevent self-trigger loops. |
 | `pull_request_review.submitted` (`changes_requested`) | Trigger when the review is on a PR previously authored by the agent's bot account. |
 | `pull_request_review.submitted` (`approved` or `commented`) | Log only. |
 | `pull_request_review_comment.created` | Trigger if comment body contains trigger phrase. |
@@ -686,7 +852,9 @@ v1 ships with the default; configurability is a 5-minute UI element.
 
 ### "Previously dispatched" tracking
 
-`agent_runs.github_event_ref` already records the issue/PR identity. Lookup:
+`agent_runs.github_event_ref` records typed event identity (`issue/123`,
+`pull/123`, `review/987`, `review-comment/654`) so issue #123 and PR #123 in
+the same repo cannot collide. Lookup:
 
 ```sql
 SELECT 1 FROM agent_runs
@@ -722,6 +890,19 @@ the meaningful security invariant; callable out in tests.
 | 7 | No race between `installation.created` and the customer's dashboard OAuth-confirm | **8/10** | Webhook events for unlinked installations are persisted but skipped. The dashboard step links retroactively (`UPDATE github_app_installations SET account_id=...`). Worst case: customer's first event gets dropped -- log it loudly and surface in dashboard so they retry. |
 | 8 | One App private key in env-var (vs HSM/KMS) is acceptable for v1 | **7/10** | Private key is PEM in SOPS, encrypted at rest, decrypted only on the API host. KMS deferred until customer count or compliance demands it. Rotation procedure: register a new key in App settings (GitHub allows two simultaneously), update env, retire old. Document in runbook before launch. |
 
+### Escalations before public launch
+
+- **Trigger abuse:** v1 allows any actor whose event reaches the installed repo to
+  trigger work by mentioning the phrase. This can burn a customer's cap. Founder
+  decision required before public launch: keep beta behavior, require
+  collaborator/write permission, or add an allowlist.
+- **Webhook raw-payload retention:** dispatched deliveries retain raw GitHub
+  payload bytes for 1 year. Founder/legal decision required before public launch:
+  confirm this retention window or shorten it to the minimum operational window.
+- **Anthropic key exposure:** see the companion #413 spec. Prompt injection can
+  exfiltrate the shared platform key from a customer container; beta acceptance
+  must be explicit, and public launch requires the proxy/sidecar follow-up.
+
 ---
 
 ## I. Acceptance criteria
@@ -732,19 +913,22 @@ Tick-box list. Each item maps to a file:line where the change lands.
       `docs/operations/decent-agents-runbook.md` (NEW; section "Initial GitHub
       App registration").
 - [ ] **Migration `0NN_decent_agents_github_integration.sql`** creates
-      `github_app_installations` and `github_webhook_deliveries` (and
-      `agent_runs` if not in #413). File: `api/migrations_pg/0NN_*.sql` --
-      pick the next free number at implementation time.
+      `github_app_installations` and `github_webhook_deliveries`, extends
+      `oauth_accounts.provider` to allow `github_oauth`, and adds the #414-owned
+      FKs from `agent_repos` / `agent_runs` to GitHub tables. File:
+      `api/migrations_pg/0NN_*.sql` -- pick the next free number at
+      implementation time.
 - [ ] **Module split** -- `api/src/openapi/webhooks.rs` becomes
       `api/src/openapi/webhooks/mod.rs` plus per-provider files. The Stripe and
       ICPay HMAC verifiers collapse to a single
       `api/src/openapi/webhooks/util.rs::verify_hmac_sha256_hex`.
 - [ ] **`POST /api/v1/webhooks/github`** registered at
-      `api/src/main.rs:1289` (next to other webhooks). Rate-limit skip
+      `api/src/main.rs:1318` (next to other webhooks). Rate-limit skip
       already covered by prefix check at `api/src/rate_limit.rs:175`.
 - [ ] **Signature verification** -- constant-time HMAC-SHA256 against raw body
-      with `GITHUB_APP_WEBHOOK_SECRET`. Forgeries logged at WARN, persisted with
-      `signature_verified=false`, return 401.
+      with `GITHUB_APP_WEBHOOK_SECRET`. The shared HMAC utility also migrates
+      Stripe and ICPay to constant-time byte comparison. Forgeries logged at
+      WARN, persisted with `signature_verified=false`, return 401.
 - [ ] **Dedupe on `github_delivery_id`** -- UNIQUE collision returns 200 OK
       without re-dispatching. Tested with a positive replay test.
 - [ ] **Event handlers** for: `ping`, `installation.{created,deleted,suspend,
@@ -760,7 +944,8 @@ Tick-box list. Each item maps to a file:line where the change lands.
 - [ ] **JWT minting** -- `api/src/github_app/auth.rs` (new module) with
       `mint_app_jwt(app_id, private_key)` and
       `get_installation_token(installation_id) -> CachedToken` using
-      `tokio::sync::RwLock<HashMap<i64, CachedToken>>`.
+      `tokio::sync::RwLock<HashMap<i64, CachedToken>>`. Startup uses `GET /app`
+      to validate `GITHUB_APP_ID` and derive the bot login as `<app_slug>[bot]`.
 - [ ] **Dispatch to container** -- `api/src/agent_dispatch.rs` (new module)
       runs `docker exec` against the per-identity container with `AGENT_NAME`,
       `GITHUB_TOKEN`, `GITHUB_TOKEN_EXPIRES_AT`, `DC_AGENT_RUN_ID`,
@@ -773,10 +958,8 @@ Tick-box list. Each item maps to a file:line where the change lands.
 - [ ] **Doctor check** -- `api/src/main.rs::doctor_command` mints a JWT and
       calls `GET /app`; on failure refuses to mark green.
 - [ ] **Startup validation** -- `serve_command` rejects boot when any of
-      `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`
-      is missing/malformed. Loud warn if `GITHUB_APP_CLIENT_ID` is missing
-      (OAuth-link flow disabled but webhooks still work -- degraded mode is
-      explicit, not silent).
+      `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`,
+      `GITHUB_APP_CLIENT_ID`, or `GITHUB_APP_CLIENT_SECRET` is missing/malformed.
 - [ ] **Env templates** -- `api/.env.example` and `cf/.env.example` get the
       five new env vars with comments.
 - [ ] **`scripts/dc-secrets`** -- runbook entry showing `dc-secrets set
@@ -791,6 +974,18 @@ Tick-box list. Each item maps to a file:line where the change lands.
       - `webhooks::github::tests::issue_without_trigger_skips`
       - `webhooks::github::tests::cross_subscription_isolation`
         (assert installation A's events never resolve to subscription B's identity)
+      - `webhooks::github::tests::bot_self_mention_skips_dispatch`
+        (assert events from the App's own bot account are skipped)
+      - `webhooks::github::tests::duplicate_active_run_prevented`
+        (assert second event for same issue/PR while first is queued/running
+        returns skipped, not a second dispatch)
+      - `webhooks::github::tests::issue_and_pr_numbers_do_not_collide`
+        (assert typed `github_event_ref` keeps `issue/123` separate from
+        `pull/123`)
+      - `webhooks::github::tests::removed_repo_skips_dispatch`
+        (assert events for a removed repo are skipped even if installation is active)
+      - `webhooks::github::tests::github_oauth_callback_links_by_numeric_id`
+      - `webhooks::github::tests::stale_unlinked_installation_is_soft_deleted`
       - `github_app::auth::tests::jwt_round_trip`
       - `github_app::auth::tests::token_cache_refreshes_before_expiry`
 - [ ] **E2E test** -- Playwright suite under `website/tests/e2e/decent-agents/`:
@@ -840,12 +1035,15 @@ This assumes #413 lands first (or at least the table shape is settled). If
 - Multi-identity per subscription. File under `decent-agents,deferred-post-launch`.
 - Bitbucket / GitLab support. Different webhook shape, different auth model;
   separate spec.
-- Agent self-mentioning loop protection (the bot must not trigger itself by
-  mentioning its own handle). Implementation: filter out `payload.sender.type
-  == 'Bot' && sender.login == '<our-app>[bot]'`. Ticket: file at implementation
-  time so the test catches it.
 - Per-repo cost caps and customer-visible spend dashboard. Subscription-level
   spend already exists in `agent_subscriptions`; per-repo split is a UX item.
+- Trigger abuse protection (e.g. any public commenter can trigger paid agent
+  work via `@decent-agent`). v1 trusts that installation repo access =
+  authorization to trigger. Post-launch: require collaborator permission or
+  an allowlist. File as `decent-agents,deferred-post-launch`.
+- Metrics/alerting (dispatch failure rate, token mint latency, queue depth).
+  The `dispatch_status` and `processed_at_ns` columns support this; concrete
+  Prometheus counters and alert thresholds are post-launch.
 
 ---
 
@@ -855,8 +1053,8 @@ This assumes #413 lands first (or at least the table shape is settled). If
 - [`api/src/openapi/webhooks.rs:174-231`](../../api/src/openapi/webhooks.rs) -- Stripe handler header, signature check, dedupe pattern.
 - [`api/src/openapi/webhooks.rs:1315-1367`](../../api/src/openapi/webhooks.rs) -- ICPay HMAC verifier (also subsumes into shared util).
 - [`api/src/database/contracts/dispute.rs:56-105`](../../api/src/database/contracts/dispute.rs) -- idempotent UPSERT pattern (`ON CONFLICT DO UPDATE` with COALESCE).
-- [`api/migrations_pg/043_dispute_pause_state.sql:14-46`](../../api/migrations_pg/043_dispute_pause_state.sql) -- most recent migration; numbering and conventions.
-- [`api/src/main.rs:1289-1304`](../../api/src/main.rs) -- webhook route registration block.
+- [`api/migrations_pg/043_dispute_pause_state.sql:14-46`](../../api/migrations_pg/043_dispute_pause_state.sql) -- most recent migration pattern for `_ns` timestamps, UNIQUE on external ID, partial indexes.
+- [`api/src/main.rs:1318-1333`](../../api/src/main.rs) -- webhook route registration block.
 - [`api/src/rate_limit.rs:168-185`](../../api/src/rate_limit.rs) -- webhook prefix is already rate-limit-skipped.
 - [`agent/docker-compose.yml:11-67`](../../../agent/docker-compose.yml) (outer workspace) -- shell-mode container model that the dispatch step reuses.
 - [`tools/src/dc_team/identity.py`](../../../tools/src/dc_team/identity.py) (outer workspace) -- existing per-identity GH-token + HOME flow.
