@@ -11,6 +11,7 @@ pub mod offerings;
 pub mod prices;
 pub mod providers;
 pub mod resellers;
+pub mod signature;
 pub mod stats;
 pub mod subscriptions;
 pub mod system;

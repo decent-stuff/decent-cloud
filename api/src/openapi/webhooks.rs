@@ -127,19 +127,15 @@ struct StripeDisputeEvidenceDetails {
     due_by: Option<i64>,
 }
 
-/// Verify Stripe webhook signature
+/// Verify Stripe webhook signature.
+///
+/// Constant-time HMAC comparison via [`super::signature::verify_hmac_sha256_hex`]
+/// (see #428 for the timing-attack rationale).
 fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> {
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
-
-    type HmacSha256 = Hmac<Sha256>;
-
     // Parse signature header (format: "t=timestamp,v1=signature")
-    let parts: Vec<&str> = signature.split(',').collect();
     let mut timestamp = None;
     let mut sig_hash = None;
-
-    for part in parts {
+    for part in signature.split(',') {
         let kv: Vec<&str> = part.splitn(2, '=').collect();
         if kv.len() == 2 {
             match kv[0] {
@@ -149,26 +145,15 @@ fn verify_signature(payload: &str, signature: &str, secret: &str) -> Result<()> 
             }
         }
     }
-
     let timestamp = timestamp.context("Missing timestamp in signature header")?;
     let sig_hash = sig_hash.context("Missing v1 signature in signature header")?;
 
-    // Construct signed payload
     let signed_payload = format!("{}.{}", timestamp, payload);
-
-    // Compute HMAC
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).context("Invalid webhook secret")?;
-    mac.update(signed_payload.as_bytes());
-    let result = mac.finalize();
-    let computed_hash = hex::encode(result.into_bytes());
-
-    // Compare signatures
-    if computed_hash != sig_hash {
-        return Err(anyhow::anyhow!("Invalid signature"));
-    }
-
-    Ok(())
+    super::signature::verify_hmac_sha256_hex(
+        signed_payload.as_bytes(),
+        secret.as_bytes(),
+        sig_hash,
+    )
 }
 
 /// Handle Stripe webhook events
@@ -1312,19 +1297,15 @@ struct IcpayPaymentObject {
     metadata: Option<serde_json::Value>,
 }
 
-/// Verify ICPay webhook signature (same format as Stripe)
+/// Verify ICPay webhook signature (same format as Stripe).
+///
+/// Constant-time HMAC comparison via [`super::signature::verify_hmac_sha256_hex`]
+/// (see #428 for the timing-attack rationale).
 fn verify_icpay_signature(payload: &str, signature: &str, secret: &str) -> Result<()> {
-    use hmac::{Hmac, Mac};
-    use sha2::Sha256;
-
-    type HmacSha256 = Hmac<Sha256>;
-
     // Parse signature header (format: "t=timestamp,v1=signature")
-    let parts: Vec<&str> = signature.split(',').collect();
     let mut timestamp = None;
     let mut sig_hash = None;
-
-    for part in parts {
+    for part in signature.split(',') {
         let kv: Vec<&str> = part.splitn(2, '=').collect();
         if kv.len() == 2 {
             match kv[0] {
@@ -1334,7 +1315,6 @@ fn verify_icpay_signature(payload: &str, signature: &str, secret: &str) -> Resul
             }
         }
     }
-
     let timestamp = timestamp.context("Missing timestamp in signature header")?;
     let sig_hash = sig_hash.context("Missing v1 signature in signature header")?;
 
@@ -1348,22 +1328,12 @@ fn verify_icpay_signature(payload: &str, signature: &str, secret: &str) -> Resul
         return Err(anyhow::anyhow!("Timestamp outside tolerance window"));
     }
 
-    // Construct signed payload
     let signed_payload = format!("{}.{}", timestamp, payload);
-
-    // Compute HMAC
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).context("Invalid webhook secret")?;
-    mac.update(signed_payload.as_bytes());
-    let result = mac.finalize();
-    let computed_hash = hex::encode(result.into_bytes());
-
-    // Compare signatures
-    if computed_hash != sig_hash {
-        return Err(anyhow::anyhow!("Invalid signature"));
-    }
-
-    Ok(())
+    super::signature::verify_hmac_sha256_hex(
+        signed_payload.as_bytes(),
+        secret.as_bytes(),
+        sig_hash,
+    )
 }
 
 /// Handle ICPay webhook events
@@ -1801,6 +1771,44 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Invalid signature"));
+    }
+
+    /// Regression test for #428: a near-correct signature (correct length,
+    /// correct hex prefix, one byte off at the end) must be rejected. The
+    /// constant-time comparison is what makes this safe against timing
+    /// side channels; the assertion here is that the rejection still
+    /// happens on the value level.
+    #[test]
+    fn test_verify_signature_constant_time_reject_one_byte_off() {
+        let payload = r#"{"test":"data"}"#;
+        let secret = "whsec_test_secret";
+
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        type HmacSha256 = Hmac<Sha256>;
+
+        let timestamp = "1234567890";
+        let signed_payload = format!("{}.{}", timestamp, payload);
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(signed_payload.as_bytes());
+        let valid_hex = hex::encode(mac.finalize().into_bytes());
+
+        // Flip the final hex nibble: same length, same prefix, one byte off.
+        let mut tampered = valid_hex.clone();
+        let last = tampered.pop().unwrap();
+        let flipped = if last == '0' { '1' } else { '0' };
+        tampered.push(flipped);
+        assert_eq!(tampered.len(), valid_hex.len());
+        assert_ne!(tampered, valid_hex);
+        assert_eq!(&tampered[..tampered.len() - 1], &valid_hex[..valid_hex.len() - 1]);
+
+        let signature = format!("t={},v1={}", timestamp, tampered);
+        let err = verify_signature(payload, &signature, secret)
+            .expect_err("one-byte-off signature must be rejected");
+        assert!(
+            err.to_string().contains("Invalid signature"),
+            "unexpected error message: {err}"
+        );
     }
 
     #[test]
