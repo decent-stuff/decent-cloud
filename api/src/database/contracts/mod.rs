@@ -509,6 +509,7 @@ mod extensions;
 mod payment;
 mod provisioning;
 mod rental;
+mod timeouts;
 mod usage;
 
 pub use dispute::{dispute_refund_idempotency_key, ContractDisputeUpsert};

@@ -38,6 +38,7 @@ mod stripe_client;
 mod support_bot;
 mod sync_docs;
 mod sync_service;
+mod timeout_cleanup_service;
 mod validation;
 mod vies;
 
@@ -49,6 +50,32 @@ fn now_ns() -> anyhow::Result<i64> {
     chrono::Utc::now()
         .timestamp_nanos_opt()
         .ok_or_else(|| anyhow::anyhow!("timestamp overflow (year > 2262)"))
+}
+
+/// Parse a positive-seconds env var with fail-fast semantics. Returns the
+/// `default` when the var is unset; refuses to start the server when the var
+/// is set but malformed (non-numeric, zero, negative). Used for the
+/// timeout-cleanup feature flags (issues #409, #410) per project rule
+/// "Validate all feature configuration at startup, NEVER at request time."
+fn parse_env_seconds(name: &str, default: u64) -> Result<u64, std::io::Error> {
+    match env::var(name) {
+        Err(_) => Ok(default),
+        Ok(raw) => {
+            let parsed: u64 = raw.trim().parse().map_err(|e| {
+                std::io::Error::other(format!(
+                    "{} is set but not a valid u64: {:?} ({})",
+                    name, raw, e
+                ))
+            })?;
+            if parsed == 0 {
+                return Err(std::io::Error::other(format!(
+                    "{} must be > 0 (got 0); refusing to start with a zero timeout",
+                    name
+                )));
+            }
+            Ok(parsed)
+        }
+    }
 }
 
 use auto_renewal_service::AutoRenewalService;
@@ -63,6 +90,7 @@ use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use payment_release_service::PaymentReleaseService;
+use timeout_cleanup_service::TimeoutCleanupService;
 use poem::web::{Data, Redirect};
 use poem::{
     get, handler,
@@ -1342,6 +1370,16 @@ async fn serve_command() -> Result<(), std::io::Error> {
         cache_for_task.run(shutdown_rx).await;
     });
 
+    // Issues #409 + #410: timeout-driven contract cleanup. Fail fast on
+    // malformed values so a malformed deploy refuses to start instead of
+    // silently falling back to a default that masks the misconfiguration.
+    let requested_timeout_secs =
+        parse_env_seconds("REQUESTED_TIMEOUT_SECONDS", 3600)?;
+    let provisioning_timeout_secs =
+        parse_env_seconds("PROVISIONING_TIMEOUT_SECONDS", 3600)?;
+    let timeout_cleanup_interval_secs =
+        parse_env_seconds("TIMEOUT_CLEANUP_INTERVAL_SECONDS", 300)?;
+
     // Start cleanup service in background (runs every 24 hours, 180-day retention)
     let cleanup_interval_hours = env::var("CLEANUP_INTERVAL_HOURS")
         .ok()
@@ -1368,6 +1406,30 @@ async fn serve_command() -> Result<(), std::io::Error> {
             cleanup_retention_days
         );
         cleanup_service.run(cleanup_shutdown).await;
+    });
+
+    // Issues #409 + #410: periodic timeout cleanup for stuck contracts.
+    // Runs at TIMEOUT_CLEANUP_INTERVAL_SECONDS (default 300s = 5 min). The
+    // Stripe client (when configured) is reused so the auto-refund path
+    // hits the real network; pure-DB tests pass `None`.
+    let db_for_timeout = ctx.database.clone();
+    let timeout_stripe = crate::stripe_client::StripeClient::new().ok().map(Arc::new);
+    let timeout_shutdown = shutdown_tx.subscribe();
+    let timeout_cleanup_task = tokio::spawn(async move {
+        let timeout_service = TimeoutCleanupService::new(
+            db_for_timeout,
+            timeout_stripe,
+            timeout_cleanup_interval_secs,
+            requested_timeout_secs,
+            provisioning_timeout_secs,
+        );
+        tracing::info!(
+            "Starting timeout cleanup service (interval: {}s, requested_timeout: {}s, provisioning_timeout: {}s)",
+            timeout_cleanup_interval_secs,
+            requested_timeout_secs,
+            provisioning_timeout_secs
+        );
+        timeout_service.run(timeout_shutdown).await;
     });
 
     // Start email processor in background if email service is configured
@@ -1523,6 +1585,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![
         metadata_cache_task,
         cleanup_task,
+        timeout_cleanup_task,
         payment_release_task,
         auto_renewal_task,
         sla_alert_task,

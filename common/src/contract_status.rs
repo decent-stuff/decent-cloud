@@ -3,15 +3,22 @@ use serde::{Deserialize, Serialize};
 /// Contract status state machine
 ///
 /// Valid state transitions:
-/// - Requested -> Pending (auto-accept), Accepted (manual accept), Rejected, Cancelled
+/// - Requested -> Pending (auto-accept), Accepted (manual accept), Rejected, Cancelled, Expired
+///   (Expired = abandoned checkout / payment never completed; see issue #410)
 /// - Pending -> Accepted, Rejected, Cancelled
-/// - Accepted -> Provisioning, Rejected, Cancelled
-/// - Provisioning -> Provisioned, Cancelled (failed provisioning)
+/// - Accepted -> Provisioning, ProvisioningFailed, Rejected, Cancelled
+/// - Provisioning -> Provisioned, ProvisioningFailed, Cancelled (failed provisioning via cancel)
 /// - Provisioned -> Active, Paused, Cancelled
 /// - Active -> Paused, Cancelled, Expired
 /// - Paused -> Active, Provisioned, Cancelled, Expired (resume restores prior operational state;
 ///   cancel/expire bypass resume)
-/// - Rejected, Cancelled, Expired are terminal states
+/// - Rejected, Cancelled, Expired, ProvisioningFailed are terminal states
+///
+/// `ProvisioningFailed` distinguishes provider/system provisioning failures from
+/// user/provider cancellations. The periodic timeout-cleanup task (issue #409)
+/// uses this state and triggers the full auto-refund. Existing
+/// `Provisioning -> Cancelled` failure paths are preserved unchanged for now;
+/// migrating those callsites is tracked separately.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ContractStatus {
@@ -35,8 +42,12 @@ pub enum ContractStatus {
     Rejected,
     /// User or provider cancelled (terminal)
     Cancelled,
-    /// Contract duration ended (terminal)
+    /// Contract duration ended OR pre-payment timeout fired (terminal)
     Expired,
+    /// Provisioning attempt timed out without reaching `Provisioned`. Triggers
+    /// auto-refund (terminal). Distinct from `Cancelled` so the audit trail
+    /// separates user/provider intent from system-detected failures.
+    ProvisioningFailed,
 }
 
 impl ContractStatus {
@@ -49,17 +60,20 @@ impl ContractStatus {
             (Requested, Accepted) => true,
             (Requested, Rejected) => true,
             (Requested, Cancelled) => true,
+            (Requested, Expired) => true, // Pre-payment timeout (issue #410)
             // From Pending
             (Pending, Accepted) => true,
             (Pending, Rejected) => true,
             (Pending, Cancelled) => true,
             // From Accepted
             (Accepted, Provisioning) => true,
+            (Accepted, ProvisioningFailed) => true, // Provisioning timeout (issue #409)
             (Accepted, Rejected) => true,
             (Accepted, Cancelled) => true,
             // From Provisioning
             (Provisioning, Provisioned) => true,
-            (Provisioning, Cancelled) => true, // Failed provisioning
+            (Provisioning, ProvisioningFailed) => true, // Provisioning timeout (issue #409)
+            (Provisioning, Cancelled) => true, // User-initiated failure path
             // From Provisioned
             (Provisioned, Active) => true,
             (Provisioned, Paused) => true,
@@ -74,7 +88,7 @@ impl ContractStatus {
             (Paused, Cancelled) => true,
             (Paused, Expired) => true,
             // Terminal states cannot transition
-            (Rejected | Cancelled | Expired, _) => false,
+            (Rejected | Cancelled | Expired | ProvisioningFailed, _) => false,
             // All other transitions are invalid
             _ => false,
         }
@@ -84,7 +98,10 @@ impl ContractStatus {
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            ContractStatus::Rejected | ContractStatus::Cancelled | ContractStatus::Expired
+            ContractStatus::Rejected
+                | ContractStatus::Cancelled
+                | ContractStatus::Expired
+                | ContractStatus::ProvisioningFailed
         )
     }
 
@@ -111,14 +128,14 @@ impl ContractStatus {
     pub fn valid_transitions(&self) -> &'static [ContractStatus] {
         use ContractStatus::*;
         match self {
-            Requested => &[Pending, Accepted, Rejected, Cancelled],
+            Requested => &[Pending, Accepted, Rejected, Cancelled, Expired],
             Pending => &[Accepted, Rejected, Cancelled],
-            Accepted => &[Provisioning, Rejected, Cancelled],
-            Provisioning => &[Provisioned, Cancelled],
+            Accepted => &[Provisioning, ProvisioningFailed, Rejected, Cancelled],
+            Provisioning => &[Provisioned, ProvisioningFailed, Cancelled],
             Provisioned => &[Active, Paused, Cancelled],
             Active => &[Paused, Cancelled, Expired],
             Paused => &[Active, Provisioned, Cancelled, Expired],
-            Rejected | Cancelled | Expired => &[],
+            Rejected | Cancelled | Expired | ProvisioningFailed => &[],
         }
     }
 }
@@ -136,6 +153,7 @@ impl std::fmt::Display for ContractStatus {
             ContractStatus::Rejected => write!(f, "rejected"),
             ContractStatus::Cancelled => write!(f, "cancelled"),
             ContractStatus::Expired => write!(f, "expired"),
+            ContractStatus::ProvisioningFailed => write!(f, "provisioningfailed"),
         }
     }
 }
@@ -155,8 +173,9 @@ impl std::str::FromStr for ContractStatus {
             "rejected" => Ok(ContractStatus::Rejected),
             "cancelled" | "canceled" => Ok(ContractStatus::Cancelled),
             "expired" => Ok(ContractStatus::Expired),
+            "provisioningfailed" | "provisioning_failed" => Ok(ContractStatus::ProvisioningFailed),
             _ => Err(format!(
-                "Invalid contract status '{}'. Valid statuses: requested, pending, accepted, provisioning, provisioned, active, paused, rejected, cancelled, expired",
+                "Invalid contract status '{}'. Valid statuses: requested, pending, accepted, provisioning, provisioned, active, paused, rejected, cancelled, expired, provisioningfailed",
                 s
             )),
         }
@@ -214,6 +233,16 @@ mod tests {
             "expired".parse::<ContractStatus>().unwrap(),
             ContractStatus::Expired
         );
+        assert_eq!(
+            "provisioningfailed".parse::<ContractStatus>().unwrap(),
+            ContractStatus::ProvisioningFailed
+        );
+        // Snake-case alias, matches the stored status string emitted by the
+        // timeout cleanup service.
+        assert_eq!(
+            "provisioning_failed".parse::<ContractStatus>().unwrap(),
+            ContractStatus::ProvisioningFailed
+        );
     }
 
     #[test]
@@ -234,6 +263,12 @@ mod tests {
         assert_eq!(ContractStatus::Rejected.to_string(), "rejected");
         assert_eq!(ContractStatus::Cancelled.to_string(), "cancelled");
         assert_eq!(ContractStatus::Expired.to_string(), "expired");
+        // Display + serde emit one lowercase token per state (no underscore).
+        // The FromStr accepts both `provisioningfailed` and `provisioning_failed`.
+        assert_eq!(
+            ContractStatus::ProvisioningFailed.to_string(),
+            "provisioningfailed"
+        );
     }
 
     #[test]
@@ -262,6 +297,7 @@ mod tests {
     fn test_valid_transitions_accepted() {
         let status = ContractStatus::Accepted;
         assert!(status.can_transition_to(ContractStatus::Provisioning));
+        assert!(status.can_transition_to(ContractStatus::ProvisioningFailed));
         assert!(status.can_transition_to(ContractStatus::Rejected));
         assert!(status.can_transition_to(ContractStatus::Cancelled));
         assert!(!status.can_transition_to(ContractStatus::Requested));
@@ -273,6 +309,7 @@ mod tests {
     fn test_valid_transitions_provisioning() {
         let status = ContractStatus::Provisioning;
         assert!(status.can_transition_to(ContractStatus::Provisioned));
+        assert!(status.can_transition_to(ContractStatus::ProvisioningFailed));
         assert!(status.can_transition_to(ContractStatus::Cancelled));
         assert!(!status.can_transition_to(ContractStatus::Requested));
         assert!(!status.can_transition_to(ContractStatus::Accepted));
@@ -331,6 +368,7 @@ mod tests {
             ContractStatus::Rejected,
             ContractStatus::Cancelled,
             ContractStatus::Expired,
+            ContractStatus::ProvisioningFailed,
         ] {
             for target in [
                 ContractStatus::Requested,
@@ -343,6 +381,7 @@ mod tests {
                 ContractStatus::Rejected,
                 ContractStatus::Cancelled,
                 ContractStatus::Expired,
+                ContractStatus::ProvisioningFailed,
             ] {
                 assert!(
                     !terminal.can_transition_to(target),
@@ -366,6 +405,7 @@ mod tests {
         assert!(ContractStatus::Rejected.is_terminal());
         assert!(ContractStatus::Cancelled.is_terminal());
         assert!(ContractStatus::Expired.is_terminal());
+        assert!(ContractStatus::ProvisioningFailed.is_terminal());
     }
 
     #[test]
@@ -380,6 +420,7 @@ mod tests {
         assert!(!ContractStatus::Rejected.is_cancellable());
         assert!(!ContractStatus::Cancelled.is_cancellable());
         assert!(!ContractStatus::Expired.is_cancellable());
+        assert!(!ContractStatus::ProvisioningFailed.is_cancellable());
     }
 
     #[test]
@@ -395,6 +436,7 @@ mod tests {
         assert!(!ContractStatus::Rejected.is_operational());
         assert!(!ContractStatus::Cancelled.is_operational());
         assert!(!ContractStatus::Expired.is_operational());
+        assert!(!ContractStatus::ProvisioningFailed.is_operational());
     }
 
     #[test]
@@ -405,12 +447,48 @@ mod tests {
                 ContractStatus::Pending,
                 ContractStatus::Accepted,
                 ContractStatus::Rejected,
-                ContractStatus::Cancelled
+                ContractStatus::Cancelled,
+                ContractStatus::Expired,
             ]
         );
         assert_eq!(ContractStatus::Rejected.valid_transitions(), &[]);
         assert_eq!(ContractStatus::Cancelled.valid_transitions(), &[]);
         assert_eq!(ContractStatus::Expired.valid_transitions(), &[]);
+        assert_eq!(ContractStatus::ProvisioningFailed.valid_transitions(), &[]);
+    }
+
+    #[test]
+    fn test_requested_to_expired_for_pre_payment_timeout() {
+        // Issue #410: a contract whose Stripe checkout never completes must be
+        // expired by the periodic timeout cleanup. The transition Requested
+        // -> Expired must be valid; the reverse and ANY transition out of
+        // Expired must NOT be.
+        assert!(ContractStatus::Requested.can_transition_to(ContractStatus::Expired));
+        assert!(!ContractStatus::Expired.can_transition_to(ContractStatus::Requested));
+        // Sanity: Requested keeps its other legitimate transitions.
+        assert!(ContractStatus::Requested.can_transition_to(ContractStatus::Pending));
+        assert!(ContractStatus::Requested.can_transition_to(ContractStatus::Cancelled));
+        // Pending must NOT directly transition to Expired (Expired is
+        // reserved for pre-payment timeout, not provider stalls).
+        assert!(!ContractStatus::Pending.can_transition_to(ContractStatus::Expired));
+    }
+
+    #[test]
+    fn test_provisioning_failed_state_classifications() {
+        // Issue #409: ProvisioningFailed is a terminal state distinct from
+        // Cancelled. It must be reachable from Accepted and Provisioning,
+        // must be non-cancellable, non-operational, and non-recoverable.
+        assert!(ContractStatus::Accepted.can_transition_to(ContractStatus::ProvisioningFailed));
+        assert!(ContractStatus::Provisioning.can_transition_to(ContractStatus::ProvisioningFailed));
+        // States that have no business hitting ProvisioningFailed.
+        assert!(!ContractStatus::Requested.can_transition_to(ContractStatus::ProvisioningFailed));
+        assert!(!ContractStatus::Pending.can_transition_to(ContractStatus::ProvisioningFailed));
+        assert!(!ContractStatus::Provisioned.can_transition_to(ContractStatus::ProvisioningFailed));
+        assert!(!ContractStatus::Active.can_transition_to(ContractStatus::ProvisioningFailed));
+        // Classifications.
+        assert!(ContractStatus::ProvisioningFailed.is_terminal());
+        assert!(!ContractStatus::ProvisioningFailed.is_cancellable());
+        assert!(!ContractStatus::ProvisioningFailed.is_operational());
     }
 
     #[test]
