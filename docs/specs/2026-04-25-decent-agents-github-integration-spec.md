@@ -42,34 +42,45 @@ key never leaves the API server.
 **Customer onboarding (one-click):**
 
 1. Customer clicks **"Connect GitHub"** in the Decent Agents dashboard.
-2. We redirect to
-   `https://github.com/apps/decent-agents/installations/new?state=<csrf_nonce>`.
+2. The API server generates a per-attempt `state` (cryptographic random
+   nonce) and `code_verifier` (32-byte base64url-encoded), inserts a row into
+   `github_oauth_pending` (DDL in section C) keyed on `state`, and redirects
+   to
+   `https://github.com/apps/decent-agents/installations/new?state=<state>&code_challenge=<base64url(SHA256(code_verifier))>&code_challenge_method=S256`.
    Note: the installation URL does **NOT** accept `redirect_uri` — that parameter
    belongs to the OAuth authorize endpoint. The App must be configured with
    **"Request user authorization (OAuth) during installation"** enabled, which
    causes GitHub to redirect to the pre-registered **User authorization callback
    URL** (e.g. `https://decent-cloud.org/dashboard/agents/connected/callback`)
    with `?code=<code>&state=<state>` after installation completes.
+   `state` and `code_verifier` MUST live in the server-side
+   `github_oauth_pending` table and not in a session cookie: cookies travel
+   with cross-origin top-level redirects in browsers configured for strict
+   SameSite, and are unavailable to the API server during the GitHub-initiated
+   callback unless explicitly relaxed. A keyed table avoids that whole class
+   of bug and keeps the protocol stateless on the browser side.
 3. Customer picks repos to install on (all repos OR a subset).
 4. GitHub fires `installation.created` webhook (our handler persists the
    installation and repos with `account_id=NULL`) and then redirects to our
    callback URL with `code` and `state`.
-   We validate `state` matches the CSRF nonce, then exchange `code` for a
-   user-to-server token via `POST https://github.com/login/oauth/access_token`
-   with `client_id`, `client_secret`, `code`. We then call `GET /user`; the
-   response includes the user's numeric GitHub ID, which we match against
+   The callback handler SELECTs from `github_oauth_pending` WHERE
+   `state = $1 AND created_at_ns > now - 10 min`. If not found or expired, 400.
+   It then exchanges `code` for a user-to-server token via
+   `POST https://github.com/login/oauth/access_token` with `client_id`,
+   `client_secret`, `code`, and `code_verifier` (read from the row). After
+   the token exchange completes, the row is `DELETE`d (single-use) so that
+   the same `state` cannot be replayed.
+   We then call `GET /user`; the response includes the user's numeric GitHub
+   ID, which we match against
    `oauth_accounts(provider='github_oauth', external_id=<github_id_as_text>)`.
    If no linked GitHub OAuth account exists, the callback refuses to link the
    installation and redirects to the dashboard with an explicit linking error.
    We then UPDATE `github_app_installations SET account_id=<matched_account_id>`
-   for the installation we received via webhook.
+   for the installation we received via webhook (correlation rule below).
    Security note: the `installation_id` in the redirect is spoofable — we do
    NOT trust it for identity linkage. We correlate the OAuth-confirmed user
    with the `installation.created` webhook (which is HMAC-verified) via the
    user's stable numeric GitHub ID, never via mutable login.
-   PKCE is strongly recommended: generate `code_verifier` before redirect,
-   send `code_challenge=SHA256(verifier)` in the installation URL, and send
-   `code_verifier` in the token exchange.
 5. From then on, GitHub sends webhook events for those repos to
    `https://api.decent-cloud.org/api/v1/webhooks/github`.
 
@@ -321,6 +332,14 @@ CREATE TABLE github_app_installations (
     github_account_type TEXT NOT NULL,
         -- 'User' | 'Organization' (free-text, no CHECK; the GitHub-side enum
         -- is the source of truth and we forward the raw value)
+    sender_user_id BIGINT NOT NULL,
+        -- Numeric GitHub user id of the human who clicked "Install"
+        -- (`payload.sender.id` on the `installation.created` webhook).
+        -- Used to correlate this installation with the OAuth user-to-server
+        -- token returned to the dashboard callback. The redirect's
+        -- `installation_id` URL parameter is unsigned and spoofable; this
+        -- column is the canonical correlation key. See section D OAuth
+        -- callback step 6.
     account_id BYTEA REFERENCES accounts(id) ON DELETE SET NULL,
         -- Decent Cloud account that installed the App; may be NULL if the
         -- installation predates the OAuth-confirm step (defensive).
@@ -363,13 +382,11 @@ CREATE TABLE github_webhook_deliveries (
         -- and (rare) installation-less events.
     raw_payload BYTEA NOT NULL,
         -- Full body bytes for audit, replay, and debugging. Stored as BYTEA
-        -- (not JSONB) because forged/malformed payloads may not be valid JSON.
-        -- We parse JSON for event routing after persistence; the raw bytes are
-        -- the audit trail.
-    signature_verified BOOLEAN NOT NULL,
-        -- true when X-Hub-Signature-256 matched. We still persist failures
-        -- (with verified=false) to detect attempted forgeries, but never
-        -- dispatch them.
+        -- (not JSONB) because malformed-but-signature-valid payloads may not
+        -- be valid JSON. We parse JSON for event routing after persistence;
+        -- the raw bytes are the audit trail. Forged deliveries (failed HMAC)
+        -- are NOT persisted -- they are warn-logged + metric-counted only
+        -- (see section D step 3).
     dispatched_to_identity_id BIGINT REFERENCES agent_identities(id),
         -- NULL when no dispatch happened (control event or trigger not met).
     dispatch_status TEXT NOT NULL DEFAULT 'pending'
@@ -392,9 +409,43 @@ CREATE INDEX idx_github_webhook_deliveries_installation
 
 Raw webhook payloads contain repo content and may include private repo data.
 Retention schedule:
-- Non-dispatched deliveries (ping, skipped events, forgeries): purge after 90 days.
+- Non-dispatched deliveries (ping, skipped events): purge after 90 days.
 - Dispatched deliveries: retain for 1 year (cross-references `agent_runs` for audit).
 - A periodic cleanup job (shared with #410's framework) handles the purge.
+- Forged deliveries (failed HMAC) are NEVER persisted (section D step 3); they
+  appear only in warn logs and the
+  `decent_agents_github_webhook_forgery_count_total` metric counter.
+
+#### `github_oauth_pending`
+
+```sql
+CREATE TABLE github_oauth_pending (
+    state            TEXT     PRIMARY KEY,
+    code_verifier    TEXT     NOT NULL,
+        -- Plaintext PKCE verifier (base64url, 32 random bytes). Single-use.
+        -- DELETED on successful callback exchange or by the periodic cleanup
+        -- job (see below). Storing plaintext is acceptable because the
+        -- companion `code_challenge` is sent to GitHub at redirect time and
+        -- the row is unreachable to anyone but the API server.
+    account_id       BYTEA    NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        -- The Decent Cloud account that initiated the install flow. Pre-bound
+        -- here (the user is logged into the dashboard before clicking
+        -- "Connect GitHub"). The OAuth callback uses this to scope the
+        -- account_id update on github_app_installations to the same user.
+    created_at_ns    BIGINT   NOT NULL
+);
+
+CREATE INDEX idx_github_oauth_pending_age ON github_oauth_pending (created_at_ns);
+```
+
+The 10-minute callback window is enforced in SQL
+(`created_at_ns > now - 10 * 60 * 1_000_000_000`). Rows older than 1 hour are
+hard-deleted by a periodic cleanup pass to bound the table size and cap the
+plaintext-verifier exposure window. Cleanup follows the
+`api/src/cleanup_service.rs` pattern (a `cleanup_once()` step iterates the
+periodic loop). Single-use is enforced by the callback handler `DELETE`ing the
+row immediately after a successful token exchange (a successful exchange
+without DELETE would leave a replayable verifier).
 
 #### `agent_runs` relationship
 
@@ -468,8 +519,18 @@ pub async fn github_webhook(db, body, req) -> Result<Response, PoemError>:
     3. Compute HMAC-SHA256(body, GITHUB_APP_WEBHOOK_SECRET) and constant-time
        compare against signature. Use `subtle::ConstantTimeEq` (already a
        dep transitively via cryptography stack).
-       Mismatch -> insert delivery row with signature_verified=false,
-       return 401.
+       Mismatch -> verify-first-then-DB: do NOT touch the database. Emit
+       `tracing::warn!` with the source IP, the `event_type` header (if
+       present), and the rejected delivery id; bump the
+       `decent_agents_github_webhook_forgery_count_total` metric counter;
+       return 401 immediately.
+
+       Rationale: the only legitimate sender is GitHub, and a forged event has
+       no audit value beyond the warn-log + metric. Persisting forgeries would
+       give an attacker free unbounded INSERTs into a TEXT/BYTEA-heavy table
+       (raw_payload is `BYTEA NOT NULL`) and a DoS vector. The Stripe webhook
+       handler at `api/src/openapi/webhooks.rs:218` follows the same shape:
+       `verify_signature(...)?` runs before any DB call.
 
        Failure mode caveat: GitHub does **NOT** auto-retry failed deliveries.
        Returning 401 on a forged delivery is acceptable because the sender is
@@ -479,9 +540,12 @@ pub async fn github_webhook(db, body, req) -> Result<Response, PoemError>:
        or by an internal reprocess job.
 
     4. INSERT INTO github_webhook_deliveries (delivery_id, event_type, action,
-       installation_id, raw_payload, signature_verified=true,
-       dispatch_status='pending', processed_at_ns=now, created_at_ns=now)
+       installation_id, raw_payload, dispatch_status='pending',
+       processed_at_ns=now, created_at_ns=now)
        ON CONFLICT (github_delivery_id) DO NOTHING RETURNING id.
+
+       Persistence runs ONLY after signature verification passes; rows in this
+       table therefore always represent verified GitHub deliveries.
 
        If RETURNING is empty (UNIQUE collision), this is a replay -> return
        200 OK with body '{"replay":true}'. Stripe-pattern dedupe.
@@ -514,25 +578,42 @@ pub async fn github_webhook(db, body, req) -> Result<Response, PoemError>:
 
 New route: `GET /api/v1/decent-agents/github-oauth/callback?code=<code>&state=<state>`
 
+The callback uses the server-side `github_oauth_pending` table (DDL in
+section C) to validate `state`, retrieve the PKCE `code_verifier`, and
+correlate the install attempt with the originating Decent Cloud account.
+Session cookies are NOT used for this flow.
+
 ```text
-pub async fn github_oauth_callback(db, query, session) -> Result<Response, PoemError>:
-    1. Validate query.state matches the CSRF nonce stored in the user's session.
-       Mismatch -> 400.
+pub async fn github_oauth_callback(db, query) -> Result<Response, PoemError>:
+    1. SELECT code_verifier, account_id, created_at_ns
+       FROM github_oauth_pending
+       WHERE state = $query.state
+         AND created_at_ns > (now_ns() - 10 * 60 * 1_000_000_000);
+       Not found / expired -> 400.
     2. POST https://github.com/login/oauth/access_token with:
        client_id=GITHUB_APP_CLIENT_ID,
        client_secret=GITHUB_APP_CLIENT_SECRET,
-       code=query.code
+       code=query.code,
+       code_verifier=<retrieved>
        Accept: application/json
-    3. Response: { access_token, token_type, scope, expires_in (28800 = 8h) }
+    3. Response: { access_token, token_type, scope, expires_in (28800 = 8h) }.
+       DELETE FROM github_oauth_pending WHERE state = $query.state. Single-use:
+       even if the rest of the handler fails the verifier cannot be reused.
     4. Use the user access token to call GET https://api.github.com/user and
-       obtain the installer's GitHub login and numeric ID.
+       obtain the installer's GitHub login and numeric `id` (immutable).
     5. Match numeric ID against oauth_accounts where provider='github_oauth'
        and external_id=<numeric_id_as_text>. If no match -> redirect to
        dashboard with error "GitHub account not linked to this Decent Cloud
-       account. Link GitHub first, then install the App."
-    6. Find the most recent github_app_installations row for this account
-       (by github_account_id, not mutable login) where account_id IS NULL.
-       UPDATE SET account_id=<matched_account_id>.
+       account. Link GitHub first, then install the App." The matched
+       Decent Cloud account_id MUST equal the account_id pre-bound on the
+       pending row (step 1) -- mismatch is a hard 403.
+    6. Resolve the installation by GitHub user id (NOT by the redirect's
+       installation_id, which is unsigned and spoofable; see correlation
+       rule below):
+       UPDATE github_app_installations
+          SET account_id = <matched_account_id>, updated_at_ns = now_ns()
+        WHERE sender_user_id = <github_user_id>
+          AND account_id IS NULL;
     7. Find the active agent_subscriptions row for this account and UPDATE
        agent_repos SET subscription_id=<subscription_id> WHERE
        github_installation_id=<installation_id> AND subscription_id IS NULL.
@@ -558,12 +639,14 @@ INSERT INTO github_app_installations (
     github_account_login   = inst["account"]["login"],
     github_account_id      = inst["account"]["id"],
     github_account_type    = inst["account"]["type"],
+    sender_user_id         = payload["sender"]["id"],  -- numeric, immutable
     account_id             = NULL,  -- linked later via dashboard OAuth flow
     created_at_ns = now, updated_at_ns = now
 )
 ON CONFLICT (github_installation_id) DO UPDATE SET
     github_account_login = EXCLUDED.github_account_login,
     github_account_type  = EXCLUDED.github_account_type,
+    sender_user_id       = EXCLUDED.sender_user_id,
     suspended_at_ns      = NULL,
     removed_at_ns        = NULL,    -- reinstall after delete
     updated_at_ns        = EXCLUDED.updated_at_ns;
@@ -571,10 +654,15 @@ ON CONFLICT (github_installation_id) DO UPDATE SET
 For each repo in payload["repositories"]:
     INSERT INTO agent_repos (subscription_id=NULL, github_installation_id,
                              github_repo_id, github_repo_full_name)
-    -- subscription_id stays NULL until the dashboard OAuth step links the
-    -- installation to an account and finds their active subscription. Webhook
-    -- events for unlinked installations are persisted but not dispatched
-    -- (DispatchOutcome::skipped, error="installation not linked to user").
+    -- subscription_id is NULL on purpose. The Decent Agents identity spec
+    -- (#413) declares `agent_repos.subscription_id` as nullable specifically
+    -- to allow this insert path: the GitHub App webhook `installation.created`
+    -- event arrives BEFORE the dashboard OAuth callback completes, so the
+    -- subscription is unknown at this moment. The OAuth callback flow
+    -- (section D.OAuth callback step 7) sets it once the account+subscription
+    -- are linked. Webhook events for unlinked installations are persisted but
+    -- not dispatched (DispatchOutcome::skipped, error="installation not
+    -- linked to user").
 ```
 
 **`installation.deleted`:**
@@ -913,7 +1001,8 @@ Tick-box list. Each item maps to a file:line where the change lands.
       `docs/operations/decent-agents-runbook.md` (NEW; section "Initial GitHub
       App registration").
 - [ ] **Migration `0NN_decent_agents_github_integration.sql`** creates
-      `github_app_installations` and `github_webhook_deliveries`, extends
+      `github_app_installations` (with `sender_user_id BIGINT NOT NULL`),
+      `github_webhook_deliveries`, and `github_oauth_pending`, extends
       `oauth_accounts.provider` to allow `github_oauth`, and adds the #414-owned
       FKs from `agent_repos` / `agent_runs` to GitHub tables. File:
       `api/migrations_pg/0NN_*.sql` -- pick the next free number at
@@ -927,8 +1016,11 @@ Tick-box list. Each item maps to a file:line where the change lands.
       already covered by prefix check at `api/src/rate_limit.rs:175`.
 - [ ] **Signature verification** -- constant-time HMAC-SHA256 against raw body
       with `GITHUB_APP_WEBHOOK_SECRET`. The shared HMAC utility also migrates
-      Stripe and ICPay to constant-time byte comparison. Forgeries logged at
-      WARN, persisted with `signature_verified=false`, return 401.
+      Stripe and ICPay to constant-time byte comparison. Forgeries are
+      verify-first-then-DB: NO row is inserted, source IP and rejected delivery
+      id are warn-logged, the `decent_agents_github_webhook_forgery_count_total`
+      counter is bumped, and the response is 401. Mirrors the Stripe pattern
+      at `api/src/openapi/webhooks.rs:218`.
 - [ ] **Dedupe on `github_delivery_id`** -- UNIQUE collision returns 200 OK
       without re-dispatching. Tested with a positive replay test.
 - [ ] **Event handlers** for: `ping`, `installation.{created,deleted,suspend,
@@ -966,7 +1058,9 @@ Tick-box list. Each item maps to a file:line where the change lands.
       shared/env GITHUB_APP_*=...`.
 - [ ] **Unit tests**:
       - `webhooks::github::tests::ping_returns_200`
-      - `webhooks::github::tests::forged_signature_returns_401_persists_row`
+      - `webhooks::github::tests::forged_signature_returns_401_no_db_write`
+        (assert NO row in `github_webhook_deliveries`, assert metric counter
+        `decent_agents_github_webhook_forgery_count_total` incremented)
       - `webhooks::github::tests::replay_returns_200_without_redispatch`
       - `webhooks::github::tests::installation_created_inserts_row`
       - `webhooks::github::tests::installation_deleted_soft_deletes_repos`
@@ -985,6 +1079,14 @@ Tick-box list. Each item maps to a file:line where the change lands.
       - `webhooks::github::tests::removed_repo_skips_dispatch`
         (assert events for a removed repo are skipped even if installation is active)
       - `webhooks::github::tests::github_oauth_callback_links_by_numeric_id`
+        (assert correlation uses `sender_user_id` from the webhook payload,
+        NOT the redirect's `installation_id` URL parameter)
+      - `webhooks::github::tests::oauth_pending_state_mismatch_returns_400`
+        (assert callback rejects unknown / expired `state` without contacting
+        GitHub)
+      - `webhooks::github::tests::oauth_pending_row_is_single_use`
+        (assert callback DELETEs the `github_oauth_pending` row after
+        successful exchange; second callback with the same state -> 400)
       - `webhooks::github::tests::stale_unlinked_installation_is_soft_deleted`
       - `github_app::auth::tests::jwt_round_trip`
       - `github_app::auth::tests::token_cache_refreshes_before_expiry`

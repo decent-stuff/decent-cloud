@@ -172,7 +172,7 @@ A. ARCHITECTURE OVERVIEW
                         |
                         v
            api-server -> host-control channel -> docker exec <slug> ...
-                         (SSH or dc-agent command API; see I.9)
+                         (extends the dc-agent reconcile loop; see D.8)
 ```
 
 Three concepts, three tables, three lifetimes:
@@ -282,9 +282,10 @@ CREATE TABLE agent_identities (
     -- e.g. 'hetzner-eu-helsinki-1'. Looking up the host's IP/SSH config
     -- lives in dc-agent host registry, NOT in this row.
     hetzner_host_id          TEXT         NOT NULL,
-    -- Lifecycle state -- see section C.2.
+    -- Lifecycle state -- see section C.2 and section D.8.5.
     state                    TEXT         NOT NULL CHECK (state IN
-                                            ('provisioning','ready','paused',
+                                            ('provisioning','provisioning_failed',
+                                             'ready','paused',
                                              'tearing_down','destroyed')),
     -- Pause bookkeeping (mirrors contract_sign_requests; reuses the
     -- dispute pause primitive at contracts/dispute.rs:115).
@@ -347,12 +348,14 @@ CREATE TABLE agent_runs (
     repo_full_name           TEXT         NOT NULL,
     github_event_kind        TEXT         NOT NULL,
     github_event_ref         TEXT         NOT NULL,
-    -- Per-run secret for the mid-run token refresh endpoint (#414).
-    -- 32-byte cryptographic random from `ring::rand`, generated at queue time,
-    -- passed to the container as DC_AGENT_RUN_SECRET env var. Validated with
-    -- constant-time comparison (`subtle::ConstantTimeEq`). Never logged.
+    -- Hashed per-run secret for the mid-run token refresh endpoint (#414).
+    -- The plaintext secret (32-byte cryptographic random from `ring::rand`) is
+    -- generated at queue time and passed to the container as DC_AGENT_RUN_SECRET
+    -- env var; it is NEVER persisted. We persist only its SHA-256 digest.
+    -- SHA-256 of the 32-byte secret. Compare with subtle::ConstantTimeEq against
+    -- the supplied secret in the refresh-token endpoint.
     -- Cleared (set NULL) when the run reaches a terminal state.
-    run_secret               BYTEA,
+    run_secret_hash          BYTEA,
     -- Denormalized from agent_subscriptions.current_period_start_ns at insert
     -- time. #415 cap checks are equality scans on (identity_id,
     -- billing_period_start_ns), not range joins against mutable subscription
@@ -403,9 +406,13 @@ don't lose historical run rows that reference the repo via
 ```sql
 CREATE TABLE agent_repos (
     id                       BIGSERIAL    PRIMARY KEY,
-    -- Nullable until the GitHub installation is linked to a Decent Cloud
-    -- account with an active agent_subscriptions row. Unlinked installs are
-    -- persisted for audit but never dispatched.
+    -- Nullable: the GitHub App webhook flow in #414 inserts rows on
+    -- `installation.created` BEFORE the OAuth callback links the installation
+    -- to a Decent Cloud account+subscription. The link is established later by
+    -- the OAuth callback flow (#414 section D, OAuth callback step 7), which
+    -- UPDATEs subscription_id once the account is matched. Until then, webhook
+    -- events for the installation are persisted but never dispatched (the
+    -- resolver in #414 section E returns None when `subscription_id IS NULL`).
     subscription_id          BIGINT       REFERENCES agent_subscriptions(id)
                                                    ON DELETE RESTRICT,
     github_installation_id   BIGINT       NOT NULL,
@@ -834,6 +841,156 @@ or after 14 days in `tearing_down`, whichever comes first. Do not mark
 `destroyed` until archive + container removal + HOME deletion have all
 succeeded, except for an operator-initiated kill that is audit-logged.
 
+### D.8 Host-control channel: wire protocol
+
+The architecture diagrams in section A and section D.6 reference a
+"host-control channel" between the API server and dc-agent on the Hetzner host.
+This section pins the wire protocol so the implementation PR cannot drift back
+into ad-hoc SSH.
+
+#### D.8.1 Why not SSH
+
+Forbidden. The host-control channel must be auditable and deterministic, not
+interactive. SSH carries operational baggage that disqualifies it for this path:
+
+- Persistent operator credentials (host key pinning, authorized_keys rotation,
+  agent-forwarding accidents) widen the blast radius beyond what a per-host
+  registration token achieves.
+- Free-form shell sessions cannot be replayed or audited as discrete actions.
+- A flaky network mid-`docker run` leaves no idempotency handle.
+
+dc-agent already speaks an authenticated, polled, idempotent protocol with the
+API server (`api/src/openapi/providers.rs:3640-3796` reconcile endpoint;
+`dc-agent/src/main.rs:2151-2237` reconcile loop). Reuse it.
+
+#### D.8.2 Wire protocol: extend the bidirectional reconcile loop
+
+Recommendation: extend the existing reconcile mechanism that
+`e50ea8e5` (Phase-2 disputes) used to introduce `ReconcilePauseInstance`.
+Instead of inventing a parallel command channel, add a new bucket on
+`ReconcileResponse` carrying agent-identity provisioning intents:
+
+```rust
+// common/src/api_types.rs (sketch -- exact field set finalized at impl time)
+pub struct ReconcileProvisionAgentIdentity {
+    pub identity_slug: String,           // server-generated, e.g. eager-otter-h7k2p9
+    pub home_dir_path: String,           // /home/dc-agent-<slug>
+    pub image_tag: String,               // decent-agents-runtime:<commit-sha>
+    pub env: Vec<(String, String)>,      // ANTHROPIC_API_KEY mount path, etc.
+    pub resource_limits: AgentResourceLimits, // cpus, memory, pids, disk (D.5)
+    pub restart_policy: String,          // "unless-stopped"
+}
+
+pub struct ReconcileTeardownAgentIdentity {
+    pub identity_slug: String,
+    pub external_id: String,             // container id once known
+    pub archive_uri: Option<String>,     // s3://... target for HOME tarball
+}
+```
+
+`ReconcileResponse` gains four new buckets, all `#[serde(default)]` so older
+dc-agent builds keep parsing:
+
+- `provision_agent_identity` -- carries the `ReconcileProvisionAgentIdentity`
+  intents the host must enact (mkdir HOME, write tool config, `docker run -d`).
+- `teardown_agent_identity` -- carries `ReconcileTeardownAgentIdentity` intents
+  for the 7-day-grace cleanup pass (archive HOME, `docker rm`, `rm -rf` HOME).
+- `pause_agents` / `resume_agents` -- already specified in section D.2;
+  routed to `AgentRuntimeProvisioner::stop()` / `start()`.
+
+The marketplace-shaped buckets (`keep`, `terminate`, `unknown`, `pause`) stay
+unchanged; agent identities never appear there because they have no
+`contract_id`.
+
+#### D.8.3 Auth model
+
+The reconcile endpoint already authenticates dc-agent via the
+`AgentAuthenticatedUser` extractor (`api/src/auth.rs:175,395-502`):
+`X-Agent-Pubkey` + `X-Signature` + `X-Timestamp` + `X-Nonce`, signed with the
+agent's private key, validated against an active provider delegation row. This
+is the per-host registration token model and is reused as-is. No new
+credentials, no SSH keys, no per-identity secrets on the wire.
+
+The API server authorizes agent-identity actions on top of the existing
+delegation check by:
+
+- Confirming the calling agent's `provider_pubkey` matches the
+  `agent_identities.hetzner_host_id` -> agent registration mapping.
+- Refusing intents whose `identity_slug` resolves to an identity owned by a
+  different host. This is the same boundary as the marketplace
+  "agent can only reconcile their delegated provider's contracts" check at
+  `api/src/openapi/providers.rs:3662-3672`.
+
+#### D.8.4 Ordering guarantees
+
+Reconcile is poll-driven. dc-agent calls `POST /providers/:pubkey/reconcile`
+every `config.polling.interval_seconds` (`dc-agent/src/main.rs:1378-1379`).
+On a single host:
+
+- Action ordering is sequential per poll cycle. dc-agent processes the response
+  in a fixed order: `pause_agents` -> `resume_agents` ->
+  `provision_agent_identity` -> `teardown_agent_identity` -> marketplace buckets
+  (`pause` -> `terminate` -> `keep`). The order matches the reconcile loop's
+  existing pause-before-terminate convention (`dc-agent/src/main.rs:2197-2237`).
+- Multiple identities in the same bucket are processed serially. There is no
+  intra-host parallelism for agent provisioning at v1; one VM per customer
+  (section I.1) makes parallel provision intents on a single host the
+  exception, not the norm.
+- Across poll cycles: actions are idempotent on `identity_slug` + container
+  state. A `provision` intent for an identity whose container is already
+  running is a no-op; a `teardown` intent for an already-archived identity
+  reports success without retrying the archive step.
+
+#### D.8.5 Failure modes and reporting
+
+dc-agent reports outcomes back via the next reconcile call. The reconcile
+request body (`ReconcileRequest`) is extended with an
+`agent_identity_results` field carrying per-action success/failure with the
+captured stdout/stderr from the failing step.
+
+Concrete failure transitions (mirror the contract pattern from `e62ac055`,
+which introduced the `failed-provisioning` cleanup state for marketplace
+contracts):
+
+- Container start failure (image pull, `docker run`, health probe never passes):
+  dc-agent reports `provision_failed` with the captured error in the next
+  reconcile call. The API server compare-and-swaps
+  `agent_identities.state` from `provisioning` to `provisioning_failed`,
+  bumps a retry counter, and re-emits the `provision_agent_identity` intent
+  on the following reconcile cycle.
+- Periodic retry: up to 3 attempts with exponential backoff over a maximum of
+  10 minutes (matching section D.6's failure budget). After exhaustion, the
+  state machine compare-and-swaps `provisioning_failed` to `tearing_down`,
+  refuses new GitHub events, and alerts ops via the LOUD-misconfig pattern.
+  The captured command output is persisted on `agent_identities` (a future
+  column `last_provision_error TEXT`) for runbook diagnosis.
+- Teardown failure (archive, `docker rm`, or HOME delete): handled in section
+  D.7 already; the intent stays on the next reconcile cycle until
+  `teardown_failure_count` exceeds the alert threshold.
+
+The state set is therefore extended:
+
+```text
+provisioning ---(dc-agent reports failure)---> provisioning_failed
+provisioning_failed ---(retry budget exhausted)---> tearing_down
+provisioning_failed ---(retry succeeds)---> ready
+```
+
+`provisioning_failed` is added to the `agent_identities.state` CHECK list in
+section B.2. The cap-driven and dispute-driven pause primitives are unaffected.
+
+#### D.8.6 What the host-control channel does NOT do
+
+- Does NOT carry GitHub installation tokens. Per section F.1, those are minted
+  per dispatch and passed via `docker exec` env (#414 owns the dispatch path).
+- Does NOT replace the `docker exec` dispatch path for GitHub events. The
+  reconcile loop handles container *lifecycle* (provision / pause / resume /
+  teardown); per-event invocations use the existing `docker exec` shell-mode
+  pattern documented in section A's diagram and section E's routing.
+- Does NOT poll for agent runs. `agent_runs` rows are written by the API
+  server when a GitHub webhook arrives (section E.1) and updated by the
+  container's runner via the #414 refresh-token endpoint.
+
 E. WEBHOOK INTEGRATION WITH #414 (GITHUB APP)
 =============================================
 
@@ -1128,7 +1285,7 @@ requests. Do not promise 90 days unless legal/product explicitly chooses it.
 | # | Decision | Choice | Rationale |
 |---|----------|--------|-----------|
 | 1 | Anthropic key isolation | Accept shared-key mount for beta; file ticket for proxy/sidecar before public launch | Beta customers are trusted; exfiltration risk accepted. Public launch requires per-identity key proxy. |
-| 2 | Host-control channel | dc-agent command queue (not API-server SSH) | Avoids SSH key management, pinning, rotation. dc-agent already runs on the host; add a command-poll table/API. |
+| 2 | Host-control channel | Extend the existing reconcile loop with `provision_agent_identity`, `teardown_agent_identity`, `pause_agents`, `resume_agents` buckets (section D.8). Not SSH. | Reuses dc-agent's authenticated, polled, idempotent reconcile path (`api/src/openapi/providers.rs:3640-3796`, `dc-agent/src/main.rs:2151-2237`). Avoids SSH key management, pinning, rotation; auditable per intent. |
 | 3 | Async job durability | DB-backed job rows consumed by a worker | API server restarts do not strand `provisioning` rows; repair scan is not needed. |
 | 4 | GitHub webhook loss during deploys | Accept loss for beta; add periodic delivery-log scan for missed events | GitHub does not automatically retry failed webhook deliveries. A periodic job queries GitHub App delivery logs and replays missed deliveries. |
 | 5 | Host registry and capacity | Single-host config for beta; no `agent_hosts` table yet | 1 customer = 1 VM makes host registry unnecessary at beta scale. Add when multi-customer packing is real. |
@@ -1183,9 +1340,10 @@ implemented in this spec; this is the contract for the future PR.
 |10 | #413 stores no GitHub token; #414 mint/cache helper supplies dispatch token | migration grep + `agent_repos` schema; #414 integration      |
 |11 | Slug generator (wordlist + suffix)                                         | `api/src/decent_agents/slug.rs:1-60`                         |
 |12 | Runtime image source ported into product repo + CI workflow                | `agent/Dockerfile:1-140`; `.github/workflows/decent-agents-runtime.yml:1-50` |
-|13 | Common reconcile API adds explicit agent pause/resume actions              | `common/src/api_types.rs`: `ReconcilePauseAgentIdentity`, `ReconcileResumeAgentIdentity` |
-|   | with `external_id`, `identity_slug`, `reason`; response has               | `common/src/api_types.rs`: `ReconcileResponse.pause_agents`, `.resume_agents` |
-|   | `pause_agents` / `resume_agents`; dc-agent loop processes both            | `dc-agent/src/main.rs`: reconcile loop pause/resume branches |
+|13 | Common reconcile API adds explicit agent lifecycle actions per section    | `common/src/api_types.rs`: `ReconcilePauseAgentIdentity`, `ReconcileResumeAgentIdentity`, |
+|   | D.8: pause/resume + provision/teardown buckets; dc-agent loop processes   | `ReconcileProvisionAgentIdentity`, `ReconcileTeardownAgentIdentity`; `ReconcileResponse.{pause_agents,resume_agents,provision_agent_identity,teardown_agent_identity}` (all `#[serde(default)]`) |
+|   | each bucket serially (D.8.4); failure is reported via the next reconcile  | `dc-agent/src/main.rs`: reconcile loop branches; `ReconcileRequest.agent_identity_results` for failure reporting |
+|   | call (D.8.5)                                                              |                                                              |
 |14 | Tests: idempotent subscription insert, state-machine reject of bad         | `api/src/database/agent_subscriptions.rs:tests:*`            |
 |   | transitions, pause/resume credit, slug uniqueness, no persisted GitHub     | `api/src/database/agent_identities.rs:tests:*`               |
 |   | credentials, webhook idempotency on replay                                  | `api/src/openapi/webhooks.rs:tests:*`                        |
@@ -1249,5 +1407,8 @@ of focused agent time. NOT including #414 (GitHub App) or #415
   shares plumbing with #410. Coordinate sequencing.
 - Decision: `agent_subscriptions.account_id` carries `accounts.id`
   (BYTEA). Do not use username strings for billing joins.
-- `agent_runs.run_secret` is a 32-byte cryptographic random for the #414
-  mid-run token refresh endpoint. Cleared on terminal state. See #414 section F.
+- `agent_runs.run_secret_hash` is the SHA-256 of a 32-byte cryptographic random
+  used by the #414 mid-run token refresh endpoint. The plaintext secret is
+  passed to the container once via env and never persisted; the refresh-token
+  handler hashes the supplied secret and compares with `subtle::ConstantTimeEq`
+  against the stored hash. Cleared on terminal state. See #414 section F.
