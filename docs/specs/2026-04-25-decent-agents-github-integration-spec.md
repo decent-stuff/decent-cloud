@@ -449,20 +449,20 @@ without DELETE would leave a replayable verifier).
 
 #### `agent_runs` relationship
 
-#413 owns the full `agent_runs` schema. #414 uses its `identity_id BIGINT`,
-`github_delivery_id TEXT UNIQUE`, repo metadata, event-ref fields, and
-`queued/running/succeeded/failed/cancelled` statuses. If
-`github_webhook_deliveries` lands first, add the
+#413 owns the full `agent_runs` schema and DB helpers. #414 owns population of
+the GitHub-specific fields at dispatch time: `github_delivery_id`,
+`github_installation_id`, repo metadata, `github_event_kind`,
+`github_event_ref`, and `run_secret_hash`. #414's migration adds the
 `agent_runs.github_delivery_id -> github_webhook_deliveries.github_delivery_id`
-foreign key in the #413 migration; otherwise #414 adds the FK.
+foreign key after it creates `github_webhook_deliveries`; #413 never references a
+GitHub-owned table.
 
 ### Migration file
 
-`api/migrations_pg/0NN_decent_agents_github_integration.sql` where `0NN` is the
-next available number at implementation time. Top of `main` at spec authoring
-is `045_contract_timeout_states.sql`. Pick whichever number is free when this
-lands; the migration runner is order-by-filename, so number conflicts are
-surfaced loudly.
+`api/migrations_pg/047_decent_agents_github_integration.sql` if #413 lands as
+`046_agent_identities.sql` first. If another migration lands before either spec,
+keep #413 first and renumber this spec to the next free number. The migration
+runner is order-by-filename, so number conflicts are surfaced loudly.
 
 ---
 
@@ -628,6 +628,15 @@ with `account_id IS NULL AND removed_at_ns IS NULL` as stale by setting
 clear "install again" error for stale rows. This prevents abandoned install flows
 from accumulating forever.
 
+Org-install caveat: v1 requires the GitHub user who starts the Decent Cloud
+dashboard flow to be the same user who clicks **Install** in GitHub. For
+organization installs, that usually means the dashboard user must be an org owner
+or GitHub App manager. If a different org admin performs the GitHub-side install,
+`sender_user_id` will not match the OAuth-confirmed dashboard user and the
+installation remains unlinked. Do not add a spoofable `installation_id` fallback;
+supporting delegated org-admin installs needs a separate verified membership / org
+ownership design.
+
 ### Handler-by-handler behaviour
 
 **`installation.created`:**
@@ -720,10 +729,15 @@ WHERE github_installation_id=payload["installation"]["id"]
    If not triggered: DispatchOutcome::skipped(reason="trigger not matched").
 4. Mint installation access token (section F).
 5. INSERT INTO agent_runs (status='queued', identity_id,
-   github_delivery_id, repo_full_name, github_event_ref=typed_ref,
-   run_secret=<32-byte cryptographic random>).
-   Store `github_event_ref` as a typed ref (`issue/<number>`, `pull/<number>`,
-   `review/<id>`, or `review-comment/<id>`). Guard: reject if an active run
+   github_delivery_id, repo_full_name,
+   github_event_kind='<event_type>.<action>', github_event_ref=typed_ref,
+   run_secret_hash=sha256(<32-byte cryptographic random>)).
+   The #413 DB helper also stamps `billing_period_start_ns` from the current
+   subscription period.
+   The plaintext run secret is passed once to the container as
+   `DC_AGENT_RUN_SECRET` and is NEVER stored. Store `github_event_ref` as a typed
+   ref (`issue/<number>`, `pull/<number>`, `review/<id>`, or
+   `review-comment/<id>`). Guard: reject if an active run
    already exists for the same `(repo_full_name, github_event_ref)` with status
    IN ('queued','running').
    This prevents double-dispatch from two webhook events arriving
@@ -737,6 +751,12 @@ is in `agent_runs` and the docker exec is invoked. Long agent runs do NOT block
 GitHub's 10-second delivery timeout — but since GitHub does not auto-retry,
 returning 2xx promptly is essential to avoid the delivery being marked as failed
 in GitHub's delivery logs (which are visible to the customer).
+
+Terminology boundary: this spec uses **container invocation** for per-webhook
+`docker exec` work. #413 uses **reconcile dispatch** for lifecycle intents
+(provision / pause / resume / teardown). Keep these code paths separate: webhook
+invocation does not provision containers, and the reconcile loop does not carry
+GitHub installation tokens.
 
 ### Orphaned run reconciliation
 
@@ -753,8 +773,15 @@ WHERE status IN ('queued','running')
 
 For each orphaned row: mark `status='failed'`, set
 `failure_reason='reconciler: run timed out or server crashed'`, clear
-`run_secret`. Default timeout is 60 minutes; staging may use a shorter value in
-tests. Alert ops. This job MUST exist before launch.
+`run_secret_hash`. Default timeout is 60 minutes; staging may use a shorter value
+in tests. Alert ops. This job MUST exist before launch.
+
+Also scan `github_webhook_deliveries.dispatch_status='pending'` rows older than
+5 minutes. These rows should only exist if the API process crashed after the
+verified delivery INSERT and before the handler wrote the final dispatch outcome.
+Mark them `failed` with `error_message='reconciler: webhook handler crashed before final status'`
+and leave the raw payload available for manual replay. This is why `pending` is
+an explicit state rather than a transient-only implementation detail.
 
 ---
 
@@ -907,6 +934,8 @@ Required env vars (added to `api/.env.example` and `cf/.env.example`):
   registration.
 - `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` -- for the OAuth
   user-to-server flow that links installation to user.
+- `DECENT_AGENTS_STRIPE_PRICE_ID` -- owned by #413, but required in the same env
+  templates so Stripe subscription events route to the Decent Agents branch.
 
 ---
 
@@ -955,6 +984,13 @@ LIMIT 1;
 If hit, the event is part of an existing thread the agent owns and we trigger
 without requiring an explicit re-mention.
 
+`agent_runs.github_event_kind` stores `<X-GitHub-Event>.<payload.action>` (for
+example `issues.opened`, `issue_comment.created`, `pull_request.synchronize`).
+`agent_runs.github_event_ref` stores the typed thread identity used for
+dedupe/continuation (`issue/123`, `pull/123`, `review/987`, or
+`review-comment/654`). Do not swap these: `github_event_kind` answers "what
+happened", `github_event_ref` answers "which thread/object owns follow-up work".
+
 ### Boundary: never cross subscription boundaries
 
 The resolver in section E is keyed on `installation_id`. Two customers with two
@@ -990,6 +1026,16 @@ the meaningful security invariant; callable out in tests.
 - **Anthropic key exposure:** see the companion #413 spec. Prompt injection can
   exfiltrate the shared platform key from a customer container; beta acceptance
   must be explicit, and public launch requires the proxy/sidecar follow-up.
+- **Delegated org installs:** v1 links installations only when the same GitHub
+  user starts the dashboard flow and clicks Install in GitHub. Founder decision
+  required before public launch: keep this limitation, or add a verified
+  org-membership flow that lets a different org admin complete the GitHub-side
+  install.
+- **App uninstall while subscription is active:** uninstalling the GitHub App
+  stops dispatch by soft-deleting installations/repos, but does not cancel the
+  paid subscription or tear down the identity container. Founder decision
+  required: keep billing/subscription as the sole lifecycle owner, or treat App
+  uninstall as an explicit cancel/teardown signal.
 
 ---
 
@@ -1000,13 +1046,12 @@ Tick-box list. Each item maps to a file:line where the change lands.
 - [ ] **App registered with required permissions** -- runbook entry in
       `docs/operations/decent-agents-runbook.md` (NEW; section "Initial GitHub
       App registration").
-- [ ] **Migration `0NN_decent_agents_github_integration.sql`** creates
+- [ ] **Migration `047_decent_agents_github_integration.sql`** creates
       `github_app_installations` (with `sender_user_id BIGINT NOT NULL`),
       `github_webhook_deliveries`, and `github_oauth_pending`, extends
       `oauth_accounts.provider` to allow `github_oauth`, and adds the #414-owned
       FKs from `agent_repos` / `agent_runs` to GitHub tables. File:
-      `api/migrations_pg/0NN_*.sql` -- pick the next free number at
-      implementation time.
+      `api/migrations_pg/047_*.sql` unless a peer migration forces renumbering.
 - [ ] **Module split** -- `api/src/openapi/webhooks.rs` becomes
       `api/src/openapi/webhooks/mod.rs` plus per-provider files. The Stripe and
       ICPay HMAC verifiers collapse to a single
@@ -1030,7 +1075,7 @@ Tick-box list. Each item maps to a file:line where the change lands.
       `pull_request_review_comment.created`. Unknown event types log INFO and
       return 200.
 - [ ] **Repo-to-identity resolver** -- section E algorithm implemented as
-      `Database::resolve_identity_for_installation(installation_id) -> Option<id>`.
+      `Database::resolve_identity_for_installation_repo(installation_id, repo_id) -> Option<id>`.
       Unit-tested for: happy path, suspended, removed, unlinked user, no active
       subscription.
 - [ ] **JWT minting** -- `api/src/github_app/auth.rs` (new module) with
@@ -1053,7 +1098,7 @@ Tick-box list. Each item maps to a file:line where the change lands.
       `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_WEBHOOK_SECRET`,
       `GITHUB_APP_CLIENT_ID`, or `GITHUB_APP_CLIENT_SECRET` is missing/malformed.
 - [ ] **Env templates** -- `api/.env.example` and `cf/.env.example` get the
-      five new env vars with comments.
+      five GitHub App env vars plus `DECENT_AGENTS_STRIPE_PRICE_ID` with comments.
 - [ ] **`scripts/dc-secrets`** -- runbook entry showing `dc-secrets set
       shared/env GITHUB_APP_*=...`.
 - [ ] **Unit tests**:
@@ -1088,6 +1133,8 @@ Tick-box list. Each item maps to a file:line where the change lands.
         (assert callback DELETEs the `github_oauth_pending` row after
         successful exchange; second callback with the same state -> 400)
       - `webhooks::github::tests::stale_unlinked_installation_is_soft_deleted`
+      - `webhooks::github::tests::stale_oauth_pending_row_is_deleted`
+      - `webhooks::github::tests::pending_delivery_reconciler_marks_failed`
       - `github_app::auth::tests::jwt_round_trip`
       - `github_app::auth::tests::token_cache_refreshes_before_expiry`
 - [ ] **E2E test** -- Playwright suite under `website/tests/e2e/decent-agents/`:
