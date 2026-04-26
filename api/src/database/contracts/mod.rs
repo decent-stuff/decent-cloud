@@ -504,7 +504,7 @@ impl Database {
     }
 }
 
-mod dispute;
+pub(crate) mod dispute;
 mod extensions;
 mod payment;
 mod provisioning;
@@ -512,7 +512,7 @@ mod rental;
 mod timeouts;
 mod usage;
 
-pub use dispute::{dispute_refund_idempotency_key, ContractDisputeUpsert};
+pub use dispute::ContractDisputeUpsert;
 
 /// Contract usage tracking for billing periods
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, TS, Object)]

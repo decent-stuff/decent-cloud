@@ -2303,7 +2303,7 @@ mod tests {
     // the handler-side invariants the spec mandates in section 6.
     // =========================================================================
 
-    use crate::database::contracts::dispute_refund_idempotency_key;
+    use crate::database::contracts::dispute::dispute_refund_idempotency_key;
     use crate::database::test_helpers::setup_test_db;
 
     async fn insert_active_contract(db: &Database, contract_id: &[u8], pi_id: Option<&str>) {

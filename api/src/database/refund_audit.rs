@@ -12,9 +12,15 @@
 
 use super::types::Database;
 use anyhow::{Context, Result};
+#[cfg(test)]
 use chrono::{DateTime, Utc};
+#[cfg(test)]
 use sqlx::FromRow;
 
+/// Materialized refund-audit row. Only constructed by
+/// `find_audit_by_idempotency_key`, which is currently exercised by tests
+/// only (ops dashboard wiring is tracked in #432).
+#[cfg(test)]
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
 pub struct RefundAudit {
     pub id: i64,
@@ -137,8 +143,10 @@ impl Database {
         Ok(())
     }
 
-    /// Look up an audit row by its idempotency_key. Used by ops dashboards
-    /// and by tests asserting wiring end-to-end.
+    /// Look up an audit row by its idempotency_key. Currently exercised by
+    /// tests asserting end-to-end wiring; ops dashboard wiring is tracked
+    /// in #432, at which point this gate should be removed.
+    #[cfg(test)]
     pub async fn find_audit_by_idempotency_key(
         &self,
         key: &str,
