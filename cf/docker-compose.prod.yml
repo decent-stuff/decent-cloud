@@ -150,11 +150,29 @@ services:
   # Application Services
   # ============================================
 
+  # Fix ownership of the bind-mounted /data dir before any service uses it.
+  # Docker creates a missing bind-mount source as root:root, but the app
+  # runs as the non-root appuser (UID/GID ${USER_ID}/${GROUP_ID}); without
+  # this the ledger sync and validator cannot create /data/ledger and
+  # crash-loop. This one-shot runs on every `up`, so the fix survives
+  # data-dir recreation.
+  data-init:
+    image: decent-cloud-api:prod
+    container_name: decent-cloud-prod-data-init
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /data/ledger && chown -R ${USER_ID:-1000}:${GROUP_ID:-1000} /data"]
+    volumes:
+      - ../data/api-data-prod:/data
+    networks:
+      - decent-cloud-prod
+
   # Configuration doctor - runs on deploy to check setup
   api-doctor:
     image: decent-cloud-api:prod
     container_name: decent-cloud-prod-api-doctor
     depends_on:
+      data-init:
+        condition: service_completed_successfully
       chatwoot-setup:
         condition: service_completed_successfully
     command: ["api-server", "doctor"]
@@ -215,6 +233,8 @@ services:
     container_name: decent-cloud-prod-api-serve
     restart: unless-stopped
     depends_on:
+      data-init:
+        condition: service_completed_successfully
       api-doctor:
         condition: service_completed_successfully
       chatwoot-web:
@@ -296,6 +316,9 @@ services:
     image: decent-cloud-api:prod
     container_name: decent-cloud-prod-api-sync
     restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
     command: ["api-server", "sync"]
     environment:
       - ENVIRONMENT=prod
@@ -321,6 +344,9 @@ services:
     image: decent-cloud-api:prod
     container_name: decent-cloud-prod-validator
     restart: unless-stopped
+    depends_on:
+      data-init:
+        condition: service_completed_successfully
     command: ["/usr/local/bin/validator-entrypoint.sh"]
     environment:
       - ENVIRONMENT=prod
