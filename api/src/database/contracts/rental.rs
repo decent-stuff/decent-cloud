@@ -608,56 +608,66 @@ impl Database {
                         .stripe_payment_intent_id
                         .as_deref()
                         .or(contract.stripe_checkout_session_id.as_deref());
-                    if let Some(payment_intent_id) = stripe_id {
-                        // Calculate prorated refund based on when service became active.
-                        // Pause credit comes from `total_paused_ns`; failure to read it is
-                        // fatal here because under-crediting a refund silently is worse than
-                        // a loud cancel failure (operator sees, retries).
-                        let total_paused_ns = self.get_total_paused_ns(contract_id).await?;
-                        let refund_e9s = Self::calculate_prorated_refund(
-                            contract.payment_amount_e9s,
-                            contract.provisioning_completed_at_ns,
-                            contract.end_timestamp_ns,
-                            current_timestamp_ns,
-                            total_paused_ns,
+                    // A succeeded Stripe payment always carries a PaymentIntent or checkout
+                    // session id (set by the webhook / verify-checkout path). Missing both is
+                    // a data-integrity violation: fail loudly rather than silently cancel the
+                    // contract without refunding the customer.
+                    let Some(payment_intent_id) = stripe_id else {
+                        tracing::error!(
+                            "Stripe contract {} has payment_status=succeeded but no stripe_payment_intent_id/stripe_checkout_session_id; refusing to cancel without a refund",
+                            hex::encode(contract_id)
                         );
+                        return Err(anyhow::anyhow!(
+                            "Cannot refund Stripe contract {}: succeeded payment has no payment_intent_id or checkout_session_id",
+                            hex::encode(contract_id)
+                        ));
+                    };
 
-                        // Only process refund if amount is positive
-                        if refund_e9s > 0 {
-                            // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                            let refund_cents = refund_e9s / 10_000_000;
-                            let unique_token = format!("cancel:{}", current_timestamp_ns);
-                            let key = crate::refund::refund_idempotency_key(
-                                "cancel",
-                                contract_id,
-                                &unique_token,
-                            );
-                            let refund_id = self
-                                .issue_audited_refund(
-                                    crate::database::refund_audit::AuditedRefundInput {
-                                        contract_id,
-                                        idempotency_key: &key,
-                                        payment_intent_id,
-                                        refund_cents,
-                                        currency: &contract.currency,
-                                        reason: "cancel",
-                                        stripe_dispute_id: None,
-                                        stripe_client,
-                                    },
-                                )
-                                .await?;
-                            if let Some(ref id) = refund_id {
-                                tracing::info!(
-                                    "Stripe refund created: {} for contract {} (amount: {} cents)",
-                                    id,
-                                    hex::encode(contract_id),
-                                    refund_cents
-                                );
-                            }
-                            (Some(refund_e9s), refund_id, None)
-                        } else {
-                            (None, None, None)
+                    // Refund only the remainder still held by the platform: prorated for
+                    // unused time, minus funds already released to the provider. Shared
+                    // with the ICPay path via `calculate_net_refund_e9s`.
+                    let refund_e9s = self
+                        .calculate_net_refund_e9s(&contract, current_timestamp_ns)
+                        .await?;
+
+                    // Only process refund if amount is positive
+                    if refund_e9s > 0 {
+                        // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
+                        let refund_cents = refund_e9s / 10_000_000;
+                        let unique_token = format!("cancel:{}", current_timestamp_ns);
+                        let key = crate::refund::refund_idempotency_key(
+                            "cancel",
+                            contract_id,
+                            &unique_token,
+                        );
+                        let refund_id = self
+                            .issue_audited_refund(
+                                crate::database::refund_audit::AuditedRefundInput {
+                                    contract_id,
+                                    idempotency_key: &key,
+                                    payment_intent_id,
+                                    refund_cents,
+                                    currency: &contract.currency,
+                                    reason: "cancel",
+                                    stripe_dispute_id: None,
+                                    stripe_client,
+                                },
+                            )
+                            .await?;
+                        match refund_id {
+                            Some(ref id) => tracing::info!(
+                                "Stripe refund created: {} for contract {} (amount: {} cents)",
+                                id,
+                                hex::encode(contract_id),
+                                refund_cents
+                            ),
+                            None => tracing::warn!(
+                                "Stripe refund for contract {} computed at {} cents but Stripe returned no refund id (client not configured / dry-run); recording amount only",
+                                hex::encode(contract_id),
+                                refund_cents
+                            ),
                         }
+                        (Some(refund_e9s), refund_id, None)
                     } else {
                         (None, None, None)
                     }

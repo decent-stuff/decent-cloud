@@ -164,6 +164,31 @@ impl Database {
         refund_amount.clamp(0, payment_amount_e9s)
     }
 
+    /// Net refund owed to the customer on cancellation: the prorated refund for
+    /// unused time, minus any funds already released to the provider.
+    ///
+    /// Shared by the Stripe and ICPay cancel paths so both honour the same
+    /// policy — the customer is refunded only the remainder still held by the
+    /// platform, never funds already paid out to the provider. Returns a value
+    /// in `[0, payment_amount_e9s]`.
+    pub(super) async fn calculate_net_refund_e9s(
+        &self,
+        contract: &Contract,
+        current_timestamp_ns: i64,
+    ) -> Result<i64> {
+        let contract_id_bytes = hex::decode(&contract.contract_id)?;
+        let total_paused_ns = self.get_total_paused_ns(&contract_id_bytes).await?;
+        let gross_refund_e9s = Self::calculate_prorated_refund(
+            contract.payment_amount_e9s,
+            contract.provisioning_completed_at_ns,
+            contract.end_timestamp_ns,
+            current_timestamp_ns,
+            total_paused_ns,
+        );
+        let already_released = contract.total_released_e9s.unwrap_or(0);
+        Ok(gross_refund_e9s.saturating_sub(already_released).max(0))
+    }
+
     /// Update ICPay transaction ID for a contract
     pub async fn update_icpay_transaction_id(
         &self,
@@ -239,22 +264,12 @@ impl Database {
             (None, None) => return Ok((None, None)),
         };
 
-        // Calculate prorated refund based on when service became active.
-        // If never provisioned, user gets full refund. Pause credit is read
-        // directly from the row (Phase 2: dispute paths populate it).
-        let contract_id_bytes = hex::decode(&contract.contract_id)?;
-        let total_paused_ns = self.get_total_paused_ns(&contract_id_bytes).await?;
-        let gross_refund_e9s = Self::calculate_prorated_refund(
-            contract.payment_amount_e9s,
-            contract.provisioning_completed_at_ns,
-            contract.end_timestamp_ns,
-            current_timestamp_ns,
-            total_paused_ns,
-        );
-
-        // Subtract any amounts already released to provider
-        let already_released = contract.total_released_e9s.unwrap_or(0);
-        let net_refund_e9s = gross_refund_e9s.saturating_sub(already_released);
+        // Refund only the remainder still held by the platform: prorated for
+        // unused time, minus funds already released to the provider. Shared
+        // with the Stripe cancel path via `calculate_net_refund_e9s`.
+        let net_refund_e9s = self
+            .calculate_net_refund_e9s(contract, current_timestamp_ns)
+            .await?;
 
         // Only process refund if amount is positive and icpay_client is provided
         if net_refund_e9s > 0 {

@@ -1713,6 +1713,321 @@ async fn test_cancel_contract_icpay_with_released_amount() {
     }
 }
 
+/// The Stripe cancel path must refund only the remainder the platform still
+/// holds: the prorated refund for unused time minus funds already released to
+/// the provider (`total_released_e9s`), matching the ICPay path. Regression
+/// guard for the over-refund bug where Stripe refunded the full gross amount.
+#[tokio::test]
+async fn test_cancel_stripe_contract_subtracts_released_amount() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![71u8; 32];
+    let payment_amount_e9s = 1_000_000_000i64; // $1.00 == 100 cents
+
+    let now_ns = crate::now_ns().unwrap();
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64); // started 10 days ago
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30-day term
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-1".to_string(),
+            payment_intent_id: "pi_test_released".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    // Service started at start_ns; provider has already been paid for elapsed time.
+    let released_e9s = 200_000_000i64; // 0.2 of $1 already released to provider
+    sqlx::query(
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(start_ns)
+    .bind(released_e9s)
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_before_cancel = crate::now_ns().unwrap();
+    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "refunded");
+
+    // Gross prorated refund computed exactly as the handler does.
+    let gross = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_ns),
+        Some(end_ns),
+        now_before_cancel,
+        0,
+    );
+    let expected_net = gross - released_e9s;
+    let refund = contract
+        .refund_amount_e9s
+        .expect("stripe cancel must record a refund");
+    assert!(
+        (refund - expected_net).abs() < 1_000_000,
+        "Stripe refund must subtract already-released funds: expected ~{expected_net} (gross {gross} - released {released_e9s}), got {refund}"
+    );
+}
+
+/// A succeeded Stripe payment that carries neither a PaymentIntent id nor a
+/// checkout session id is a data-integrity violation. Cancellation must fail
+/// loudly rather than silently cancel the contract without refunding.
+#[tokio::test]
+async fn test_cancel_stripe_contract_without_payment_intent_id_fails_loudly() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![72u8; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+    // Stripe + succeeded, but both Stripe ids are NULL.
+    sqlx::query(
+        "UPDATE contract_sign_requests SET payment_method = 'stripe', payment_status = 'succeeded', stripe_payment_intent_id = NULL, stripe_checkout_session_id = NULL WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let result = db
+        .cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+        .await;
+    assert!(
+        result.is_err(),
+        "cancel must fail when a succeeded Stripe payment has no payment id"
+    );
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(
+        err.contains("no payment_intent_id"),
+        "unexpected error message: {err}"
+    );
+
+    // The contract must remain uncancelled -- no silent state change on failure.
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "requested");
+    assert_eq!(contract.payment_status, "succeeded");
+}
+
+/// When funds already released to the provider exceed the prorated refund, the
+/// net refund clamps to zero: the platform never issues a negative or
+/// over-refund, and records no refund at all.
+#[tokio::test]
+async fn test_cancel_stripe_contract_released_exceeds_refund_pays_nothing() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![73u8; 32];
+    let payment_amount_e9s = 1_000_000_000i64;
+
+    let now_ns = crate::now_ns().unwrap();
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-1".to_string(),
+            payment_intent_id: "pi_test_overreleased".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    // Gross prorated refund is ~666M; release MORE than that to the provider.
+    sqlx::query(
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(start_ns)
+    .bind(800_000_000i64)
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+        .await
+        .unwrap();
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert!(
+        contract.refund_amount_e9s.is_none(),
+        "expected no refund when released exceeds gross, got {:?}",
+        contract.refund_amount_e9s
+    );
+    assert_eq!(contract.payment_status, "succeeded");
+}
+
+/// Live integration test (gated on a test-mode `STRIPE_SECRET_KEY`): proves the
+/// REAL refund path -- `cancel_contract` -> `StripeClient::create_refund` --
+/// issues the correct net refund (prorated minus already-released) and that
+/// Stripe's ledger reflects exactly the amount we recorded. Skipped when no
+/// test key is configured, so CI without secrets still passes.
+#[tokio::test]
+async fn test_cancel_stripe_contract_issues_live_refund() {
+    let secret_key = match std::env::var("STRIPE_SECRET_KEY") {
+        Ok(k) if k.starts_with("sk_test_") => k,
+        Ok(_) => {
+            eprintln!("skipping live Stripe test: STRIPE_SECRET_KEY is not a test-mode key");
+            return;
+        }
+        Err(_) => {
+            eprintln!("skipping live Stripe test: STRIPE_SECRET_KEY not set");
+            return;
+        }
+    };
+
+    let http = reqwest::Client::new();
+
+    // 1) Create + confirm a real test-mode PaymentIntent so there is a charge to refund.
+    let pi: serde_json::Value = http
+        .post("https://api.stripe.com/v1/payment_intents")
+        .basic_auth(&secret_key, Some(""))
+        .form(&[
+            ("amount", "500"),
+            ("currency", "usd"),
+            ("payment_method", "pm_card_visa"),
+            ("payment_method_types[]", "card"),
+            ("confirm", "true"),
+        ])
+        .send()
+        .await
+        .expect("create PaymentIntent")
+        .json()
+        .await
+        .expect("parse PaymentIntent");
+    let pi_id = pi["id"].as_str().expect("payment_intent id").to_string();
+    assert_eq!(
+        pi["status"].as_str(),
+        Some("succeeded"),
+        "test PaymentIntent must be succeeded: {pi:#}"
+    );
+
+    // 2) Build a contract paid by that PaymentIntent, with some funds already released.
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![74u8; 32];
+    let payment_amount_e9s = 5_000_000_000i64; // 500 cents == $5.00
+    let now_ns = crate::now_ns().unwrap();
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-1".to_string(),
+            payment_intent_id: pi_id.clone(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+    let released_e9s = 1_000_000_000i64; // 100 cents already released to provider
+    sqlx::query(
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(start_ns)
+    .bind(released_e9s)
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // 3) Cancel through the REAL Stripe client -> real refund on Stripe's test ledger.
+    let stripe_client = crate::stripe_client::StripeClient::new().expect("stripe client");
+    let now_before = crate::now_ns().unwrap();
+    db.cancel_contract(
+        &contract_id,
+        &requester_pk,
+        Some("live refund test"),
+        Some(&stripe_client),
+        None,
+    )
+    .await
+    .expect("cancel_contract with live refund");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    assert_eq!(contract.payment_status, "refunded");
+    let refund_e9s = contract.refund_amount_e9s.expect("refund recorded");
+    let refund_id = contract.stripe_refund_id.expect("stripe refund id recorded");
+    assert!(refund_id.starts_with("re_"), "unexpected refund id: {refund_id}");
+
+    // Net must equal gross minus released (i.e. released funds were subtracted).
+    let gross = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_ns),
+        Some(end_ns),
+        now_before,
+        0,
+    );
+    let expected_net = gross - released_e9s;
+    assert!(
+        (refund_e9s - expected_net).abs() < 1_000_000,
+        "net refund {refund_e9s} should equal gross {gross} - released {released_e9s}"
+    );
+
+    // 4) Stripe's ledger must reflect exactly the cents we recorded.
+    let expected_cents = refund_e9s / 10_000_000;
+    let refunds: serde_json::Value = http
+        .get(format!(
+            "https://api.stripe.com/v1/refunds?payment_intent={pi_id}&limit=10"
+        ))
+        .basic_auth(&secret_key, Some(""))
+        .send()
+        .await
+        .expect("list refunds")
+        .json()
+        .await
+        .expect("parse refunds");
+    let data = refunds["data"].as_array().expect("refunds data");
+    assert_eq!(
+        data.len(),
+        1,
+        "exactly one refund expected on a fresh PaymentIntent"
+    );
+    let ledger_cents: i64 = data.iter().map(|r| r["amount"].as_i64().unwrap_or(0)).sum();
+    assert_eq!(
+        ledger_cents, expected_cents,
+        "Stripe ledger refund ({ledger_cents}c) must match recorded amount ({expected_cents}c)"
+    );
+}
+
 #[tokio::test]
 async fn test_try_auto_accept_contract_enabled() {
     let db = setup_test_db().await;
