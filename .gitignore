@@ -116,8 +116,5 @@ dc-agent.toml
 /.claude/orchestrator/
 /api/.sqlx/
 .dev-pids/
-.beads/
 .opencode/
 .runtime/
-.dolt/
-.beads-credential-key
