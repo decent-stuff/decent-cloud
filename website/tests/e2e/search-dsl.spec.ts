@@ -120,6 +120,41 @@ test.describe('Search DSL', () => {
 		await expect(page.locator('text=0 offerings found')).toBeVisible();
 	});
 
+	test('empty-state hint uses the valid DSL field alias "type"', async ({ page }) => {
+		// Regression: the hint used to advertise `product_type:gpu`, but the
+		// API DSL allowlist (api/src/search/builder.rs) only accepts the alias
+		// `type` (which maps to the product_type column). `product_type:gpu`
+		// was rejected with "Unknown field: product_type".
+		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
+
+		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		await searchInput.fill('price:<=0');
+		await page.waitForTimeout(800);
+
+		// Hint must show the valid alias `type:gpu` and must not advertise the
+		// invalid `product_type:` form.
+		await expect(page.locator('text=/Try a different term/')).toBeVisible();
+		await expect(page.locator('code')).toHaveText('type:gpu');
+	});
+
+	test('DSL "type:" filter queries offerings by product type', async ({ page }) => {
+		// Validates the field-syntax the empty-state hint advertises actually
+		// works end-to-end through the API DSL parser (distinct from the
+		// client-side GPU checkbox test, which never sends a `q` parameter).
+		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
+
+		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		await searchInput.fill('type:gpu');
+		await page.waitForTimeout(800);
+
+		const offeringRows = page.locator('tbody tr');
+		const count = await offeringRows.count();
+		expect(count).toBeGreaterThan(0);
+		for (let i = 0; i < count; i++) {
+			await expect(offeringRows.nth(i)).toContainText(/gpu/i);
+		}
+	});
+
 	test('should update results count when filtering', async ({ page }) => {
 		// Wait for initial offerings to load
 		const initialCount = page.locator(COUNT_LOCATOR);

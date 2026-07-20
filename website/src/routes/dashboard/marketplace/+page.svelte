@@ -1305,7 +1305,7 @@
 					</div>
 					{#if searchQuery}
 						<p class="text-neutral-400 mb-1 font-medium">No results for "{searchQuery}"</p>
-						<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">product_type:gpu</code></p>
+						<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">type:gpu</code></p>
 					{:else}
 						<p class="text-neutral-500 mb-2">No offerings found</p>
 					{/if}
