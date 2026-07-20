@@ -99,6 +99,12 @@ test.describe('Billing Settings Page', () => {
 		// Verify button should be present
 		await expect(page.locator('button:has-text("Verify")')).toBeVisible();
 
+		// Reset any persisted state from earlier tests so we can assert the
+		// empty-form behaviour. The shared worker account keeps billing data
+		// between tests, so explicitly clear it here.
+		await page.locator('#billingCountryCode').selectOption('');
+		await page.locator('#billingVatId').fill('');
+
 		// Button should be disabled without country and VAT ID
 		await expect(page.locator('button:has-text("Verify")')).toBeDisabled();
 
@@ -116,10 +122,10 @@ test.describe('Billing Settings Page', () => {
 		// Open dropdown and verify some EU countries are present
 		const select = page.locator('#billingCountryCode');
 
-		// Check for specific EU countries
-		await expect(select.locator('option[value="DE"]')).toHaveText('Germany (DE)');
-		await expect(select.locator('option[value="FR"]')).toHaveText('France (FR)');
-		await expect(select.locator('option[value="NL"]')).toHaveText('Netherlands (NL)');
+		// Check for specific EU countries (current format: "CC - Country Name")
+		await expect(select.locator('option[value="DE"]')).toHaveText('DE - Germany');
+		await expect(select.locator('option[value="FR"]')).toHaveText('FR - France');
+		await expect(select.locator('option[value="NL"]')).toHaveText('NL - Netherlands');
 		await expect(select.locator('option[value="OTHER"]')).toHaveText('Other (non-EU)');
 	});
 
