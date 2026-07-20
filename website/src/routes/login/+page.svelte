@@ -8,12 +8,19 @@
 	import type { AccountInfo } from '$lib/stores/auth';
 	import { getAuthCtaClass } from '$lib/utils/auth-cta';
 
-	let returnUrl = $state<string>('/dashboard/marketplace');
+	const DEFAULT_RETURN_URL = '/dashboard/marketplace';
+	// Fresh registrations land on /dashboard so the first-login WelcomeModal
+	// onboarding fires (it renders on that route only). Explicit returnUrl
+	// still wins for both registrations and logins.
+	const REGISTRATION_DEFAULT_RETURN_URL = '/dashboard';
+	let returnUrl = $state<string>(DEFAULT_RETURN_URL);
+	let hasExplicitReturnUrl = $state(false);
 
 	onMount(() => {
 		const urlReturnUrl = $page.url.searchParams.get('returnUrl');
 		if (urlReturnUrl) {
 			returnUrl = urlReturnUrl;
+			hasExplicitReturnUrl = true;
 		}
 
 		const currentlyAuthenticated = get(authStore.isAuthenticated);
@@ -22,8 +29,12 @@
 		}
 	});
 
-	function handleSuccess(account: AccountInfo) {
-		goto(returnUrl);
+	function handleSuccess(account: AccountInfo, isNewRegistration: boolean) {
+		if (isNewRegistration && !hasExplicitReturnUrl) {
+			goto(REGISTRATION_DEFAULT_RETURN_URL);
+		} else {
+			goto(returnUrl);
+		}
 	}
 
 	function handleCancel() {

@@ -226,6 +226,42 @@ test.describe('Account Registration Flow', () => {
 		await expect(page).toHaveURL(/\/dashboard\/marketplace/, { timeout: 10000 });
 	});
 
+	test('should redirect new registration to /dashboard so WelcomeModal fires', async ({ page }) => {
+		const username = generateTestUsername();
+
+		// Navigate to login with NO explicit returnUrl — exercise the new default.
+		await page.goto('/login');
+		await page.waitForLoadState('networkidle');
+
+		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await page.locator('button:has-text("Generate New")').click();
+		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
+		await page.check('input[type="checkbox"]');
+		await page.click('button:has-text("Continue")');
+		await expect(page.locator('input[placeholder="alice"]')).toBeVisible({ timeout: 10000 });
+		await page.fill('input[placeholder="alice"]', username);
+		await expect(page.getByText('available', { exact: false })).toBeVisible({ timeout: 5000 });
+
+		const testEmail = `${username}@test.example.com`;
+		await page.fill('input[placeholder="you@example.com"]', testEmail);
+
+		const apiResponsePromise = waitForApiResponse(
+			page,
+			/\/api\/v1\/accounts$/,
+		);
+
+		const createButton = page.locator('button:has-text("Create Account")');
+		await expect(createButton).toBeEnabled({ timeout: 5000 });
+		await createButton.click();
+		await apiResponsePromise;
+
+		await expect(page.locator('text=Welcome to Decent Cloud')).toBeVisible({ timeout: 10000 });
+		await page.click('button:has-text("Go to Dashboard")');
+
+		// Land on /dashboard (the home route), where WelcomeModal renders.
+		await expect(page).toHaveURL(/\/dashboard$/, { timeout: 10000 });
+	});
+
 	test('should redirect to login page when action=signup parameter is present', async ({ page }) => {
 		// Navigate with action=signup parameter
 		await page.goto('/?action=signup');

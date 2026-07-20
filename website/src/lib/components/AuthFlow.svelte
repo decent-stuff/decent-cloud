@@ -12,7 +12,7 @@
 	import { getAuthCtaClass } from '$lib/utils/auth-cta';
 
 	let { onSuccess } = $props<{
-		onSuccess: (account: AccountInfo) => void;
+		onSuccess: (account: AccountInfo, isNewRegistration: boolean) => void;
 	}>();
 
 	type Step =
@@ -33,6 +33,10 @@
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
 	let showSeedPhrase = $state(false);
+	// Tracks whether the success state came from a fresh registration (vs an
+	// existing-account login) so the host page can route to /dashboard (where
+	// the first-login WelcomeModal renders) instead of the generic returnUrl.
+	let isNewRegistration = $state(false);
 
 	onMount(async () => {
 		if (typeof window === 'undefined') return;
@@ -88,6 +92,7 @@
 		try {
 			await authStore.loginWithSeedPhrase(seedPhrase, '/dashboard/marketplace');
 			createdAccount = account;
+			isNewRegistration = false;
 			currentStep = 'success';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Login failed';
@@ -134,6 +139,7 @@
 			);
 
 			createdAccount = account;
+			isNewRegistration = true;
 			currentStep = 'success';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';
@@ -143,7 +149,7 @@
 
 	function handleSuccess() {
 		if (createdAccount) {
-			onSuccess(createdAccount);
+			onSuccess(createdAccount, isNewRegistration);
 		}
 	}
 
@@ -178,6 +184,7 @@
 			if (result.success && result.data) {
 				await authStore.loadOAuthSession();
 				createdAccount = result.data;
+				isNewRegistration = true;
 				currentStep = 'success';
 			} else {
 				error = result.error || 'Registration failed';
