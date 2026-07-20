@@ -63,7 +63,7 @@ test.describe('Search DSL', () => {
 
 		// Type price filter in the search input (field syntax is sent to
 		// the API as the `q` parameter).
-		const searchInput = page.locator('input[placeholder*="Search by name"]');
+		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
 		await searchInput.fill('price:<=20');
 
 		// Wait for debounce (300ms) and results to update.
@@ -88,7 +88,7 @@ test.describe('Search DSL', () => {
 		await page.waitForTimeout(500);
 
 		// Add DSL price filter
-		const searchInput = page.locator('input[placeholder*="Search by name"]');
+		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
 		await searchInput.fill('price:<=50');
 
 		// Wait for debounce and results to update
@@ -106,7 +106,7 @@ test.describe('Search DSL', () => {
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
 		// Search for impossible price
-		const searchInput = page.locator('input[placeholder*="Search by name"]');
+		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
 		await searchInput.fill('price:<=0');
 
 		// Wait for debounce and results to update

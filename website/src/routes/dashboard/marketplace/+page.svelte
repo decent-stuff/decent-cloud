@@ -1146,9 +1146,10 @@
 				</div>
 				<input
 					type="text"
-					placeholder="Search by name, description, or type..."
+					placeholder="Search offerings…"
 					bind:value={searchQuery}
 					oninput={handleSearchInput}
+					aria-label="Search offerings by name, description, or type"
 					class="w-full pl-11 pr-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-neutral-500 focus:outline-none focus:border-primary-400 transition-colors"
 				/>
 			</div>
