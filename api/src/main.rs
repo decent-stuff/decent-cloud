@@ -187,15 +187,46 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
 
     // Ledger client setup
     let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://icp-api.io".to_string());
-    let canister_id = env::var("CANISTER_ID")
-        .expect("CANISTER_ID environment variable required")
-        .parse::<Principal>()
-        .expect("Invalid CANISTER_ID");
-    let ledger_client = Arc::new(
-        LedgerClient::new(&network_url, canister_id)
-            .await
-            .expect("Failed to initialize ledger client"),
-    );
+    // Default to the deployed decent-cloud ledger canister on IC mainnet.
+    // Production deploys override via env; development almost always uses this value.
+    const DEFAULT_CANISTER_ID: &str = "ggi4a-wyaaa-aaaai-actqq-cai";
+    let canister_id_str = env::var("CANISTER_ID").unwrap_or_else(|_| {
+        tracing::warn!(
+            "CANISTER_ID not set — defaulting to {}. Set CANISTER_ID to override.",
+            DEFAULT_CANISTER_ID
+        );
+        DEFAULT_CANISTER_ID.to_string()
+    });
+    let canister_id = match canister_id_str.parse::<Principal>() {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!(
+                "Invalid CANISTER_ID {:?}: {:#}. Expected a valid IC Principal (e.g. '{}').",
+                canister_id_str,
+                e,
+                DEFAULT_CANISTER_ID
+            );
+            return Err(std::io::Error::other(format!(
+                "Invalid CANISTER_ID: {}",
+                e
+            )));
+        }
+    };
+    let ledger_client = match LedgerClient::new(&network_url, canister_id).await {
+        Ok(c) => Arc::new(c),
+        Err(e) => {
+            tracing::error!(
+                "Failed to initialize ledger client for canister {} at {}: {:#}",
+                canister_id,
+                network_url,
+                e
+            );
+            return Err(std::io::Error::other(format!(
+                "Ledger client initialization failed: {}",
+                e
+            )));
+        }
+    };
     tracing::info!("Ledger client initialized for canister {}", canister_id);
 
     // Sync interval setup
@@ -1574,12 +1605,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
         }
     };
 
-    // Signal all background tasks to finish their current work cycle
+    // Signal all background tasks to finish their current work cycle.
+    // A send error here means all receivers have already been dropped (i.e. the
+    // tasks already exited on their own). That is not a fault — log at debug.
     tracing::info!(
         "Draining background tasks (timeout: {}s)",
         drain_timeout_secs
     );
-    let _ = shutdown_tx.send(true);
+    if let Err(e) = shutdown_tx.send(true) {
+        tracing::debug!(
+            error = %e,
+            "shutdown_tx send failed; all background tasks already exited"
+        );
+    }
 
     // Collect all task handles for awaiting
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![
