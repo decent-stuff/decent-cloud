@@ -477,15 +477,6 @@
 										Copy link
 									{/if}
 								</button>
-								{#if offering.id !== undefined}
-									<button
-										onclick={() => { toggleBookmark(); closeOptionsMenu(); }}
-										class="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-surface-hover hover:text-white flex items-center gap-2.5 transition-colors {savedIds.has(offering.id) ? 'text-primary-400' : ''}"
-									>
-										<Icon name="bookmark" size={14} />
-										{savedIds.has(offering.id) ? 'Saved' : 'Save'}
-									</button>
-								{/if}
 								<button
 									onclick={() => { closeOptionsMenu(); if (!isAuthenticated) { showAuthModal = true; } else { showContactDialog = true; } }}
 									class="w-full px-4 py-2.5 text-left text-sm text-neutral-300 hover:bg-surface-hover hover:text-white flex items-center gap-2.5 transition-colors"
@@ -496,6 +487,20 @@
 							</div>
 						{/if}
 					</div>
+					{#if offering.id !== undefined}
+						<!-- Visible bookmark toggle so saving is a single click (regression:
+						     previously Save lived only inside the overflow menu). -->
+						<button
+							onclick={toggleBookmark}
+							disabled={!isAuthenticated}
+							class="p-2.5 border border-neutral-700 hover:border-primary-500 hover:bg-surface-elevated transition-colors disabled:opacity-50 disabled:cursor-not-allowed {savedIds.has(offering.id) ? 'text-primary-400 border-primary-500/50 bg-primary-500/5' : 'text-neutral-400'}"
+							aria-pressed={savedIds.has(offering.id)}
+							aria-label={savedIds.has(offering.id) ? `Remove ${offering.offer_name} from saved` : `Save ${offering.offer_name}`}
+							title={savedIds.has(offering.id) ? 'Saved — click to remove' : 'Save for later'}
+						>
+							<Icon name="bookmark" size={18} />
+						</button>
+					{/if}
 					<button
 						onclick={handleRentClick}
 						disabled={offering.is_example || offering.provider_online === false}
