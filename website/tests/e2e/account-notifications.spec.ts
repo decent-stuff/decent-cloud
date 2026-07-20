@@ -28,19 +28,24 @@ test.describe('Account Notification Settings', () => {
 
 	test('should show email input when email checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.click('label:has-text("Email")');
+		await page.waitForLoadState('networkidle');
+		// Check the channel checkbox directly by ID; the dependent input appears
+		// client-side once config state updates.
+		await page.check('#notify-email');
 		await expect(page.locator('input[placeholder="your@email.com"]')).toBeVisible();
 	});
 
 	test('should show telegram input when telegram checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.click('label:has-text("Telegram")');
+		await page.waitForLoadState('networkidle');
+		await page.check('#notify-telegram');
 		await expect(page.locator('input[placeholder="Telegram Chat ID"]')).toBeVisible();
 	});
 
 	test('should show sms input when sms checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.click('label:has-text("SMS")');
+		await page.waitForLoadState('networkidle');
+		await page.check('#notify-sms');
 		await expect(page.locator('input[placeholder="+1234567890"]')).toBeVisible();
 	});
 });
