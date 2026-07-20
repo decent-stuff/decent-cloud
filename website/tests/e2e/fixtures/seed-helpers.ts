@@ -169,27 +169,23 @@ export async function seedTransfer(opts: {
  * contract_sign_requests is referenced by several tables without ON DELETE
  * CASCADE (contract_events, contract_usage, contract_usage_events,
  * contract_health_checks, invoices). We must delete those first or the
- * DELETE fails with an FK violation.
+ * DELETE fails with an FK violation. Combined into one psql invocation to
+ * minimise process spawn overhead under parallel workers.
  */
 export async function deleteContractsForRequester(requesterPubkeyHex: string): Promise<void> {
-	// Child tables that reference contract_id without CASCADE
-	const childTables = [
-		'contract_events',
-		'contract_usage_events',
-		'contract_usage',
-		'contract_health_checks',
-		'invoices',
-	];
-	for (const table of childTables) {
-		await sql(`
-			DELETE FROM ${table}
-			WHERE contract_id IN (
-				SELECT contract_id FROM contract_sign_requests
-				WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex')
-			)
-		`);
-	}
-	await sql(`DELETE FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex')`);
+	await sql(`
+		DELETE FROM contract_events
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
+		DELETE FROM contract_usage_events
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
+		DELETE FROM contract_usage
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
+		DELETE FROM contract_health_checks
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
+		DELETE FROM invoices
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
+		DELETE FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex');
+	`);
 }
 
 /** Delete transfers where account is sender or receiver. */
