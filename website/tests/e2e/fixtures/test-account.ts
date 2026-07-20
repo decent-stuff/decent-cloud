@@ -12,15 +12,14 @@ const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
 	testAccount: [
 		async ({ browser }, use) => {
 			// Create test account in worker scope
-			const setupPage = await browser.newPage();
+			const setupContext = await browser.newContext();
+			const setupPage = await setupContext.newPage();
 			setupConsoleLogging(setupPage);
 			const credentials = await registerNewAccount(setupPage);
-			await setupPage.close();
+			await setupContext.close();
 
 			// Provide credentials to all tests
 			await use(credentials);
-
-			// Cleanup if needed
 		},
 		{ scope: 'worker' },
 	],
@@ -28,22 +27,32 @@ const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
 
 /**
  * Test fixture for authenticated tests.
- * Creates account once per worker and signs in before each test.
- * Use this when testing features that require authentication.
+ * Creates account once per worker. Each test starts on /dashboard with the
+ * session pre-seeded via localStorage — no per-test UI sign-in flow.
+ *
+ * The fast path (addInitScript + goto /dashboard) replaces ~5s of UI clicks
+ * per test ("Sign in with seed phrase instead" → "Import Existing" → fill →
+ * "Continue" → "Go to Dashboard") with a single navigation. Under 16 parallel
+ * workers this is the difference between a 4-minute suite and a 1-minute one.
  */
-export const test = baseFixtures.extend<{}>({
-	// Override page fixture to sign in before each test
-	page: async ({ page, testAccount }, use) => {
+export const test = baseFixtures.extend({
+	// Override context: pre-seed seed_phrases in localStorage before any page
+	// navigation. The website reads this on load to authenticate silently.
+	context: async ({ context, testAccount }, use) => {
+		const seed = testAccount.seedPhrase;
+		await context.addInitScript((s: string) => {
+			localStorage.setItem('seed_phrases', JSON.stringify([s]));
+		}, seed);
+		await use(context);
+	},
+
+	// Override page: skip UI sign-in; land directly on /dashboard authenticated.
+	page: async ({ page }, use) => {
 		setupConsoleLogging(page);
-
-		// Sign in with test account credentials
-		await signIn(page, testAccount);
-
-		// Wait for page to be fully hydrated and auth state ready
-		await page.waitForLoadState('networkidle');
-		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 10000 });
-
-		// Use the authenticated page
+		await page.goto('/dashboard');
+		// Logout button visibility IS the auth-ready signal; do not wait for
+		// networkidle (vite HMR keeps the network busy and tanks parallel runs).
+		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
 		await use(page);
 	},
 });
@@ -65,5 +74,12 @@ export const testLoggedOut = baseFixtures.extend<{ testAccountLoggedOut: AuthCre
 		await use(page);
 	},
 });
+
+/**
+ * signIn() is re-exported for tests that explicitly need to exercise the UI
+ * sign-in flow (e.g. signin-flow.spec.ts). Most authenticated tests should NOT
+ * call this — the `test` fixture already lands them authenticated.
+ */
+export { signIn };
 
 export { expect } from '@playwright/test';

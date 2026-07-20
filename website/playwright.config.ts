@@ -25,7 +25,13 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	workers: process.env.CI ? 2 : 16,
+	// 16 dev workers oversaturate a 16-core box that also runs api-server, vite,
+	// and postgres. 4 keeps the box responsive and the suite under 60s with the
+	// fast-auth fixture (cached seed-phrase injection, no per-test UI sign-in).
+	workers: process.env.CI ? 2 : (process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 4),
+	// Per-test timeout. The fast-auth fixture lands on /dashboard in <2s; 30s
+	// leaves plenty of headroom for actual test body work under parallel load.
+	timeout: 30_000,
 	reporter: process.env.CI ? 'github' : 'list',
 
 	use: {
