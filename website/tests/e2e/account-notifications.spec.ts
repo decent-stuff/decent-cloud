@@ -7,28 +7,23 @@ test.describe('Account Notification Settings', () => {
 		await expect(page.locator('h2:has-text("Notification Channels")')).toBeVisible();
 	});
 
-	test('should show email channel with description', async ({ page }) => {
+	test('should show email channel with usage info', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
 		await expect(page.locator('label:has-text("Email")')).toBeVisible();
-		await expect(
-			page.locator('text=Receive notifications via email for important updates')
-		).toBeVisible();
+		// Static descriptions were removed; per-channel usage info now identifies each channel
+		await expect(page.locator('text=/^\\d+ sent today$/')).toBeVisible();
 	});
 
-	test('should show telegram channel with description', async ({ page }) => {
+	test('should show telegram channel with usage info', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
 		await expect(page.locator('label:has-text("Telegram")')).toBeVisible();
-		await expect(
-			page.locator('text=Get instant notifications through Telegram bot')
-		).toBeVisible();
+		await expect(page.locator('text=/^\\d+\\/50 sent today$/')).toBeVisible();
 	});
 
-	test('should show sms channel with description', async ({ page }) => {
+	test('should show sms channel with usage info', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
 		await expect(page.locator('label:has-text("SMS")')).toBeVisible();
-		await expect(
-			page.locator('text=Receive text message alerts on your phone')
-		).toBeVisible();
+		await expect(page.locator('text=/^\\d+\\/5 sent today$/')).toBeVisible();
 	});
 
 	test('should show email input when email checkbox checked', async ({ page }) => {
