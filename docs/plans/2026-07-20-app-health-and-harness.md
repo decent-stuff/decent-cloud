@@ -53,12 +53,14 @@ Guiding principles:
 - Zero flake from shared worker state: workers don't fight over the same seed data.
 - Verify the REAL app: real api-server, real vite, real browser, real Postgres. No mocks of first-party code. Mocks allowed ONLY at external-service boundaries (Stripe, Chatwoot) per user's mock rule.
 
-- [ ] **P3.1** `playwright.config.ts`: switch both `reuseExistingServer` to `true`. Add `E2E_REUSE_ONLY=1` env that **requires** servers to be running (skips spawn). Document a `npm run test:e2e:fast` script using this mode.
-- [ ] **P3.2** Replace `test-admin-account.ts` cargo shell-out with direct SQLx UPDATE on `accounts.is_admin`. Faster + no toolchain dep.
+- [x] **P3.1** `playwright.config.ts`: both `reuseExistingServer` set to `true`; auto-spawned API now runs with `RATE_LIMIT_ENABLED=false`. No `E2E_REUSE_ONLY` env added — `reuseExistingServer: true` already does the right thing (spawn-or-reuse) so a separate mode would be YAGNI. Committed in `d837248b`.
+- [x] **P3.2** `test-admin-account.ts` cargo shell-out replaced with `psql UPDATE accounts SET is_admin = TRUE ... RETURNING username` (sub-ms; no toolchain dep). Committed in `d837248b`.
+- [ ] **P3.1.5** (added) Disable API rate limiter in dev/test. `RATE_LIMIT_ENABLED` env (default: on in production, off elsewhere). Required for parallel workers — without it, 16 workers sharing 127.0.0.1 blew the 120/min RELAXED bucket and produced mass 429s. Committed in `d837248b`.
 - [ ] **P3.3** Add `scripts/e2e-up.sh` (one-shot launcher): builds api binary if missing, starts api + web detached, waits for `/api/v1/health` and `/`, prints "ready in Xs". Pair with `e2e-down.sh`. Idempotent (reuse if already up).
 - [ ] **P3.4** Add `npm run test:e2e:fast` that calls `e2e-up.sh` then runs playwright with `reuseExistingServer: true`. Time it. Target: smoke set <10s after build, full suite <60s.
 - [ ] **P3.5** Audit existing 20 specs for any non-boundary mock usage; convert to real flow where possible.
 - [ ] **P3.6** Wire E2E into CI (`Makefile.toml` `all` task or new GitHub workflow). Split smoke vs full. Use cache for `target/` and `node_modules/`.
+- [ ] **P3.7** (added) Triage 86 stale-test failures across 17 specs (UI drifted from assertions; e.g. account-page expects removed "Account ID" text, signin-flow expects "Import Existing" without prior "Sign in with seed phrase instead" click). Group by spec family, dispatch parallel subagents to update assertions to match real UI without losing coverage intent. Discovered during Phase 2 baseline re-run after rate-limit fix.
 
 ### Phase 4 — Coverage of all user flows (HIGH, ~2 h)
 
