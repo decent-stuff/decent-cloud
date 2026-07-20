@@ -28,24 +28,26 @@ test.describe('Account Notification Settings', () => {
 
 	test('should show email input when email checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.waitForLoadState('networkidle');
-		// Check the channel checkbox directly by ID; the dependent input appears
-		// client-side once config state updates.
-		await page.check('#notify-email');
+		// Wait for the checkbox element itself, not just networkidle — Svelte
+		// hydrates the channels section async and page.check() flakes if the
+		// element isn't fully interactive. Use click() (real user click) so the
+		// Svelte bind:checked change handler fires reliably.
+		await page.locator('#notify-email').waitFor({ state: 'visible' });
+		await page.locator('#notify-email').click();
 		await expect(page.locator('input[placeholder="your@email.com"]')).toBeVisible();
 	});
 
 	test('should show telegram input when telegram checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.waitForLoadState('networkidle');
-		await page.check('#notify-telegram');
+		await page.locator('#notify-telegram').waitFor({ state: 'visible' });
+		await page.locator('#notify-telegram').click();
 		await expect(page.locator('input[placeholder="Telegram Chat ID"]')).toBeVisible();
 	});
 
 	test('should show sms input when sms checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/account/notifications');
-		await page.waitForLoadState('networkidle');
-		await page.check('#notify-sms');
+		await page.locator('#notify-sms').waitFor({ state: 'visible' });
+		await page.locator('#notify-sms').click();
 		await expect(page.locator('input[placeholder="+1234567890"]')).toBeVisible();
 	});
 });

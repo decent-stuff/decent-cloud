@@ -7,14 +7,6 @@ test.describe('First login onboarding', () => {
 		// AFTER the context-level one) to re-arm the modal on every navigation.
 		await page.addInitScript(() => sessionStorage.removeItem('first_login_onboarding_completed'));
 
-		await page.route('**/api/v1/accounts/*/external-keys', async (route) => {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ success: true, data: [] }),
-			});
-		});
-
 		await page.goto('/dashboard');
 
 		await expect(page.getByRole('heading', { name: 'Complete your profile' })).toBeVisible();
