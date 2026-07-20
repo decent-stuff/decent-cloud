@@ -545,9 +545,9 @@
 					<div>
 						<div class="data-label mb-1">Latest Report</div>
 						<div class="text-sm font-medium text-white">{offeringSlaSummary.latestReportDate ?? 'No report yet'}</div>
-						{#if offeringSlaSummary.latestUptimePercent !== undefined}
-							<div class="text-xs text-neutral-500 mt-1">{offeringSlaSummary.latestUptimePercent.toFixed(2)}% uptime</div>
-						{/if}
+					{#if offeringSlaSummary.latestUptimePercent != null}
+						<div class="text-xs text-neutral-500 mt-1">{offeringSlaSummary.latestUptimePercent.toFixed(2)}% uptime</div>
+					{/if}
 					</div>
 				</div>
 
