@@ -26,6 +26,12 @@ REMOTE_API_URL="https://dev-api.decent-cloud.org"
 API_BINARY="$ROOT/target/debug/api-server"
 
 # Source all env vars from cf/.env.dev
+if [ ! -f "$ROOT/cf/.env.dev" ]; then
+  echo "error: $ROOT/cf/.env.dev not found." >&2
+  echo "       Copy cf/.env.dev.example to cf/.env.dev and edit it:" >&2
+  echo "         cp cf/.env.dev.example cf/.env.dev" >&2
+  exit 1
+fi
 # shellcheck disable=SC1090
 set -a
 # shellcheck source=/dev/null
