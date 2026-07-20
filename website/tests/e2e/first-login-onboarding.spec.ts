@@ -2,6 +2,11 @@ import { test, expect } from './fixtures/test-account';
 
 test.describe('First login onboarding', () => {
 	test('@smoke guides a new user through all onboarding steps once', async ({ page }) => {
+		// The fast-auth fixture dismisses the WelcomeModal by default. This test
+		// exercises the modal explicitly, so add a page-level init script (runs
+		// AFTER the context-level one) to re-arm the modal on every navigation.
+		await page.addInitScript(() => sessionStorage.removeItem('first_login_onboarding_completed'));
+
 		await page.route('**/api/v1/accounts/*/external-keys', async (route) => {
 			await route.fulfill({
 				status: 200,

@@ -70,9 +70,9 @@ test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 		const adminLink = page.locator('aside a[href="/dashboard/admin"]');
 		await expect(adminLink).not.toBeVisible();
 
-		// But should see other navigation items
+		// But should see other navigation items (offerings link was moved into
+		// auth-gated My Activity; marketplace link is the canonical sidebar entry).
 		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
-		await expect(page.locator('aside a[href="/dashboard/offerings"]')).toBeVisible();
 	});
 });
 

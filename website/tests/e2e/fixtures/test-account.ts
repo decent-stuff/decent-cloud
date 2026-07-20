@@ -38,10 +38,14 @@ const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
 export const test = baseFixtures.extend({
 	// Override context: pre-seed seed_phrases in localStorage before any page
 	// navigation. The website reads this on load to authenticate silently.
+	// Also dismiss the first-login WelcomeModal so it doesn't intercept clicks
+	// on the underlying dashboard chrome. Tests that explicitly exercise the
+	// modal (first-login-onboarding.spec.ts) clear sessionStorage to opt back in.
 	context: async ({ context, testAccount }, use) => {
 		const seed = testAccount.seedPhrase;
 		await context.addInitScript((s: string) => {
 			localStorage.setItem('seed_phrases', JSON.stringify([s]));
+			sessionStorage.setItem('first_login_onboarding_completed', 'true');
 		}, seed);
 		await use(context);
 	},

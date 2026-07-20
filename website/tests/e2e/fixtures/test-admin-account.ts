@@ -3,7 +3,6 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import {
 	registerNewAccount,
-	signIn,
 	setupConsoleLogging,
 	type AuthCredentials,
 } from './auth-helpers';
@@ -59,15 +58,18 @@ async function grantAdminStatus(username: string): Promise<void> {
 
 /**
  * Test fixture for admin user tests.
- * Creates account once per worker, grants admin status, and signs in before each test.
+ * Creates account once per worker, grants admin status, and silently
+ * authenticates each test by injecting the seed phrase into localStorage
+ * (same fast-auth pattern as test-account.ts; no per-test UI sign-in).
  */
 export const test = base.extend<{}, { adminAccount: AuthCredentials }>({
 	adminAccount: [
 		async ({ browser }, use) => {
-			const setupPage = await browser.newPage();
+			const setupContext = await browser.newContext();
+			const setupPage = await setupContext.newPage();
 			setupConsoleLogging(setupPage);
 			const credentials = await registerNewAccount(setupPage);
-			await setupPage.close();
+			await setupContext.close();
 
 			// Grant admin status via direct DB UPDATE (fast; no cargo run).
 			await grantAdminStatus(credentials.username);
@@ -77,11 +79,23 @@ export const test = base.extend<{}, { adminAccount: AuthCredentials }>({
 		{ scope: 'worker' },
 	],
 
-	page: async ({ page, adminAccount }, use) => {
+	// Override context: pre-seed seed_phrases + dismiss WelcomeModal.
+	context: async ({ context, adminAccount }, use) => {
+		const seed = adminAccount.seedPhrase;
+		await context.addInitScript((s: string) => {
+			localStorage.setItem('seed_phrases', JSON.stringify([s]));
+			sessionStorage.setItem('first_login_onboarding_completed', 'true');
+		}, seed);
+		await use(context);
+	},
+
+	// Override page: skip UI sign-in; land directly on /dashboard authenticated.
+	page: async ({ page }, use) => {
 		setupConsoleLogging(page);
-		await signIn(page, adminAccount);
-		await page.waitForLoadState('networkidle');
-		await page.locator(`text=@${adminAccount.username}`).waitFor({ state: 'visible', timeout: 10000 });
+		await page.goto('/dashboard');
+		// Logout button visibility IS the auth-ready signal; do not wait for
+		// networkidle (vite HMR keeps the network busy and tanks parallel runs).
+		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
 		await use(page);
 	},
 });
