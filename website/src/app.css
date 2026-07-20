@@ -135,13 +135,14 @@
 	}
 
 	body {
+		/* text-neutral-100 already flips to dark in light theme via the
+		   CSS variable overrides below — no extra override needed. The
+		   previous `text-neutral-900` override was inverted: in light theme
+		   neutral-900 is the LIGHTEST shade, so it made unstyled content
+		   (e.g. SvelteKit's default 404) render white-on-white. */
 		@apply bg-base text-neutral-100 min-h-screen;
 		font-feature-settings: 'kern' 1, 'liga' 1;
 		transition: background-color 0.2s ease, color 0.2s ease;
-	}
-
-	:root[data-theme='light'] body {
-		@apply text-neutral-900;
 	}
 
 	/* Headings - Bold, commanding */
