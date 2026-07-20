@@ -1381,7 +1381,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .data(ctx.email_service.clone())
         .data(ctx.cloudflare_dns.clone())
         .with(CookieJarManager::new())
-        .with(rate_limit::RateLimiter::new())
+        .with(rate_limit::RateLimiter::from_env())
         .with(request_logging::RequestLogging)
         .with(cors);
 

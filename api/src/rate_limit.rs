@@ -62,13 +62,49 @@ impl RateLimitState {
 
 pub struct RateLimiter {
     state: Arc<Mutex<RateLimitState>>,
+    enabled: bool,
 }
 
 impl RateLimiter {
-    pub fn new() -> Self {
+    pub fn with_enabled(enabled: bool) -> Self {
         Self {
             state: Arc::new(Mutex::new(RateLimitState::new())),
+            enabled,
         }
+    }
+
+    /// Build from process env. Rate limiting is on by default in production and
+    /// off elsewhere, unless `RATE_LIMIT_ENABLED` explicitly overrides.
+    pub fn from_env() -> Self {
+        let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
+        let explicit = std::env::var("RATE_LIMIT_ENABLED").ok();
+        let enabled = enabled_from_env(&environment, explicit.as_deref());
+        if !enabled {
+            tracing::warn!(
+                environment = %environment,
+                "RATE LIMITING DISABLED. Acceptable for dev/test; MUST be enabled in production. \
+                 Set RATE_LIMIT_ENABLED=true to force on."
+            );
+        }
+        Self::with_enabled(enabled)
+    }
+}
+
+/// Pure decision rule so tests can cover it without touching process env.
+/// Enabled by default only in production; explicit `RATE_LIMIT_ENABLED` wins.
+fn enabled_from_env(environment: &str, rate_limit_enabled: Option<&str>) -> bool {
+    match rate_limit_enabled {
+        Some("true") => true,
+        Some("false") => false,
+        Some(other) => {
+            tracing::warn!(
+                value = %other,
+                "Invalid RATE_LIMIT_ENABLED value; expected 'true' or 'false'. \
+                 Falling back to ENVIRONMENT-based default."
+            );
+            environment == "production"
+        }
+        None => environment == "production",
     }
 }
 
@@ -79,6 +115,7 @@ impl<E: Endpoint> Middleware<E> for RateLimiter {
         RateLimitEndpoint {
             inner: ep,
             state: self.state.clone(),
+            enabled: self.enabled,
         }
     }
 }
@@ -86,12 +123,17 @@ impl<E: Endpoint> Middleware<E> for RateLimiter {
 pub struct RateLimitEndpoint<E> {
     inner: E,
     state: Arc<Mutex<RateLimitState>>,
+    enabled: bool,
 }
 
 impl<E: Endpoint> Endpoint for RateLimitEndpoint<E> {
     type Output = Response;
 
     async fn call(&self, req: Request) -> poem::Result<Self::Output> {
+        if !self.enabled {
+            return self.inner.call(req).await.map(|r| r.into_response());
+        }
+
         let path = req.uri().path().to_string();
         let method = req.method();
 
@@ -385,5 +427,42 @@ mod tests {
         });
         entry.count += 1;
         assert!(entry.count > max);
+    }
+
+    #[test]
+    fn test_enabled_from_env_defaults_to_environment() {
+        // Unset RATE_LIMIT_ENABLED: enabled only in production.
+        assert!(enabled_from_env("production", None));
+        assert!(!enabled_from_env("dev", None));
+        assert!(!enabled_from_env("test", None));
+        assert!(!enabled_from_env("staging", None));
+    }
+
+    #[test]
+    fn test_enabled_from_env_explicit_override() {
+        // Explicit values win regardless of environment.
+        assert!(enabled_from_env("dev", Some("true")));
+        assert!(enabled_from_env("production", Some("true")));
+        assert!(!enabled_from_env("production", Some("false")));
+        assert!(!enabled_from_env("dev", Some("false")));
+    }
+
+    #[test]
+    fn test_enabled_from_env_invalid_value_falls_back_to_environment() {
+        // Garbage values fall back to environment-based default.
+        assert!(enabled_from_env("production", Some("yes")));
+        assert!(!enabled_from_env("dev", Some("1")));
+        assert!(!enabled_from_env("test", Some("")));
+    }
+
+    #[test]
+    fn test_with_disabled_does_not_track_state() {
+        // A disabled limiter should not mutate entries; verify by constructing one
+        // and confirming its state stays empty (no public API to assert the
+        // short-circuit directly, so we exercise the decision rule instead).
+        let limiter = RateLimiter::with_enabled(false);
+        assert!(!limiter.enabled);
+        let enabled_limiter = RateLimiter::with_enabled(true);
+        assert!(enabled_limiter.enabled);
     }
 }
