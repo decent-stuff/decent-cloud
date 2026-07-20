@@ -4,23 +4,41 @@ import { test, expect } from './fixtures/test-account';
  * E2E Tests for Provider Support Page - Notification Settings
  *
  * Tests notification configuration and rate limiting display on /dashboard/provider/support
+ *
+ * Note: Notifications live in step 2 of the provider setup wizard. Tests land there
+ * by pre-setting the persisted wizard step in localStorage before navigating.
  */
 test.describe('Provider Support - Notification Settings', () => {
+	test.beforeEach(async ({ page }) => {
+		// Provider setup wizard persists its step in localStorage and defaults to step 1
+		// (Support Portal). The Notifications section is rendered only on step 2
+		// ("Contacts & Notifications"), so land there before each test navigates.
+		await page.evaluate(() =>
+			localStorage.setItem('provider-setup-wizard-step', '2'),
+		);
+	});
+
 	test('should display notifications section', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h2:has-text("Notifications")')).toBeVisible();
-		await expect(page.locator('text=Configure how you receive support escalation alerts')).toBeVisible();
+		await expect(page.locator('text=Get alerted when customers need support')).toBeVisible();
 	});
 
 	test('should display channel selection options', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
-		await expect(page.locator('text=Email')).toBeVisible();
-		await expect(page.locator('text=Telegram')).toBeVisible();
-		await expect(page.locator('text=SMS')).toBeVisible();
+		await page.waitForLoadState('networkidle');
+		// Each channel is wrapped in its own <label>; use that to avoid matching the
+		// email-verification banner and the usage grid column labels.
+		const notifications = page.locator('#notifications');
+		await expect(notifications.locator('label:has-text("Email")')).toBeVisible();
+		await expect(notifications.locator('label:has-text("Telegram")')).toBeVisible();
+		await expect(notifications.locator('label:has-text("SMS")')).toBeVisible();
 	});
 
 	test('should show telegram input when telegram checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		// Click the label containing "Telegram" to toggle the checkbox
 		await page.click('label:has-text("Telegram")');
 		await expect(page.locator('input[placeholder="Chat ID"]')).toBeVisible();
@@ -30,12 +48,14 @@ test.describe('Provider Support - Notification Settings', () => {
 
 	test('should show phone input when sms checkbox checked', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		await page.click('label:has-text("SMS")');
 		await expect(page.locator('input[placeholder="+1 555-123-4567"]')).toBeVisible();
 	});
 
 	test('should allow multiple channels to be selected', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		await page.click('label:has-text("Telegram")');
 		await page.click('label:has-text("SMS")');
 		await expect(page.locator('input[placeholder="Chat ID"]')).toBeVisible();
@@ -44,11 +64,13 @@ test.describe('Provider Support - Notification Settings', () => {
 
 	test('should have save notifications button', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		await expect(page.locator('button:has-text("Save Notifications")')).toBeVisible();
 	});
 
 	test('should display free tier limit badges', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 		// Email is free (unlimited)
 		await expect(page.locator('text=Free').first()).toBeVisible();
 		// Telegram has 50/day free limit
@@ -87,13 +109,15 @@ test.describe('Provider Support - Notification Settings', () => {
 		await expect(telegramUsage.locator('text=/\\d+\\/50/')).toBeVisible();
 
 		const smsUsage = usageGrid.locator('div:has-text("SMS")').locator('..');
-		await expect(smsUsage.locator('text=/\\d+\\/5/')).toBeVisible();
+		// Anchored so it does not also match the Telegram "0/50" cell
+		await expect(smsUsage.locator('text=/^\\d+\\/5$/')).toBeVisible();
 	});
 
 	test('should show test notification button when channel enabled with valid input', async ({
 		page,
 	}) => {
 		await page.goto('/dashboard/provider/support');
+		await page.waitForLoadState('networkidle');
 
 		// Enable Telegram and enter a chat ID
 		await page.click('label:has-text("Telegram")');
