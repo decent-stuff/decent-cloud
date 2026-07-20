@@ -73,8 +73,9 @@ test.describe('Recovery Flow', () => {
 		await expect(page.locator('h3:has-text("Check Your Email")')).toBeVisible({ timeout: 5000 });
 		await expect(page.locator('text=If an account exists with this email, a recovery link has been sent')).toBeVisible();
 
-		// Should show envelope emoji
-		await expect(page.locator('text=✉️')).toBeVisible();
+		// Should show the mail success icon (Icon name="mail" inside .icon-box-accent;
+		// previously a literal ✉️ emoji, now an SVG Icon component)
+		await expect(page.locator('.icon-box-accent')).toBeVisible();
 
 		// Should show option to send to different email
 		await expect(page.locator('button:has-text("Send to a different email")')).toBeVisible();
@@ -193,6 +194,10 @@ test.describe('Recovery Flow', () => {
 
 		// Should navigate to /login
 		await expect(page).toHaveURL('/login');
-		await expect(page.locator('button:has-text("Import Existing")')).toBeVisible();
+		// Verify the login page rendered. "Import Existing" is hidden behind the
+		// "Sign in with seed phrase instead" CTA, so assert against that button.
+		await expect(
+			page.locator('button:has-text("Sign in with seed phrase instead")'),
+		).toBeVisible();
 	});
 });
