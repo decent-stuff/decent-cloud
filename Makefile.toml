@@ -287,8 +287,30 @@ set -eEuo pipefail
 source scripts/detect-postgres.sh
 export DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
 
-cd website
-E2E_AUTO_SERVER=1 npx playwright test
+# Warm-stack pattern: bring up api+web once (rate-limit disabled for parallel
+# workers), run the full suite against the live stack, then tear down.
+# Identical to `npm run e2e:up` + `npm run test:e2e:fast` + `npm run e2e:down`
+# but callable from cargo-make alongside the rest of the test matrix.
+bash scripts/dev-server.sh start --e2e
+trap 'bash scripts/dev-server.sh stop' EXIT
+
+# Subshell so the EXIT trap fires from repo root (where scripts/ lives).
+( cd website && npm run test:e2e:fast )
+'''
+
+[tasks.website-e2e-smoke]
+dependencies = ["postgres-start", "website-check"]
+script = '''
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+source scripts/detect-postgres.sh
+export DATABASE_URL="postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DB}"
+
+bash scripts/dev-server.sh start --e2e
+trap 'bash scripts/dev-server.sh stop' EXIT
+
+( cd website && npm run test:e2e:fast:smoke )
 '''
 
 [tasks.all]

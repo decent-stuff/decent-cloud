@@ -19,3 +19,16 @@ jobs:
       - uses: actions/checkout@v4
       - run: cargo make all
       - run: cargo sweep --time 14
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: self-hosted
+    env:
+      CARGO_HOME: /cache/cargo
+      CARGO_TARGET_DIR: /cache/cargo-target/decent-cloud
+      RUSTUP_HOME: /cache/cargo/rustup
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd website && npx playwright install --with-deps chromium
+      - run: cargo make website-e2e
+
