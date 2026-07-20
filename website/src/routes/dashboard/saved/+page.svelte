@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { get } from 'svelte/store';
-	import { goto } from '$app/navigation';
+	import { onMount, onDestroy } from 'svelte';
 	import {
 		getSavedOfferings,
 		getUserNotifications,
@@ -14,6 +12,7 @@
 	import { collectSavedOfferingPriceChanges } from '$lib/utils/saved-offering-price-change';
 	import Icon from '$lib/components/Icons.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
+	import AuthRequiredCard from '$lib/components/AuthRequiredCard.svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { signRequest } from '$lib/services/auth-api';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
@@ -26,22 +25,24 @@
 	let selectedIds = $state(new Set<number>());
 	let removing = $state(false);
 	let priceChangeMap = $state(new Map<number, 'up' | 'down'>());
+	let isAuthenticated = $state(false);
+	let unsubscribeAuth: (() => void) | null = null;
 
 	let allSelected = $derived(offerings.length > 0 && offerings.every(o => o.id !== undefined && selectedIds.has(o.id)));
 	let someSelected = $derived(selectedIds.size > 0);
 
-	onMount(async () => {
-		const isAuth = get(authStore.isAuthenticated);
-
-		if (!isAuth) {
-			goto('/dashboard/login?redirect=/dashboard/saved');
+	async function loadSavedOfferings() {
+		if (!isAuthenticated) {
+			loading = false;
 			return;
 		}
-
 		try {
+			loading = true;
+			error = null;
+
 			const info = await authStore.getSigningIdentity();
 			if (!info || !(info.identity instanceof Ed25519KeyIdentity)) {
-				goto('/dashboard/login?redirect=/dashboard/saved');
+				loading = false;
 				return;
 			}
 			const pubkeyHex = hexEncode(info.publicKeyBytes);
@@ -66,6 +67,19 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(() => {
+		// Subscribe so we re-fire when authStore.initialize() completes (the
+		// dashboard layout calls it in its own onMount, which races with ours).
+		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+			isAuthenticated = isAuth;
+			loadSavedOfferings();
+		});
+	});
+
+	onDestroy(() => {
+		unsubscribeAuth?.();
 	});
 
 	async function handleUnsave(offeringId: number) {
@@ -184,7 +198,9 @@
 		</div>
 	</div>
 
-	{#if error}
+	{#if !isAuthenticated}
+		<AuthRequiredCard subtext="Create an account or login to save offerings for later." />
+	{:else if error}
 		<div class="bg-danger/10 border border-danger/20 p-3 text-danger text-sm">{error}</div>
 	{/if}
 
@@ -192,6 +208,8 @@
 		<div class="flex justify-center py-12">
 			<div class="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-400"></div>
 		</div>
+	{:else if !isAuthenticated}
+		<!-- AuthRequiredCard already rendered above; nothing here -->
 	{:else if offerings.length === 0}
 		<div class="text-center py-16 card">
 			<div class="flex justify-center mb-4">
