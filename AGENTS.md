@@ -160,11 +160,38 @@ node scripts/dc-auth.js seed-contracts
 Use `scripts/browser.js` directly from Bash — it works in ALL contexts (main session, subagents, CI). No setup needed: every call launches a fresh browser, performs the operation, and closes it automatically. Detailed command reference, auth helpers, and known pitfalls live in `scripts/AGENTS.md`.
 
 **Playwright E2E (repo-local):**
+
+The fast pattern reuses a warm stack — bring it up once, then iterate on the suite in seconds.
+No per-invocation `cargo run`, no 120 s health-check wait.
+
+```bash
+# 1. Bring up the warm stack (builds api-server if missing, disables rate limiter for parallel workers)
+bash scripts/dev-server.sh start --e2e
+
+# 2. Iterate — runs against the warm stack, no auto-spawn
+cd website
+npm run test:e2e:fast            # full suite
+npm run test:e2e:fast:smoke      # smoke subset only (--grep @smoke)
+npm run test:e2e:fast -- --workers 1   # serial mode for flaky-spec triage
+
+# 3. Tear down when done
+bash scripts/dev-server.sh stop
+bash scripts/dev-server.sh status   # check health (api:59011, web:59010)
+```
+
+Alternative one-shot mode (spawns + tears down its own stack, slower):
 ```bash
 cd website
 E2E_AUTO_SERVER=1 npx playwright test <spec-or-dir>
 ```
-This auto-starts local website/API on `59010/59011`. If startup fails because ports are already in use, kill stale `vite` / `api-server` processes first.
+This auto-starts local website/API on `59010/59011`. If startup fails because ports are already
+in use, kill stale `vite` / `api-server` processes first (or run `bash scripts/dev-server.sh stop`).
+
+**Rate limiter (`RATE_LIMIT_ENABLED`):** the API rate-limiter keys on `client_ip + tier`. Parallel
+test workers share 127.0.0.1 and will blow the 120/min RELAXED bucket — producing mass 429s.
+`dev-server.sh start --e2e` and the `E2E_AUTO_SERVER=1` flow both set `RATE_LIMIT_ENABLED=false`
+automatically. The limiter defaults to ON in production (when `ENVIRONMENT=production`) and OFF
+otherwise; see `api/src/rate_limit.rs`.
 
 ### Browser Rules
 - ALWAYS run `scripts/browser.js errs` after shipping any UI change to catch JS errors before the user does.

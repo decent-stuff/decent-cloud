@@ -1,35 +1,53 @@
-Analyze the open GitHub issues for `decent-stuff/decent-cloud` (the canonical task list — `TODO.md` is deprecated).
+# 2026-07-20 Session Complete — Next Session Prompt
 
-```bash
-gh issue list --repo decent-stuff/decent-cloud --state open --limit 200 \
-  --label stripe,decent-agents,launch \
-  --json number,title,labels,createdAt,updatedAt,body
-```
+## What shipped this session
 
-Identify the highest-impact items that:
-1. Deliver user-visible value OR remove a real limitation users hit
-2. Require actual design decisions and new code, not just connecting existing pieces
-3. Can be completed in a single session, e.g. single week from a multi-week effort
-4. Are aligned with the current focus (Stripe hardening / Decent Agents MVP / launch prep — see `GROWTH_PLAN.md` in the outer workspace). Issues labeled `deferred-post-launch` are out of scope; do not pick them.
+App-health audit + radical E2E harness overhaul. See `docs/plans/2026-07-20-app-health-and-harness.md`
+for the full plan and per-phase confidence ratings. Headline numbers:
 
-Pick AS MANY OF THEM AS YOU CAN and complete them with subagents — one subagent per issue.
+- **E2E went from 24/114 pass (2m46s) → 135/139 pass + 4 skipped (2m42s)** against a warm stack.
+- **Smoke subset: 4/4 in ~20 s** against a warm stack (was minutes per invocation).
+- **E2E wired into CI** (`.github/workflows/build-and-test.yml` `e2e` job, `Makefile.toml`
+  `website-e2e` + `website-e2e-smoke` tasks).
+- **5 real product bugs fixed**: CANISTER_ID panic on boot, `let _ = shutdown_tx.send`, offering
+  detail SLA null-guard (`latestUptimePercent`), `/dashboard/saved` 404 during auth bootstrap,
+  inverted light-theme body color (invisible 404).
+- **3 UX optimizations**: registration lands on `/dashboard` so WelcomeModal fires, Save promoted
+  to a visible bookmark toggle (2 clicks → 1), mobile search placeholder shortened.
+- **22 new E2E tests** covering 4 previously-uncovered routes (rentals, invoices, transfers, saved).
+- **6 GitHub issues filed**, 1 closed as false alarm. See `docs/OPEN_ISSUES.md`.
 
-For each issue, first build a working PoC as per the mandatory workflow. The PoC should be a python or bash script, or a unit/integration test — whichever fits best — and avoid one-off shell commands. After the PoC works, add a failing test for the expected functionality, then get the tests to pass with code changes, all in line with TDD.
+## Operating posture (unchanged)
 
-When done with an issue:
-- Update the GH issue: comment with what shipped (PR link, key decisions, follow-up sub-issues if any), then close it.
-  - `gh issue comment <N> --repo decent-stuff/decent-cloud --body "..."`
-  - `gh issue close <N> --repo decent-stuff/decent-cloud`
-- If new follow-up work surfaces, file new GH issues with the appropriate label (`stripe`, `decent-agents`, or `launch`) and link them from the parent.
+- Autonomous. Subagents for high-level decisions; swarm for parallel plan/build/verify.
+- Plan file `docs/plans/YYYY-MM-DD-<slug>.md` (extend the existing one if same day).
+- Commit each unit. Dev cycle in SECONDS against a warm stack (use `npm run test:e2e:fast`).
+- No silent errors (`match`/`?`, never `let _ = ...`). DRY/KISS/YAGNI. No backward-compat.
+- Mocks only at the smallest external-dep boundary in tests; never mock first-party code.
+- TDD: RED → GREEN → keep test. Every path needs +/− meaningful tests.
+- Confidence 1-10 shown for changes. Verify alignment (mechanical + human).
 
-Finally each subagent commits the VALUABLE part of its changes (one PR per issue when possible).
+## Where to start next session
 
-If there are not enough MEANINGFUL in-scope issues to do now, create a few subagents for each of the following — but only file findings against the current focus areas:
-- Review the codebase for zombie code, inconsistencies, and half-baked things in the Stripe path or the Decent Agents-relevant code (provisioning, dispatcher, billing, webhooks). Fix gaps you can fix; otherwise file a GH issue with the right label.
-- Consider the app from a *Decent Agents customer* point of view — onboarding, dashboard, agent-run experience. If a UI/UX change would radically improve intuitiveness for that customer, file an issue with the `launch` label.
+1. **Read `docs/OPEN_ISSUES.md`** for the categorized open-issue inventory (in scope vs deferred).
+   GitHub Issues at `decent-stuff/decent-cloud` is the canonical source — re-sync with
+   `gh issue list --repo decent-stuff/decent-cloud --state open`.
 
-Note: do not do UX review and improvements yourself — there is a separate agent for that.
+2. **In-scope issues** (NOT `deferred-post-launch`): highest impact first
+   - #433 No UI to top up account balance [launch] — found during this session's UX audit.
+   - #418 Decent Agents: beta onboarding [launch].
+   - #427 Anthropic API key proxy/sidecar [decent-agents, launch].
+   - #416 DA usage metering + customer dashboard [decent-agents].
+   - #415 DA subscription billing [decent-agents].
+   - #410 Stripe: cleanup stale pending contracts [stripe].
 
-When fully done, use subagents to (a) verify completeness and find implementation gaps, (b) fix small gaps immediately or file GH issues for large ones, and (c) confirm no orphaned in-flight work.
+3. **Bring up the warm stack first** — `bash scripts/dev-server.sh start --e2e` from the repo root.
+   Then iterate with `cd website && npm run test:e2e:fast` (see `AGENTS.md` for the full workflow).
 
-Then do a final pass through `git diff`, analyze leftover changes, and COMMIT all VALUABLE changes, or revert/leave changes that should not be committed, as appropriate. Push when commits are ready.
+4. **Coverage gaps remaining** (lower priority — info/admin pages): `/dashboard/cloud`,
+   `/dashboard/providers`, `/dashboard/user`, top-level `/agents`, `/checkout`,
+   `/dashboard/reputation`, `/dashboard/validators` (only visibility checks).
+
+5. **In-repo known issue** (not on GitHub): marketplace empty-state hint suggests
+   `product_type:gpu` field syntax but the API rejects it (`Unknown field: product_type`).
+   See `docs/OPEN_ISSUES.md` → "In-repo known issues".
