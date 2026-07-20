@@ -58,6 +58,20 @@ test.describe('/dashboard/transfers', () => {
 		await expect(page.getByRole('button', { name: 'All Recent' })).toBeVisible();
 	});
 
+	test('empty state: explains the per-transaction billing model (#433)', async ({ page }) => {
+		// Regression for #433: the balance card used to show a number with no
+		// context, leaving users unsure whether they needed to pre-load tokens
+		// to rent. The fix documents that rentals are billed per-transaction
+		// at checkout and that this balance is for P2P transfers.
+		await page.goto('/dashboard/transfers');
+		await waitForAuthReady(page);
+
+		// Balance card explanation
+		await expect(page.getByText(/billed per-transaction at checkout/i)).toBeVisible();
+		// Empty-state guidance on how tokens move
+		await expect(page.getByText(/Receive tokens from another account/i)).toBeVisible();
+	});
+
 	test('populated state: shows sent and received transfers with direction icons', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		const other1 = randomHex(32);

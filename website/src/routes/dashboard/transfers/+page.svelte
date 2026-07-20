@@ -110,15 +110,18 @@
 				<div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"></div>
 			</div>
 		{:else}
-			<!-- Balance Card -->
-			<section>
-				<div class="bg-surface-elevated border border-neutral-800 p-6">
-					<p class="text-neutral-500 text-sm">Token Balance</p>
-					<p class="text-3xl font-bold text-white mt-1">
-						{formatTokens(balance)}
-					</p>
-				</div>
-			</section>
+		<!-- Balance Card -->
+		<section>
+			<div class="bg-surface-elevated border border-neutral-800 p-6">
+				<p class="text-neutral-500 text-sm">Token Balance</p>
+				<p class="text-3xl font-bold text-white mt-1">
+					{formatTokens(balance)}
+				</p>
+				<p class="text-neutral-500 text-xs mt-3 leading-relaxed">
+					Used for peer-to-peer transfers between accounts. Rentals are billed per-transaction at checkout — no pre-payment needed.
+				</p>
+			</div>
+		</section>
 
 			<!-- View Toggle -->
 			<section class="space-y-4">
@@ -141,17 +144,22 @@
 					</button>
 				</div>
 
-				<!-- Transfer List -->
-				{#if transfers.length === 0}
-					<div class="text-center py-16">
-						<Icon name="activity" size={48} class="mx-auto text-neutral-600 mb-4" />
-						<h3 class="text-xl font-bold text-white mb-2">No Transfers</h3>
-						<p class="text-neutral-500">
-							{viewMode === "mine"
-								? "You have no token transfers yet."
-								: "No recent platform transfers found."}
+			<!-- Transfer List -->
+			{#if transfers.length === 0}
+				<div class="text-center py-16">
+					<Icon name="activity" size={48} class="mx-auto text-neutral-600 mb-4" />
+					<h3 class="text-xl font-bold text-white mb-2">No Transfers</h3>
+					<p class="text-neutral-500">
+						{viewMode === "mine"
+							? "You have no token transfers yet."
+							: "No recent platform transfers found."}
+					</p>
+					{#if viewMode === "mine"}
+						<p class="text-neutral-600 text-sm mt-2">
+							Receive tokens from another account to fund transfers.
 						</p>
-					</div>
+					{/if}
+				</div>
 				{:else}
 					<div class="space-y-2">
 						{#each transfers as transfer}
