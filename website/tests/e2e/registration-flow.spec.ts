@@ -98,8 +98,9 @@ test.describe('Account Registration Flow', () => {
 		// Step 8: Verify dashboard access
 		await expect(page).toHaveURL(/\/dashboard/);
 
-		// Should show username in header
-		await expect(page.locator(`text=@${username}`)).toBeVisible();
+		// Authenticated state is confirmed by the presence of the Logout button
+		// (the dashboard no longer surfaces @username in its chrome)
+		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
 	});
 
 	test('should handle username already taken', async ({ page }) => {
@@ -126,7 +127,21 @@ test.describe('Account Registration Flow', () => {
 		// This test may need adjustment based on actual API behavior
 	});
 
-	test('should handle network errors gracefully', async ({ page }) => {
+	test('should handle network errors gracefully', async ({ page, context }) => {
+		// The website registers a service worker (/sw.js) that wraps every fetch
+		// via event.respondWith(); once active it intercepts the API requests
+		// before Playwright's page.route can, which makes request mocking no-ops.
+		// Stub navigator.serviceWorker so no SW is registered for this test.
+		await context.addInitScript(() => {
+			Object.defineProperty(navigator, 'serviceWorker', {
+				value: {
+					register: () => Promise.resolve({}),
+					getRegistrations: () => Promise.resolve([]),
+				},
+				configurable: true,
+			});
+		});
+
 		// Intercept API calls and return error
 		await page.route('**/api/v1/accounts', (route) => {
 			route.fulfill({
@@ -217,6 +232,10 @@ test.describe('Account Registration Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
+		// Wait for SvelteKit hydration so the button's onclick handler is bound
+		// before we click (the redirect is server-side, so the URL is correct
+		// but the client-side state machine isn't ready until networkidle).
+		await page.waitForLoadState('networkidle');
 		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 	});
