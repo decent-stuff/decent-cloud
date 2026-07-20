@@ -33,8 +33,8 @@ test.describe('Account Settings Page', () => {
 			page.locator(`text=@${testAccount.username}`).first(),
 		).toBeVisible();
 
-		// Verify account ID is displayed (truncated hex)
-		await expect(page.locator('text=Account ID')).toBeVisible();
+		// Account ID is no longer shown on the overview page (moved to /security);
+		// identity coverage here is preserved by Username + Created assertions below.
 
 		// Verify created date is displayed
 		await expect(page.locator('text=Created')).toBeVisible();
@@ -48,8 +48,9 @@ test.describe('Account Settings Page', () => {
 		// Fixture already leaves us on /dashboard, just ensure page is ready
 		await page.waitForLoadState('networkidle');
 
-		// Verify "⚙️ Account" link exists in sidebar (be specific to avoid matching username link)
-		const accountLink = page.locator('a:has-text("⚙️ Account")');
+		// Verify the "Account" link exists in the sidebar (exact match — the
+		// dashboard cards use longer text like "Profile Account settings").
+		const accountLink = page.getByRole('link', { name: 'Account', exact: true });
 		await expect(accountLink).toBeVisible({ timeout: 10000 });
 
 		// Click it and verify navigation
@@ -57,21 +58,11 @@ test.describe('Account Settings Page', () => {
 		await expect(page).toHaveURL('/dashboard/account');
 	});
 
-	test('should show username in header', async ({ page, testAccount }) => {
-		// Fixture already leaves us on /dashboard, just ensure page is ready
-		await page.waitForLoadState('networkidle');
-
-		// Username should appear in header
-		await expect(
-			page.locator(`text=@${testAccount.username}`).first(),
-		).toBeVisible({ timeout: 10000 });
-
-		// Clicking username should navigate to account page
-		const usernameLink = page.locator(`a:has-text("@${testAccount.username}")`).first();
-		await usernameLink.click();
-
-		await expect(page).toHaveURL('/dashboard/account');
-	});
+	// REMOVED: "should show username in header" — the header no longer displays
+	// the @username and there is no clickable username anywhere in the dashboard
+	// chrome (sidebar shows "Account" + "Logout" only). The feature this test
+	// covered (click username -> account page) was removed; navigation to the
+	// account page is now covered by "should show account link in sidebar" above.
 
 	test('should handle navigation between account sections', async ({
 		page,
@@ -166,8 +157,10 @@ test.describe('Account Settings Page', () => {
 		// Find Devices section
 		await expect(page.locator('text=Devices')).toBeVisible();
 
-		// Click on device name button to start editing
-		const deviceNameBtn = page.locator('button:has-text("Unnamed Device")');
+		// Click the device name button to start editing. Use the title attribute
+		// (stable across runs) — an earlier test in this suite renames the device,
+		// so the displayed text is no longer "Unnamed Device" by the time we run.
+		const deviceNameBtn = page.locator('button[title="Click to edit device name"]');
 		await expect(deviceNameBtn).toBeVisible();
 		await deviceNameBtn.click();
 
