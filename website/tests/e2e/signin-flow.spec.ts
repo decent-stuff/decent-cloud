@@ -27,6 +27,8 @@ test.describe('Sign-In Flow', () => {
 		// Step 1: Navigate to login page
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		// Reveal seed phrase options (hidden behind "Sign in with seed phrase instead")
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		const importButton = page.locator('button:has-text("Import Existing")');
 		await expect(importButton).toBeVisible();
 
@@ -45,7 +47,7 @@ test.describe('Sign-In Flow', () => {
 
 		// Step 4: Should auto-detect account and show success
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Should show username
@@ -59,15 +61,17 @@ test.describe('Sign-In Flow', () => {
 		// Step 6: Verify dashboard access
 		await expect(page).toHaveURL(/\/dashboard/);
 
-		// Username should appear in header
+		// Authenticated state is confirmed by the presence of the Logout button
+		// (the dashboard no longer surfaces @username in its chrome)
 		await expect(
-			page.locator(`text=@${testAccountLoggedOut.username}`),
+			page.locator('button:has-text("Logout")'),
 		).toBeVisible();
 	});
 
 	test('should reject invalid seed phrase', async ({ page }) => {
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -90,6 +94,7 @@ test.describe('Sign-In Flow', () => {
 		// Sign in
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -97,30 +102,28 @@ test.describe('Sign-In Flow', () => {
 		await page.click('button:has-text("Continue")');
 
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 		await page.click('button:has-text("Go to Dashboard")');
 
 		// Verify signed in
 		await expect(page).toHaveURL(/\/dashboard/);
-		await expect(
-			page.locator(`text=@${testAccountLoggedOut.username}`),
-		).toBeVisible();
+		// Authenticated state is confirmed by the presence of the Logout button
+		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
 
 		// Refresh page
 		await page.reload();
 
 		// Should still be signed in
 		await expect(page).toHaveURL(/\/dashboard/);
-		await expect(
-			page.locator(`text=@${testAccountLoggedOut.username}`),
-		).toBeVisible();
+		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
 	});
 
 	test('should sign out successfully', async ({ page, testAccountLoggedOut }) => {
 		// Sign in first
 		await page.goto('/login');
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -128,7 +131,7 @@ test.describe('Sign-In Flow', () => {
 		await page.click('button:has-text("Continue")');
 
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 		await page.click('button:has-text("Go to Dashboard")');
 
@@ -154,6 +157,7 @@ test.describe('Sign-In Flow', () => {
 		await page.waitForLoadState('networkidle');
 
 		// Step 2: Click "Import Existing"
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		// Step 3: Enter seed phrase
@@ -164,7 +168,7 @@ test.describe('Sign-In Flow', () => {
 		// Step 4: Should show "Detecting Account" briefly then auto-sign in
 		// The account detection step may be very fast, so we wait for success
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 15000 });
 
 		// Should show the auto-detected username
@@ -183,6 +187,7 @@ test.describe('Sign-In Flow', () => {
 		await page.waitForLoadState('networkidle');
 
 		// Complete sign-in flow
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		// Enter seed phrase
@@ -192,7 +197,7 @@ test.describe('Sign-In Flow', () => {
 
 		// Should show success screen
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 
 		// Click "Go to Dashboard"
@@ -221,6 +226,7 @@ test.describe('Sign-In Flow', () => {
 
 		// Complete sign-in
 		await page.waitForLoadState('networkidle');
+		await page.click('button:has-text("Sign in with seed phrase instead")');
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -229,7 +235,7 @@ test.describe('Sign-In Flow', () => {
 		await page.click('button:has-text("Continue")');
 
 		await expect(
-			page.locator('text=Welcome to Decent Cloud!'),
+			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
 
 		await page.click('button:has-text("Go to Dashboard")');
@@ -244,6 +250,9 @@ test.describe('Sign-In Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
-		await expect(page.locator('text=Import Existing')).toBeVisible();
+		// Verify login page rendered (the seed-phrase button is the primary CTA after Google sign-in)
+		await expect(
+			page.locator('button:has-text("Sign in with seed phrase instead")'),
+		).toBeVisible();
 	});
 });
