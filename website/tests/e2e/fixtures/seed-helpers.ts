@@ -12,7 +12,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Ed25519KeyIdentity } from '@dfinity/identity';
-import { mnemonicToSeedSync, validateMnemonic } from 'bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from 'bip39';
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
 
@@ -63,6 +63,47 @@ export function pubkeyHexFromSeed(seedPhrase: string): string {
 /** Current time in nanoseconds since epoch. */
 export function nowNs(): bigint {
 	return BigInt(Date.now()) * 1_000_000n;
+}
+
+/**
+ * Create a test account directly in the DB, bypassing the ~10-15s UI
+ * registration flow (goto /login → networkidle → "Generate New" → fill
+ * username/email → "Create Account" → "Go to Dashboard").
+ *
+ * Mirrors exactly what the API's `create_account()` does
+ * (`api/src/database/accounts.rs:155`): generates a 16-byte random id for
+ * the accounts row, inserts (id, username, email), then inserts the
+ * matching account_public_keys row with the ed25519 pubkey derived from
+ * the mnemonic. No triggers, no other tables.
+ *
+ * The returned seed phrase is later injected into localStorage via
+ * `context.addInitScript` in the `testAccount` fixture; the client
+ * derives the same pubkey and authenticates silently.
+ *
+ * `username` defaults to the same `test<timestamp><random>` format used
+ * by `generateTestUsername()` in auth-helpers for consistency with
+ * existing test data.
+ */
+export async function seedAccountDirect(
+	username: string = `test${Date.now()}${Math.floor(Math.random() * 10000)}`,
+): Promise<{ username: string; seedPhrase: string }> {
+	const seedPhrase = generateMnemonic(128);
+	const pubkeyHex = pubkeyHexFromSeed(seedPhrase);
+	const email = `${username}@test.example.com`;
+	const accountIdHex = randomHex(16);
+	const keyIdHex = randomHex(16);
+
+	await sql(`
+		INSERT INTO accounts (id, username, email) VALUES (decode('${accountIdHex}', 'hex'), '${username}', '${email}');
+		INSERT INTO account_public_keys (id, account_id, public_key) VALUES (decode('${keyIdHex}', 'hex'), decode('${accountIdHex}', 'hex'), decode('${pubkeyHex}', 'hex'));
+	`);
+
+	return { username, seedPhrase };
+}
+
+/** Delete an account and all dependent rows (CASCADE) by username. */
+export async function deleteAccountByUsername(username: string): Promise<void> {
+	await sql(`DELETE FROM accounts WHERE username = '${username.replace(/'/g, "''")}'`);
 }
 
 /** Random 32-byte lowercase hex string (for contract_id / provider_pubkey). */

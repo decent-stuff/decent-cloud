@@ -1,24 +1,21 @@
 import { test as base } from '@playwright/test';
 import {
-	registerNewAccount,
 	signIn,
 	setupConsoleLogging,
 	type AuthCredentials,
 } from './auth-helpers';
+import { seedAccountDirect } from './seed-helpers';
 
-// Worker-scoped credentials shared by all test variants
+// Worker-scoped credentials shared by all test variants.
+//
+// The fixture creates the account via direct DB INSERT (seedAccountDirect)
+// instead of the ~10-15s UI registration flow. registration-flow.spec.ts
+// remains the ONE canonical test that exercises the full UI registration
+// path; every other test only needs an account to exist in the DB.
 const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
-	// Worker-scoped fixture that creates one test account per worker
 	testAccount: [
-		async ({ browser }, use) => {
-			// Create test account in worker scope
-			const setupContext = await browser.newContext();
-			const setupPage = await setupContext.newPage();
-			setupConsoleLogging(setupPage);
-			const credentials = await registerNewAccount(setupPage);
-			await setupContext.close();
-
-			// Provide credentials to all tests
+		async ({}, use) => {
+			const credentials = await seedAccountDirect();
 			await use(credentials);
 		},
 		{ scope: 'worker' },
