@@ -28,6 +28,10 @@
 	}: Props = $props();
 
 	let showTooltip = $state(false);
+	// Stable id used both for the tooltip's id attribute and for aria-describedby
+	// on the trigger button so screen readers announce the same content keyboard
+	// users see on focus.
+	const tooltipId = 'offering-status-tooltip';
 
 	function getSubscriptionLabel(): string | null {
 		if (!isSubscription) return null;
@@ -105,8 +109,19 @@
 				class="text-neutral-500 hover:text-neutral-300 transition-colors"
 				onmouseenter={() => showTooltip = true}
 				onmouseleave={() => showTooltip = false}
+				onfocus={() => showTooltip = true}
+				onblur={() => showTooltip = false}
 				onclick={(e) => { e.stopPropagation(); showTooltip = !showTooltip; }}
+				onkeydown={(e) => {
+					// Audit #15: Escape closes the tooltip while the button keeps
+					// focus so the user can re-open it or tab away cleanly.
+					if (e.key === 'Escape') {
+						e.preventDefault();
+						showTooltip = false;
+					}
+				}}
 				aria-label="More details"
+				aria-describedby={tooltipId}
 			>
 				<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<path d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 12a1 1 0 110-2 1 1 0 010 2zm1-3.5V9a1 1 0 00-2 0v-.5a1 1 0 001-1V5a1 1 0 00-2 0 1 1 0 00-2 0 3 3 0 106 0v2.5z"/>
@@ -114,6 +129,7 @@
 			</button>
 			{#if showTooltip}
 				<div
+					id={tooltipId}
 					class="absolute bottom-full left-0 mb-2 z-50 w-44 bg-neutral-900 border border-neutral-700 rounded p-2 text-xs shadow-xl pointer-events-none"
 					role="tooltip"
 				>
