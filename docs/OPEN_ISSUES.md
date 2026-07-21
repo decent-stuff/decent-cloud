@@ -21,9 +21,6 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | Required for multi-tenant DA isolation. Large. |
 | 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | Depends on #415 meters. Large. |
 | 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | Meters, caps, Stripe cycle rollover. Large. |
-| 437 | Marketplace: click-to-cycle visibility/stock buttons are surprising | enhancement | Filed from 2026-07-21 UX audit (#4). Dropdown menu needed. |
-| 438 | Dashboard layout: email banner preempts seed-phrase backup banner (recovery risk) | bug | Filed from 2026-07-21 UX audit (#7). Stack banners + design pass. |
-| 439 | Marketplace: sort UI hidden on mobile (`hidden md:flex`) | bug | Filed from 2026-07-21 UX audit (#8). Mobile `<select>` + URL sync. |
 
 ## Deferred — Decent Agents
 
@@ -47,7 +44,15 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | # | Title | Filed by |
 |---|-------|----------|
 | 436 | Seed-phrase sign-in hidden behind extra click when no Google OAuth configured | 2026-07-20 UX audit |
-| 435 | Offering detail SLA chart renders empty gray bars when provider has no SLA data | 2026-07-20 visual audit |
+
+> **#436 implementation note (2026-07-21):** The issue's suggested gate
+> (`!import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID`) does not apply — that Vite env
+> var does not exist. Google OAuth is gated **server-side** via the Rust env var
+> `GOOGLE_OAUTH_CLIENT_ID` (`api/src/main.rs:1024`, conditionally registers the
+> route at `:1334`). The frontend has no signal. Three implementation paths
+> documented in [issue comment 5035263075](https://github.com/decent-stuff/decent-cloud/issues/436#issuecomment-5035263075):
+> (1) capability endpoint [recommended], (2) runtime HEAD probe, (3) build-time
+> Vite var. Product call.
 
 ## Deferred — Tech debt / low-value
 
@@ -66,6 +71,10 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title | Resolution |
 |---|-------|------------|
+| 437 | Marketplace: click-to-cycle visibility/stock buttons are surprising | Shipped in `e2d28e6e`: new `OfferingStatusMenu.svelte` (button + conditional panel, per-card mutual exclusion via `globalThis.__offeringStatusMenus` registry, click-outside/ESC/Enter/Space a11y, `role="menu"` + `role="menuitemradio"`). Panel auto-flips up to avoid overlapping the wrapped stock trigger. Load switched to `getMyOfferings` so owners see shared/private offerings (was filtered out by the public endpoint). E2E in `offerings-status-menus.spec.ts` (4 tests). |
+| 438 | Dashboard layout: email banner preempts seed-phrase backup banner (recovery risk) | Shipped in `29efa840`: banners now render as static-block siblings inside one fixed container (each independently dismissable). `mainTopPadding` derived expr picks the right offset for both/one/none. `EmailVerificationBanner`/`SeedPhraseBackupBanner` lost their per-component positioning. E2E in `dashboard-banners.spec.ts` (4 tests). |
+| 439 | Marketplace: sort UI hidden on mobile (`hidden md:flex`) | Shipped in `698329f7`: added `<select aria-label="Sort offerings">` next to the pill row. Pills unchanged on desktop; select is the mobile-only affordance + a11y alternative. Both bind to the same `sortField`/`sortDir` state and reuse `syncFiltersToUrl()`. E2E in `marketplace-sort.spec.ts` (3 tests). |
+| 435 | Offering detail SLA chart renders empty gray bars when provider has no SLA data | Shipped in `ccfcb1b0`: chart now gated on `reports30d > 0`. When a provider has set an SLA target but submitted zero SLI reports, the card shows a friendly empty state ('No SLA reports in the last 30 days') instead of 30 misleading gray bars. Target stays visible in the card header. E2E in `offering-sla-empty-state.spec.ts`. |
 | 433 | No UI to top up account balance — `/dashboard/transfers` only shows history | **Small-fix path** shipped in `9df37443`: balance card gained explanatory subtitle (P2P transfer units; rentals are per-transaction at checkout). E2E in `transfers.spec.ts`. Larger pre-pay deposit CTA remains out of scope. |
 | 410 | Stripe: cleanup stale pending contracts (payment timeout) | Shipped in `8ca5e070`: `Pending → Expired` transition allowed, `find_stale_pending`/`expire_pending` with money-safety guard `AND payment_status != 'succeeded'`, wired into `TimeoutCleanupService` via env `PENDING_TIMEOUT_SECONDS` (default 3600). Partial index `046`. |
 | 434 | Flaky test: `account-notifications.spec.ts` in parallel runs (workers>1) | False alarm — fixed in `81615b77` (P3.5 mock audit). |
