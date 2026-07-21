@@ -21,7 +21,6 @@ anonymousTest.describe('Admin Dashboard - Anonymous Access', () => {
 
 	anonymousTest('should show access denied for anonymous users', async ({ page }) => {
 		await page.goto('/dashboard/admin');
-		await page.waitForLoadState('networkidle');
 
 		// Should show Access Denied
 		await expect(page.locator('h2:has-text("Access Denied")')).toBeVisible();
@@ -34,7 +33,6 @@ anonymousTest.describe('Admin Dashboard - Anonymous Access', () => {
 test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 	test('should show access denied for non-admin users', async ({ page }) => {
 		await page.goto('/dashboard/admin');
-		await page.waitForLoadState('networkidle');
 
 		// Should show Access Denied (regular test users are not admins)
 		await expect(page.locator('h2:has-text("Access Denied")')).toBeVisible();
@@ -52,7 +50,11 @@ test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 
 	test('should not show admin features when access denied', async ({ page }) => {
 		await page.goto('/dashboard/admin');
-		await page.waitForLoadState('networkidle');
+
+		// Affirmative wait first: Access Denied MUST be showing before we can
+		// trust absence assertions for admin-only sections below. (Replaces a
+		// fragile `networkidle`.)
+		await expect(page.locator('h2:has-text("Access Denied")')).toBeVisible();
 
 		// Should NOT show admin-only sections
 		await expect(page.locator('h2:has-text("Email Queue Statistics")')).not.toBeVisible();
@@ -64,16 +66,15 @@ test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 	test('should not show Admin link in sidebar for non-admin users', async ({ page }) => {
 		// Go to any dashboard page to load the sidebar
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
+
+		// Affirmative wait: sidebar marketplace link must be visible before we
+		// can trust absence of the admin link. (Replaces `networkidle`.)
+		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 
 		// Non-admin user should NOT see the Admin link in sidebar
 		// This tests that isAdmin is properly returned from the API
 		const adminLink = page.locator('aside a[href="/dashboard/admin"]');
 		await expect(adminLink).not.toBeVisible();
-
-		// But should see other navigation items (offerings link was moved into
-		// auth-gated My Activity; marketplace link is the canonical sidebar entry).
-		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 	});
 });
 
@@ -81,7 +82,12 @@ adminTest.describe('Admin Dashboard - Authenticated Admin', () => {
 	adminTest('should show Admin link in sidebar for admin users', async ({ page }) => {
 		// Go to any dashboard page to load the sidebar
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
+
+		// Sidebar chrome must be mounted before we assert on it. (Replaces
+		// `networkidle`.) The marketplace link is the canonical sidebar entry —
+		// visible on every breakpoint — so its visibility proves the sidebar
+		// has rendered.
+		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 
 		// Admin user SHOULD see the Admin link in sidebar
 		const adminLink = page.locator('aside a[href="/dashboard/admin"]');
@@ -90,13 +96,16 @@ adminTest.describe('Admin Dashboard - Authenticated Admin', () => {
 
 	adminTest('should show admin features when user is admin', async ({ page }) => {
 		await page.goto('/dashboard/admin');
-		await page.waitForLoadState('networkidle');
+
+		// Affirmative wait first: an admin-only section MUST be visible before
+		// we can trust the absence assertion for Access Denied below. (Replaces
+		// `networkidle`.)
+		await baseExpect(page.locator('h2:has-text("Email Queue Statistics")')).toBeVisible();
 
 		// Should NOT show Access Denied
 		await baseExpect(page.locator('h2:has-text("Access Denied")')).not.toBeVisible();
 
 		// Should show admin-only sections
-		await baseExpect(page.locator('h2:has-text("Email Queue Statistics")')).toBeVisible();
 		await baseExpect(page.locator('h2:has-text("Send Test Email")')).toBeVisible();
 		await baseExpect(page.locator('h2:has-text("All Accounts")')).toBeVisible();
 		await baseExpect(page.locator('h2:has-text("Failed Emails")')).toBeVisible();

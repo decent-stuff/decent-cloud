@@ -57,7 +57,12 @@ export async function registerNewAccount(
 	// Navigate to login page
 	await page.goto('/login');
 
-	// Wait for page to load and click "Sign in with seed phrase instead"
+	// Wait for page to load and click "Sign in with seed phrase instead".
+	// networkidle is load-bearing here: the button is in the SSR HTML so it's
+	// visible immediately, but its onclick handler isn't bound until SvelteKit
+	// hydrates. Clicking before hydration is a silent no-op. There is no clean
+	// public hydration signal, so we accept the networkidle wait — this is the
+	// account-creation path, runs once per worker, not on the per-test hot path.
 	await page.waitForLoadState('networkidle');
 	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
 	await expect(seedPhraseButton).toBeVisible({ timeout: 10000 });
@@ -133,7 +138,8 @@ export async function signIn(
 	// Navigate to login page
 	await page.goto('/login');
 
-	// Wait for page to be fully hydrated
+	// Wait for page to be fully hydrated (see registerNewAccount for rationale
+	// — the SSR-rendered button is visible before its onclick is bound).
 	await page.waitForLoadState('networkidle');
 
 	// Click "Sign in with seed phrase instead" to reveal seed phrase options
