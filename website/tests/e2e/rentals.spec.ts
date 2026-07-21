@@ -3,6 +3,7 @@ import {
 	pubkeyHexFromSeed,
 	seedContract,
 	deleteContractsForRequester,
+	sql,
 	type ContractSeed,
 } from './fixtures/seed-helpers';
 
@@ -211,10 +212,45 @@ test.describe('/dashboard/rentals', () => {
 			await expect(card).toBeVisible();
 
 			// The card must surface next-step text mentioning the marketplace as a
-			// recovery path (exact copy may flex — match on the key concepts).
-			// "marketplace" appears in both the next-step text and the action
-			// button label, so use first() to assert at least one is visible.
-			await expect(card.getByText(/marketplace/i).first()).toBeVisible();
+		// recovery path (exact copy may flex — match on the key concepts).
+		// "marketplace" appears in both the next-step text and the action
+		// button label, so use first() to assert at least one is visible.
+		await expect(card.getByText(/marketplace/i).first()).toBeVisible();
+	} finally {
+		await deleteContractsForRequester(pubkey);
+	}
+});
+
+	test('pending-gateway state shows ETA copy and inline Refresh button (audit #10)', async ({ page, testAccount }) => {
+		// Audit #10: when a contract has provisioning_instance_details but no
+		// gateway_subdomain/gateway_ssh_port yet, the card showed only
+		// "Gateway routing is being configured. Connection details will appear
+		// shortly." with no ETA and no way to refresh without a full page reload.
+		// Fix adds a "typically 1–3 minutes" hint and an inline Refresh button.
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		try {
+			const contractId = await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'active',
+				paymentStatus: 'succeeded',
+			});
+			// Set provisioning_instance_details and explicitly NULL the gateway
+			// fields so the "pending gateway" branch is the only one that fires
+			// inside the Connection Details card.
+			await sql(
+				`UPDATE contract_sign_requests SET provisioning_instance_details = '{"ip_address":"10.0.0.1"}', gateway_subdomain = NULL, gateway_ssh_port = NULL WHERE contract_id = decode('${contractId}', 'hex')`
+			);
+
+			await page.goto('/dashboard/rentals');
+
+			const card = page.locator(`a[href="/dashboard/rentals/${contractId}"]`);
+			await expect(card).toBeVisible();
+
+			// The pending-gateway hint must surface an ETA hint.
+			await expect(card.getByText(/gateway routing is being configured/i)).toBeVisible();
+			await expect(card.getByText(/1.{0,3}3 minutes|typically/i)).toBeVisible();
+			// And an inline Refresh button must exist on the card.
+			await expect(card.getByRole('button', { name: /refresh/i })).toBeVisible();
 		} finally {
 			await deleteContractsForRequester(pubkey);
 		}

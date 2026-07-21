@@ -994,9 +994,18 @@
 									</div>
 								</div>
 							{/if}
-							{#if !gatewaySshCmd && !directSshCmd && contract.provisioning_instance_details}
-								<div class="text-yellow-300 text-xs">Gateway routing is being configured. Connection details will appear shortly.</div>
-							{/if}
+						{#if !gatewaySshCmd && !directSshCmd && contract.provisioning_instance_details}
+							<div class="flex items-center justify-between gap-3">
+								<div class="text-yellow-300 text-xs">
+									Gateway routing is being configured. Connection details will appear here shortly (typically 1–3 minutes).
+								</div>
+								<button
+									onclick={(e) => { e.preventDefault(); e.stopPropagation(); location.reload(); }}
+									class="shrink-0 px-2 py-1 text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 border border-yellow-500/30 transition-colors"
+									title="Re-check gateway status"
+								>Refresh</button>
+							</div>
+						{/if}
 							{#if contract.provisioning_completed_at_ns}
 								<div class="text-green-400/60 text-xs">Provisioned: {formatDate(contract.provisioning_completed_at_ns)}</div>
 							{/if}
