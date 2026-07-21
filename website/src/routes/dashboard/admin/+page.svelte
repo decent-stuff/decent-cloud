@@ -938,9 +938,16 @@
 										<td class="py-3 px-2 text-sm">
 											{formatTimestamp(email.createdAt)}
 										</td>
-										<td class="py-3 px-2 text-xs text-red-400 max-w-xs truncate">
-											{email.lastError || "Unknown error"}
-										</td>
+									<td class="py-3 px-2 text-xs text-red-400 max-w-xs">
+										{#if email.lastError}
+											<details>
+												<summary class="cursor-pointer whitespace-pre-wrap break-words">{email.lastError}</summary>
+												<pre class="mt-1 p-2 bg-base/50 border border-neutral-800 text-xs text-red-300 font-mono overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap">{email.lastError}</pre>
+											</details>
+										{:else}
+											<span title="No error details were recorded">Unknown error</span>
+										{/if}
+									</td>
 										<td class="py-3 px-2">
 											<button
 												type="button"
