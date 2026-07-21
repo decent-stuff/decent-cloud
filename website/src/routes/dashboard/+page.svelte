@@ -785,7 +785,7 @@
 			<div class="flex items-center justify-between mb-4">
 				<div>
 					<h2 class="text-base font-semibold text-white">My Resources</h2>
-					<p class="text-xs text-neutral-500 mt-1">Your infrastructure offerings - rent for free (self-rental)</p>
+					<p class="text-xs text-neutral-500 mt-1">Your own offerings - provision a test instance on demand (self-rental)</p>
 				</div>
 				<a
 					href="/dashboard/offerings"
@@ -851,12 +851,13 @@
 								</p>
 								<p class="text-[10px] text-neutral-500">/month</p>
 							</div>
-							<button
-								onclick={() => selectedOfferingForRental = offering}
-								class="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors"
-							>
-								Rent Free
-							</button>
+						<button
+							onclick={() => selectedOfferingForRental = offering}
+							class="px-3 py-1.5 text-xs font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+							title="Provision this offering to yourself at no charge"
+						>
+							Test Provision
+						</button>
 						</div>
 					{/each}
 					{#if myOfferings.length > 5}
