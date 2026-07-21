@@ -556,9 +556,18 @@
 					</div>
 				</div>
 
+			{#if offeringSlaSummary.reports30d > 0}
 				<SlaBreachTimeline timeline={offeringSlaSummary.timeline} days={30} />
-			</div>
-		{/if}
+			{:else}
+				<div class="rounded-lg border border-neutral-800 bg-neutral-900/30 px-4 py-6 text-center">
+					<p class="text-sm text-neutral-400">No SLA reports in the last 30 days</p>
+					<p class="text-xs text-neutral-500 mt-1">
+						The provider's SLA target is shown above; check back once SLI reports are submitted.
+					</p>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 		<!-- Price card -->
 		<div class="card p-6 border border-neutral-800">
