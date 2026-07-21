@@ -1,34 +1,35 @@
 import { test, expect } from './fixtures/test-account';
-import {
-	signIn,
-	setupConsoleLogging,
-} from './fixtures/auth-helpers';
 
 /**
  * E2E Tests for Account Settings Page
  *
+ * Consolidated: same-page snapshot assertions are grouped into single tests
+ * to reduce redundant page.goto() calls. Behavioral flows (clicks that change
+ * state) remain separate so each flow stays a clear, documented behavior.
+ *
  * Prerequisites:
- * - API server running at http://localhost:8080
- * - Dev server running at http://localhost:5173
- * - Clean test database
+ * - Warm stack: api at http://localhost:59011, web at http://localhost:59010
+ * - Clean test database (test-account fixture seeds + tears down per worker)
  */
 
 test.describe('Account Settings Page', () => {
 	// No beforeEach needed - the test fixture handles authentication automatically
 
-	test('should display account overview correctly', async ({ page, testAccount }) => {
-		// Navigate to account page
+	test('account page: overview renders correctly via direct URL', async ({
+		page,
+		testAccount,
+	}) => {
+		// Single navigation covers what was previously three snapshot tests:
+		// "display account overview", "format created date as human-readable",
+		// and "accessible via direct URL" (whose h1 + @username assertions were
+		// a strict subset of the overview assertions).
 		await page.goto('/dashboard/account');
 
-		// Verify page title
-		await expect(
-			page.locator('h1:has-text("Account Settings")'),
-		).toBeVisible();
+		// Page title and overview section
+		await expect(page.locator('h1:has-text("Account Settings")')).toBeVisible();
+		await expect(page.locator('text=Account overview')).toBeVisible();
 
-		// Verify account overview section
-		await expect(page.locator('text=Account Overview')).toBeVisible();
-
-		// Verify username is displayed (use first() since it appears in sidebar and content)
+		// Username (first() — also appears in sidebar)
 		await expect(
 			page.locator(`text=@${testAccount.username}`).first(),
 		).toBeVisible();
@@ -36,15 +37,22 @@ test.describe('Account Settings Page', () => {
 		// Account ID is no longer shown on the overview page (moved to /security);
 		// identity coverage here is preserved by Username + Created assertions below.
 
-		// Verify created date is displayed
+		// Created date is present AND human-readable (month name appears)
 		await expect(page.locator('text=Created')).toBeVisible();
+		const createdSection = page.locator('text=Created').locator('..');
+		const dateText = await createdSection.textContent();
+		const hasMonthName =
+			/(January|February|March|April|May|June|July|August|September|October|November|December)/.test(
+				dateText || '',
+			);
+		expect(hasMonthName).toBeTruthy();
 
-		// Verify active keys count is displayed
+		// Active keys count
 		await expect(page.locator('text=Active Keys')).toBeVisible();
 		await expect(page.locator('text=1 key')).toBeVisible(); // New account has 1 key
 	});
 
-	test('should show account link in sidebar', async ({ page }) => {
+	test('account page: sidebar link navigates to account page', async ({ page }) => {
 		// Fixture already leaves us on /dashboard, just ensure page is ready
 		await page.waitForLoadState('networkidle');
 
@@ -58,15 +66,7 @@ test.describe('Account Settings Page', () => {
 		await expect(page).toHaveURL('/dashboard/account');
 	});
 
-	// REMOVED: "should show username in header" — the header no longer displays
-	// the @username and there is no clickable username anywhere in the dashboard
-	// chrome (sidebar shows "Account" + "Logout" only). The feature this test
-	// covered (click username -> account page) was removed; navigation to the
-	// account page is now covered by "should show account link in sidebar" above.
-
-	test('should handle navigation between account sections', async ({
-		page,
-	}) => {
+	test('account page: navigation between sections', async ({ page }) => {
 		// Start at account page
 		await page.goto('/dashboard/account');
 		await expect(
@@ -76,9 +76,7 @@ test.describe('Account Settings Page', () => {
 		// Navigate to security section
 		await page.click('a:has-text("Security")');
 		await expect(page).toHaveURL('/dashboard/account/security');
-		await expect(
-			page.locator('h1:has-text("Security")'),
-		).toBeVisible();
+		await expect(page.locator('h1:has-text("Security")')).toBeVisible();
 
 		// Navigate back to account overview
 		await page.click('a:has-text("Account")');
@@ -95,35 +93,29 @@ test.describe('Account Settings Page', () => {
 		).toBeVisible();
 	});
 
-	test('should format created date as human-readable', async ({ page }) => {
-		await page.goto('/dashboard/account');
+	test('account page: security overview renders device key info for single-key account', async ({
+		page,
+	}) => {
+		// Single navigation covers what was previously two snapshot tests:
+		// "not show Remove button for single key account" and
+		// "display device key info correctly".
+		await page.goto('/dashboard/account/security');
 
-		// Find created date element
-		const createdSection = page.locator('text=Created').locator('..');
-		const dateText = await createdSection.textContent();
+		// Devices section present, single key
+		await expect(page.locator('text=Devices')).toBeVisible();
+		await expect(page.locator('text=1 key')).toBeVisible();
 
-		// Should contain a month name (e.g., "January", "February")
-		const hasMonthName =
-			/(January|February|March|April|May|June|July|August|September|October|November|December)/.test(
-				dateText || '',
-			);
-		expect(hasMonthName).toBeTruthy();
+		// Remove button should NOT be visible (can't remove last key)
+		await expect(page.locator('button:has-text("Remove")')).not.toBeVisible();
+
+		// Device shows Active status, key icon, and truncated public key (hex)
+		await expect(page.locator('text=Active').first()).toBeVisible({ timeout: 10000 });
+		await expect(page.locator('text=🔑')).toBeVisible();
+		const keyDisplay = page.locator('.font-mono').filter({ hasText: /[0-9a-f]+\.\.\.[0-9a-f]+/i });
+		await expect(keyDisplay.first()).toBeVisible();
 	});
 
-	test('should be accessible via direct URL', async ({ page, testAccount }) => {
-		// Navigate directly to account page
-		await page.goto('/dashboard/account');
-
-		// Should load without errors
-		await expect(
-			page.locator('h1:has-text("Account Settings")'),
-		).toBeVisible();
-		await expect(
-			page.locator(`text=@${testAccount.username}`).first(),
-		).toBeVisible();
-	});
-
-	test('should edit device name', async ({ page }) => {
+	test('account page: edit device name', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
 
 		// Find the Devices section
@@ -151,7 +143,7 @@ test.describe('Account Settings Page', () => {
 		await expect(page.locator(`button:has-text("${newName}")`)).toBeVisible();
 	});
 
-	test('should cancel device name edit', async ({ page }) => {
+	test('account page: cancel device name edit', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
 
 		// Find Devices section
@@ -183,35 +175,7 @@ test.describe('Account Settings Page', () => {
 		await expect(page.locator('input[placeholder="Device name"]')).not.toBeVisible();
 	});
 
-	test('should not show Remove button for single key account', async ({ page }) => {
-		await page.goto('/dashboard/account/security');
-
-		// Find the Devices section
-		await expect(page.locator('text=Devices')).toBeVisible();
-
-		// Should show "1 key" in Active Keys
-		await expect(page.locator('text=1 key')).toBeVisible();
-
-		// Remove button should NOT be visible (can't remove last key)
-		await expect(page.locator('button:has-text("Remove")')).not.toBeVisible();
-	});
-
-	test('should display device key info correctly', async ({ page }) => {
-		await page.goto('/dashboard/account/security');
-		await page.waitForLoadState('networkidle');
-
-		// Should show device with Active status
-		await expect(page.locator('text=Active').first()).toBeVisible({ timeout: 10000 });
-
-		// Should show key icon for active key
-		await expect(page.locator('text=🔑')).toBeVisible();
-
-		// Should show truncated public key (hex format)
-		const keyDisplay = page.locator('.font-mono').filter({ hasText: /[0-9a-f]+\.\.\.[0-9a-f]+/i });
-		await expect(keyDisplay.first()).toBeVisible();
-	});
-
-	test('should open Add Device modal', async ({ page }) => {
+	test('account page: open Add Device modal', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
 
 		// Click Add Device button
@@ -226,7 +190,7 @@ test.describe('Account Settings Page', () => {
 		await expect(page.locator('button:has-text("Import Existing")')).toBeVisible();
 	});
 
-	test('should cancel Add Device modal', async ({ page }) => {
+	test('account page: cancel Add Device modal', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
 
 		// Click Add Device button
