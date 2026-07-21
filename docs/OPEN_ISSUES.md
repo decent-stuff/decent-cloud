@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-07-20. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-07-21. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -17,12 +17,13 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title | Labels | Notes |
 |---|-------|--------|-------|
-| 418 | Decent Agents: beta onboarding (invite + first-run demo) | launch | First user-facing DA flow. |
-| 433 | No UI to top up account balance — `/dashboard/transfers` only shows history | launch | Found during 2026-07-20 UX audit (`/dashboard/transfers` has no Add Funds / Deposit button). |
-| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | Required for multi-tenant DA isolation. |
-| 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | |
-| 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | |
-| 410 | Stripe: cleanup stale pending contracts (payment timeout) | stripe | |
+| 418 | Decent Agents: beta onboarding (invite + first-run demo) | launch | First user-facing DA flow. Large (magic-link/Google auth → Stripe → GitHub App → demo PR → invite gate). |
+| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | Required for multi-tenant DA isolation. Large. |
+| 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | Depends on #415 meters. Large. |
+| 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | Meters, caps, Stripe cycle rollover. Large. |
+| 437 | Marketplace: click-to-cycle visibility/stock buttons are surprising | enhancement | Filed from 2026-07-21 UX audit (#4). Dropdown menu needed. |
+| 438 | Dashboard layout: email banner preempts seed-phrase backup banner (recovery risk) | bug | Filed from 2026-07-21 UX audit (#7). Stack banners + design pass. |
+| 439 | Marketplace: sort UI hidden on mobile (`hidden md:flex`) | bug | Filed from 2026-07-21 UX audit (#8). Mobile `<select>` + URL sync. |
 
 ## Deferred — Decent Agents
 
@@ -61,15 +62,16 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 212 | dc-agent: pre-built Docker image with openssh-server (P2) |
 | 107 | Backlog: Dark/light mode toggle |
 
-## Recently closed by this work (2026-07-20)
+## Recently closed by this work
 
 | # | Title | Resolution |
 |---|-------|------------|
-| 434 | Flaky test: `account-notifications.spec.ts` in parallel runs (workers>1) | False alarm — fixed in `81615b77` (P3.5 mock audit): replaced `page.check('#notify-*')` with `locator(...).click()` after `waitFor('visible')` because `waitForLoadState('networkidle')` returned before Svelte finished hydrating channels. |
+| 433 | No UI to top up account balance — `/dashboard/transfers` only shows history | **Small-fix path** shipped in `9df37443`: balance card gained explanatory subtitle (P2P transfer units; rentals are per-transaction at checkout). E2E in `transfers.spec.ts`. Larger pre-pay deposit CTA remains out of scope. |
+| 410 | Stripe: cleanup stale pending contracts (payment timeout) | Shipped in `8ca5e070`: `Pending → Expired` transition allowed, `find_stale_pending`/`expire_pending` with money-safety guard `AND payment_status != 'succeeded'`, wired into `TimeoutCleanupService` via env `PENDING_TIMEOUT_SECONDS` (default 3600). Partial index `046`. |
+| 434 | Flaky test: `account-notifications.spec.ts` in parallel runs (workers>1) | False alarm — fixed in `81615b77` (P3.5 mock audit). |
 
 ## In-repo known issues (not on GitHub)
 
-- **Marketplace empty-state hint suggests `product_type:gpu` field syntax but the API rejects it**
-  (`Unknown field: product_type`). Pre-existing product bug at
-  `website/src/routes/dashboard/marketplace/+page.svelte:1307`. Not fixed in 2026-07-20 session;
-  `search-dsl.spec.ts` tests use `price:<=N` instead, which does work.
+None currently outstanding. Previously tracked: marketplace empty-state hint suggested
+`product_type:gpu` field syntax but the API rejected it — **fixed in `83612673`** (renamed to
+`type:gpu` matching the DSL allowlist alias).
