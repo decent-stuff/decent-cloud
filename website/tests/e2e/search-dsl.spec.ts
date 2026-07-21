@@ -188,4 +188,36 @@ test.describe('Search DSL', () => {
 		const resetNumber = parseInt(resetText?.match(/\d+/)?.[0] || '0');
 		expect(resetNumber).toBe(initialNumber);
 	});
+
+	test('recipe filter uses self-explanatory label with tooltip (#9)', async ({ page }) => {
+		// Audit #9: the advanced filters panel had a checkbox labelled "Recipes only"
+		// with no explanation. A new user had no way to know that "recipe" means
+		// post_provision_script (a setup script the provider baked into the offering).
+		// Rename to "Includes setup script" with a title= tooltip describing it.
+		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
+
+		// The recipe checkbox lives inside the collapsible "More filters" panel;
+		// expand it first.
+		const moreFiltersButton = page.getByRole('button', { name: /More filters/i });
+		if (await moreFiltersButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+			await moreFiltersButton.click();
+			await page.waitForTimeout(200);
+		}
+
+		// The new label must be present.
+		const recipeLabel = page.locator('aside').getByText('Includes setup script');
+		await expect(recipeLabel).toBeVisible();
+
+		// The old ambiguous label must be gone.
+		await expect(page.locator('aside').getByText('Recipes only')).toHaveCount(0);
+
+		// The label's container must carry a tooltip explaining what a setup
+		// script is, so the user isn't forced to guess.
+		const recipeFilterBlock = page.locator('aside').filter({ hasText: 'Includes setup script' }).first();
+		// A <span>/<label>/<input> within this block exposes a title attribute
+		// whose text mentions what the setup script does.
+		const tooltipText = await recipeFilterBlock.locator('[title]').first().getAttribute('title');
+		expect(tooltipText?.length).toBeGreaterThan(10);
+		expect(tooltipText?.toLowerCase()).toMatch(/setup script|recipe|provision/);
+	});
 });

@@ -758,7 +758,7 @@
 			chips.push({ label: "Showing offline", remove: () => { showOfflineOfferings = false; syncFiltersToUrl(); } });
 		}
 		if (recipesOnly) {
-			chips.push({ label: "Recipes only", remove: () => { recipesOnly = false; handleFilterChange(); } });
+			chips.push({ label: "Includes setup script", remove: () => { recipesOnly = false; handleFilterChange(); } });
 		}
 		if (!inStockOnly) {
 			chips.push({ label: "Including out-of-stock", remove: () => { inStockOnly = true; handleFilterChange(); } });
@@ -1067,9 +1067,12 @@
 							</label>
 						</div>
 
-						<!-- Recipes Only Filter -->
+						<!-- Includes Setup Script Filter (a.k.a. "recipe" / post_provision_script) -->
 						<div>
-							<label class="flex items-center gap-2 cursor-pointer group">
+							<label
+								class="flex items-center gap-2 cursor-pointer group"
+								title="Filter to offerings that include an automated setup script for popular workloads."
+							>
 								<input
 									type="checkbox"
 									bind:checked={recipesOnly}
@@ -1077,7 +1080,7 @@
 									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
 								/>
 								<span class="text-sm text-neutral-400 group-hover:text-white"
-									>Recipes only</span
+									>Includes setup script</span
 								>
 								</label>
 							</div>
@@ -1452,8 +1455,8 @@
 													</div>
 													{#if offering.post_provision_script}
 														<details class="mt-3">
-															<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View recipe script</summary>
-															<pre class="mt-2 p-3 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
+														<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View setup script</summary>
+														<pre class="mt-2 p-3 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
 														</details>
 													{/if}
 												</div>
@@ -1753,8 +1756,8 @@
 									</div>
 									{#if offering.post_provision_script}
 										<details class="mt-1">
-											<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View recipe script</summary>
-											<pre class="mt-2 p-2 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-36 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
+										<summary class="text-xs text-blue-400 cursor-pointer hover:text-blue-300">View setup script</summary>
+										<pre class="mt-2 p-2 bg-base/50 border border-neutral-800 text-xs text-neutral-300 font-mono overflow-x-auto max-h-36 overflow-y-auto whitespace-pre-wrap">{offering.post_provision_script}</pre>
 										</details>
 									{/if}
 									<div class="grid grid-cols-2 gap-2 text-xs">
