@@ -800,7 +800,7 @@
 											{release.providerPubkeyHex.slice(0, 12)}...
 										</td>
 										<td class="py-3 px-2">
-											{(release.totalPendingE9s / 1e9).toFixed(4)} tokens
+											{(release.totalPendingE9s / 1e9).toFixed(4)} ICP
 										</td>
 										<td class="py-3 px-2">{release.releaseCount}</td>
 										<td class="py-3 px-2">
