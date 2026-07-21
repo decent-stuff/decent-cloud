@@ -3,6 +3,7 @@ import {
 	pubkeyHexFromSeed,
 	seedContract,
 	deleteContractsForRequester,
+	randomHex,
 } from './fixtures/seed-helpers';
 
 /**
@@ -149,6 +150,38 @@ test.describe('/dashboard/invoices', () => {
 			// Click the contract hash link in the row
 			await page.locator(`a[href="/dashboard/rentals/${contractId}"]`).click();
 			await expect(page).toHaveURL(new RegExp(`/dashboard/rentals/${contractId}`));
+		} finally {
+			await deleteContractsForRequester(pubkey);
+		}
+	});
+
+	test('provider column links to reputation page (#5)', async ({ page, testAccount }) => {
+		// Audit #5: the invoice table Provider column showed a raw pubkey hex
+		// with no link, forcing users to remember 8-char hex prefixes to tell
+		// providers apart. Mirror rentals/+page.svelte: wrap the pubkey in a
+		// link to /dashboard/reputation/{pubkey} so one click resolves the name.
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		const providerPubkey = randomHex(32);
+		try {
+			await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'active',
+				paymentStatus: 'succeeded',
+				providerPubkeyHex: providerPubkey,
+			});
+
+			await page.goto('/dashboard/invoices');
+
+			// The provider cell must be an anchor pointing at the reputation page
+			// for that exact pubkey — not just plain text.
+			const providerLink = page.locator(
+				`a[href="/dashboard/reputation/${providerPubkey}"]`,
+			);
+			await expect(providerLink).toBeVisible();
+			// Link text is the truncated pubkey, so the user still sees the same
+			// identifier but can now resolve it to a name in one click.
+			// truncatePubkey shows the first 6 + last 6 chars by default.
+			await expect(providerLink).toContainText(providerPubkey.slice(0, 6));
 		} finally {
 			await deleteContractsForRequester(pubkey);
 		}

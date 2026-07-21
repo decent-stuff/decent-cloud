@@ -214,9 +214,14 @@
 										{truncateHash(contract.contract_id, 8)}
 									</a>
 								</td>
-								<td class="px-4 py-3 text-neutral-400 font-mono text-xs">
+							<td class="px-4 py-3 font-mono text-xs">
+								<a
+									href="/dashboard/reputation/{contract.provider_pubkey}"
+									class="text-neutral-400 hover:text-primary-400 transition-colors"
+								>
 									{truncateHash(contract.provider_pubkey)}
-								</td>
+								</a>
+							</td>
 								<td class="px-4 py-3 text-white text-right font-medium whitespace-nowrap">
 									{formatAmount(contract.payment_amount_e9s, contract.currency)}
 								</td>
