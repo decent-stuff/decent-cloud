@@ -3,30 +3,46 @@ import { test, expect } from './fixtures/test-account';
 /**
  * E2E Tests for Billing Settings Page
  *
+ * Consolidated: same-page snapshot assertions are grouped into one test.
+ * Behavioral save/persist/verify flows remain separate.
+ *
  * Prerequisites:
- * - API server running at http://localhost:8080
- * - Dev server running at http://localhost:5173
- * - Clean test database
+ * - Warm stack: api at http://localhost:59011, web at http://localhost:59010
+ * - Clean test database (test-account fixture seeds + tears down per worker)
  */
 
 test.describe('Billing Settings Page', () => {
-	test('should display billing settings page correctly', async ({ page }) => {
+	test('billing settings: page renders with form fields, country options, and VAT info', async ({
+		page,
+	}) => {
+		// Single navigation covers what was previously three snapshot tests:
+		// "display billing settings page correctly", "show EU country options in
+		// dropdown", and "display VAT info section".
 		await page.goto('/dashboard/account/billing');
 
-		// Verify page title
+		// Page title and description
 		await expect(page.locator('h1:has-text("Billing Settings")')).toBeVisible();
-
-		// Verify description
 		await expect(page.locator('text=Manage your billing address and VAT information')).toBeVisible();
 
-		// Verify form elements
+		// Form labels
 		await expect(page.locator('text=Invoice Information')).toBeVisible();
 		await expect(page.locator('label:has-text("Billing Address")')).toBeVisible();
 		await expect(page.locator('label:has-text("Country (for VAT)")')).toBeVisible();
 		await expect(page.locator('label:has-text("VAT ID")')).toBeVisible();
+
+		// EU country options (current format: "CC - Country Name")
+		const select = page.locator('#billingCountryCode');
+		await expect(select.locator('option[value="DE"]')).toHaveText('DE - Germany');
+		await expect(select.locator('option[value="FR"]')).toHaveText('FR - France');
+		await expect(select.locator('option[value="NL"]')).toHaveText('NL - Netherlands');
+		await expect(select.locator('option[value="OTHER"]')).toHaveText('Other (non-EU)');
+
+		// VAT info section
+		await expect(page.locator('text=About VAT and Invoices')).toBeVisible();
+		await expect(page.locator('text=EU businesses with valid VAT IDs may qualify for reverse charge')).toBeVisible();
 	});
 
-	test('should navigate to billing from account page', async ({ page }) => {
+	test('billing settings: navigation from account page', async ({ page }) => {
 		await page.goto('/dashboard/account');
 
 		// Should see billing tab
@@ -40,7 +56,7 @@ test.describe('Billing Settings Page', () => {
 		await expect(page.locator('h1:has-text("Billing Settings")')).toBeVisible();
 	});
 
-	test('should save billing address', async ({ page }) => {
+	test('billing settings: save billing address', async ({ page }) => {
 		await page.goto('/dashboard/account/billing');
 
 		// Fill in billing address
@@ -54,7 +70,7 @@ test.describe('Billing Settings Page', () => {
 		await expect(page.locator('text=Billing settings saved')).toBeVisible({ timeout: 5000 });
 	});
 
-	test('should save VAT settings', async ({ page }) => {
+	test('billing settings: save VAT settings', async ({ page }) => {
 		await page.goto('/dashboard/account/billing');
 
 		// Select country
@@ -70,7 +86,7 @@ test.describe('Billing Settings Page', () => {
 		await expect(page.locator('text=Billing settings saved')).toBeVisible({ timeout: 5000 });
 	});
 
-	test('should persist billing settings on reload', async ({ page }) => {
+	test('billing settings: settings persist on reload', async ({ page }) => {
 		await page.goto('/dashboard/account/billing');
 
 		// Fill in billing info
@@ -83,9 +99,10 @@ test.describe('Billing Settings Page', () => {
 		await page.click('button:has-text("Save Billing Settings")');
 		await expect(page.locator('text=Billing settings saved')).toBeVisible({ timeout: 5000 });
 
-		// Reload page
+		// Reload. The next op (toHaveValue) is auto-retrying, so the prior
+		// networkidle wait was redundant and has been removed — toHaveValue
+		// itself waits for the form to re-populate from the server.
 		await page.reload();
-		await page.waitForLoadState('networkidle');
 
 		// Verify data persisted
 		await expect(page.locator('#billingAddress')).toHaveValue(testAddress);
@@ -93,7 +110,7 @@ test.describe('Billing Settings Page', () => {
 		await expect(page.locator('#billingVatId')).toHaveValue('987654321');
 	});
 
-	test('should show verify button for VAT ID', async ({ page }) => {
+	test('billing settings: verify button reflects VAT field state', async ({ page }) => {
 		await page.goto('/dashboard/account/billing');
 
 		// Verify button should be present
@@ -114,26 +131,5 @@ test.describe('Billing Settings Page', () => {
 
 		// Button should now be enabled
 		await expect(page.locator('button:has-text("Verify")')).toBeEnabled();
-	});
-
-	test('should show EU country options in dropdown', async ({ page }) => {
-		await page.goto('/dashboard/account/billing');
-
-		// Open dropdown and verify some EU countries are present
-		const select = page.locator('#billingCountryCode');
-
-		// Check for specific EU countries (current format: "CC - Country Name")
-		await expect(select.locator('option[value="DE"]')).toHaveText('DE - Germany');
-		await expect(select.locator('option[value="FR"]')).toHaveText('FR - France');
-		await expect(select.locator('option[value="NL"]')).toHaveText('NL - Netherlands');
-		await expect(select.locator('option[value="OTHER"]')).toHaveText('Other (non-EU)');
-	});
-
-	test('should display VAT info section', async ({ page }) => {
-		await page.goto('/dashboard/account/billing');
-
-		// Should show VAT info section
-		await expect(page.locator('text=About VAT and Invoices')).toBeVisible();
-		await expect(page.locator('text=EU businesses with valid VAT IDs may qualify for reverse charge')).toBeVisible();
 	});
 });
