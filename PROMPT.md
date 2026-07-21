@@ -63,12 +63,13 @@ audit doc, and the per-issue plans under `docs/plans/`.
 
 3. **Small remaining UX fixes** (deferred from B3 — not blocking, filed only in the audit doc):
    - Finding **#2** `/dashboard/+page.svelte:787-788,854-859` — "Rent Free" / "rent for free
-     (self-rental)" ambiguous copy. Rename to "Test Provision" + tooltip.
+     (self-rental)" ambiguous copy. Rename to "Test Provision" + tooltip. **DONE 2026-07-21 (`c528d3da`).**
    - Finding **#10** `/dashboard/rentals/+page.svelte:979-981` — "Gateway routing being configured...
-     shortly" no ETA/refresh. Inline refresh button + "typically 1-3 minutes" copy.
+     shortly" no ETA/refresh. Inline refresh button + "typically 1-3 minutes" copy. **DONE 2026-07-21 (`9b15d162`).**
    - Finding **#12** `WelcomeModal.svelte:71` + `welcome-onboarding.ts:12-14` — backdrop click
-     permanently dismisses onboarding. Decouple close from complete.
-   Each is small enough to ship inline with a RED Playwright test.
+     permanently dismisses onboarding. Decouple close from complete. **DONE 2026-07-21 (`5fff8ea9`).**
+   Each shipped inline with a RED Playwright test. All 15 audit findings now resolved
+   (12 fixed, 1 false positive, 2 → filed as #437/#438/#439 — wait, #4 was #437, #7 was #438, #8 was #439).
 
 4. **In-scope large issues** (highest impact first):
    - #437 Marketplace click-to-cycle → dropdown menu.
