@@ -1,11 +1,8 @@
 import { test as base } from '@playwright/test';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import {
-	registerNewAccount,
-	setupConsoleLogging,
-	type AuthCredentials,
-} from './auth-helpers';
+import { setupConsoleLogging, type AuthCredentials } from './auth-helpers';
+import { seedAccountDirect, deleteAccountByUsername } from './seed-helpers';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,17 +61,20 @@ async function grantAdminStatus(username: string): Promise<void> {
  */
 export const test = base.extend<{}, { adminAccount: AuthCredentials }>({
 	adminAccount: [
-		async ({ browser }, use) => {
-			const setupContext = await browser.newContext();
-			const setupPage = await setupContext.newPage();
-			setupConsoleLogging(setupPage);
-			const credentials = await registerNewAccount(setupPage);
-			await setupContext.close();
-
-			// Grant admin status via direct DB UPDATE (fast; no cargo run).
+		async ({}, use) => {
+			const credentials = await seedAccountDirect();
 			await grantAdminStatus(credentials.username);
-
 			await use(credentials);
+			// Teardown: delete the account to prevent data accumulation across
+			// suite runs (same pattern as test-account.ts testAccount fixture).
+			try {
+				await deleteAccountByUsername(credentials.username);
+			} catch (err) {
+				console.warn(
+					`adminAccount teardown: failed to delete account "${credentials.username}"`,
+					err instanceof Error ? err.message : err,
+				);
+			}
 		},
 		{ scope: 'worker' },
 	],

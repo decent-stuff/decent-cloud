@@ -4,7 +4,7 @@ import {
 	setupConsoleLogging,
 	type AuthCredentials,
 } from './auth-helpers';
-import { seedAccountDirect } from './seed-helpers';
+import { seedAccountDirect, deleteAccountByUsername } from './seed-helpers';
 
 // Worker-scoped credentials shared by all test variants.
 //
@@ -17,6 +17,17 @@ const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
 		async ({}, use) => {
 			const credentials = await seedAccountDirect();
 			await use(credentials);
+			// Teardown: delete the account to prevent data accumulation across
+			// suite runs. Handles the 3 NO-ACTION FK tables explicitly;
+			// remaining 12 child tables cascade automatically.
+			try {
+				await deleteAccountByUsername(credentials.username);
+			} catch (err) {
+				console.warn(
+					`testAccount teardown: failed to delete account "${credentials.username}"`,
+					err instanceof Error ? err.message : err,
+				);
+			}
 		},
 		{ scope: 'worker' },
 	],

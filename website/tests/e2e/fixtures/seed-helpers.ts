@@ -101,9 +101,25 @@ export async function seedAccountDirect(
 	return { username, seedPhrase };
 }
 
-/** Delete an account and all dependent rows (CASCADE) by username. */
+/**
+ * Delete an account and all dependent rows by username.
+ *
+ * Most child tables (account_public_keys, billing_settings, etc.) have
+ * ON DELETE CASCADE and are removed automatically when the accounts row is
+ * deleted. Three tables have NO ACTION FKs and must be cleaned explicitly
+ * first, or the accounts DELETE will fail:
+ *   - signature_audit (account_id)
+ *   - subscription_events (account_id)
+ *   - reseller_commissions_mapping (referred_account_id)
+ */
 export async function deleteAccountByUsername(username: string): Promise<void> {
-	await sql(`DELETE FROM accounts WHERE username = '${username.replace(/'/g, "''")}'`);
+	const safeName = username.replace(/'/g, "''");
+	await sql(`
+		DELETE FROM signature_audit WHERE account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
+		DELETE FROM subscription_events WHERE account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
+		DELETE FROM reseller_commissions_mapping WHERE referred_account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
+		DELETE FROM accounts WHERE username = '${safeName}';
+	`);
 }
 
 /** Random 32-byte lowercase hex string (for contract_id / provider_pubkey). */

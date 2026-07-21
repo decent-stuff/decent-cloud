@@ -25,9 +25,11 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	// 16 dev workers oversaturate a 16-core box that also runs api-server, vite,
-	// and postgres. 4 keeps the box responsive and the suite under 60s with the
-	// fast-auth fixture (cached seed-phrase injection, no per-test UI sign-in).
+	// Default 4 workers: measured 8 workers gives no improvement (2.9m vs 2.7m).
+	// Not CPU-bound (box is 64% idle at 8 workers); not Vite-dev-bound (preview
+	// mode measured same speed); not DB-pool-bound (larger pool regressed). The
+	// bottleneck is the sequential nature of browser-driven page loads against a
+	// single API+Postgres stack. Override per-run with E2E_WORKERS=N.
 	workers: process.env.CI ? 2 : (process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 4),
 	// Per-test timeout. The fast-auth fixture lands on /dashboard in <2s; 30s
 	// leaves plenty of headroom for actual test body work under parallel load.
