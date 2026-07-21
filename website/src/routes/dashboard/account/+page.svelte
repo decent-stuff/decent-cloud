@@ -9,8 +9,12 @@
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let isAuthenticated = $state(false);
+	// True when the account fetch failed during auth init — distinguishes
+	// "still loading" from "we tried and gave up" so we can show recovery.
+	let accountLoadFailed = $state(false);
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeAuth: (() => void) | null = null;
+	let unsubscribeLoadFailed: (() => void) | null = null;
 	let currentPath = $state("");
 
 	let showDeleteModal = $state(false);
@@ -26,12 +30,29 @@
 		unsubscribe = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
 		});
+
+		unsubscribeLoadFailed = authStore.accountLoadFailed.subscribe((failed) => {
+			accountLoadFailed = failed;
+		});
 	});
 
 	onDestroy(() => {
 		unsubscribe?.();
 		unsubscribeAuth?.();
+		unsubscribeLoadFailed?.();
 	});
+
+	async function retryAccountLoad() {
+		// Re-run auth init — it resets accountLoadFailed at the top and only
+		// sets it back to true if the fetch fails again.
+		await authStore.initialize();
+	}
+
+	async function handleLogout() {
+		await authStore.logout();
+		// Send the user home after clearing state.
+		window.location.href = '/';
+	}
 
 	page.subscribe((p) => {
 		currentPath = p.url.pathname;
@@ -101,7 +122,34 @@
 
 	<SettingsTabs />
 
-	{#if !isAuthenticated}
+	{#if !isAuthenticated && accountLoadFailed}
+		<!-- Account fetch failed during auth init — show recovery instead of
+		     trapping the user on a perpetual "Loading..." screen. -->
+		<div class="card p-6 border border-red-500/30 bg-red-500/5">
+			<h2 class="text-xl font-bold text-white mb-2">We couldn't load your account</h2>
+			<p class="text-neutral-400 text-sm mb-4">
+				We had trouble reaching the server or fetching your account details.
+				Please check your connection and try again. If the problem persists,
+				log out and sign back in.
+			</p>
+			<div class="flex gap-2">
+				<button
+					type="button"
+					onclick={retryAccountLoad}
+					class="px-4 py-2 bg-primary-500 text-white text-sm font-medium rounded hover:bg-primary-600 transition-colors"
+				>
+					Retry
+				</button>
+				<button
+					type="button"
+					onclick={handleLogout}
+					class="px-4 py-2 bg-neutral-700 text-white text-sm font-medium rounded hover:bg-neutral-600 transition-colors"
+				>
+					Logout
+				</button>
+			</div>
+		</div>
+	{:else if !isAuthenticated}
 		<AuthRequiredCard subtext="Create an account or login to access your account settings, manage security, and edit your public profile." />
 	{:else if currentIdentity?.account}
 		<!-- Account Overview Card -->

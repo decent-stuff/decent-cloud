@@ -102,6 +102,11 @@ function createAuthStore() {
 	// Since II is removed, viewing and signing identities are always the same
 	const activeIdentity = writable<IdentityInfo | null>(null);
 	const errorMessage = writable<string | null>(null);
+	// True after a stored seed phrase was found but the account fetch failed
+	// (network blip, 500, edge-case data). Lets pages distinguish "still
+	// loading" from "we tried and gave up" so they can render a recovery card
+	// instead of trapping the user on a perpetual "Loading..." screen.
+	const accountLoadFailed = writable<boolean>(false);
 
 	const isAuthenticated = derived(activeIdentity, ($active) => $active !== null);
 
@@ -260,6 +265,7 @@ function createAuthStore() {
 		currentIdentity: { subscribe: activeIdentity.subscribe },
 		signingIdentity: { subscribe: activeIdentity.subscribe },
 		isAuthenticated: { subscribe: isAuthenticated.subscribe },
+		accountLoadFailed: { subscribe: accountLoadFailed.subscribe },
 		errorMessage: {
 			subscribe: errorMessage.subscribe,
 			set: errorMessage.set
@@ -270,6 +276,10 @@ function createAuthStore() {
 		loadAccountByUsername,
 
 		async initialize() {
+			// Reset the load-failed flag at the start of every (re)try so a
+			// successful retry clears the error card on the page.
+			accountLoadFailed.set(false);
+
 			const oldSeedPhrase =
 				typeof window !== 'undefined' ? localStorage.getItem('seed_phrase') : null;
 			if (oldSeedPhrase) {
@@ -328,6 +338,9 @@ function createAuthStore() {
 					// else: null means key definitively not in DB → seed phrase will be removed
 				} catch (error) {
 					console.error('Failed to load account for identity:', error);
+					// Surface the failure so pages can render a recovery card
+					// instead of trapping the user on a perpetual "Loading...".
+					accountLoadFailed.set(true);
 					// Network error: preserve seed phrase so the user is not permanently locked out
 					if (identityInfo.type === 'seedPhrase' && identityInfo.seedPhrase) {
 						phrasesWithAccounts.push(identityInfo.seedPhrase);
@@ -459,6 +472,7 @@ function createAuthStore() {
 			identities.set([]);
 			activeIdentity.set(null);
 			errorMessage.set(null);
+			accountLoadFailed.set(false);
 			clearStoredSeedPhrases();
 		},
 
