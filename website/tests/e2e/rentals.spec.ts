@@ -188,4 +188,35 @@ test.describe('/dashboard/rentals', () => {
 			await deleteContractsForRequester(pubkey);
 		}
 	});
+
+	test('failed contract shows a next-step CTA pointing to the marketplace (#14)', async ({ page, testAccount }) => {
+		// Audit #14: getNextStepInfo had branches for requested/pending/accepted/
+		// provisioning/provisioned/active/rejected/cancelled but NOT for `failed`,
+		// so a failed contract rendered only the "Failed" badge with no guidance.
+		// The fix adds a `failed` branch with a marketplace hint + link.
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		try {
+			const contractId = await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'failed',
+				paymentStatus: 'succeeded',
+			});
+
+			await page.goto('/dashboard/rentals');
+
+			// `failed` lands under the "Cancelled / Failed" tab — switch to it.
+			await page.getByRole('button', { name: /Cancelled.*Failed/ }).click();
+
+			const card = page.locator(`a[href="/dashboard/rentals/${contractId}"]`);
+			await expect(card).toBeVisible();
+
+			// The card must surface next-step text mentioning the marketplace as a
+			// recovery path (exact copy may flex — match on the key concepts).
+			// "marketplace" appears in both the next-step text and the action
+			// button label, so use first() to assert at least one is visible.
+			await expect(card.getByText(/marketplace/i).first()).toBeVisible();
+		} finally {
+			await deleteContractsForRequester(pubkey);
+		}
+	});
 });

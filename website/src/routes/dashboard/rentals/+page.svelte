@@ -113,7 +113,7 @@
 	}
 
 	// Get "what's next" info for a contract
-	function getNextStepInfo(status: string, paymentStatus?: string): { text: string; isWaiting: boolean } | null {
+	function getNextStepInfo(status: string, paymentStatus?: string): { text: string; isWaiting: boolean; actionHref?: string; actionLabel?: string } | null {
 		const s = status.toLowerCase();
 		const ps = paymentStatus?.toLowerCase() ?? "";
 
@@ -140,6 +140,17 @@
 		}
 		if (s === "rejected") {
 			return { text: "Provider rejected this request. You can try another provider.", isWaiting: false };
+		}
+		if (s === "failed") {
+			// Audit #14: previously returned null, leaving the user staring at a
+			// bare "Failed" badge with no next step. Point them at the marketplace
+			// so they can find an alternative instead of digging through the sidebar.
+			return {
+				text: "Provisioning failed. Contact the provider or browse the marketplace for alternatives.",
+				isWaiting: false,
+				actionHref: "/dashboard/marketplace",
+				actionLabel: "Browse marketplace",
+			};
 		}
 		if (s === "cancelled") {
 			return null;
@@ -829,23 +840,30 @@
 									</div>
 								{/each}
 							</div>
-							{#if nextStep}
-								<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-primary-400' : 'text-neutral-400'}">
+						{#if nextStep}
+							<div class="flex items-start gap-2 text-sm {nextStep.isWaiting ? 'text-primary-400' : 'text-neutral-400'}">
+								{#if nextStep.isWaiting}
+									<div class="animate-pulse mt-0.5">⏳</div>
+								{:else}
+									<span class="mt-0.5">→</span>
+								{/if}
+								<div>
+									<span>{nextStep.text}</span>
 									{#if nextStep.isWaiting}
-										<div class="animate-pulse mt-0.5">⏳</div>
-									{:else}
-										<span class="mt-0.5">→</span>
+										<p class="text-neutral-500 text-xs mt-1">
+											You'll receive an email when your resource is ready. Make sure your <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto('/dashboard/account/profile'); }} class="text-primary-400 hover:underline">profile</button> has a valid email address.
+										</p>
+									{:else if nextStep.actionHref && nextStep.actionLabel}
+										<p class="text-neutral-500 text-xs mt-1">
+											<button
+												onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto(nextStep.actionHref!); }}
+												class="text-primary-400 hover:underline"
+											>{nextStep.actionLabel}</button>
+										</p>
 									{/if}
-									<div>
-										<span>{nextStep.text}</span>
-										{#if nextStep.isWaiting}
-											<p class="text-neutral-500 text-xs mt-1">
-												You'll receive an email when your resource is ready. Make sure your <button onclick={(e) => { e.preventDefault(); e.stopPropagation(); goto('/dashboard/account/profile'); }} class="text-primary-400 hover:underline">profile</button> has a valid email address.
-											</p>
-										{/if}
-									</div>
 								</div>
-							{/if}
+							</div>
+						{/if}
 						</div>
 					{/if}
 
