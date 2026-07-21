@@ -58,9 +58,36 @@
 	const showEmailVerificationBanner = $derived(
 		isAuthenticated && account && !account.emailVerified && !isCheckoutOrMarketplacePage
 	);
+	// #438: previously gated on `!showEmailVerificationBanner`, which meant a
+	// seed-phrase user with an unverified email NEVER saw the backup warning —
+	// exactly the high-risk account that needs it most. The two banners now
+	// stack independently inside a single fixed container; each has its own
+	// dismissal path (seed banner via localStorage flag, email banner via
+	// verification). The marketplace/rentals exclusion mirrors the email banner
+	// so focus-critical flows stay unobstructed.
 	const showSeedPhraseBackupBanner = $derived(
-		isAuthenticated && !showEmailVerificationBanner && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
+		isAuthenticated && !isCheckoutOrMarketplacePage && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
 	);
+
+	// <main> top padding must clear the fixed banner stack. Mobile sits under
+	// the h-14 (3.5rem) header; desktop starts at top-0. Each banner adds its
+	// own height; the both-banners case is the new path added by #438.
+	const mainTopPadding = $derived(
+		!isAuthenticated
+			? 'md:pt-20'
+			: showEmailVerificationBanner && showSeedPhraseBackupBanner
+				? 'pt-56 md:pt-36'
+				: showEmailVerificationBanner
+					? 'pt-44 md:pt-20'
+					: showSeedPhraseBackupBanner
+						? 'pt-28 md:pt-14'
+						: ''
+	);
+
+	function dismissSeedPhraseBanner() {
+		seedBackupDismissed = true;
+		if (browser) localStorage.setItem(SEED_BACKUP_DISMISSED_KEY, '1');
+	}
 </script>
 
 <div class="min-h-screen bg-base">
@@ -96,14 +123,22 @@
 	<!-- Auth prompt banner for anonymous users -->
 	{#if !isAuthenticated}
 		<AuthPromptBanner />
-	{:else if showEmailVerificationBanner}
-		<EmailVerificationBanner />
-	{:else if showSeedPhraseBackupBanner}
-		<SeedPhraseBackupBanner onDismiss={() => { seedBackupDismissed = true; if (browser) localStorage.setItem(SEED_BACKUP_DISMISSED_KEY, '1'); }} />
+	{:else if showEmailVerificationBanner || showSeedPhraseBackupBanner}
+		<!-- #438: banners stack independently inside one fixed container so they
+		can coexist (seed-phrase backup + unverified email). Each renders as a
+		static block sibling; the container owns positioning + z-index. -->
+		<div class="fixed top-14 md:top-0 left-0 md:left-60 right-0 z-40">
+			{#if showEmailVerificationBanner}
+				<EmailVerificationBanner />
+			{/if}
+			{#if showSeedPhraseBackupBanner}
+				<SeedPhraseBackupBanner onDismiss={dismissSeedPhraseBanner} />
+			{/if}
+		</div>
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {showEmailVerificationBanner ? 'pt-44 md:pt-20' : ''} {showSeedPhraseBackupBanner ? 'pt-28 md:pt-14' : ''} {!isAuthenticated ? 'md:pt-20' : ''}">
+	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {mainTopPadding}">
 		<div class="max-w-6xl mx-auto">
 			{@render children()}
 		</div>
