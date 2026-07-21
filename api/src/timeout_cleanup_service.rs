@@ -1,14 +1,19 @@
 //! Periodic timeout-cleanup tasks for stuck contracts (issues #409 + #410).
 //!
 //! Mirrors the structure of `cleanup_service.rs` (the existing 24-hour
-//! retention/cleanup loop) at a tighter cadence: 5 minutes by default. Two
+//! retention/cleanup loop) at a tighter cadence: 5 minutes by default. Three
 //! tasks run every cycle:
 //!
 //!  1. `cleanup_stale_requested` (#410): contracts whose Stripe checkout
 //!     never completed (status = `requested`) and that have been sitting
 //!     longer than `requested_timeout_secs` flip to `expired`. No refund is
 //!     issued because no payment ever succeeded.
-//!  2. `cleanup_failed_provisioning` (#409): contracts in `accepted` or
+//!  2. `cleanup_stale_pending` (#410 Option B/C): contracts in the literal
+//!     `pending` state longer than `pending_timeout_secs` flip to `expired`.
+//!     Same no-refund invariant; the underlying scan additionally guards
+//!     `payment_status != 'succeeded'` so a paid-but-pending edge row is
+//!     never silently expired.
+//!  3. `cleanup_failed_provisioning` (#409): contracts in `accepted` or
 //!     `provisioning` longer than `provisioning_timeout_secs` flip to
 //!     `provisioningfailed` and the full paid amount is auto-refunded via
 //!     `issue_audited_refund` (idempotency key
@@ -23,16 +28,17 @@ use crate::stripe_client::StripeClient;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Background service that runs both timeout-driven cleanup tasks. Owns the
-/// database handle, an optional Stripe client (passed through to
+/// Background service that runs all three timeout-driven cleanup tasks. Owns
+/// the database handle, an optional Stripe client (passed through to
 /// `mark_provisioning_failed` so the refund call hits the real Stripe API in
 /// production and is bypassed cleanly in pure-DB tests), the cycle interval
-/// and the two configurable timeout windows.
+/// and the three configurable timeout windows.
 pub struct TimeoutCleanupService {
     database: Arc<Database>,
     stripe_client: Option<Arc<StripeClient>>,
     interval: Duration,
     requested_timeout_secs: u64,
+    pending_timeout_secs: u64,
     provisioning_timeout_secs: u64,
 }
 
@@ -42,6 +48,7 @@ impl TimeoutCleanupService {
         stripe_client: Option<Arc<StripeClient>>,
         interval_secs: u64,
         requested_timeout_secs: u64,
+        pending_timeout_secs: u64,
         provisioning_timeout_secs: u64,
     ) -> Self {
         Self {
@@ -49,6 +56,7 @@ impl TimeoutCleanupService {
             stripe_client,
             interval: Duration::from_secs(interval_secs),
             requested_timeout_secs,
+            pending_timeout_secs,
             provisioning_timeout_secs,
         }
     }
@@ -79,10 +87,11 @@ impl TimeoutCleanupService {
         }
     }
 
-    /// One pass of both cleanup tasks. Errors on individual rows are logged
-    /// and swallowed; only a database-level scan failure surfaces here.
+    /// One pass of all three cleanup tasks. Errors on individual rows are
+    /// logged and swallowed; only a database-level scan failure surfaces here.
     async fn cleanup_once(&self) -> anyhow::Result<()> {
         self.cleanup_stale_requested().await?;
+        self.cleanup_stale_pending().await?;
         self.cleanup_failed_provisioning().await?;
         Ok(())
     }
@@ -126,6 +135,54 @@ impl TimeoutCleanupService {
         }
         tracing::info!(
             "Stale `requested` cleanup pass: scanned={} expired={}",
+            total, expired
+        );
+        Ok(())
+    }
+
+    /// Issue #410 Option B/C: expire contracts in the literal `pending`
+    /// state that never completed checkout. The underlying scan
+    /// (`find_stale_pending`) already excludes `payment_status = 'succeeded'`
+    /// rows, so the per-row match arms below are the same shape as the
+    /// `requested` task.
+    async fn cleanup_stale_pending(&self) -> anyhow::Result<()> {
+        let cutoff_ns = self.cutoff_ns(self.pending_timeout_secs)?;
+        let stale = self.database.find_stale_pending(cutoff_ns).await?;
+        if stale.is_empty() {
+            tracing::debug!("No stale `pending` contracts to expire");
+            return Ok(());
+        }
+
+        let total = stale.len();
+        let mut expired = 0u64;
+        for row in stale {
+            match self.database.expire_pending(&row.contract_id).await {
+                Ok(true) => {
+                    expired += 1;
+                    tracing::info!(
+                        contract_id = %hex::encode(&row.contract_id),
+                        "Expired stale `pending` contract (pre-payment timeout)"
+                    );
+                }
+                Ok(false) => {
+                    // Another worker handled the row between scan and
+                    // transition; benign no-op.
+                    tracing::debug!(
+                        contract_id = %hex::encode(&row.contract_id),
+                        "Stale `pending` contract already transitioned"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(
+                        contract_id = %hex::encode(&row.contract_id),
+                        error = %format!("{:#}", e),
+                        "Failed to expire stale `pending` contract"
+                    );
+                }
+            }
+        }
+        tracing::info!(
+            "Stale `pending` cleanup pass: scanned={} expired={}",
             total, expired
         );
         Ok(())
@@ -240,7 +297,7 @@ mod tests {
             .unwrap();
         }
 
-        let service = TimeoutCleanupService::new(db.clone(), None, 60, 1, 1);
+        let service = TimeoutCleanupService::new(db.clone(), None, 60, 1, 1, 1);
         service.cleanup_once().await.expect("cleanup pass must succeed");
 
         let status_of = |cid: &[u8]| {
@@ -267,12 +324,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_cleanup_once_transitions_stale_pending() {
+        // Issue #410 Option B/C: the loop must additionally expire stale
+        // `pending` rows. Seeds one stale `pending` row (status_updated_at_ns
+        // = 0) and one fresh `pending` row (now_ns), runs a single
+        // `cleanup_once` pass with a 1-second `pending_timeout`, and asserts
+        // only the stale row flips. Mirrors the seeded-ns pattern used by
+        // the requested/provisioning sibling test.
+        let db = Arc::new(setup_test_db().await);
+
+        let provider: &[u8] = &[0xCE; 32];
+        let requester: &[u8] = &[0xDF; 32];
+
+        let stale_pend = vec![0xB0; 32];
+        let fresh_pend = vec![0xB1; 32];
+
+        // `payment_status` is intentionally NOT `succeeded` so the scan's
+        // money-safety guard does not exclude these rows. This is the
+        // happy-path shape a pre-payment `pending` contract would have.
+        for (cid, status, ts) in [
+            (&stale_pend, "pending", 0_i64),
+            (&fresh_pend, "pending", crate::now_ns().unwrap()),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO contract_sign_requests (
+                    contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
+                    provider_pubkey, offering_id, payment_amount_e9s, request_memo,
+                    created_at_ns, status, status_updated_at_ns, payment_method,
+                    payment_status, currency
+                ) VALUES ($1, $2, '', '', $3, 'off-pending-loop', 0, '',
+                          $4, $5, $4, 'stripe', 'pending', 'usd')"#,
+            )
+            .bind(cid.as_slice())
+            .bind(requester)
+            .bind(provider)
+            .bind(ts)
+            .bind(status)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+        }
+
+        // Constructor arg order: db, stripe, interval, requested, pending,
+        // provisioning. requested/provisioning are 60s so only the pending
+        // task acts on these rows.
+        let service = TimeoutCleanupService::new(db.clone(), None, 60, 60, 1, 60);
+        service.cleanup_once().await.expect("cleanup pass must succeed");
+
+        let status_of = |cid: &[u8]| {
+            let pool = db.pool.clone();
+            let cid = cid.to_vec();
+            async move {
+                sqlx::query_scalar::<_, String>(
+                    "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
+                )
+                .bind(cid)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            }
+        };
+
+        assert_eq!(
+            status_of(&stale_pend).await,
+            "expired",
+            "stale pending row must be expired by the loop"
+        );
+        assert_eq!(
+            status_of(&fresh_pend).await,
+            "pending",
+            "fresh pending row must NOT be touched -- timeout boundary respected"
+        );
+    }
+
+    #[tokio::test]
     async fn test_cleanup_once_with_no_stale_rows_is_silent_noop() {
         // Defensive: a healthy production system spends most of its time in
         // this branch. A single empty cycle must not error and must not
         // write any contract events.
         let db = Arc::new(setup_test_db().await);
-        let service = TimeoutCleanupService::new(db.clone(), None, 60, 60, 60);
+        let service = TimeoutCleanupService::new(db.clone(), None, 60, 60, 60, 60);
         service.cleanup_once().await.expect("empty cycle must succeed");
         let event_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM contract_events")

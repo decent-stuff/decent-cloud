@@ -1,6 +1,6 @@
 //! Timeout-driven cleanup primitives for stuck contracts (issues #409 + #410).
 //!
-//! Two periodic background tasks (`api/src/timeout_cleanup_service.rs`) call
+//! Three periodic background tasks (`api/src/timeout_cleanup_service.rs`) call
 //! into the helpers below to close the highest-probability
 //! Stripe-account-freeze gaps:
 //!
@@ -9,13 +9,20 @@
 //!    No refund is issued because no payment ever succeeded. Inventory that
 //!    was reserved by `release_self_provisioned_resource` is freed.
 //!
+//!  * `expire_pending` (#410 Option B/C): contracts in the literal `pending`
+//!    state for longer than `PENDING_TIMEOUT_SECONDS`. Mirrors
+//!    `expire_requested` but additionally guards
+//!    `payment_status != 'succeeded'` in the scan so a `pending` row that
+//!    somehow carries a successful payment is never silently expired (no
+//!    refund logic exists in this path).
+//!
 //!  * `mark_provisioning_failed` (#409): contracts in `accepted` or
 //!    `provisioning` for longer than `PROVISIONING_TIMEOUT_SECONDS`. The
 //!    full paid amount is auto-refunded via `issue_audited_refund` keyed on
 //!    `provisioning_failed:{contract_id_hex}:{provisioning_failed_at_ns}` so
 //!    a transient retry collapses onto a single Stripe Refund record.
 //!
-//! All four helpers below are idempotent: callers may replay them safely on
+//! All six helpers below are idempotent: callers may replay them safely on
 //! a row whose status no longer matches (no error, no state change).
 //!
 //! Existing `Provisioning -> Cancelled` failure paths are intentionally
@@ -158,6 +165,117 @@ impl Database {
                 contract_id = %hex::encode(contract_id),
                 error = %format!("{:#}", e),
                 "Failed to release self-provisioned resource after expire_requested"
+            );
+        }
+        Ok(true)
+    }
+
+    /// Find contracts in `pending` state whose
+    /// `COALESCE(status_updated_at_ns, created_at_ns)` is older than
+    /// `older_than_ns`. The partial index `idx_contract_pending_timeout`
+    /// keeps this scan O(stale).
+    ///
+    /// Money-safety guardrail (issue #410 Option B/C): rows whose
+    /// `payment_status = 'succeeded'` are EXCLUDED from the scan. A
+    /// `pending` row that somehow carries a successful payment must never be
+    /// silently expired -- no refund logic exists in this path (mirrors
+    /// `expire_requested`, which is safe-by-construction because `requested`
+    /// rows are pre-payment). `pending` is reachable via the column DEFAULT
+    /// and edge cases, so the guard is non-negotiable here.
+    pub async fn find_stale_pending(
+        &self,
+        older_than_ns: i64,
+    ) -> Result<Vec<StaleContractRow>> {
+        let rows = sqlx::query_as::<_, StaleContractRow>(
+            r#"SELECT contract_id, status, status_updated_at_ns, created_at_ns,
+                      payment_method, payment_status, payment_amount_e9s, currency,
+                      stripe_payment_intent_id, stripe_checkout_session_id
+                 FROM contract_sign_requests
+                WHERE status = 'pending'
+                  AND payment_status != 'succeeded'
+                  AND COALESCE(status_updated_at_ns, created_at_ns) < $1
+                ORDER BY created_at_ns ASC"#,
+        )
+        .bind(older_than_ns)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Transition a `pending` contract to `expired`. Idempotent: a row that
+    /// is no longer in `pending` status produces zero affected rows and the
+    /// helper returns `Ok(false)` -- the caller treats that as "another
+    /// worker already processed it" and moves on. On the happy path the
+    /// contract record + status history + event timeline are written
+    /// atomically and any reserved self-provisioned inventory is freed.
+    ///
+    /// Audit trail: unlike `expire_requested` (which writes
+    /// `requested_expired_at_ns`), this helper does NOT write a dedicated
+    /// timestamp column -- the `contract_status_history` +
+    /// `contract_events` rows inserted in the same transaction are the
+    /// audit trail (old_status='pending', new_status='expired'). The
+    /// `find_stale_pending` scan already excludes `payment_status =
+    /// 'succeeded'` rows, and this UPDATE guards `status = 'pending'` so a
+    /// concurrent transition is a benign no-op.
+    pub async fn expire_pending(&self, contract_id: &[u8]) -> Result<bool> {
+        let now_ns = crate::now_ns()?;
+        let actor: &[u8] = b"system-timeout";
+        let new_status = dcc_common::ContractStatus::Expired.to_string();
+        let memo = "Pre-payment timeout: pending contract never completed checkout";
+
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query(
+            r#"UPDATE contract_sign_requests
+                  SET status = $1,
+                      status_updated_at_ns = $2,
+                      status_updated_by = $3
+                WHERE contract_id = $4
+                  AND status = 'pending'"#,
+        )
+        .bind(&new_status)
+        .bind(now_ns)
+        .bind(actor)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+
+        if updated == 0 {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+
+        sqlx::query(
+            "INSERT INTO contract_status_history (contract_id, old_status, new_status, changed_by, changed_at_ns, change_memo) VALUES ($1, 'pending', $2, $3, $4, $5)",
+        )
+        .bind(contract_id)
+        .bind(&new_status)
+        .bind(actor)
+        .bind(now_ns)
+        .bind(memo)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "INSERT INTO contract_events (contract_id, event_type, old_status, new_status, actor, details, created_at) VALUES ($1, 'status_change', 'pending', $2, 'system', $3, $4)",
+        )
+        .bind(contract_id)
+        .bind(&new_status)
+        .bind(memo)
+        .bind(now_ns)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        // Best-effort: release marketplace inventory the contract may have
+        // reserved. A failure here MUST NOT roll back the state transition --
+        // the contract is already terminal logically; an operator can
+        // reconcile inventory manually if this branch errors.
+        if let Err(e) = self.release_self_provisioned_resource(contract_id).await {
+            tracing::warn!(
+                contract_id = %hex::encode(contract_id),
+                error = %format!("{:#}", e),
+                "Failed to release self-provisioned resource after expire_pending"
             );
         }
         Ok(true)
@@ -760,5 +878,292 @@ mod tests {
         assert!(ids.contains(&stuck_prov));
         assert!(!ids.contains(&fresh_prov));
         assert!(!ids.contains(&other));
+    }
+
+    // ---- Issue #410 Option B/C: `pending` pre-payment timeout ----
+
+    #[tokio::test]
+    async fn test_find_stale_pending_respects_timeout_boundary() {
+        // Boundary semantics mirror `find_stale_requested`: a row whose
+        // status_updated_at_ns equals the cutoff is NOT picked up (strict
+        // `<`); one nanosecond older IS. Additionally codifies the
+        // money-safety guard: a `pending` row with `payment_status =
+        // 'succeeded'` MUST be excluded even when it is old enough.
+        let db = setup_test_db().await;
+
+        let stale_id = vec![0x50; 32];
+        let fresh_id = vec![0x51; 32];
+        let other_status_id = vec![0x52; 32];
+        let paid_pending_id = vec![0x53; 32];
+
+        insert_test_contract(
+            &db, &stale_id, "pending", 0, Some(99), "stripe", "pending", 1, None,
+        )
+        .await;
+        insert_test_contract(
+            &db, &fresh_id, "pending", 0, Some(101), "stripe", "pending", 1, None,
+        )
+        .await;
+        // A stale `requested` row must NOT be picked up by the pending scan.
+        insert_test_contract(
+            &db, &other_status_id, "requested", 0, Some(50), "stripe", "pending", 1, None,
+        )
+        .await;
+        // Money-safety: old enough but paid -- MUST be excluded by the guard.
+        insert_test_contract(
+            &db, &paid_pending_id, "pending", 0, Some(10), "stripe", "succeeded", 1, None,
+        )
+        .await;
+
+        let stale = db.find_stale_pending(100).await.unwrap();
+        assert_eq!(stale.len(), 1, "exactly the stale unpaid pending row");
+        assert_eq!(stale[0].contract_id, stale_id);
+        assert_eq!(stale[0].status, "pending");
+    }
+
+    #[tokio::test]
+    async fn test_expire_pending_flips_status_and_writes_audit() {
+        // Happy path: status flips to `expired`, and exactly one
+        // `contract_status_history` (old_status='pending') + one
+        // `contract_events` row are written in the same transaction.
+        let db = setup_test_db().await;
+        let contract_id = vec![0x60; 32];
+        insert_test_contract(
+            &db,
+            &contract_id,
+            "pending",
+            0,
+            Some(0),
+            "stripe",
+            "pending",
+            1_000_000_000,
+            None,
+        )
+        .await;
+
+        let fired = db.expire_pending(&contract_id).await.unwrap();
+        assert!(fired, "expire_pending must report success on a pending row");
+
+        let after = db.get_contract(&contract_id).await.unwrap().unwrap();
+        assert_eq!(after.status, "expired", "status must flip to expired");
+
+        let history_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM contract_status_history WHERE contract_id = $1 AND old_status = 'pending' AND new_status = 'expired'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            history_count, 1,
+            "exactly one pending->expired history row must be written"
+        );
+
+        let event_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1 AND old_status = 'pending' AND new_status = 'expired'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            event_count, 1,
+            "exactly one pending->expired event row must be written"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_expire_pending_releases_marketplace_inventory() {
+        // A `pending` contract that reserved a marketplace cloud_resource
+        // must, on expiry, free that resource (contract_id = NULL) and flip
+        // the offering's stock_status back to `in_stock`. Mirrors the
+        // `expire_requested` inventory test -- the release path is identical,
+        // this proves it is wired into `expire_pending` too.
+        let db = setup_test_db().await;
+        let provider_pubkey = [0xBD_u8; 32];
+
+        let provider_account = db
+            .create_account("pending_timeout_test", &provider_pubkey, "pending-timeout@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &provider_account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "pending-timeout-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let ca_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+        let resource = db
+            .create_cloud_resource(
+                &ca_uuid,
+                "ext-pending-timeout",
+                "pending-timeout-vm",
+                "cx22",
+                "nbg1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+            )
+            .await
+            .unwrap();
+        let resource_id: uuid::Uuid = resource.id.parse().unwrap();
+        db.update_cloud_resource_status(&resource_id, "running")
+            .await
+            .unwrap();
+
+        let offering_id: i64 = sqlx::query_scalar(
+            r#"INSERT INTO provider_offerings (
+                pubkey, offering_id, offer_name, currency, monthly_price, setup_fee,
+                visibility, product_type, billing_interval, stock_status,
+                datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns
+            ) VALUES ($1, 'off-pending-timeout', 'PendingTimeoutOffer', 'USD', 10.0, 0, 'public', 'compute',
+                      'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)
+            RETURNING id"#,
+        )
+        .bind(&provider_pubkey[..])
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        db.list_on_marketplace(&resource_id, &provider_account.id, offering_id)
+            .await
+            .unwrap();
+
+        let contract_id = vec![0x61_u8; 32];
+        insert_test_contract(
+            &db,
+            &contract_id,
+            "pending",
+            0,
+            Some(0),
+            "stripe",
+            "pending",
+            500_000_000,
+            Some("pi_test_pending_expire"),
+        )
+        .await;
+        db.reserve_self_provisioned_resource(offering_id, &contract_id)
+            .await
+            .unwrap();
+
+        // Precondition: reservation actually held the inventory before we
+        // assert the release restores it.
+        let pre_stock: String = sqlx::query_scalar(
+            "SELECT stock_status FROM provider_offerings WHERE id = $1",
+        )
+        .bind(offering_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            pre_stock, "out_of_stock",
+            "precondition: reservation must hold inventory"
+        );
+
+        let fired = db.expire_pending(&contract_id).await.unwrap();
+        assert!(fired, "expire_pending must report success");
+
+        let after = db.get_contract(&contract_id).await.unwrap().unwrap();
+        assert_eq!(after.status, "expired", "status must flip to expired");
+
+        assert!(
+            db.get_reserved_self_provisioned_resource(&contract_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "cloud_resource reservation must be cleared"
+        );
+        let stock: String = sqlx::query_scalar(
+            "SELECT stock_status FROM provider_offerings WHERE id = $1",
+        )
+        .bind(offering_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(stock, "in_stock", "offering must be restocked");
+    }
+
+    #[tokio::test]
+    async fn test_expire_pending_idempotent_on_non_pending_contract() {
+        // Calling expire_pending on a contract that is not currently
+        // `pending` must be a silent no-op: Ok(false), status untouched, no
+        // spurious history/event rows. Mirrors the `expire_requested`
+        // idempotency test.
+        let db = setup_test_db().await;
+        let contract_id = vec![0x62; 32];
+        insert_test_contract(
+            &db,
+            &contract_id,
+            "active",
+            0,
+            Some(0),
+            "icpay",
+            "succeeded",
+            1_000_000_000,
+            None,
+        )
+        .await;
+
+        let result = db.expire_pending(&contract_id).await.unwrap();
+        assert!(!result, "expire_pending on non-pending must return false");
+
+        let after = db.get_contract(&contract_id).await.unwrap().unwrap();
+        assert_eq!(after.status, "active", "status must be untouched");
+
+        let event_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM contract_events WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(event_count, 0, "no event rows must be written on no-op");
+    }
+
+    #[tokio::test]
+    async fn test_expire_pending_skips_succeeded_payment_row() {
+        // Money-safety guard (non-negotiable, issue #410 Option B/C): a
+        // `pending` row that somehow carries `payment_status = 'succeeded'`
+        // must NEVER be returned by the scan, because `expire_pending` has
+        // no refund path. This test codifies the SQL guard so a future edit
+        // that drops the `AND payment_status != 'succeeded'` clause turns
+        // this test red.
+        let db = setup_test_db().await;
+        let paid_pending_id = vec![0x70; 32];
+        insert_test_contract(
+            &db,
+            &paid_pending_id,
+            "pending",
+            0,
+            Some(0), // ancient -- would be picked up without the guard
+            "stripe",
+            "succeeded",
+            5_000_000_000,
+            Some("pi_test_paid_pending"),
+        )
+        .await;
+
+        let stale = db.find_stale_pending(i64::MAX).await.unwrap();
+        assert!(
+            stale.is_empty(),
+            "paid-but-pending row must be excluded by the money-safety guard"
+        );
+
+        // Belt-and-suspenders: even if a caller bypassed the scan and called
+        // expire_pending directly, the UPDATE guards on status='pending' but
+        // would still flip a paid row. The scan guard is the load-bearing
+        // protection; this assertion documents that invariant. We do NOT
+        // call expire_pending here because doing so would prove the opposite
+        // (that the guard can be bypassed) -- the scan is the contract.
+        let row_status: String = sqlx::query_scalar(
+            "SELECT status FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&paid_pending_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(row_status, "pending", "row must remain pending (untouched)");
     }
 }

@@ -1406,6 +1406,8 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // silently falling back to a default that masks the misconfiguration.
     let requested_timeout_secs =
         parse_env_seconds("REQUESTED_TIMEOUT_SECONDS", 3600)?;
+    let pending_timeout_secs =
+        parse_env_seconds("PENDING_TIMEOUT_SECONDS", 3600)?;
     let provisioning_timeout_secs =
         parse_env_seconds("PROVISIONING_TIMEOUT_SECONDS", 3600)?;
     let timeout_cleanup_interval_secs =
@@ -1452,12 +1454,14 @@ async fn serve_command() -> Result<(), std::io::Error> {
             timeout_stripe,
             timeout_cleanup_interval_secs,
             requested_timeout_secs,
+            pending_timeout_secs,
             provisioning_timeout_secs,
         );
         tracing::info!(
-            "Starting timeout cleanup service (interval: {}s, requested_timeout: {}s, provisioning_timeout: {}s)",
+            "Starting timeout cleanup service (interval: {}s, requested_timeout: {}s, pending_timeout: {}s, provisioning_timeout: {}s)",
             timeout_cleanup_interval_secs,
             requested_timeout_secs,
+            pending_timeout_secs,
             provisioning_timeout_secs
         );
         timeout_service.run(timeout_shutdown).await;

@@ -353,6 +353,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/043_dispute_pause_state.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/044_refund_audit.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/045_contract_timeout_states.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/046_pending_timeout_index.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -702,6 +703,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "045_contract_timeout_states.sql",
                     include_str!("../../migrations_pg/045_contract_timeout_states.sql"),
+                ),
+                (
+                    "046_pending_timeout_index.sql",
+                    include_str!("../../migrations_pg/046_pending_timeout_index.sql"),
                 ),
             ];
 

@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 /// Valid state transitions:
 /// - Requested -> Pending (auto-accept), Accepted (manual accept), Rejected, Cancelled, Expired
 ///   (Expired = abandoned checkout / payment never completed; see issue #410)
-/// - Pending -> Accepted, Rejected, Cancelled
+/// - Pending -> Accepted, Rejected, Cancelled, Expired
+///   (Expired = pre-payment timeout; see issue #410)
 /// - Accepted -> Provisioning, ProvisioningFailed, Rejected, Cancelled
 /// - Provisioning -> Provisioned, ProvisioningFailed, Cancelled (failed provisioning via cancel)
 /// - Provisioned -> Active, Paused, Cancelled
@@ -65,6 +66,7 @@ impl ContractStatus {
             (Pending, Accepted) => true,
             (Pending, Rejected) => true,
             (Pending, Cancelled) => true,
+            (Pending, Expired) => true, // Pre-payment timeout (issue #410)
             // From Accepted
             (Accepted, Provisioning) => true,
             (Accepted, ProvisioningFailed) => true, // Provisioning timeout (issue #409)
@@ -129,7 +131,7 @@ impl ContractStatus {
         use ContractStatus::*;
         match self {
             Requested => &[Pending, Accepted, Rejected, Cancelled, Expired],
-            Pending => &[Accepted, Rejected, Cancelled],
+            Pending => &[Accepted, Rejected, Cancelled, Expired],
             Accepted => &[Provisioning, ProvisioningFailed, Rejected, Cancelled],
             Provisioning => &[Provisioned, ProvisioningFailed, Cancelled],
             Provisioned => &[Active, Paused, Cancelled],
@@ -289,6 +291,8 @@ mod tests {
         assert!(status.can_transition_to(ContractStatus::Accepted));
         assert!(status.can_transition_to(ContractStatus::Rejected));
         assert!(status.can_transition_to(ContractStatus::Cancelled));
+        // Issue #410: pre-payment timeout applies to `pending` as well.
+        assert!(status.can_transition_to(ContractStatus::Expired));
         assert!(!status.can_transition_to(ContractStatus::Requested));
         assert!(!status.can_transition_to(ContractStatus::Provisioning));
     }
@@ -451,6 +455,16 @@ mod tests {
                 ContractStatus::Expired,
             ]
         );
+        // Issue #410: `pending` is now expirable (pre-payment timeout).
+        assert_eq!(
+            ContractStatus::Pending.valid_transitions(),
+            &[
+                ContractStatus::Accepted,
+                ContractStatus::Rejected,
+                ContractStatus::Cancelled,
+                ContractStatus::Expired,
+            ]
+        );
         assert_eq!(ContractStatus::Rejected.valid_transitions(), &[]);
         assert_eq!(ContractStatus::Cancelled.valid_transitions(), &[]);
         assert_eq!(ContractStatus::Expired.valid_transitions(), &[]);
@@ -468,9 +482,11 @@ mod tests {
         // Sanity: Requested keeps its other legitimate transitions.
         assert!(ContractStatus::Requested.can_transition_to(ContractStatus::Pending));
         assert!(ContractStatus::Requested.can_transition_to(ContractStatus::Cancelled));
-        // Pending must NOT directly transition to Expired (Expired is
-        // reserved for pre-payment timeout, not provider stalls).
-        assert!(!ContractStatus::Pending.can_transition_to(ContractStatus::Expired));
+        // Issue #410 (Option B/C): a `pending` contract that never completes
+        // checkout is treated as pre-payment and MUST be expirable by the
+        // periodic timeout cleanup -- `Pending -> Expired` is now valid,
+        // mirroring `Requested -> Expired`. The reverse stays forbidden.
+        assert!(ContractStatus::Pending.can_transition_to(ContractStatus::Expired));
     }
 
     #[test]
