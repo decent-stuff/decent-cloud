@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import {
-		getProviderOfferings,
+		getMyOfferings,
 		exportProviderOfferingsCSV,
 		updateProviderOffering,
 		duplicateProviderOffering,
@@ -25,6 +25,7 @@
 	import OfferingsEditor from '$lib/components/OfferingsEditor.svelte';
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
 	import AllowlistDialog from '$lib/components/AllowlistDialog.svelte';
+	import OfferingStatusMenu from '$lib/components/OfferingStatusMenu.svelte';
 	import ProviderSetupBanner from '$lib/components/ProviderSetupBanner.svelte';
 	import AuthRequiredCard from '$lib/components/AuthRequiredCard.svelte';
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
@@ -67,11 +68,18 @@
 				return;
 			}
 
-			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
-			const [fetchedOfferings, onboarding] = await Promise.all([
-				getProviderOfferings(pubkeyHex),
-				getProviderOnboarding(pubkeyHex).catch(() => null),
-			]);
+		const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+		// The owner's dashboard must list every offering they own — including
+		// `shared` and `private` rows — or flipping visibility via the status
+		// menu would make the card vanish and leave no way to flip it back.
+		// The public `/providers/:pubkey/offerings` endpoint filters to
+		// visibility='public' only (api/src/openapi/providers.rs:1653), so we
+		// use the authenticated `/provider/my-offerings` endpoint here.
+		const listHeaders = (await signRequest(currentIdentity.identity, 'GET', '/api/v1/provider/my-offerings')).headers;
+		const [fetchedOfferings, onboarding] = await Promise.all([
+			getMyOfferings(listHeaders),
+			getProviderOnboarding(pubkeyHex).catch(() => null),
+		]);
 			offerings = fetchedOfferings;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
 
@@ -209,58 +217,15 @@
 		await loadOfferings();
 	}
 
-	async function handleStockToggle(offering: Offering, event: Event) {
-		event.stopPropagation();
-		const statuses = ['in_stock', 'out_of_stock', 'discontinued'];
-		const currentIndex = statuses.indexOf(offering.stock_status);
-		const newStatus = statuses[(currentIndex + 1) % statuses.length];
-
+	// Thin error-handling wrapper around updateOfferingField so menu
+	// `onSelect` callbacks surface failures via the page-level `error` state
+	// instead of escaping to the Svelte click handler.
+	async function updateOfferingStatus(offering: Offering, updates: Partial<Offering>) {
 		try {
-			await updateOfferingField(offering, { stock_status: newStatus });
+			await updateOfferingField(offering, updates);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to update stock status';
-			console.error('Error updating stock status:', e);
-		}
-	}
-
-	async function handleVisibilityToggle(offering: Offering, event: Event) {
-		event.stopPropagation();
-		// Cycle through: public → shared → private → public
-		const visibilityOrder = ['public', 'shared', 'private'];
-		const currentIndex = visibilityOrder.indexOf(offering.visibility.toLowerCase());
-		const newVisibility = visibilityOrder[(currentIndex + 1) % visibilityOrder.length];
-
-		try {
-			await updateOfferingField(offering, { visibility: newVisibility });
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to update visibility';
-			console.error('Error updating visibility:', e);
-		}
-	}
-
-	function getVisibilityStyle(visibility: string): string {
-		switch (visibility.toLowerCase()) {
-			case 'public':
-				return 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30';
-			case 'shared':
-				return 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30';
-			case 'private':
-				return 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30';
-			default:
-				return 'bg-gray-500/20 text-gray-400 border-gray-500/30 hover:bg-gray-500/30';
-		}
-	}
-
-	function getVisibilityLabel(visibility: string): string {
-		switch (visibility.toLowerCase()) {
-			case 'public':
-				return 'Public';
-			case 'shared':
-				return 'Shared';
-			case 'private':
-				return 'Private';
-			default:
-				return visibility;
+			error = e instanceof Error ? e.message : 'Failed to update offering';
+			console.error('Error updating offering status:', e);
 		}
 	}
 
@@ -462,19 +427,6 @@
 			unsubscribe();
 		};
 	});
-
-	function getStatusColor(stockStatus: string) {
-		switch (stockStatus) {
-			case 'in_stock':
-				return 'bg-green-500/20 text-green-400 border-green-500/30';
-			case 'out_of_stock':
-				return 'bg-red-500/20 text-red-400 border-red-500/30';
-			case 'discontinued':
-				return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
-			default:
-				return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-		}
-	}
 
 	function getTypeIcon(productType: string): IconName {
 		const type = productType.toLowerCase();
@@ -750,14 +702,15 @@
 		<!-- Offerings Grid -->
 		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 			{#each offerings as offering}
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="card p-6 border transition-all group cursor-pointer
-						{bulkPublishMode && offering.is_draft && offering.id !== undefined && bulkPublishSelected.has(offering.id)
-							? 'border-amber-500/60 bg-amber-500/5'
-							: 'border-neutral-800 hover:border-white/40'}"
-					onclick={() => {
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				data-offering-id={offering.id}
+				class="card p-6 border transition-all group cursor-pointer
+					{bulkPublishMode && offering.is_draft && offering.id !== undefined && bulkPublishSelected.has(offering.id)
+						? 'border-amber-500/60 bg-amber-500/5'
+						: 'border-neutral-800 hover:border-white/40'}"
+				onclick={() => {
 						if (bulkPublishMode && offering.is_draft && offering.id !== undefined) {
 							toggleDraftSelection(offering.id);
 						} else if (!bulkPublishMode) {
@@ -788,25 +741,20 @@
 									Offline
 								</span>
 							{/if}
-							<!-- Visibility toggle -->
-							<button
-								onclick={(e) => handleVisibilityToggle(offering, e)}
-								class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getVisibilityStyle(offering.visibility)}"
-								title="Click to cycle visibility: public → shared → private"
-							>
-								{getVisibilityLabel(offering.visibility)}
-							</button>
-							<!-- Stock status toggle -->
-							<button
-								onclick={(e) => handleStockToggle(offering, e)}
-								class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all hover:scale-105 cursor-pointer {getStatusColor(
-									offering.stock_status
-								)}"
-								title="Click to cycle stock status: {offering.stock_status.replace('_', ' ')}"
-							>
-								<span class="w-2 h-2 rounded-full bg-current"></span>
-								{offering.stock_status.replace('_', ' ')}
-							</button>
+						<!-- Visibility menu (replaces cycle button — #437) -->
+						<OfferingStatusMenu
+							kind="visibility"
+							currentValue={offering.visibility}
+							offeringId={offering.id ?? ''}
+							onSelect={(value) => updateOfferingStatus(offering, { visibility: value })}
+						/>
+						<!-- Stock status menu (replaces cycle button — #437) -->
+						<OfferingStatusMenu
+							kind="stock"
+							currentValue={offering.stock_status}
+							offeringId={offering.id ?? ''}
+							onSelect={(value) => updateOfferingStatus(offering, { stock_status: value })}
+						/>
 							<!-- Draft / Scheduled badge -->
 							{#if offering.is_draft}
 								{#if offering.publish_at}
