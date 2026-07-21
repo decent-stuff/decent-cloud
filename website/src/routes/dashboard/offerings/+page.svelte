@@ -26,6 +26,7 @@
 	import QuickEditOfferingDialog from '$lib/components/QuickEditOfferingDialog.svelte';
 	import AllowlistDialog from '$lib/components/AllowlistDialog.svelte';
 	import ProviderSetupBanner from '$lib/components/ProviderSetupBanner.svelte';
+	import AuthRequiredCard from '$lib/components/AuthRequiredCard.svelte';
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 	import type { Ed25519KeyIdentity } from '@dfinity/identity';
 
@@ -33,6 +34,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<any>(null);
+	let isAuthenticated = $state(false);
 	let onboardingCompleted = $state<boolean | null>(null);
 	let showEditorDialog = $state(false);
 	let showEditDialog = $state(false);
@@ -443,16 +445,22 @@
 
 	onMount(() => {
 		loadProductTypes();
-		// Subscribe to identity and (re-)load when it becomes available.
+		// Subscribe to auth state and (re-)load when identity becomes available.
 		// This handles both direct navigation and deep-linking / refresh scenarios
 		// where auth settles asynchronously after the page's onMount fires.
+		const unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
+			isAuthenticated = isAuth;
+		});
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			currentIdentity = identity;
 			if (identity?.publicKeyBytes) {
 				loadOfferings();
 			}
 		});
-		return unsubscribe;
+		return () => {
+			unsubscribeAuth();
+			unsubscribe();
+		};
 	});
 
 	function getStatusColor(stockStatus: string) {
@@ -486,6 +494,13 @@
 </script>
 
 <div class="space-y-8">
+	{#if !isAuthenticated}
+		<!-- Audit #3: gate the page on auth like rentals/invoices/account do.
+		     An anonymous visitor used to see a red "Error loading offerings:
+		     Please authenticate to view your offerings" panel with no recovery
+		     CTA; now they get the standard AuthRequiredCard. -->
+		<AuthRequiredCard subtext="Create an account or login to view and manage your offerings." />
+	{:else}
 	<ProviderSetupBanner completed={onboardingCompleted} />
 
 	<div class="flex items-center justify-between">
@@ -963,6 +978,7 @@
 				</a>
 			</div>
 		{/if}
+	{/if}
 	{/if}
 </div>
 

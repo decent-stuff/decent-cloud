@@ -23,7 +23,8 @@ test.describe('Auth Protection', () => {
 			'/dashboard/account/security',
 			'/dashboard/account/profile',
 			'/dashboard/rentals',
-			'/dashboard/provider/requests'
+			'/dashboard/provider/requests',
+			'/dashboard/offerings'
 		];
 
 		for (const pagePath of protectedPages) {
@@ -55,7 +56,6 @@ test.describe('Auth Protection', () => {
 		const publicPages = [
 			'/dashboard',
 			'/dashboard/marketplace',
-			'/dashboard/offerings',
 			'/dashboard/validators'
 		];
 
@@ -68,6 +68,24 @@ test.describe('Auth Protection', () => {
 			// Should NOT see "Login Required" heading
 			await expect(page.getByRole('heading', { name: 'Login Required' })).not.toBeVisible();
 		}
+	});
+
+	test('offerings page renders AuthRequiredCard (not red error box) when unauthenticated (#3)', async ({ page }) => {
+		// Audit #3: sister pages (rentals, invoices, account) all render
+		// <AuthRequiredCard> for anonymous visitors. The offerings page instead
+		// set error = 'Please authenticate to view your offerings' and rendered
+		// it inside a red "Error loading offerings" panel — a hard error with no
+		// recovery CTA. Fix: gate the page on isAuthenticated like rentals and
+		// render the AuthRequiredCard.
+		await page.goto('/dashboard/offerings');
+
+		// AuthRequiredCard renders its heading + Login button.
+		await expect(page.getByRole('heading', { name: 'Login Required' })).toBeVisible();
+		await expect(page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i })).toBeVisible();
+
+		// The red "Error loading offerings" panel must NOT appear.
+		await expect(page.getByText('Error loading offerings')).toHaveCount(0);
+		await expect(page.getByText('Please authenticate to view your offerings')).toHaveCount(0);
 	});
 
 	test('should show auth prompt banner on public dashboard pages', async ({ page }) => {
