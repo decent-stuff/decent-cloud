@@ -126,10 +126,14 @@ test.describe('/dashboard/invoices', () => {
 			// no uncaught exceptions are thrown on the page.
 			const errors: string[] = [];
 			page.on('pageerror', (err) => errors.push(err.message));
+			// Wait for the signed invoice GET to round-trip; the button flips
+			// to "Downloading..." then reverts regardless of response status.
+			const invoiceResponse = page.waitForResponse(
+				(resp) => resp.url().includes('/invoice'),
+				{ timeout: 5000 },
+			);
 			await pdfButton.click();
-			// Give the click a tick to propagate; we don't assert on the spinner
-			// because it may complete too fast to catch reliably.
-			await page.waitForTimeout(500);
+			await invoiceResponse;
 			expect(errors).toEqual([]);
 		} finally {
 			await deleteContractsForRequester(pubkey);

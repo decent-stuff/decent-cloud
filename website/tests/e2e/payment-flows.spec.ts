@@ -173,8 +173,10 @@ test.describe('Payment Flows', () => {
 		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
-		// Wait for offerings to load
-		await page.waitForTimeout(1000);
+		// Wait for offerings to load — at least one table row should render
+		// before probing the rent button. The skip path below handles the
+		// empty-marketplace case.
+		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
 
 		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
 		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
@@ -222,8 +224,10 @@ test.describe('Payment Flows', () => {
 		await page.goto('/dashboard/marketplace');
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
-		// Wait for offerings to load
-		await page.waitForTimeout(1000);
+		// Wait for offerings to load — at least one table row should render
+		// before probing the rent button. The skip path below handles the
+		// empty-marketplace case.
+		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
 
 		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
 		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
@@ -270,8 +274,10 @@ test.describe('Payment Flows', () => {
 		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
-		// Wait for offerings to load
-		await page.waitForTimeout(1000);
+		// Wait for offerings to load — at least one table row should render
+		// before probing the rent button. The skip path below handles the
+		// empty-marketplace case.
+		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
 
 		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
 		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
@@ -291,11 +297,8 @@ test.describe('Payment Flows', () => {
 		// Select Stripe payment method
 		await page.click('button:has-text("Credit Card")');
 
-		// Wait for Stripe to load
-		await page.waitForTimeout(2000);
-
-		// Verify card information section appears
-		await expect(page.locator('legend:has-text("Card Information")')).toBeVisible();
+		// Stripe Elements render asynchronously after method selection.
+		await expect(page.locator('legend:has-text("Card Information")')).toBeVisible({ timeout: 5000 });
 
 		// Verify help text about when card will be charged
 		await expect(page.locator('text=Your card will be charged after the provider accepts')).toBeVisible();

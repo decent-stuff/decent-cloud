@@ -77,9 +77,10 @@ test.describe('Sign-In Flow', () => {
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await expect(seedInput).toBeVisible();
 
-		// Enter invalid seed phrase
+		// Enter invalid seed phrase. Validation runs synchronously inside
+		// `validateSeedPhrase()` on the Continue click below, so there is no
+		// debounce or async state to wait for here.
 		await seedInput.fill('invalid seed phrase that is not valid at all');
-		await page.waitForTimeout(300);
 
 		// Click Continue to trigger validation
 		await page.click('button:has-text("Continue")');

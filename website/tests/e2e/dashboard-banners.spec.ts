@@ -68,7 +68,7 @@ test.describe('dashboard banner stack (#438)', () => {
 		await page.goto('/dashboard/marketplace?demo=1&offline=1');
 		await expect(page).toHaveURL(/\/dashboard\/marketplace/);
 		// Wait for the marketplace shell to render before asserting absence.
-		await page.waitForTimeout(500);
+		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible({ timeout: 5000 });
 
 		await expect(page.locator('h3', { hasText: 'Verify Your Email Address' })).toHaveCount(0);
 		await expect(page.getByText('Back up your seed phrase', { exact: false })).toHaveCount(0);

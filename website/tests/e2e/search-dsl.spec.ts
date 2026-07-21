@@ -44,8 +44,9 @@ test.describe('Search DSL', () => {
 		await gpuCheckbox.check();
 		await expect(gpuCheckbox).toBeChecked();
 
-		// Wait for results to update (filter is applied client-side).
-		await page.waitForTimeout(500);
+		// Client-side filter applies via $derived; wait for non-GPU rows to
+		// be removed before reading the count.
+		await expect(page.locator('tbody tr').filter({ hasNotText: /gpu/i })).toHaveCount(0, { timeout: 1500 });
 
 		// Verify all visible offering rows show a gpu product type. The
 		// offering table renders each product_type inside a span in a row.
@@ -64,10 +65,13 @@ test.describe('Search DSL', () => {
 		// Type price filter in the search input (field syntax is sent to
 		// the API as the `q` parameter).
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		// Wait for the debounced search to round-trip through the API.
+		const priceResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings'),
+			{ timeout: 3000 },
+		);
 		await searchInput.fill('price:<=20');
-
-		// Wait for debounce (300ms) and results to update.
-		await page.waitForTimeout(800);
+		await priceResponse;
 
 		// Verify results are filtered (demo offerings with price <=20 exist).
 		const offeringRows = page.locator('tbody tr');
@@ -84,15 +88,19 @@ test.describe('Search DSL', () => {
 		await computeCheckbox.check();
 		await expect(computeCheckbox).toBeChecked();
 
-		// Wait for filter to apply
-		await page.waitForTimeout(500);
+		// Client-side filter applies via $derived; wait for non-Compute rows
+		// to be removed before adding the DSL price filter on top.
+		await expect(page.locator('tbody tr').filter({ hasNotText: /compute/i })).toHaveCount(0, { timeout: 1500 });
 
 		// Add DSL price filter
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		// Wait for the debounced search to round-trip through the API.
+		const priceResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings'),
+			{ timeout: 3000 },
+		);
 		await searchInput.fill('price:<=50');
-
-		// Wait for debounce and results to update
-		await page.waitForTimeout(800);
+		await priceResponse;
 
 		// Verify results exist and show compute type.
 		const offeringRows = page.locator('tbody tr');
@@ -107,10 +115,13 @@ test.describe('Search DSL', () => {
 
 		// Search for impossible price
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		// Wait for the debounced search to round-trip through the API.
+		const priceResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings'),
+			{ timeout: 3000 },
+		);
 		await searchInput.fill('price:<=0');
-
-		// Wait for debounce and results to update
-		await page.waitForTimeout(800);
+		await priceResponse;
 
 		// Verify the per-query empty state is shown.
 		await expect(page.locator('text=No results for')).toBeVisible();
@@ -128,8 +139,13 @@ test.describe('Search DSL', () => {
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		// Wait for the debounced search to round-trip through the API.
+		const priceResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings'),
+			{ timeout: 3000 },
+		);
 		await searchInput.fill('price:<=0');
-		await page.waitForTimeout(800);
+		await priceResponse;
 
 		// Hint must show the valid alias `type:gpu` and must not advertise the
 		// invalid `product_type:` form.
@@ -144,8 +160,13 @@ test.describe('Search DSL', () => {
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
+		// Wait for the debounced search to round-trip through the API.
+		const typeResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings'),
+			{ timeout: 3000 },
+		);
 		await searchInput.fill('type:gpu');
-		await page.waitForTimeout(800);
+		await typeResponse;
 
 		const offeringRows = page.locator('tbody tr');
 		const count = await offeringRows.count();
@@ -164,10 +185,14 @@ test.describe('Search DSL', () => {
 		const initialText = await initialCount.textContent();
 		const initialNumber = parseInt(initialText?.match(/\d+/)?.[0] || '0');
 		expect(initialNumber).toBeGreaterThan(0);
+		// Anchor the exact banner text so the wait/change assertions are unambiguous.
+		const initialBanner = new RegExp(`^${initialNumber} offerings found$`);
 
 		// Apply GPU filter via checkbox
 		await page.locator('aside label:has-text("GPU") input[type="checkbox"]').check();
-		await page.waitForTimeout(500);
+		// Client-side filter applies via $derived; wait for the count banner
+		// to change before reading the filtered number.
+		await expect(page.locator(COUNT_LOCATOR)).not.toHaveText(initialBanner, { timeout: 2000 });
 
 		// Get filtered count text
 		const filteredCount = page.locator(COUNT_LOCATOR);
@@ -180,7 +205,8 @@ test.describe('Search DSL', () => {
 
 		// Reset filter by unchecking GPU (no dedicated "All" button exists).
 		await page.locator('aside label:has-text("GPU") input[type="checkbox"]').uncheck();
-		await page.waitForTimeout(500);
+		// Wait for the client-side filter to clear (count returns to initial).
+		await expect(page.locator(COUNT_LOCATOR)).toHaveText(initialBanner, { timeout: 2000 });
 
 		// Verify count returns to original
 		const resetCount = page.locator(COUNT_LOCATOR);
@@ -201,7 +227,8 @@ test.describe('Search DSL', () => {
 		const moreFiltersButton = page.getByRole('button', { name: /More filters/i });
 		if (await moreFiltersButton.isVisible({ timeout: 2000 }).catch(() => false)) {
 			await moreFiltersButton.click();
-			await page.waitForTimeout(200);
+			// The recipe label below is part of the panel's expanded content;
+			// the next toBeVisible() assertion auto-retries until it appears.
 		}
 
 		// The new label must be present.
