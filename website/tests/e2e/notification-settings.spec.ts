@@ -7,6 +7,9 @@ import { test, expect } from './fixtures/test-account';
  *
  * Note: Notifications live in step 2 of the provider setup wizard. Tests land there
  * by pre-setting the persisted wizard step in localStorage before navigating.
+ *
+ * Consolidated: snapshot tests on /dashboard/provider/support are merged into one
+ * test to reduce redundant page.goto() calls. Behavioral toggle flows stay separate.
  */
 test.describe('Provider Support - Notification Settings', () => {
 	test.beforeEach(async ({ page }) => {
@@ -18,26 +21,58 @@ test.describe('Provider Support - Notification Settings', () => {
 		);
 	});
 
-	test('should display notifications section', async ({ page }) => {
+	test('notification settings: section, channels, save button, tier limits, and usage grid render correctly', async ({
+		page,
+	}) => {
+		// Single navigation covers what was previously six snapshot tests:
+		// "display notifications section", "display channel selection options",
+		// "have save notifications button", "display free tier limit badges",
+		// "display usage statistics grid", and "display usage counts with limits".
+		//
+		// The first op after goto is an auto-retrying expect(...).toBeVisible(),
+		// so the prior networkidle wait would have been redundant; each subsequent
+		// assertion also auto-retries, covering the async-loaded usage grid.
 		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
+
+		// Notifications heading + description
 		await expect(page.locator('h2:has-text("Notifications")')).toBeVisible();
 		await expect(page.locator('text=Get alerted when customers need support')).toBeVisible();
-	});
 
-	test('should display channel selection options', async ({ page }) => {
-		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
 		// Each channel is wrapped in its own <label>; use that to avoid matching the
 		// email-verification banner and the usage grid column labels.
 		const notifications = page.locator('#notifications');
 		await expect(notifications.locator('label:has-text("Email")')).toBeVisible();
 		await expect(notifications.locator('label:has-text("Telegram")')).toBeVisible();
 		await expect(notifications.locator('label:has-text("SMS")')).toBeVisible();
+
+		// Save button
+		await expect(page.locator('button:has-text("Save Notifications")')).toBeVisible();
+
+		// Free-tier limit badges
+		await expect(page.locator('text=Free').first()).toBeVisible();
+		await expect(page.locator('text=Free (50/day)')).toBeVisible();
+		await expect(page.locator('text=5 free/day')).toBeVisible();
+
+		// Usage grid (3 columns: Email, Telegram, SMS)
+		const usageGrid = page.locator('.grid.grid-cols-3');
+		await expect(usageGrid).toBeVisible({ timeout: 10000 });
+		await expect(usageGrid.locator('text=Email')).toBeVisible();
+		await expect(usageGrid.locator('text=Telegram')).toBeVisible();
+		await expect(usageGrid.locator('text=SMS')).toBeVisible();
+
+		// Telegram count/limit (e.g. "0/50"); SMS anchored (e.g. "0/5") so it does
+		// not also match the Telegram cell.
+		const telegramUsage = usageGrid.locator('div:has-text("Telegram")').locator('..');
+		await expect(telegramUsage.locator('text=/\\d+\\/50/')).toBeVisible();
+
+		const smsUsage = usageGrid.locator('div:has-text("SMS")').locator('..');
+		await expect(smsUsage.locator('text=/^\\d+\\/5$/')).toBeVisible();
 	});
 
-	test('should show telegram input when telegram checkbox checked', async ({ page }) => {
+	test('notification settings: telegram checkbox reveals chat ID input', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
+		// networkidle is load-bearing here: the Telegram label is SSR'd before
+		// its onclick handler binds, so clicking pre-hydration is a silent no-op.
 		await page.waitForLoadState('networkidle');
 		// Click the label containing "Telegram" to toggle the checkbox
 		await page.click('label:has-text("Telegram")');
@@ -46,14 +81,16 @@ test.describe('Provider Support - Notification Settings', () => {
 		await expect(page.locator('a[href^="https://t.me/"]')).toBeVisible();
 	});
 
-	test('should show phone input when sms checkbox checked', async ({ page }) => {
+	test('notification settings: sms checkbox reveals phone input', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
 		await page.waitForLoadState('networkidle');
 		await page.click('label:has-text("SMS")');
 		await expect(page.locator('input[placeholder="+1 555-123-4567"]')).toBeVisible();
 	});
 
-	test('should allow multiple channels to be selected', async ({ page }) => {
+	test('notification settings: multiple channels can be selected simultaneously', async ({
+		page,
+	}) => {
 		await page.goto('/dashboard/provider/support');
 		await page.waitForLoadState('networkidle');
 		await page.click('label:has-text("Telegram")');
@@ -62,58 +99,7 @@ test.describe('Provider Support - Notification Settings', () => {
 		await expect(page.locator('input[placeholder="+1 555-123-4567"]')).toBeVisible();
 	});
 
-	test('should have save notifications button', async ({ page }) => {
-		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
-		await expect(page.locator('button:has-text("Save Notifications")')).toBeVisible();
-	});
-
-	test('should display free tier limit badges', async ({ page }) => {
-		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
-		// Email is free (unlimited)
-		await expect(page.locator('text=Free').first()).toBeVisible();
-		// Telegram has 50/day free limit
-		await expect(page.locator('text=Free (50/day)')).toBeVisible();
-		// SMS has 5/day free limit
-		await expect(page.locator('text=5 free/day')).toBeVisible();
-	});
-
-	test('should display usage statistics grid', async ({ page }) => {
-		await page.goto('/dashboard/provider/support');
-		// Wait for usage data to load (displayed in a grid)
-		await page.waitForLoadState('networkidle');
-
-		// Usage grid should be visible with 3 columns: Email, Telegram, SMS
-		const usageGrid = page.locator('.grid.grid-cols-3');
-		await expect(usageGrid).toBeVisible({ timeout: 10000 });
-
-		// Should show count labels
-		await expect(usageGrid.locator('text=Email')).toBeVisible();
-		await expect(usageGrid.locator('text=Telegram')).toBeVisible();
-		await expect(usageGrid.locator('text=SMS')).toBeVisible();
-	});
-
-	test('should display usage counts with limits for Telegram and SMS', async ({ page }) => {
-		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
-
-		// Wait for usage grid
-		const usageGrid = page.locator('.grid.grid-cols-3');
-		await expect(usageGrid).toBeVisible({ timeout: 10000 });
-
-		// Telegram should show count/limit format (e.g., "0/50")
-		// SMS should show count/limit format (e.g., "0/5")
-		// The format is: number/number where limits are 50 for Telegram and 5 for SMS
-		const telegramUsage = usageGrid.locator('div:has-text("Telegram")').locator('..');
-		await expect(telegramUsage.locator('text=/\\d+\\/50/')).toBeVisible();
-
-		const smsUsage = usageGrid.locator('div:has-text("SMS")').locator('..');
-		// Anchored so it does not also match the Telegram "0/50" cell
-		await expect(smsUsage.locator('text=/^\\d+\\/5$/')).toBeVisible();
-	});
-
-	test('should show test notification button when channel enabled with valid input', async ({
+	test('notification settings: test notification button appears with valid input', async ({
 		page,
 	}) => {
 		await page.goto('/dashboard/provider/support');
