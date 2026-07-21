@@ -34,6 +34,13 @@
 		open = false;
 	}
 
+	// Backdrop click should NOT complete onboarding — only explicit CTAs do.
+	// Without this, a single accidental backdrop click permanently dismisses
+	// the onboarding flow across reloads (audit #12).
+	function closeModal() {
+		open = false;
+	}
+
 	function goToNextStep() {
 		step = nextStep(step);
 	}
@@ -68,7 +75,7 @@
 {#if open}
 	<div class="fixed inset-0 z-50 flex items-center justify-center p-4">
 		<!-- Backdrop -->
-		<div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick={finishOnboarding} role="presentation"></div>
+		<div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick={closeModal} role="presentation"></div>
 
 		<!-- Modal -->
 		<div class="relative z-10 w-full max-w-lg bg-surface border border-neutral-800 shadow-2xl">
