@@ -56,16 +56,22 @@ test.describe('Recovery Flow', () => {
 
 	test('should submit email request and show success message', async ({ page }) => {
 		await page.goto('/recover');
-		await page.waitForLoadState('networkidle');
 
-		// Fill in email
+		// The form's bind:value + onclick handlers need SvelteKit hydration.
+		// fill() before hydration doesn't register in Svelte's state, so the
+		// submit silently fails validation. Retry the fill+submit until
+		// hydration completes (replaces networkidle, which tanks parallel
+		// runs under Vite HMR — see playwright.config.ts:28-33).
 		const emailInput = page.locator('input#email[type="email"]');
-		await emailInput.fill('test@example.com');
-
-		// Submit form
 		const submitButton = page.locator('button:has-text("Send Recovery Link")');
-		await expect(submitButton).toBeVisible();
-		await submitButton.click();
+		const successHeading = page.locator('h3:has-text("Check Your Email")');
+		for (let attempt = 0; attempt < 20; attempt++) {
+			if (await successHeading.isVisible().catch(() => false)) break;
+			await emailInput.fill('test@example.com');
+			await submitButton.click({ timeout: 5000 }).catch(() => {});
+			await page.waitForTimeout(100);
+		}
+		await expect(successHeading).toBeVisible({ timeout: 5000 });
 
 		// Should show success message
 		await expect(page.locator('h3:has-text("Check Your Email")')).toBeVisible({ timeout: 5000 });
@@ -94,13 +100,19 @@ test.describe('Recovery Flow', () => {
 
 	test('should allow sending to different email after success', async ({ page }) => {
 		await page.goto('/recover');
-		await page.waitForLoadState('networkidle');
 
-		// Submit first email
-		await page.fill('input#email[type="email"]', 'first@example.com');
+		// Submit first email (retry fill+submit until hydration completes —
+		// see the submit test above for rationale).
+		const emailInput = page.locator('input#email[type="email"]');
 		const submitButton = page.locator('button:has-text("Send Recovery Link")');
-		await expect(submitButton).toBeVisible();
-		await submitButton.click();
+		const successHeading = page.locator('h3:has-text("Check Your Email")');
+		for (let attempt = 0; attempt < 20; attempt++) {
+			if (await successHeading.isVisible().catch(() => false)) break;
+			await emailInput.fill('first@example.com');
+			await submitButton.click({ timeout: 5000 }).catch(() => {});
+			await page.waitForTimeout(100);
+		}
+		await expect(successHeading).toBeVisible({ timeout: 5000 });
 
 		// Wait for success
 		await expect(page.locator('h3:has-text("Check Your Email")')).toBeVisible({ timeout: 5000 });
@@ -181,10 +193,12 @@ test.describe('Recovery Flow', () => {
 
 	test('should navigate back to login from /recover page', async ({ page }) => {
 		await page.goto('/recover');
-		await page.waitForLoadState('networkidle');
 
-		// Click back to login link
-		await page.click('a:has-text("← Back to login")');
+		// The "← Back to login" is a native <a> link — works without
+		// SvelteKit hydration. Wait for it to be visible, then click.
+		const backLink = page.locator('a:has-text("← Back to login")');
+		await expect(backLink).toBeVisible();
+		await backLink.click();
 
 		// Should navigate to /login
 		await expect(page).toHaveURL('/login');
