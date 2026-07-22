@@ -19,6 +19,11 @@ import {
  */
 
 test.describe('/dashboard/invoices', () => {
+	// Serial mode: all tests share the same testAccount pubkey and seed/delete
+	// contracts via deleteContractsForRequester(pubkey). Parallel execution
+	// causes test A's cleanup to nuke test B's seeded contracts.
+	test.describe.configure({ mode: 'serial' });
+
 	test('empty state: fresh user sees FAQ and marketplace CTA', async ({ page }) => {
 		await page.goto('/dashboard/invoices');
 
