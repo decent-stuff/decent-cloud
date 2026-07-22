@@ -244,7 +244,7 @@
 				<p class="text-sm text-danger">Failed to load trust metrics</p>
 				<p class="text-xs text-neutral-500 mt-1">{trustMetricsError}</p>
 			</div>
-		{:else if trustMetrics}
+		{:else if trustMetrics && userRole === 'provider'}
 			<div class="flex items-center justify-between mb-3">
 				<h2 class="text-lg font-semibold text-white">Your Trust Score</h2>
 				<a
