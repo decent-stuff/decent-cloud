@@ -86,8 +86,12 @@
 		</div>
 	{/if}
 
-	{#if currentIdentity}
-		<UserProfileEditor identity={currentIdentity} signingIdentity={currentIdentity} />
+	{#if currentIdentity?.account}
+		<UserProfileEditor
+			identity={currentIdentity}
+			signingIdentity={currentIdentity}
+			username={currentIdentity.account.username}
+		/>
 	{:else}
 		<p class="text-neutral-500">Loading...</p>
 	{/if}

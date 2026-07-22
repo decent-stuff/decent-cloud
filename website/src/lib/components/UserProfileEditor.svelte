@@ -11,9 +11,10 @@
 	interface Props {
 		identity: IdentityInfo;
 		signingIdentity: IdentityInfo;
+		username: string;
 	}
 
-	let { identity, signingIdentity }: Props = $props();
+	let { identity, signingIdentity, username }: Props = $props();
 
 	let profile = $state({
 		displayName: "",
@@ -23,12 +24,6 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
-
-	// Get username from the account
-	if (!identity.account?.username) {
-		throw new Error("No account username found");
-	}
-	const username = identity.account.username;
 
 	const apiClient = new UserApiClient(
 		signingIdentity.identity as Ed25519KeyIdentity,
