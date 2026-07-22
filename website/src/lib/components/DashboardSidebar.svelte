@@ -32,6 +32,10 @@
 	let pendingRequestsCount = $state(0);
 	let pendingPasswordResetsCount = $state(0);
 	let pendingSshKeyRotationsCount = $state(0);
+	// Principal we've already loaded provider data for. Prevents re-fetching
+	// on every activeIdentity emit during initialize() (addIdentity → then
+	// account data attaching emits new object refs for the SAME key).
+	let loadedPrincipal: string | null = null;
 
 	// Section keys and their default collapsed state (false = expanded by default)
 	type SectionKey = 'discover' | 'activity' | 'provider';
@@ -186,9 +190,18 @@
 
 		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
+			const principalHex = value?.publicKeyBytes ? hexEncode(value.publicKeyBytes) : null;
 			if (value?.publicKeyBytes) {
-				loadProviderData();
+				// Only load when the principal actually changes. During
+				// initialize() the store emits several times with new object
+				// references for the SAME key — the providerDataLoading guard
+				// blocks concurrent calls but not sequential ones across emits.
+				if (loadedPrincipal !== principalHex) {
+					loadedPrincipal = principalHex;
+					loadProviderData();
+				}
 			} else {
+				loadedPrincipal = null;
 				offeringsCount = 0;
 				onboardingData = null;
 				pendingRequestsCount = 0;

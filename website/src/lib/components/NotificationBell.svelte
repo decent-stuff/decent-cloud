@@ -25,6 +25,11 @@
 	let loading = $state(false);
 	let activeIdentity = $state<import('$lib/stores/auth').IdentityInfo | null>(null);
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	// Principal we're currently polling for. Only re-fetch + reset the
+	// interval when this actually changes (null→identity or A→B), not on
+	// every object-reference change (e.g. account data attaching to an
+	// existing identity during initialize()).
+	let pollingPrincipal: string | null = null;
 	let unsubIdentity: (() => void) | null = null;
 	let dropdownEl = $state<HTMLDivElement | null>(null);
 
@@ -159,11 +164,25 @@
 	onMount(() => {
 		unsubIdentity = authStore.activeIdentity.subscribe((identity) => {
 			activeIdentity = identity;
+			const principalHex = identity?.publicKeyBytes
+				? hexEncode(identity.publicKeyBytes)
+				: null;
+
 			if (identity?.publicKeyBytes) {
-				fetchUnreadCount();
-				if (pollTimer !== null) clearInterval(pollTimer);
-				pollTimer = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
+				// Only start polling when the principal actually changes.
+				// During initialize() the store emits several times with new
+				// object references for the SAME key (addIdentity → then
+				// account data attaching), which previously caused one fetch
+				// per emit. Guard against that here.
+				if (pollingPrincipal !== principalHex) {
+					pollingPrincipal = principalHex;
+					fetchUnreadCount();
+					if (pollTimer !== null) clearInterval(pollTimer);
+					pollTimer = setInterval(fetchUnreadCount, POLL_INTERVAL_MS);
+				}
 			} else {
+				// Identity cleared — stop polling and reset.
+				pollingPrincipal = null;
 				unreadCount = 0;
 				notifications = [];
 				if (pollTimer !== null) {
