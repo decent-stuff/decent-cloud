@@ -1,5 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { registerNewAccount, setupConsoleLogging } from './fixtures/auth-helpers';
+import { test, expect } from './fixtures/test-account';
 import { ed25519ph } from '@noble/curves/ed25519';
 import { mnemonicToSeedSync } from 'bip39';
 import { sha512 } from '@noble/hashes/sha512';
@@ -66,11 +65,11 @@ test.describe('Chatwoot API', () => {
 		expect(response.status()).toBe(401);
 	});
 
-	test('GET /chatwoot/identity returns identity hash for authenticated user', async ({ page }) => {
-		setupConsoleLogging(page);
-
-		// Register a new account to get credentials
-		const credentials = await registerNewAccount(page);
+	test('GET /chatwoot/identity returns identity hash for authenticated user', async ({ request, testAccount }) => {
+		// The testAccount fixture creates the account via a direct DB INSERT
+		// (instant) instead of the ~10-15s UI registration flow; this test only
+		// needs valid credentials to sign the request.
+		const credentials = testAccount;
 
 		// Generate keypair from seed phrase
 		const { publicKey, privateKey } = seedPhraseToKeyPair(credentials.seedPhrase);
@@ -80,7 +79,7 @@ test.describe('Chatwoot API', () => {
 		const headers = await signRequest(privateKey, publicKey, 'GET', path);
 
 		// Make API request with signed headers
-		const response = await page.request.get(`${API_BASE_URL}${path}`, {
+		const response = await request.get(`${API_BASE_URL}${path}`, {
 			headers
 		});
 
@@ -107,15 +106,14 @@ test.describe('Chatwoot API', () => {
 		}
 	});
 
-	test('GET /chatwoot/support-access returns status for authenticated user', async ({ page }) => {
-		setupConsoleLogging(page);
-		const credentials = await registerNewAccount(page);
+	test('GET /chatwoot/support-access returns status for authenticated user', async ({ request, testAccount }) => {
+		const credentials = testAccount;
 		const { publicKey, privateKey } = seedPhraseToKeyPair(credentials.seedPhrase);
 
 		const path = '/api/v1/chatwoot/support-access';
 		const headers = await signRequest(privateKey, publicKey, 'GET', path);
 
-		const response = await page.request.get(`${API_BASE_URL}${path}`, { headers });
+		const response = await request.get(`${API_BASE_URL}${path}`, { headers });
 		expect(response.status()).toBe(200);
 
 		const data = await response.json();
@@ -132,15 +130,14 @@ test.describe('Chatwoot API', () => {
 		}
 	});
 
-	test('POST /chatwoot/support-access/reset returns error without Platform API', async ({ page }) => {
-		setupConsoleLogging(page);
-		const credentials = await registerNewAccount(page);
+	test('POST /chatwoot/support-access/reset returns error without Platform API', async ({ request, testAccount }) => {
+		const credentials = testAccount;
 		const { publicKey, privateKey } = seedPhraseToKeyPair(credentials.seedPhrase);
 
 		const path = '/api/v1/chatwoot/support-access/reset';
 		const headers = await signRequest(privateKey, publicKey, 'POST', path);
 
-		const response = await page.request.post(`${API_BASE_URL}${path}`, { headers });
+		const response = await request.post(`${API_BASE_URL}${path}`, { headers });
 		expect(response.status()).toBe(200);
 
 		const data = await response.json();
