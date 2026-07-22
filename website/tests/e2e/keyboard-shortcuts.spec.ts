@@ -1,0 +1,52 @@
+import { test, expect } from './fixtures/test-account';
+
+test.describe('/ keyboard shortcut + email banner dismiss', () => {
+	test('/ focuses marketplace search input', async ({ page }) => {
+		await page.goto('/dashboard/marketplace');
+		await page.waitForLoadState('networkidle');
+
+		// Type / — should focus the search input, not insert text
+		await page.keyboard.press('/');
+
+		const searchInput = page.locator('#marketplace-search');
+		await expect(searchInput).toBeFocused();
+
+		// Now typing should go into the search field
+		await page.keyboard.type('gpu');
+		await expect(searchInput).toHaveValue('gpu');
+	});
+
+	test('/ does not hijack input when already typing in a field', async ({ page }) => {
+		await page.goto('/dashboard/marketplace');
+		await page.waitForLoadState('networkidle');
+
+		const searchInput = page.locator('#marketplace-search');
+		await searchInput.click();
+		await searchInput.fill('already here');
+
+		// Move cursor to end, type / — should be inserted as text, not trigger shortcut
+		await searchInput.press('End');
+		await page.keyboard.type('/');
+		await expect(searchInput).toHaveValue('already here/');
+	});
+
+	test('email verification banner can be dismissed per-session', async ({ page }) => {
+		await page.goto('/dashboard');
+		await page.waitForLoadState('networkidle');
+
+		// Banner should be visible (test account has unverified email)
+		const banner = page.getByText('Verify Your Email Address');
+		await expect(banner).toBeVisible({ timeout: 10000 });
+
+		// Dismiss it
+		await page.getByRole('button', { name: 'Dismiss reminder' }).click();
+
+		// Banner should disappear
+		await expect(banner).not.toBeVisible();
+
+		// Navigate to another page — banner stays dismissed
+		await page.goto('/dashboard/account');
+		await page.waitForLoadState('networkidle');
+		await expect(banner).not.toBeVisible();
+	});
+});

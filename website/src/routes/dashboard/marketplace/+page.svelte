@@ -777,7 +777,16 @@
 
 		return chips;
 	});
+
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+			e.preventDefault();
+			document.getElementById('marketplace-search')?.focus();
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 <div class="space-y-4">
 	<div>
@@ -1158,14 +1167,16 @@
 				<div class="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
 					<Icon name="search" size={20} class="text-neutral-500" />
 				</div>
-				<input
-					type="text"
-					placeholder="Search offerings…"
-					bind:value={searchQuery}
-					oninput={handleSearchInput}
-					aria-label="Search offerings by name, description, or type"
-					class="w-full pl-11 pr-4 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-neutral-500 focus:outline-none focus:border-primary-400 transition-colors"
-				/>
+			<input
+				id="marketplace-search"
+				type="text"
+				placeholder="Search offerings…"
+				bind:value={searchQuery}
+				oninput={handleSearchInput}
+				aria-label="Search offerings by name, description, or type"
+				class="w-full pl-11 pr-12 py-3 bg-surface-elevated border border-neutral-800 text-white placeholder-neutral-500 focus:outline-none focus:border-primary-400 transition-colors"
+			/>
+			<kbd class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-neutral-500 border border-neutral-700 rounded px-1.5 py-0.5 pointer-events-none">/</kbd>
 			</div>
 
 			<!-- Active Filter Chips -->

@@ -14,6 +14,7 @@
 	import Icon from '$lib/components/Icons.svelte';
 
 	const SEED_BACKUP_DISMISSED_KEY = 'seedPhraseBackupDismissed';
+	const EMAIL_BANNER_DISMISSED_KEY = 'emailVerificationBannerDismissed';
 
 	let { children } = $props();
 	let isAuthenticated = $state(false);
@@ -23,6 +24,7 @@
 	let account = $state<AccountInfo | null>(null);
 	let activeIdentity = $state<IdentityInfo | null>(null);
 	let seedBackupDismissed = $state(browser ? localStorage.getItem(SEED_BACKUP_DISMISSED_KEY) === '1' : true);
+	let emailBannerDismissed = $state(browser ? sessionStorage.getItem(EMAIL_BANNER_DISMISSED_KEY) === '1' : false);
 	let unsubscribe: (() => void) | null = null;
 	let unsubscribeIdentity: (() => void) | null = null;
 
@@ -56,7 +58,7 @@
 	);
 
 	const showEmailVerificationBanner = $derived(
-		isAuthenticated && account && !account.emailVerified && !isCheckoutOrMarketplacePage
+		isAuthenticated && account && !account.emailVerified && !isCheckoutOrMarketplacePage && !emailBannerDismissed
 	);
 	// #438: previously gated on `!showEmailVerificationBanner`, which meant a
 	// seed-phrase user with an unverified email NEVER saw the backup warning —
@@ -87,6 +89,11 @@
 	function dismissSeedPhraseBanner() {
 		seedBackupDismissed = true;
 		if (browser) localStorage.setItem(SEED_BACKUP_DISMISSED_KEY, '1');
+	}
+
+	function dismissEmailBanner() {
+		emailBannerDismissed = true;
+		if (browser) sessionStorage.setItem(EMAIL_BANNER_DISMISSED_KEY, '1');
 	}
 </script>
 
@@ -128,9 +135,9 @@
 		can coexist (seed-phrase backup + unverified email). Each renders as a
 		static block sibling; the container owns positioning + z-index. -->
 		<div class="fixed top-14 md:top-0 left-0 md:left-60 right-0 z-40">
-			{#if showEmailVerificationBanner}
-				<EmailVerificationBanner />
-			{/if}
+		{#if showEmailVerificationBanner}
+			<EmailVerificationBanner onDismiss={dismissEmailBanner} />
+		{/if}
 			{#if showSeedPhraseBackupBanner}
 				<SeedPhraseBackupBanner onDismiss={dismissSeedPhraseBanner} />
 			{/if}

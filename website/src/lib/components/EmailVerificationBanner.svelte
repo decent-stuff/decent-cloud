@@ -2,6 +2,8 @@
 	import { authStore, type AccountInfo } from '$lib/stores/auth';
 	import { resendVerificationEmail } from '$lib/services/account-api';
 
+	let { onDismiss }: { onDismiss: () => void } = $props();
+
 	let isResending = $state(false);
 	let statusMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
 	let account = $state<AccountInfo | null>(null);
@@ -60,11 +62,21 @@
 				<button
 					onclick={handleResend}
 					disabled={isResending}
-					class="px-4 py-2 bg-amber-900 hover:bg-amber-800 disabled:bg-amber-700 disabled:opacity-50  text-white text-sm font-medium transition-colors whitespace-nowrap"
+					class="px-4 py-2 bg-amber-900 hover:bg-amber-800 disabled:bg-amber-700 disabled:opacity-50 text-white text-sm font-medium transition-colors whitespace-nowrap"
 				>
 					{isResending ? 'Sending...' : 'Resend Verification Email'}
 				</button>
 			{/if}
+			<button
+				type="button"
+				onclick={onDismiss}
+				class="text-amber-900 hover:text-amber-700 transition-colors p-1"
+				aria-label="Dismiss reminder"
+			>
+				<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
+			</button>
 		</div>
 
 		{#if statusMessage}
