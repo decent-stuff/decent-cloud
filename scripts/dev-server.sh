@@ -2,8 +2,13 @@
 # Local dev environment: SvelteKit website (port 59010) + local API (port 59011).
 #
 # One source of truth for stack lifecycle. Detached (setsid) so processes
-# survive the caller's exit; idempotent so re-running start is a no-op if
-# the stack is already healthy.
+# survive the caller's exit; idempotent so re-running start is a no-op if the
+# stack is already healthy.
+#
+# The API runs in RELEASE by default. Debug builds run Ed25519 curve math
+# ~150x slower than release (~17ms vs ~106us per auth), which both distorts
+# E2E timing and does not reflect production. Override with
+# API_BINARY=$ROOT/target/debug/api-server for fast Rust iteration only.
 #
 # Usage:
 #   scripts/dev-server.sh start [--e2e]   — start stack (idempotent)
@@ -28,7 +33,7 @@ PIDS="$ROOT/.dev-pids"
 API_PORT="${API_PORT:-59011}"
 WEB_PORT="${WEB_PORT:-59010}"
 REMOTE_API_URL="https://dev-api.decent-cloud.org"
-API_BINARY="$ROOT/target/debug/api-server"
+API_BINARY="${API_BINARY:-$ROOT/target/release/api-server}"
 DEFAULT_CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai"
 
 # Source all env vars from cf/.env.dev (optional in --e2e mode if defaults work).
@@ -125,8 +130,8 @@ start_stack() {
   local api_url
   if [ "$E2E_MODE" -eq 1 ]; then
     if [ ! -x "$API_BINARY" ]; then
-      echo "E2E mode: $API_BINARY missing — building (cargo build -p api --bin api-server)..."
-      (cd "$ROOT" && cargo build -p api --bin api-server)
+      echo "E2E mode: $API_BINARY missing — building (cargo build -p api --bin api-server --release)..."
+      (cd "$ROOT" && cargo build -p api --bin api-server --release)
     fi
     if _healthy api "http://localhost:$API_PORT/api/v1/health"; then
       echo "API already running (pid $(cat "$PIDS/api.pid"))"

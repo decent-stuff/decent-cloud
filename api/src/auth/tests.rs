@@ -898,3 +898,168 @@ fn authenticate_provider_or_agent_from_request_sync_agent_path(
         ))
     }
 }
+
+// =============================================================================
+// Verifying-key cache tests (Task #1: auth perf).
+//
+// The signature itself still verifies on EVERY request (caching only skips the
+// ~8us `VerifyingKey::from_bytes` reconstruction). These tests assert that the
+// cache is populated, reused, bounded, and — critically — that a cached key
+// never authorizes a request whose signature does not verify.
+//
+// The cache is a process-wide singleton, so these tests serialize on a guard to
+// stay isolated from one another when the rest of the suite runs in parallel.
+// =============================================================================
+use std::sync::Mutex as StdMutex;
+lazy_static::lazy_static! {
+    static ref CACHE_TEST_LOCK: StdMutex<()> = StdMutex::new(());
+}
+
+/// Build a valid signed request for `identity` and run it through the verifier.
+fn run_valid_signed_request(identity: &DccIdentity, pubkey: &[u8]) -> Result<Vec<u8>, AuthError> {
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let nonce = uuid::Uuid::new_v4();
+    let method = "GET";
+    let path = "/api/v1/providers/abc/trust-metrics";
+    let body: Vec<u8> = vec![];
+
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+    let mut message = timestamp_str.as_bytes().to_vec();
+    message.extend_from_slice(nonce_str.as_bytes());
+    message.extend_from_slice(method.as_bytes());
+    message.extend_from_slice(path.as_bytes());
+    message.extend_from_slice(&body);
+
+    let signature = identity.sign(&message).expect("sign");
+
+    verify_request_signature(
+        &hex::encode(pubkey),
+        &hex::encode(signature.to_bytes()),
+        &timestamp_str,
+        &nonce_str,
+        method,
+        path,
+        &body,
+        Some(timestamp),
+    )
+}
+
+#[test]
+fn test_verifying_key_cache_populated_on_first_verify() {
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    super::clear_verifying_key_cache();
+    let (identity, pubkey) = create_test_identity();
+    assert_eq!(super::verifying_key_cache_len(), 0, "cache should start empty");
+
+    run_valid_signed_request(&identity, &pubkey).expect("valid request must verify");
+
+    assert_eq!(
+        super::verifying_key_cache_len(),
+        1,
+        "first verify must populate the cache with the pubkey's verifying key"
+    );
+}
+
+#[test]
+fn test_verifying_key_cache_reused_on_repeated_calls() {
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    super::clear_verifying_key_cache();
+    let (identity, pubkey) = create_test_identity();
+
+    // Three requests with the same pubkey — cache must hold exactly one entry.
+    for _ in 0..3 {
+        run_valid_signed_request(&identity, &pubkey).expect("valid request must verify");
+    }
+    assert_eq!(
+        super::verifying_key_cache_len(),
+        1,
+        "repeated calls for the same pubkey must reuse the cached key (no duplicate inserts)"
+    );
+}
+
+#[test]
+fn test_verifying_key_cache_distinguishes_pubkeys() {
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    super::clear_verifying_key_cache();
+    let (id_a, pk_a) = create_test_identity();
+    let (id_b, pk_b) = (
+        DccIdentity::new_from_seed(&[7u8; 32]).expect("create second identity"),
+        DccIdentity::new_from_seed(&[7u8; 32])
+            .expect("create second identity")
+            .to_bytes_verifying(),
+    );
+
+    run_valid_signed_request(&id_a, &pk_a).expect("verify A");
+    run_valid_signed_request(&id_b, &pk_b).expect("verify B");
+
+    assert_eq!(
+        super::verifying_key_cache_len(),
+        2,
+        "two distinct pubkeys must produce two cache entries"
+    );
+}
+
+#[test]
+fn test_verifying_key_cache_invalid_signature_still_rejected() {
+    // SECURITY: a cached verifying key must NOT authorize a request whose
+    // signature fails to verify. verify_bytes must run on every request.
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    super::clear_verifying_key_cache();
+    let (identity, pubkey) = create_test_identity();
+
+    // First: a valid request primes the cache for this pubkey.
+    run_valid_signed_request(&identity, &pubkey).expect("prime cache with valid request");
+    assert_eq!(super::verifying_key_cache_len(), 1);
+
+    // Now attempt to verify a DIFFERENT (untampered but mis-signed) message with
+    // a signature computed over completely different content. The cached key is
+    // present, but the signature must still fail verification.
+    let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = "550e8400-e29b-41d4-a716-446655440000".to_string();
+    let signed_over = b"completely different message";
+    let signature = identity.sign(signed_over).expect("sign wrong message");
+
+    let result = verify_request_signature(
+        &hex::encode(&pubkey),
+        &hex::encode(signature.to_bytes()),
+        &timestamp_str,
+        &nonce_str,
+        "GET",
+        "/api/v1/providers/abc/trust-metrics",
+        &[],
+        Some(timestamp),
+    );
+
+    assert!(result.is_err(), "cached key must still reject an invalid signature");
+    assert!(
+        matches!(result.unwrap_err(), AuthError::InvalidSignature(_)),
+        "rejection must be InvalidSignature (verify_bytes ran and failed)"
+    );
+}
+
+#[test]
+fn test_verifying_key_cache_bounded() {
+    // The cache must never grow without bound. Inserting more distinct pubkeys
+    // than the cap must keep the size at or below the configured maximum.
+    let _guard = CACHE_TEST_LOCK.lock().unwrap();
+    super::clear_verifying_key_cache();
+    let max = super::VERIFYING_KEY_CACHE_MAX_ENTRIES;
+
+    for i in 0u32..(max + 5) as u32 {
+        let mut seed = [0u8; 32];
+        seed[..4].copy_from_slice(&i.to_le_bytes());
+        // Reconstruct identity directly (bypassing verify) to exercise insertion.
+        let pubkey = DccIdentity::new_from_seed(&seed)
+            .expect("create identity")
+            .to_bytes_verifying();
+        super::cached_verifying_identity(&pubkey).expect("insert into cache");
+    }
+
+    let len = super::verifying_key_cache_len();
+    assert!(
+        len <= max,
+        "cache must be bounded: got {len} entries, cap is {max}"
+    );
+}
