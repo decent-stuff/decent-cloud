@@ -4,9 +4,12 @@ import { setupConsoleLogging } from './fixtures/auth-helpers';
 /**
  * E2E Tests for Offerings Template Download
  *
+ * Consolidated: dialog snapshot assertions (product types + edit options) are
+ * in one test; dialog interactions (Cancel + CSV download) are in a second.
+ * Two navigations total instead of five.
+ *
  * Prerequisites:
- * - API server running at http://localhost:8080 (or configured API_URL)
- * - Dev server running at http://localhost:5173
+ * - Warm stack: api at http://localhost:59011, web at http://localhost:59010
  */
 
 test.describe('Offerings Template Download', () => {
@@ -14,12 +17,16 @@ test.describe('Offerings Template Download', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('should show product type selector when clicking Download Template button', async ({
+	test('template dialog shows heading, product type options, and edit section', async ({
 		page,
 	}) => {
+		// Single navigation covers what was previously three snapshot tests:
+		// "show product type selector", "display product type options", and
+		// "show Edit options when offerings list is empty".
 		await page.goto('/dashboard/offerings');
 		await expect(page.locator('h1:has-text("My Offerings")')).toBeVisible();
 
+		// Open the template dialog
 		const downloadBtn = page.locator('button:has-text("Download Template")');
 		await expect(downloadBtn).toBeVisible();
 		await downloadBtn.click();
@@ -28,22 +35,29 @@ test.describe('Offerings Template Download', () => {
 		await expect(
 			page.locator('text=Choose a product type to download an example template'),
 		).toBeVisible();
-	});
 
-	test('should display product type options in template dialog', async ({ page }) => {
-		await page.goto('/dashboard/offerings');
-
-		const downloadBtn = page.locator('button:has-text("Download Template")');
-		await expect(downloadBtn).toBeVisible();
-		await downloadBtn.click();
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
-
+		// Product type options exist
 		const productTypeButtons = page.locator('.grid button:has-text("Download template")');
 		const count = await productTypeButtons.count();
 		expect(count).toBeGreaterThan(0);
+
+		// Edit options (conditional: only shown when offerings list is empty)
+		const hasOfferings = (await page.locator('.grid > div').count()) > 0;
+		if (!hasOfferings) {
+			await expect(
+				page.locator('text=Or start editing with a template:'),
+			).toBeVisible();
+
+			const editButtons = page.locator('button:has-text("Edit")');
+			const editCount = await editButtons.count();
+			expect(editCount).toBeGreaterThan(0);
+		}
 	});
 
-	test('should close template dialog when clicking Cancel', async ({ page }) => {
+	test('dialog interactions: close with Cancel and download CSV template', async ({ page }) => {
+		// Single navigation covers what was previously two interaction tests:
+		// "close template dialog when clicking Cancel" and
+		// "download CSV template when selecting a product type".
 		await page.goto('/dashboard/offerings');
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
@@ -51,23 +65,15 @@ test.describe('Offerings Template Download', () => {
 		await downloadBtn.click();
 		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
+		// Close with Cancel
 		await page.click('button:has-text("Cancel")');
 		await expect(page.locator('h2:has-text("Select Product Type")')).not.toBeVisible();
-	});
 
-	test('should download CSV template when selecting a product type', async ({
-		page,
-	}) => {
-		await page.goto('/dashboard/offerings');
-		await page.waitForLoadState('networkidle');
-
-		const downloadPromise = page.waitForEvent('download');
-
-		const downloadBtn = page.locator('button:has-text("Download Template")');
-		await expect(downloadBtn).toBeVisible();
+		// Reopen and download a CSV template
 		await downloadBtn.click();
 		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
 
+		const downloadPromise = page.waitForEvent('download');
 		const firstProductType = page
 			.locator('.grid button:has-text("Download template")')
 			.first();
@@ -75,26 +81,5 @@ test.describe('Offerings Template Download', () => {
 
 		const download = await downloadPromise;
 		expect(download.suggestedFilename()).toMatch(/^offerings-template-\w+\.csv$/);
-	});
-
-	test('should show Edit options when offerings list is empty', async ({ page }) => {
-		await page.goto('/dashboard/offerings');
-
-		const downloadBtn = page.locator('button:has-text("Download Template")');
-		await expect(downloadBtn).toBeVisible();
-		await downloadBtn.click();
-		await expect(page.locator('h2:has-text("Select Product Type")')).toBeVisible({ timeout: 10000 });
-
-		const hasOfferings = (await page.locator('.grid > div').count()) > 0;
-
-		if (!hasOfferings) {
-			await expect(
-				page.locator('text=Or start editing with a template:'),
-			).toBeVisible();
-
-			const editButtons = page.locator('button:has-text("Edit")');
-			const count = await editButtons.count();
-			expect(count).toBeGreaterThan(0);
-		}
 	});
 });
