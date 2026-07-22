@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/test-account';
-import { sql, nowNs } from './fixtures/seed-helpers';
+import { sql, nowNs, seedOffering } from './fixtures/seed-helpers';
 
 // Demo provider pubkey (already in provider_registrations) — reuse so we don't
 // have to seed a registration row just to satisfy the SLA-target FK.
@@ -15,16 +15,9 @@ const DEMO_PROVIDER_PUBKEY_HEX =
  * empty gray bars — visually indistinguishable from broken data.
  */
 async function seedOfferingWithSlaTarget(): Promise<number> {
-	const out = await sql(
-		`INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, created_at_ns)
-		 VALUES (decode('${DEMO_PROVIDER_PUBKEY_HEX}', 'hex'), 'sla-empty-test-${Date.now()}', 'SLA Empty State Test', 'ICP', 25.0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'Test City', ${nowNs()})
-		 RETURNING id`
-	);
-	const numericId = out
-		.split('\n')
-		.map((l) => l.trim())
-		.find((l) => /^\d+$/.test(l));
-	if (!numericId) throw new Error(`could not parse offering id from psql output: ${out}`);
+	const numericId = await seedOffering(DEMO_PROVIDER_PUBKEY_HEX, {
+		name: 'SLA Empty State Test',
+	});
 
 	await sql(
 		`INSERT INTO provider_offering_sla_targets (offering_id, provider_pubkey, sla_target_percent, updated_at_ns)

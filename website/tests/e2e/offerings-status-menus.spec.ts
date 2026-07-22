@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/test-account';
-import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
+import { pubkeyHexFromSeed, sql, seedOffering } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the offering visibility & stock-status menus (#437).
@@ -10,47 +10,6 @@ import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
  * menu that lists every option with a one-line description, the current
  * option is marked, and selecting an option persists via the signed PUT path.
  */
-
-interface OfferingSeed {
-	/** Stable per-test offering_id. */
-	offeringId: string;
-	/** Initial visibility. Default 'public'. */
-	visibility?: string;
-	/** Initial stock_status. Default 'in_stock'. */
-	stockStatus?: string;
-	/** Optional name override. Default 'Menu Test Offering'. */
-	name?: string;
-}
-
-async function seedOffering(pubkeyHex: string, seed: OfferingSeed): Promise<string> {
-	const visibility = seed.visibility ?? 'public';
-	const stockStatus = seed.stockStatus ?? 'in_stock';
-	const name = (seed.name ?? 'Menu Test Offering').replace(/'/g, "''");
-	const createdAt = nowNs().toString();
-	// Only the NOT NULL columns of provider_offerings (verified via \d).
-	// Bytes use decode(...,'hex'); signed PUTs are accepted because the row's
-	// pubkey matches the test-account identity. Returns the numeric id (PK)
-	// which is what the page sets on the per-card `data-offering-id` attribute.
-	const result = await sql(`
-		INSERT INTO provider_offerings (
-			pubkey, offering_id, offer_name, currency, monthly_price,
-			visibility, product_type, billing_interval, stock_status,
-			datacenter_country, datacenter_city, created_at_ns
-		) VALUES (
-			decode('${pubkeyHex}', 'hex'),
-			'${seed.offeringId}',
-			'${name}',
-			'ICP', 25.0,
-			'${visibility}', 'compute', 'monthly', '${stockStatus}',
-			'US', 'New York', ${createdAt}
-		)
-		RETURNING id
-	`);
-	// psql emits "id\nINSERT 0 1" — take the first non-empty line.
-	const numericId = result.split('\n').map((l) => l.trim()).find((l) => /^\d+$/.test(l));
-	if (!numericId) throw new Error(`seedOffering did not RETURN a numeric id; got: ${result}`);
-	return numericId;
-}
 
 async function deleteOfferingsForPubkey(pubkeyHex: string): Promise<void> {
 	// CASCADE handles sla_targets, sli_reports, visibility_allowlist;

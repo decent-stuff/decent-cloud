@@ -254,3 +254,50 @@ export async function deleteTransfersForAccount(account: string): Promise<void> 
 export async function deleteSavedOfferingsForUser(userPubkeyHex: string): Promise<void> {
 	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${userPubkeyHex}', 'hex')`);
 }
+
+/** Overrides for seedOffering(). All optional — sensible defaults provided. */
+export interface OfferingSeedOverrides {
+	/** Stable per-test offering_id. Default: `test-<timestamp>`. */
+	offeringId?: string;
+	/** Initial visibility. Default 'public'. */
+	visibility?: string;
+	/** Initial stock_status. Default 'in_stock'. */
+	stockStatus?: string;
+	/** Optional name override. Default 'Test Offering'. */
+	name?: string;
+}
+
+/**
+ * Insert a provider_offerings row and return the numeric BIGSERIAL id (as a
+ * string from psql). Only the NOT NULL columns are populated; bytes use
+ * decode(...,'hex'). Signed PUTs are accepted because the row's pubkey
+ * matches the caller's identity.
+ *
+ * Shared by specs that need to seed offering rows with different column
+ * values (visibility, stock_status, name) without duplicating the INSERT SQL.
+ */
+export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOverrides): Promise<string> {
+	const offeringId = overrides?.offeringId ?? `test-${Date.now()}`;
+	const visibility = overrides?.visibility ?? 'public';
+	const stockStatus = overrides?.stockStatus ?? 'in_stock';
+	const name = (overrides?.name ?? 'Test Offering').replace(/'/g, "''");
+	const createdAt = nowNs().toString();
+	const result = await sql(`
+		INSERT INTO provider_offerings (
+			pubkey, offering_id, offer_name, currency, monthly_price,
+			visibility, product_type, billing_interval, stock_status,
+			datacenter_country, datacenter_city, created_at_ns
+		) VALUES (
+			decode('${pubkeyHex}', 'hex'),
+			'${offeringId}',
+			'${name}',
+			'ICP', 25.0,
+			'${visibility}', 'compute', 'monthly', '${stockStatus}',
+			'US', 'New York', ${createdAt}
+		)
+		RETURNING id
+	`);
+	const numericId = result.split('\n').map((l) => l.trim()).find((l) => /^\d+$/.test(l));
+	if (!numericId) throw new Error(`seedOffering did not RETURN a numeric id; got: ${result}`);
+	return numericId;
+}
