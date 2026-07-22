@@ -4042,6 +4042,11 @@ export async function getSpendingAlert(
 	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/spending-alert`;
 	const response = await fetch(url, { method: 'GET', headers });
 
+	if (response.status === 404) {
+		// No spending alert configured yet — not an error.
+		return null;
+	}
+
 	if (!response.ok) {
 		const errorMsg = await getErrorMessage(response, `Failed to fetch spending alert: ${response.status}`);
 		throw new Error(errorMsg);

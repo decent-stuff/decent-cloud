@@ -2,12 +2,20 @@ use super::common::{ApiResponse, MarkReadRequest, UnreadCountResponse, UserNotif
 use super::providers::BandwidthHistoryResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
+use crate::database::spending_alerts::SpendingAlert;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Request body to create an API token
+/// Request body to upsert a spending alert.
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertSpendingAlertRequest {
+	pub monthly_limit_usd: f64,
+	pub alert_at_pct: i32,
+}
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
@@ -644,6 +652,115 @@ impl UsersApi {
 
         match db.revoke_api_token(token_uuid, &pubkey_bytes).await {
             Ok(()) => Json(ApiResponse {
+                success: true,
+                data: None,
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get spending alert configuration
+    ///
+    /// Returns the authenticated user's spending alert, or null if none set.
+    #[oai(
+        path = "/users/:pubkey/spending-alert",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_spending_alert(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<SpendingAlert>> {
+        if decode_and_verify_pubkey(&pubkey.0, &auth.pubkey).is_err() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own data".to_string()),
+            });
+        }
+        match db.get_spending_alert(&pubkey.0).await {
+            Ok(alert) => Json(ApiResponse {
+                success: true,
+                data: alert,
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Set or update spending alert configuration
+    ///
+    /// Upserts the authenticated user's monthly spending limit and alert threshold.
+    #[oai(
+        path = "/users/:pubkey/spending-alert",
+        method = "put",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn upsert_spending_alert(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        body: Json<UpsertSpendingAlertRequest>,
+    ) -> Json<ApiResponse<SpendingAlert>> {
+        if decode_and_verify_pubkey(&pubkey.0, &auth.pubkey).is_err() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own data".to_string()),
+            });
+        }
+        match db
+            .upsert_spending_alert(&pubkey.0, body.0.monthly_limit_usd, body.0.alert_at_pct)
+            .await
+        {
+            Ok(alert) => Json(ApiResponse {
+                success: true,
+                data: Some(alert),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Delete spending alert configuration
+    ///
+    /// Removes the authenticated user's spending alert. Idempotent.
+    #[oai(
+        path = "/users/:pubkey/spending-alert",
+        method = "delete",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn delete_spending_alert(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<String>> {
+        if decode_and_verify_pubkey(&pubkey.0, &auth.pubkey).is_err() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own data".to_string()),
+            });
+        }
+        match db.delete_spending_alert(&pubkey.0).await {
+            Ok(_) => Json(ApiResponse {
                 success: true,
                 data: None,
                 error: None,

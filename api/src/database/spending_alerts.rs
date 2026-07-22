@@ -38,9 +38,8 @@ impl Database {
         }))
     }
 
-    /// Insert or update spending alert config for a user.
-    #[cfg(test)]
-    pub async fn upsert_spending_alert(
+	/// Insert or update spending alert config for a user.
+	pub async fn upsert_spending_alert(
         &self,
         pubkey_hex: &str,
         limit_usd: f64,
@@ -65,9 +64,8 @@ impl Database {
             .ok_or_else(|| anyhow::anyhow!("Spending alert not found after upsert"))
     }
 
-    /// Delete spending alert config for a user.
-    #[cfg(test)]
-    pub async fn delete_spending_alert(&self, pubkey_hex: &str) -> Result<bool> {
+	/// Delete spending alert config for a user.
+	pub async fn delete_spending_alert(&self, pubkey_hex: &str) -> Result<bool> {
         let result = sqlx::query!("DELETE FROM spending_alerts WHERE pubkey = $1", pubkey_hex)
             .execute(&self.pool)
             .await?;

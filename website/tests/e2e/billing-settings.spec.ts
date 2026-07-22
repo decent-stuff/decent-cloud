@@ -132,4 +132,39 @@ test.describe('Billing Settings Page', () => {
 		// Button should now be enabled
 		await expect(page.locator('button:has-text("Verify")')).toBeEnabled();
 	});
+
+	test('spending alerts: no raw error text, save persists, delete clears', async ({ page }) => {
+		await page.goto('/dashboard/account/billing');
+		await expect(page.locator('h2:has-text("Spending Alerts")')).toBeVisible({
+			timeout: 10000,
+		});
+
+		// The section must NOT render a raw error body (regression: endpoint was
+		// missing and 'not found' leaked into the page).
+		await expect(page.locator('text=not found')).not.toBeVisible();
+		await expect(page.locator('#alertLimit')).toBeVisible();
+
+		// Save a spending alert.
+		await page.locator('#alertLimit').fill('250');
+		await page.locator('#alertPct').fill('80');
+		await page.locator('button:has-text("Set Alert")').click();
+		await expect(page.locator('text=Spending alert saved')).toBeVisible({
+			timeout: 10000,
+		});
+
+		// Reload — config persists.
+		await page.reload();
+		await expect(page.locator('#alertLimit')).toHaveValue('250', { timeout: 10000 });
+		await expect(page.locator('#alertPct')).toHaveValue('80');
+
+		// Delete and confirm it clears.
+		await page.locator('button:has-text("Remove Alert")').click();
+		await expect(page.locator('text=Spending alert removed')).toBeVisible({
+			timeout: 10000,
+		});
+		await page.reload();
+		// After delete, inputs reset to defaults and no active alert summary shows.
+		await expect(page.locator('#alertLimit')).toHaveValue('100', { timeout: 10000 });
+		await expect(page.locator('text=Active spending alert')).not.toBeVisible();
+	});
 });
