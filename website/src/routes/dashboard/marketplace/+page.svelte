@@ -144,7 +144,7 @@
 		: null);
 
 	// Derived: filtered and sorted offerings
-	let filteredOfferings = $derived.by(() => {
+	let userFiltered = $derived.by(() => {
 		let result = [...offerings];
 
 		// Client-side type filter (multi-select)
@@ -226,16 +226,6 @@
 			result = result.filter((o) => (o.trust_score ?? 0) >= trustThreshold);
 		}
 
-		// Hide demo offerings if toggle is off (non-demo always shown)
-		if (!showDemoOfferings) {
-			result = result.filter((o) => !o.is_example);
-		}
-
-		// Hide offline offerings if toggle is off (online always shown)
-		if (!showOfflineOfferings) {
-			result = result.filter((o) => o.provider_online);
-		}
-
 		// Recently Added: filter to last 7 days
 		if (RECENT_CUTOFF_NS !== null) {
 			result = result.filter((o) => (o.created_at_ns ?? 0) >= RECENT_CUTOFF_NS!);
@@ -244,6 +234,27 @@
 		// Provider filter (from ?provider= URL param or "View all from provider" link)
 		if (providerFilter) {
 			result = result.filter(o => o.pubkey === providerFilter);
+		}
+		return result;
+	});
+
+	// Offerings that pass every user filter but are hidden by the default
+	// visibility settings (demo/offline). Powers the empty-state reveal.
+	let defaultHiddenCount = $derived(
+		userFiltered.filter(
+			(o) =>
+				(!showDemoOfferings && o.is_example) ||
+				(!showOfflineOfferings && !o.provider_online),
+		).length,
+	);
+
+	let filteredOfferings = $derived.by(() => {
+		let result = [...userFiltered];
+		if (!showDemoOfferings) {
+			result = result.filter((o) => !o.is_example);
+		}
+		if (!showOfflineOfferings) {
+			result = result.filter((o) => o.provider_online);
 		}
 
 		// Sort by selected field
@@ -1335,15 +1346,25 @@
 					{#if searchQuery}
 						<p class="text-neutral-400 mb-1 font-medium">No results for "{searchQuery}"</p>
 						<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">type:gpu</code></p>
-					{:else}
-						<p class="text-neutral-500 mb-2">No offerings found</p>
-					{/if}
-					{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || !showDemoOfferings || showOfflineOfferings || recipesOnly || searchQuery}
-						<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
-						<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
-							Clear all filters
-						</button>
-					{/if}
+				{:else}
+					<p class="text-neutral-500 mb-2">No offerings found</p>
+				{/if}
+				{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly || searchQuery}
+					<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
+					<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
+						Clear all filters
+					</button>
+				{:else if defaultHiddenCount > 0}
+					<p class="text-neutral-600 text-sm mb-4">
+						{defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering is' : 'offerings are'} hidden because no providers are currently online. Show demo/offline offerings?
+					</p>
+					<button
+						onclick={() => { showDemoOfferings = true; showOfflineOfferings = true; syncFiltersToUrl(); }}
+						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
+					>
+						Show {defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering' : 'offerings'}
+					</button>
+				{/if}
 				</div>
 			{:else}
 				<!-- Desktop Table -->
