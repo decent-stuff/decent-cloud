@@ -33,10 +33,21 @@
 	let error = $state<string | null>(null);
 	let createdAccount = $state<AccountInfo | null>(null);
 	let showSeedPhrase = $state(false);
+	let initialSeedMode = $state<'choose' | 'generate' | 'import'>('choose');
 	// Tracks whether the success state came from a fresh registration (vs an
 	// existing-account login) so the host page can route to /dashboard (where
 	// the first-login WelcomeModal renders) instead of the generic returnUrl.
 	let isNewRegistration = $state(false);
+
+	function showRegistration() {
+		initialSeedMode = 'generate';
+		showSeedPhrase = true;
+	}
+
+	function showSignIn() {
+		initialSeedMode = 'choose';
+		showSeedPhrase = true;
+	}
 
 	onMount(async () => {
 		if (typeof window === 'undefined') return;
@@ -211,11 +222,17 @@
 			{#if !showSeedPhrase}
 				<button
 					type="button"
-					onclick={() => (showSeedPhrase = true)}
+					onclick={showSignIn}
 					class={getAuthCtaClass('seed')}
 				>
 					Sign in with seed phrase instead
 				</button>
+				<p class="text-center text-sm text-neutral-500 pt-1">
+					New here?
+					<button type="button" onclick={showRegistration} class="text-primary-400 hover:text-primary-300 font-medium underline">
+						Create an account
+					</button>
+				</p>
 			{:else}
 				<div class="relative">
 					<div class="absolute inset-0 flex items-center">
@@ -226,11 +243,11 @@
 					</div>
 				</div>
 
-				<SeedPhraseStep
-					initialMode="choose"
-					showModeChoice={true}
-					onComplete={handleSeedComplete}
-				/>
+			<SeedPhraseStep
+				initialMode={initialSeedMode}
+				showModeChoice={true}
+				onComplete={handleSeedComplete}
+			/>
 			{/if}
 		</div>
 	{/if}
