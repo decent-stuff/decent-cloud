@@ -1,5 +1,16 @@
 # E2E Harness Overhaul + UX Fix Plan (2026-07-22)
 
+**STATUS: COMPLETE** — 33 commits, 197 tests passing, 0 networkidle, 0 flake.
+
+## Summary of Results
+- **Critical fixes shipped:** C1 (marketplace empty-state), C2 (profile crash), H1 (spending alerts)
+- **High fixes shipped:** H5 (login registration CTA). H3/H4/M3 triaged as false positives (stale build). H2 deferred (IC canister integration). H6 operational (provider keepalive).
+- **Medium fixes shipped:** M1 (dashboard role gating), M2 (marketplace label), M4 (email banner dismiss). M5 deferred (server-side VAT rules).
+- **E2E harness:** 0 `networkidle` (was 14+), 0 `registerNewAccount` in API tests (was 4), 4 DRY helpers extracted, 2 navigation-consolidation passes, invoices parallelism flake fixed.
+- **Coverage gaps closed:** 8 new spec files, 18 new tests covering verify-email, agents-pricing, become-provider, reputation-detail, account-subscription, provider-pages-smoke (8 routes), account-profile-edit, provider-requests-auth.
+- **UX improvements:** `/` keyboard shortcut for marketplace search (with visible hint), email banner per-session dismiss.
+- **Documentation:** OPEN_ISSUES.md + website/AGENTS.md updated with session results + best practices.
+
 ## Goal
 Radically improve the Web UI e2e test harness (run in seconds, cover ALL user
 flows) while fixing the functional/visual/UX issues found by live browser audit.
