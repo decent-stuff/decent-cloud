@@ -48,6 +48,18 @@ const WEB_URL = process.env.DC_WEB_URL || 'http://localhost:5173';
 const MOBILE_VIEWPORT = { width: 375, height: 812 };
 const BROWSER_ENGINE = (process.env.BROWSER_ENGINE || 'chromium').toLowerCase();
 
+/**
+ * Snapshot the page as a clean accessibility-tree string.
+ * `_snapshotForAI` returns a plain string in Playwright ≥1.49 and
+ * `{ full: string }` in older versions — normalize both, and strip the
+ * noisy `[ref=eN]` markers so the output is readable text.
+ */
+async function snapText(page, timeout) {
+	const raw = await page._snapshotForAI({ timeout });
+	const text = typeof raw === 'string' ? raw : raw.full;
+	return text.replace(/\s*\[ref=\w+\]/g, '');
+}
+
 const TOUR_ROUTES = [
   { path: '/', name: 'Landing', public: true },
   { path: '/dashboard/marketplace', name: 'Marketplace' },
@@ -188,8 +200,7 @@ async function main() {
 
     switch (cmd) {
       case 'snap': {
-        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
-        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        const clean = await snapText(page, customTimeout);
         process.stdout.write(clean + '\n');
         if (consoleLogs.length) {
           process.stdout.write('\n--- Console ---\n' + consoleLogs.join('\n') + '\n');
@@ -234,8 +245,7 @@ async function main() {
         }
         await page.click(selector);
         await page.waitForLoadState('networkidle', { timeout: customTimeout }).catch(() => {});
-        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
-        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        const clean = await snapText(page, customTimeout);
         process.stdout.write(clean + '\n');
         if (consoleLogs.length) {
           process.stdout.write('\n--- Console ---\n' + consoleLogs.join('\n') + '\n');
@@ -251,8 +261,7 @@ async function main() {
           process.exit(1);
         }
         await page.fill(selector, value);
-        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
-        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        const clean = await snapText(page, customTimeout);
         process.stdout.write(clean + '\n');
         break;
       }
@@ -264,8 +273,7 @@ async function main() {
           process.exit(1);
         }
         await page.waitForSelector(selector, { timeout: customTimeout });
-        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
-        const clean = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        const clean = await snapText(page, customTimeout);
         process.stdout.write(clean + '\n');
         break;
       }
@@ -365,9 +373,8 @@ async function runTour(browserType) {
         await page.waitForTimeout(300);
 
         const title = await page.title();
-        const snapshot = await page._snapshotForAI({ timeout: customTimeout });
         pageReport.title = title;
-        pageReport.snap = snapshot.full.replace(/\s*\[ref=\w+\]/g, '');
+        pageReport.snap = await snapText(page, customTimeout);
         pageReport.errors = pageConsole;
       } catch (e) {
         pageReport.error = e.message;
