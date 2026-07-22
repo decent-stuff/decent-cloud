@@ -1,14 +1,6 @@
 import { test as base } from '@playwright/test';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { setupConsoleLogging, type AuthCredentials } from './auth-helpers';
-import { seedAccountDirect, deleteAccountByUsername } from './seed-helpers';
-
-const execFileAsync = promisify(execFile);
-
-// In the dev container PostgreSQL is reachable at hostname `postgres`; on host
-// setups `localhost` is more common. Honour DATABASE_URL when provided.
-const DATABASE_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
+import { seedAccountDirect, deleteAccountByUsername, sql } from './seed-helpers';
 
 /**
  * Grant admin status to a user via a direct DB UPDATE.
@@ -16,38 +8,15 @@ const DATABASE_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:
  * Why not `api-cli admin grant` or the admin-status endpoint? Both cost a full
  * `cargo run` (multi-second) or require an already-admin auth token we cannot
  * bootstrap from an empty DB. A direct UPDATE is the cheapest correct path.
+ *
+ * Reuses the shared sql() helper from seed-helpers (same psql connection
+ * parsing) instead of reimplementing it locally.
  */
 async function grantAdminStatus(username: string): Promise<void> {
-	// Parse the connection string into psql args (avoids leaking it via `psql`'s
-	// argv in process listings and works regardless of `psql://://` quoting).
-	const url = new URL(DATABASE_URL);
-	const host = url.hostname || 'postgres';
-	const port = url.port || '5432';
-	const user = url.username || 'test';
-	const dbName = url.pathname.replace(/^\//, '') || 'test';
-	const password = url.password || 'test';
-
-	const { stdout } = await execFileAsync(
-		'psql',
-		[
-			'--host',
-			host,
-			'--port',
-			port,
-			'--username',
-			user,
-			'--dbname',
-			dbName,
-			'--no-psqlrc',
-			'--tuples-only',
-			'--no-align',
-			'--command',
-			`UPDATE accounts SET is_admin = TRUE WHERE LOWER(username) = LOWER('${username.replace(/'/g, "''")}') RETURNING username`,
-		],
-		{ env: { ...process.env, PGPASSWORD: password } },
+	const safeName = username.replace(/'/g, "''");
+	const returned = await sql(
+		`UPDATE accounts SET is_admin = TRUE WHERE LOWER(username) = LOWER('${safeName}') RETURNING username`,
 	);
-
-	const returned = stdout.trim();
 	if (!returned) {
 		throw new Error(`grantAdminStatus: no rows updated for username="${username}"`);
 	}
