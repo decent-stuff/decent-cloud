@@ -55,7 +55,8 @@ test.describe('dashboard banner stack (#438)', () => {
 		await expect(emailBanner).toBeVisible({ timeout: 10000 });
 
 		// Dismiss the seed-phrase backup banner via its aria-labelled close button.
-		await page.getByRole('button', { name: 'Dismiss' }).click();
+		// exact: true distinguishes from the email banner's "Dismiss reminder" button.
+		await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
 
 		// Seed banner is gone, but email banner survives.
 		await expect(page.getByText('Back up your seed phrase', { exact: false })).toHaveCount(0);

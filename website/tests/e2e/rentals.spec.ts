@@ -23,6 +23,10 @@ import {
  */
 
 test.describe('/dashboard/rentals', () => {
+	// Serial mode: tests seed/delete contracts for a shared pubkey (all testAccount
+	// users derive the same key). Parallel cleanup would nuke sibling tests' data.
+	test.describe.configure({ mode: 'serial' });
+
 	test('empty state: fresh user sees onboarding steps and marketplace CTAs', async ({ page, testAccount }) => {
 		await page.goto('/dashboard/rentals');
 
