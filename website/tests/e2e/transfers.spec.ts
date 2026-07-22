@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 import {
 	pubkeyHexFromSeed,
 	seedTransfer,
@@ -20,17 +20,6 @@ import {
  */
 
 test.describe('/dashboard/transfers', () => {
-	// Helper: wait for the transfers page to settle into authenticated state.
-	// The fast-auth fixture lands on /dashboard authenticated, but each
-	// page.goto() reloads the SPA and authStore.initialize() must re-run
-	// (it reads localStorage.seed_phrases and re-fetches the account from
-	// the API). Under parallel workers this can take a few seconds. Waiting
-	// for the "Logout" button to appear IS the auth-ready signal (same
-	// pattern the fast-auth fixture uses).
-	async function waitForAuthReady(page: import('@playwright/test').Page) {
-		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
-	}
-
 	// Each transfer row in the list has a direction-icon container (the round
 	// coloured div with arrow icon). Scope by that to avoid matching other
 	// dashboard chrome that uses the same card classes.

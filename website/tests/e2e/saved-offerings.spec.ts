@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
 
 /**
@@ -31,11 +31,6 @@ async function deleteSavedOfferingsForUser(requesterPubkeyHex: string): Promise<
 }
 
 test.describe('/dashboard/saved', () => {
-	// Helper: see transfers.spec.ts waitForAuthReady for rationale.
-	async function waitForAuthReady(page: import('@playwright/test').Page) {
-		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
-	}
-
 	test('empty state: fresh user sees empty message and Browse Marketplace CTA', async ({ page }) => {
 		await page.goto('/dashboard/saved');
 		await waitForAuthReady(page);

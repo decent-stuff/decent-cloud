@@ -1,10 +1,24 @@
 import { test as base } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import {
 	signIn,
 	setupConsoleLogging,
 	type AuthCredentials,
 } from './auth-helpers';
 import { seedAccountDirect, deleteAccountByUsername } from './seed-helpers';
+
+/**
+ * Wait for the dashboard to reach authenticated state. The fast-auth fixture
+ * injects the seed phrase via addInitScript, then the dashboard layout renders
+ * the "Logout" button once auth state propagates. Waiting on that button IS
+ * the auth-ready signal — shared by specs that page.goto() after fixture setup.
+ *
+ * Do NOT wait for networkidle: Vite HMR keeps the network busy and tanks
+ * parallel runs (see playwright.config.ts:28-33).
+ */
+export async function waitForAuthReady(page: Page): Promise<void> {
+	await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
+}
 
 // Worker-scoped credentials shared by all test variants.
 //

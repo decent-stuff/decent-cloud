@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 
 /**
  * E2E coverage for /dashboard/cloud (the cloud-accounts + cloud-resources leaves).
@@ -15,13 +15,6 @@ import { test, expect } from './fixtures/test-account';
  */
 
 test.describe('/dashboard/cloud', () => {
-	// Helper: each page.goto() reloads the SPA, so we have to wait for the
-	// auth store to re-initialise before asserting content. Same pattern as
-	// transfers.spec.ts — the Logout button is the auth-ready signal.
-	async function waitForAuthReady(page: import('@playwright/test').Page) {
-		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
-	}
-
 	test.describe('cloud accounts', () => {
 		test('authenticated visit renders the Cloud Accounts heading and Add Account button', async ({ page }) => {
 			await page.goto('/dashboard/cloud/accounts');

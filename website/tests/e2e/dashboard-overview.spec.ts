@@ -1,5 +1,4 @@
-import { test, expect } from './fixtures/test-account';
-import type { Page } from '@playwright/test';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 
 /**
  * E2E coverage for the /dashboard overview page (top-level dashboard index).
@@ -8,14 +7,6 @@ import type { Page } from '@playwright/test';
  * with zero offerings — its subtitle copy is therefore stable and safe to
  * assert against without seeding.
  */
-
-// Mirrors the helper in transfers.spec.ts: the test-account fixture injects
-// the seed phrase via addInitScript, then the dashboard layout renders the
-// "Logout" button once auth state propagates. Waiting on that button IS the
-// auth-ready signal.
-async function waitForAuthReady(page: Page) {
-	await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
-}
 
 test.describe('/dashboard overview', () => {
 	test('My Resources subtitle uses unambiguous self-test copy (audit #2)', async ({ page }) => {
