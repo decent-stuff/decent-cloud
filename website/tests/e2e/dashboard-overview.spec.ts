@@ -72,9 +72,10 @@ test.describe('/dashboard overview', () => {
 			expect(body.data).toHaveProperty(key);
 		}
 
-		// Give the page a beat to issue any straggler requests, then assert the
-		// old fan-out endpoints were never hit by the dashboard load.
-		await page.waitForTimeout(500);
+		// Wait for the dashboard to finish rendering (any follow-up requests
+		// from the old fan-out pattern would have been issued by now).
+		// Deterministic element wait replaces a fixed 500ms sleep.
+		await expect(page.locator('h2', { hasText: 'My Resources' })).toBeVisible({ timeout: 5000 });
 		expect(oldEndpoints, 'dashboard must not call the old per-section endpoints').toEqual([]);
 	});
 });
