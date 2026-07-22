@@ -33,4 +33,48 @@ test.describe('/dashboard overview', () => {
 		await expect(myResources).toContainText(/provision a test instance/i);
 		await expect(myResources).not.toContainText(/rent for free/i);
 	});
+
+	test('dashboard loads all sections via the single combined /provider/dashboard call', async ({
+		page,
+	}) => {
+		// The dashboard previously fanned out to 5 endpoints on every load. It
+		// now makes ONE authenticated call to /provider/dashboard. This test
+		// asserts (a) that combined call happens and returns all five sections,
+		// and (b) the old fan-out endpoints are NOT called from the dashboard.
+		const combinedResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/provider/dashboard') && resp.status() === 200,
+			{ timeout: 15000 },
+		);
+
+		// Track any call to the old per-section endpoints — there must be none.
+		const oldEndpoints: string[] = [];
+		page.on('request', (req) => {
+			const url = req.url();
+			if (
+				url.includes('/trust-metrics') ||
+				url.includes('/response-metrics') ||
+				url.includes('/health-summary') ||
+				url.includes('/provider/my-offerings') ||
+				url.includes('/users/') && url.includes('/activity')
+			) {
+				oldEndpoints.push(url);
+			}
+		});
+
+		await page.goto('/dashboard');
+		await waitForAuthReady(page);
+
+		const resp = await combinedResponse;
+		const body = await resp.json();
+		expect(body.success).toBe(true);
+		// All five dashboard sections must be present in the combined payload.
+		for (const key of ['trustMetrics', 'responseMetrics', 'healthSummary', 'offerings', 'activity']) {
+			expect(body.data).toHaveProperty(key);
+		}
+
+		// Give the page a beat to issue any straggler requests, then assert the
+		// old fan-out endpoints were never hit by the dashboard load.
+		await page.waitForTimeout(500);
+		expect(oldEndpoints, 'dashboard must not call the old per-section endpoints').toEqual([]);
+	});
 });

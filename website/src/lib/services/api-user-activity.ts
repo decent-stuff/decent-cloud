@@ -10,6 +10,33 @@ export interface UserActivity {
 	rentals_as_provider: Contract[];
 }
 
+/**
+ * Normalize pubkey fields and add `contractId` aliases on a raw activity
+ * payload (the shape returned verbatim by the API). Shared by the standalone
+ * /users/:pubkey/activity call and the combined /provider/dashboard call so the
+ * normalization lives in exactly one place.
+ */
+export function normalizeUserActivity(data: UserActivity): UserActivity {
+	return {
+		offerings_provided: data.offerings_provided.map((o: any) => ({
+			...o,
+			pubkey: normalizePubkey(o.pubkey)
+		})),
+		rentals_as_requester: data.rentals_as_requester.map((c: any) => ({
+			...c,
+			contractId: c.contract_id,
+			requester_pubkey: normalizePubkey(c.requester_pubkey),
+			provider_pubkey: normalizePubkey(c.provider_pubkey)
+		})),
+		rentals_as_provider: data.rentals_as_provider.map((c: any) => ({
+			...c,
+			contractId: c.contract_id,
+			requester_pubkey: normalizePubkey(c.requester_pubkey),
+			provider_pubkey: normalizePubkey(c.provider_pubkey)
+		}))
+	};
+}
+
 export async function getUserActivity(
 	pubkeyHex: string,
 	headers?: Record<string, string>
@@ -36,22 +63,5 @@ export async function getUserActivity(
 	}
 
 	// Normalize pubkey fields in all nested objects
-	return {
-		offerings_provided: payload.data.offerings_provided.map((o: any) => ({
-			...o,
-			pubkey: normalizePubkey(o.pubkey)
-		})),
-		rentals_as_requester: payload.data.rentals_as_requester.map((c: any) => ({
-			...c,
-			contractId: c.contract_id,
-			requester_pubkey: normalizePubkey(c.requester_pubkey),
-			provider_pubkey: normalizePubkey(c.provider_pubkey)
-		})),
-		rentals_as_provider: payload.data.rentals_as_provider.map((c: any) => ({
-			...c,
-			contractId: c.contract_id,
-			requester_pubkey: normalizePubkey(c.requester_pubkey),
-			provider_pubkey: normalizePubkey(c.provider_pubkey)
-		}))
-	};
+	return normalizeUserActivity(payload.data);
 }

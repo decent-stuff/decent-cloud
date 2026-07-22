@@ -7,8 +7,8 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey, formatContractPrice } from "$lib/utils/contract-format";
-	import { getProviderTrustMetrics, getProviderResponseMetrics, getProviderHealthSummary, getMyOfferings, getPendingProviderRequests, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
-	import { getUserActivity, type UserActivity } from "$lib/services/api-user-activity";
+	import { getProviderDashboard, getPendingProviderRequests, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
+	import { type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
 	import { detectUserRole, countActiveRentals, countExpiringSoon, countActiveRentalsAsProvider } from "$lib/utils/role-detection";
 	import TrustDashboard from "$lib/components/TrustDashboard.svelte";
@@ -100,64 +100,57 @@
 		return { thisMonth, lastMonth, trend, top3, projected, daysLeftInMonth };
 	});
 
-	async function loadTrustMetrics(publicKeyBytes: Uint8Array | null) {
-		if (!publicKeyBytes) {
+	async function loadDashboard(identity: IdentityInfo | null) {
+		// Single authenticated call replaces the previous 5-endpoint fan-out
+		// (trust/response/health metrics, my-offerings, activity). Each section
+		// is resolved independently server-side; a null section means that one
+		// source failed without blanking the rest.
+		if (!identity) {
 			trustMetrics = null;
 			responseMetrics = null;
 			healthSummary = null;
 			trustMetricsError = null;
+			myOfferings = [];
+			myOfferingsError = null;
+			pendingRequestsCount = 0;
+			activity = null;
 			return;
 		}
 
 		trustMetricsLoading = true;
-		trustMetricsError = null;
-		try {
-			const pubkeyHex = computePubkey(publicKeyBytes);
-			const [trustData, responseData, healthData] = await Promise.all([
-				getProviderTrustMetrics(publicKeyBytes),
-				getProviderResponseMetrics(pubkeyHex).catch(() => null),
-				getProviderHealthSummary(pubkeyHex).catch(() => null),
-			]);
-			trustMetrics = trustData;
-			responseMetrics = responseData;
-			healthSummary = healthData;
-		} catch (err) {
-			console.error('Failed to load trust metrics:', err);
-			trustMetrics = null;
-			responseMetrics = null;
-			healthSummary = null;
-			trustMetricsError = err instanceof Error ? err.message : 'Failed to load trust metrics';
-		} finally {
-			trustMetricsLoading = false;
-		}
-	}
-
-	async function loadMyOfferings(identity: IdentityInfo | null) {
-		if (!identity) {
-			myOfferings = [];
-			myOfferingsError = null;
-			pendingRequestsCount = 0;
-			return;
-		}
-
 		myOfferingsLoading = true;
+		activityLoading = true;
+		trustMetricsError = null;
 		myOfferingsError = null;
 		try {
-			const { headers } = await signRequest(identity.identity, 'GET', '/api/v1/provider/my-offerings', '');
-			const offerings = await getMyOfferings(headers);
-			myOfferings = offerings;
-			if (offerings.length > 0) {
+			const { headers } = await signRequest(identity.identity, 'GET', '/api/v1/provider/dashboard', '');
+			const dash = await getProviderDashboard(headers);
+
+			trustMetrics = dash.trustMetrics ?? null;
+			responseMetrics = dash.responseMetrics ?? null;
+			healthSummary = dash.healthSummary ?? null;
+			myOfferings = dash.offerings ?? [];
+			activity = dash.activity ?? null;
+
+			if (myOfferings.length > 0) {
 				loadPendingRequestsCount(identity);
 			}
 		} catch (err) {
-			console.error('Failed to load my offerings:', err);
+			console.error('Failed to load dashboard:', err);
+			trustMetrics = null;
+			responseMetrics = null;
+			healthSummary = null;
 			myOfferings = [];
-			// Don't show error if user simply has no offerings
+			activity = null;
+			trustMetricsError = err instanceof Error ? err.message : 'Failed to load dashboard';
+			// Don't show an offerings error if the user simply has no offerings.
 			if (err instanceof Error && !err.message.includes('404')) {
 				myOfferingsError = err.message;
 			}
 		} finally {
+			trustMetricsLoading = false;
 			myOfferingsLoading = false;
+			activityLoading = false;
 		}
 	}
 
@@ -168,24 +161,6 @@
 			pendingRequestsCount = requests.length;
 		} catch {
 			pendingRequestsCount = 0;
-		}
-	}
-
-	async function loadActivity(identity: IdentityInfo | null) {
-		if (!identity) {
-			activity = null;
-			return;
-		}
-
-		activityLoading = true;
-		try {
-			const pubkeyHex = computePubkey(identity.publicKeyBytes!);
-			const { headers } = await signRequest(identity.identity, 'GET', `/api/v1/users/${pubkeyHex}/activity`, '');
-			activity = await getUserActivity(pubkeyHex, headers);
-		} catch {
-			activity = null;
-		} finally {
-			activityLoading = false;
 		}
 	}
 
@@ -217,9 +192,7 @@
 		});
 		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
-			loadTrustMetrics(value?.publicKeyBytes ?? null);
-			loadMyOfferings(value);
-			loadActivity(value);
+			loadDashboard(value);
 		});
 
 		dashboardStore.load();

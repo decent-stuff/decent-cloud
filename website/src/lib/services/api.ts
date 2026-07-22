@@ -18,6 +18,8 @@ import type { ContractFeedback } from '$lib/types/generated/ContractFeedback';
 import type { ContractEvent } from '$lib/types/generated/ContractEvent';
 import type { SlaUptimeConfig } from '$lib/types/generated/SlaUptimeConfig';
 import { bytesToHex as hexEncode, normalizePubkey } from '$lib/utils/identity';
+import type { UserActivity } from './api-user-activity';
+import { normalizeUserActivity } from './api-user-activity';
 
 // Utility type to convert null to undefined (Rust Option -> TS optional)
 type NullToUndefined<T> = T extends null ? undefined : T;
@@ -564,6 +566,54 @@ export async function getMyOfferings(headers: SignedRequestHeaders): Promise<Off
 		...o,
 		pubkey: normalizePubkey(o.pubkey)
 	}));
+}
+
+/**
+ * Combined provider dashboard payload — all five dashboard sections in one
+ * authenticated call. Each section is independently resolved server-side: a
+ * failing query yields `null` for that section so one slow source never blanks
+ * the page. `offerings` and `activity` are normalized client-side exactly as
+ * getMyOfferings / getUserActivity do, so the page consumes identical shapes.
+ */
+export interface ProviderDashboardResponse {
+	trustMetrics: ProviderTrustMetrics | null;
+	responseMetrics: ProviderResponseMetrics | null;
+	healthSummary: ProviderHealthSummary | null;
+	offerings: Offering[] | null;
+	activity: UserActivity | null;
+}
+
+/**
+ * Fetch the combined provider dashboard in a single authenticated call.
+ * Replaces the 5-endpoint fan-out (trust/response/health metrics, my-offerings,
+ * activity) the dashboard page used to make on every load.
+ */
+export async function getProviderDashboard(
+	headers: SignedRequestHeaders
+): Promise<ProviderDashboardResponse> {
+	const url = `${API_BASE_URL}/api/v1/provider/dashboard`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch provider dashboard: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ProviderDashboardResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch provider dashboard');
+	}
+
+	const d = payload.data;
+	return {
+		trustMetrics: d.trustMetrics ?? null,
+		responseMetrics: d.responseMetrics ?? null,
+		healthSummary: d.healthSummary ?? null,
+		// Normalize offering pubkeys, matching getMyOfferings.
+		offerings: (d.offerings ?? []).map((o) => ({ ...o, pubkey: normalizePubkey(o.pubkey) })),
+		// Normalize activity pubkeys + contractId aliases, matching getUserActivity.
+		activity: d.activity ? normalizeUserActivity(d.activity) : null
+	};
 }
 
 export async function exportProviderOfferingsCSV(

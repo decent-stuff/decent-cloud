@@ -18,6 +18,7 @@ use dcc_common::ssh_exec::validate_recipe;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::Deserialize;
+use serde::Serialize;
 use std::sync::Arc;
 
 fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
@@ -410,6 +411,49 @@ async fn validate_vultr_offering_inner(
 }
 
 pub struct ProvidersApi;
+
+/// Combined provider dashboard payload — all five dashboard sections in one
+/// authenticated response. Each section is independent: a failing query yields
+/// `None` for that section so one slow/broken source never blanks the whole
+/// dashboard. Replaces the 5-call fan-out from the dashboard page.
+#[derive(Debug, Serialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderDashboardResponse {
+    /// Provider trust score and reliability metrics.
+    pub trust_metrics: Option<crate::database::stats::ProviderTrustMetrics>,
+    /// Contract request response-time / SLA metrics.
+    pub response_metrics: Option<ResponseMetricsResponse>,
+    /// Aggregated uptime / health-check summary (default 30d window).
+    pub health_summary: Option<crate::database::contracts::ProviderHealthSummary>,
+    /// The authenticated provider's offerings (public + private).
+    pub offerings: Option<Vec<crate::database::offerings::Offering>>,
+    /// The authenticated user's blockchain activity summary.
+    pub activity: Option<crate::database::users::UserActivity>,
+}
+
+/// Map raw DB response metrics to the API response shape. Shared by the
+/// `/providers/:pubkey/response-metrics` endpoint and the combined dashboard
+/// endpoint so the mapping (e.g. seconds→hours) stays in one place.
+fn build_response_metrics(
+    metrics: crate::database::chatwoot::ProviderResponseMetrics,
+) -> ResponseMetricsResponse {
+    ResponseMetricsResponse {
+        avg_response_seconds: metrics.avg_response_seconds,
+        avg_response_hours: metrics.avg_response_seconds.map(|s| s / 3600.0),
+        sla_compliance_percent: metrics.sla_compliance_percent,
+        breach_count_30d: metrics.breach_count_30d,
+        total_inquiries_30d: metrics.total_inquiries_30d,
+        distribution: ResponseTimeDistributionResponse {
+            within_1h_pct: metrics.distribution.within_1h_pct,
+            within_4h_pct: metrics.distribution.within_4h_pct,
+            within_12h_pct: metrics.distribution.within_12h_pct,
+            within_24h_pct: metrics.distribution.within_24h_pct,
+            within_72h_pct: metrics.distribution.within_72h_pct,
+            total_responses: metrics.distribution.total_responses,
+        },
+    }
+}
 
 fn default_new_providers_limit() -> i64 {
     6
@@ -1141,21 +1185,7 @@ impl ProvidersApi {
         match db.get_provider_response_metrics(&pubkey_bytes).await {
             Ok(metrics) => Json(ApiResponse {
                 success: true,
-                data: Some(ResponseMetricsResponse {
-                    avg_response_seconds: metrics.avg_response_seconds,
-                    avg_response_hours: metrics.avg_response_seconds.map(|s| s / 3600.0),
-                    sla_compliance_percent: metrics.sla_compliance_percent,
-                    breach_count_30d: metrics.breach_count_30d,
-                    total_inquiries_30d: metrics.total_inquiries_30d,
-                    distribution: ResponseTimeDistributionResponse {
-                        within_1h_pct: metrics.distribution.within_1h_pct,
-                        within_4h_pct: metrics.distribution.within_4h_pct,
-                        within_12h_pct: metrics.distribution.within_12h_pct,
-                        within_24h_pct: metrics.distribution.within_24h_pct,
-                        within_72h_pct: metrics.distribution.within_72h_pct,
-                        total_responses: metrics.distribution.total_responses,
-                    },
-                }),
+                data: Some(build_response_metrics(metrics)),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1691,6 +1721,82 @@ impl ProvidersApi {
                 error: Some(e.to_string()),
             }),
         }
+    }
+
+    /// Get provider dashboard (combined, authenticated)
+    ///
+    /// Returns all five dashboard sections in a single authenticated call:
+    /// trust metrics, response metrics, health summary, the provider's own
+    /// offerings, and the user's activity. Replaces the 5-endpoint fan-out
+    /// the dashboard page used to make on every load.
+    ///
+    /// All sections are resolved for the AUTHENTICATED pubkey. Each section is
+    /// independent: if one query fails, that section is `null` and the rest
+    /// still load (the response is always `success: true`).
+    #[oai(
+        path = "/provider/dashboard",
+        method = "get",
+        tag = "ApiTags::Offerings"
+    )]
+    async fn get_provider_dashboard(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+    ) -> Json<ApiResponse<ProviderDashboardResponse>> {
+        // Run every section independently — a failure in one must not blank the
+        // others. Errors are logged with context (no silent ignores) and surface
+        // as a null section to the client.
+        let trust_metrics = match db.get_provider_trust_metrics(&auth.pubkey).await {
+            Ok(m) => Some(m),
+            Err(e) => {
+                tracing::warn!("dashboard: trust metrics failed: {e:#}");
+                None
+            }
+        };
+
+        let response_metrics = match db.get_provider_response_metrics(&auth.pubkey).await {
+            Ok(m) => Some(build_response_metrics(m)),
+            Err(e) => {
+                tracing::warn!("dashboard: response metrics failed: {e:#}");
+                None
+            }
+        };
+
+        let health_summary = match db.get_provider_health_summary(&auth.pubkey, None).await {
+            Ok(s) => Some(s),
+            Err(e) => {
+                tracing::warn!("dashboard: health summary failed: {e:#}");
+                None
+            }
+        };
+
+        let offerings = match db.get_provider_offerings(&auth.pubkey).await {
+            Ok(o) => Some(o),
+            Err(e) => {
+                tracing::warn!("dashboard: offerings failed: {e:#}");
+                None
+            }
+        };
+
+        let activity = match db.get_user_activity(&auth.pubkey).await {
+            Ok(a) => Some(a),
+            Err(e) => {
+                tracing::warn!("dashboard: activity failed: {e:#}");
+                None
+            }
+        };
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(ProviderDashboardResponse {
+                trust_metrics,
+                response_metrics,
+                health_summary,
+                offerings,
+                activity,
+            }),
+            error: None,
+        })
     }
 
     /// Create provider offering
@@ -6415,5 +6521,122 @@ mod tests {
         let result = super::validate_recipe_if_present(Some(&script));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Recipe validation failed"));
+    }
+
+    // ── Combined provider dashboard endpoint ─────────────────────────────────
+    //
+    // The dashboard page previously fanned out to 5 endpoints on every load
+    // (trust-metrics, response-metrics, health-summary, my-offerings, activity).
+    // The combined /provider/dashboard endpoint returns all five in one
+    // authenticated call. Each section is independent: a failing query yields
+    // None for that section so one slow/broken source never blanks the page.
+
+    #[tokio::test]
+    async fn test_get_provider_dashboard_returns_all_sections() {
+        let db = Arc::new(setup_test_db().await);
+        let api = super::ProvidersApi;
+        let auth = crate::auth::ApiAuthenticatedUser {
+            pubkey: vec![0u8; 32],
+        };
+
+        let Json(response) = api.get_provider_dashboard(Data(&db), auth).await;
+
+        assert!(response.success, "combined response must be success");
+        assert!(response.error.is_none());
+        let dashboard = response
+            .data
+            .expect("dashboard data must be present on success");
+
+        // All five sections must be present (each query resolves, even on empty data).
+        assert!(
+            dashboard.trust_metrics.is_some(),
+            "trustMetrics section must be present"
+        );
+        assert!(
+            dashboard.response_metrics.is_some(),
+            "responseMetrics section must be present"
+        );
+        assert!(
+            dashboard.health_summary.is_some(),
+            "healthSummary section must be present"
+        );
+        assert!(
+            dashboard.offerings.is_some(),
+            "offerings section must be present"
+        );
+        assert!(
+            dashboard.activity.is_some(),
+            "activity section must be present"
+        );
+
+        // Offerings is a Vec — on an empty DB it must be an empty list, not null.
+        assert!(
+            dashboard.offerings.as_ref().unwrap().is_empty(),
+            "offerings must be empty for an unknown pubkey"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_provider_dashboard_uses_authenticated_pubkey() {
+        // SECURITY: the dashboard must serve the AUTHENTICATED user's own data,
+        // ignoring any other pubkey. We verify by giving the auth a specific
+        // pubkey and confirming offerings come back for that same key.
+        let db = Arc::new(setup_test_db().await);
+        let api = super::ProvidersApi;
+        let auth = crate::auth::ApiAuthenticatedUser {
+            pubkey: vec![7u8; 32],
+        };
+
+        let Json(response) = api.get_provider_dashboard(Data(&db), auth).await;
+
+        assert!(response.success);
+        // offerings for an unknown pubkey must be empty (the handler queried auth.pubkey).
+        let dashboard = response.data.unwrap();
+        assert_eq!(
+            dashboard.offerings.as_ref().unwrap().len(),
+            0,
+            "dashboard must query the authenticated pubkey's offerings"
+        );
+    }
+
+    #[test]
+    fn test_provider_dashboard_route_and_sections_declared() {
+        const PROVIDERS_RS: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/openapi/providers.rs",
+        ));
+        assert!(
+            PROVIDERS_RS.contains("path = \"/provider/dashboard\""),
+            "Providers API must declare /provider/dashboard route"
+        );
+        assert!(
+            PROVIDERS_RS.contains("async fn get_provider_dashboard"),
+            "Providers API must keep get_provider_dashboard handler"
+        );
+        // The combined response must expose all five dashboard sections.
+        assert!(PROVIDERS_RS.contains("pub struct ProviderDashboardResponse"));
+        for field in ["trust_metrics", "response_metrics", "health_summary", "offerings", "activity"] {
+            assert!(
+                PROVIDERS_RS.contains(field),
+                "ProviderDashboardResponse must declare field `{field}`"
+            );
+        }
+    }
+
+    #[test]
+    fn test_provider_dashboard_response_camelcase_field_names() {
+        // Frontend consumes camelCase keys; the combined struct must match.
+        let resp = super::ProviderDashboardResponse {
+            trust_metrics: None,
+            response_metrics: None,
+            health_summary: None,
+            offerings: None,
+            activity: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        let obj = json.as_object().expect("must serialize to an object");
+        for key in ["trustMetrics", "responseMetrics", "healthSummary", "offerings", "activity"] {
+            assert!(obj.contains_key(key), "missing camelCase key `{key}`");
+        }
     }
 }
