@@ -249,3 +249,8 @@ export async function deleteContractsForRequester(requesterPubkeyHex: string): P
 export async function deleteTransfersForAccount(account: string): Promise<void> {
 	await sql(`DELETE FROM token_transfers WHERE from_account = '${account.replace(/'/g, "''")}' OR to_account = '${account.replace(/'/g, "''")}'`);
 }
+
+/** Remove all saved offerings for a user (cleanup helper shared by specs). */
+export async function deleteSavedOfferingsForUser(userPubkeyHex: string): Promise<void> {
+	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${userPubkeyHex}', 'hex')`);
+}

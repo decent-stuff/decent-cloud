@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures/test-account';
-import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
+import { pubkeyHexFromSeed, deleteSavedOfferingsForUser } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the offering-detail save (bookmark) flow.
@@ -9,10 +9,6 @@ import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
  * it with a single click on the visible bookmark toggle (previously the only
  * path was 'More options' → 'Save', a 2-click flow).
  */
-
-async function deleteSavedOfferingsForUser(requesterPubkeyHex: string): Promise<void> {
-	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${requesterPubkeyHex}', 'hex')`);
-}
 
 test.describe('Offering detail save flow', () => {
 	test('bookmark toggle on offering detail page saves in a single click', async ({ page, testAccount }) => {

@@ -1,5 +1,5 @@
 import { test, expect, waitForAuthReady } from './fixtures/test-account';
-import { pubkeyHexFromSeed, sql, nowNs } from './fixtures/seed-helpers';
+import { pubkeyHexFromSeed, sql, nowNs, deleteSavedOfferingsForUser } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for /dashboard/saved.
@@ -23,11 +23,6 @@ async function seedSavedOffering(requesterPubkeyHex: string, offeringId: number)
 		VALUES (decode('${requesterPubkeyHex}', 'hex'), ${offeringId}, ${nowNs().toString()})
 		ON CONFLICT (user_pubkey, offering_id) DO NOTHING
 	`);
-}
-
-/** Remove all saved offerings for a user (cleanup). */
-async function deleteSavedOfferingsForUser(requesterPubkeyHex: string): Promise<void> {
-	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${requesterPubkeyHex}', 'hex')`);
 }
 
 test.describe('/dashboard/saved', () => {
