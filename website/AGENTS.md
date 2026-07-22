@@ -57,6 +57,26 @@ E2E_AUTO_SERVER=1 npm run test:e2e  # one-shot mode (spawns + tears down its own
 - `first_login_onboarding_completed` is also pre-set in `sessionStorage` at the context level so
   the WelcomeModal doesn't intercept clicks on underlying dashboard chrome; tests that exercise
   the WelcomeModal remove that key via a page-level `addInitScript` (page-level runs after context-level).
-- Dev iteration target: smoke 4 tests in ~20 s against a warm stack; full suite ~135 tests in ~2.7 m.
+- Dev iteration target: smoke 4 tests in ~20 s against a warm stack; full suite ~200 tests in ~2.9 m.
 - See `repo/AGENTS.md` → "Playwright E2E (repo-local)" for the full warm-stack workflow and the
   `RATE_LIMIT_ENABLED` note (parallel workers need it disabled to avoid mass 429s).
+
+## E2E BEST PRACTICES (learned the hard way)
+
+- **Never use `waitForLoadState('networkidle')`** — Vite HMR keeps the network busy, causing
+  workers to contend on network settle. Use deterministic waits: `waitForResponse`, `waitForURL`,
+  or element visibility. Zero `networkidle` calls in the suite as of 2026-07-22.
+- **Never use `registerNewAccount()` in API-only tests** — it runs a 10-15s UI registration flow.
+  Use `seedAccountDirect()` (DB-direct INSERT) or the `testAccount` fixture instead.
+- **Serial mode for shared-pubkey DB tests**: all `testAccount` users share the same pubkey.
+  Specs that seed/delete DB rows for that pubkey (e.g. invoices.spec.ts) must use
+  `test.describe.configure({ mode: 'serial' })` to avoid parallel cleanup nuking other tests' data.
+- **SvelteKit hydration**: on SSR'd routes (e.g. `/login`), SSR renders the UI immediately but
+  client-side event handlers attach only after hydration. `expect(button).toBeVisible()` passes
+  on SSR output, but `.click()` is a no-op if hydration hasn't completed. For routes where you
+  need to interact immediately after `goto`, either wait for a specific client-rendered element
+  or use `waitForResponse` on an API call the page makes.
+- **Shared helpers** (DRY): `waitForAuthReady(page)` in test-account.ts, `seedOffering()` /
+  `deleteSavedOfferingsForUser()` / `sql()` in seed-helpers.ts. Reuse, don't copy-paste.
+- **Mock policy**: only Stripe SDK and outbound external HTTP may be mocked. Never mock
+  first-party API code — if you need error-path injection, do it DB-side or document an exception.
