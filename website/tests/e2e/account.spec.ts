@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { registerNewAccount, setupConsoleLogging } from './fixtures/auth-helpers';
+import { setupConsoleLogging } from './fixtures/auth-helpers';
+import { seedAccountDirect } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the /dashboard/account page's error-recovery path.
@@ -29,12 +30,11 @@ test.describe('/dashboard/account error recovery', () => {
 		// with no recovery. The fix adds an explicit error card with Retry +
 		// Logout so the user isn't stuck looking at a half-rendered page.
 
-		// Register a real account first so the seed phrase is valid.
-		const setupContext = await browser.newContext();
-		const setupPage = await setupContext.newPage();
-		setupConsoleLogging(setupPage);
-		const credentials = await registerNewAccount(setupPage);
-		await setupContext.close();
+		// Create a real account directly in the DB (instant) so the seed
+		// phrase is valid when injected into localStorage below. Previously
+		// this used registerNewAccount (~10-15s UI registration flow) just to
+		// obtain credentials for a second browser context.
+		const credentials = await seedAccountDirect();
 
 		// Fresh context. Pre-seed the seed phrase + dismiss the WelcomeModal
 		// exactly like the fast-auth fixture does.
