@@ -1125,7 +1125,7 @@
 					<Icon name="shield" size={14} /> Most Trusted
 				</button>
 				<div class="w-px h-5 bg-neutral-700 mx-1"></div>
-				<span class="text-neutral-600 text-xs shrink-0">Category:</span>
+				<span class="text-neutral-600 text-xs shrink-0">Quick filters:</span>
 				<button
 					onclick={() => setPreset("gpu")}
 					class={buildQuickPillClass('preset', selectedPreset === 'gpu', 'purple')}
