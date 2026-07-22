@@ -87,11 +87,16 @@ test.describe('Anonymous Browsing', () => {
 	});
 
 	test('should hide demo offerings by default on marketplace', async ({ page }) => {
+		// Wait for the offerings API call (client-side fetch implies SvelteKit
+		// hydration is complete — replaces networkidle, which tanks parallel
+		// runs under Vite HMR — see playwright.config.ts:28-33).
+		const offeringsResponse = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings') && resp.status() === 200,
+			{ timeout: 15000 },
+		);
 		await page.goto('/dashboard/marketplace');
-
-		// Wait for offerings to load
+		await offeringsResponse;
 		await page.waitForSelector('h1:has-text("Marketplace")', { timeout: 10000 });
-		await page.waitForLoadState('networkidle');
 
 		// The "Show demo offerings" checkbox lives inside the collapsible
 		// "More filters" section; expand it so the checkbox is in the DOM.
@@ -102,10 +107,6 @@ test.describe('Anonymous Browsing', () => {
 		const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
 		await expect(demoCheckbox).not.toBeChecked();
 
-		// Get the offering count text
-		const countLocator = page.locator('text=/\\d+ offerings? found/');
-		await expect(countLocator).toBeVisible({ timeout: 10000 });
-
 		// Check the "Show demo offerings" checkbox
 		await demoCheckbox.check();
 
@@ -115,8 +116,13 @@ test.describe('Anonymous Browsing', () => {
 		// Navigating with both demo and offline flags confirms demo offerings
 		// become visible once the offline filter is also relaxed. The dev DB
 		// ships only offline demo offerings, so we need both to observe them.
+		const countLocator = page.locator('text=/\\d+ offerings? found/');
+		const offeringsResponse2 = page.waitForResponse(
+			(resp) => resp.url().includes('/api/v1/offerings') && resp.status() === 200,
+			{ timeout: 15000 },
+		);
 		await page.goto('/dashboard/marketplace?demo=1&offline=1');
-		await page.waitForLoadState('networkidle');
+		await offeringsResponse2;
 		await expect(countLocator).toBeVisible({ timeout: 10000 });
 		const demoCountText = await countLocator.textContent();
 		const demoCount = parseInt(demoCountText?.match(/(\d+)/)?.[1] || '0');
@@ -150,13 +156,19 @@ test.describe('Anonymous Browsing', () => {
 
 	test('should navigate to /login with returnUrl when clicking button from banner', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
+		await page.waitForSelector('h1:has-text("Marketplace")', { timeout: 10000 });
 
 		// Click the banner Sign In button (the desktop one in the auth banner,
-		// not the mobile-only fixed button).
+		// not the mobile-only fixed button). The button's onclick needs
+		// SvelteKit hydration — click-and-retry + waitForURL instead of
+		// networkidle (which tanks parallel runs under Vite HMR).
 		const bannerSignIn = page.locator('button:has-text("Sign In")').nth(1);
 		await expect(bannerSignIn).toBeVisible();
-		await bannerSignIn.click();
+		for (let attempt = 0; attempt < 10; attempt++) {
+			if (page.url().includes('/login')) break;
+			await bannerSignIn.click({ timeout: 5000 }).catch(() => {});
+			await page.waitForURL(/\/login/, { timeout: 1000 }).catch(() => {});
+		}
 
 		// Should navigate to /login with returnUrl parameter
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Fmarketplace');
