@@ -129,6 +129,28 @@ export async function registerNewAccount(
 }
 
 /**
+ * On the /login page, click "Sign in with seed phrase instead" and wait for
+ * the "Import Existing" option to appear.
+ *
+ * The button is SSR-rendered (visible immediately) but its onclick handler
+ * isn't bound until SvelteKit hydrates. Previously this waited for
+ * `networkidle`, but Vite HMR keeps the network busy and that tanks parallel
+ * runs (see playwright.config.ts:28-33). Click-and-retry instead: if the click
+ * landed before hydration (no-op), "Import Existing" won't appear — so retry.
+ * On a warm stack the first click always lands post-hydration.
+ */
+export async function revealSeedPhraseOptions(page: Page): Promise<void> {
+	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
+	const importButton = page.locator('button:has-text("Import Existing")');
+	for (let attempt = 0; attempt < 20; attempt++) {
+		await seedPhraseButton.click({ timeout: 5000 }).catch(() => {});
+		if (await importButton.isVisible().catch(() => false)) break;
+		await page.waitForTimeout(100);
+	}
+	await expect(importButton).toBeVisible({ timeout: 10000 });
+}
+
+/**
  * Sign in with existing credentials
  */
 export async function signIn(
@@ -138,20 +160,12 @@ export async function signIn(
 	// Navigate to login page
 	await page.goto('/login');
 
-	// Wait for page to be fully hydrated (see registerNewAccount for rationale
-	// — the SSR-rendered button is visible before its onclick is bound).
-	await page.waitForLoadState('networkidle');
-
-	// Click "Sign in with seed phrase instead" to reveal seed phrase options
-	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
-	await expect(seedPhraseButton).toBeVisible({ timeout: 10000 });
-	await seedPhraseButton.click();
-
-	// Wait for seed phrase choice to appear and be interactive
-	const importButton = page.locator('button:has-text("Import Existing")');
-	await expect(importButton).toBeVisible({ timeout: 10000 });
+	// Reveal seed phrase options (click-and-retry instead of networkidle —
+	// see revealSeedPhraseOptions for rationale).
+	await revealSeedPhraseOptions(page);
 
 	// Click "Import Existing"
+	const importButton = page.locator('button:has-text("Import Existing")');
 	await importButton.click();
 
 	// Wait for seed phrase textarea

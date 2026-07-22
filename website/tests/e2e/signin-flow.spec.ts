@@ -1,7 +1,7 @@
 import { testLoggedOut as test, expect } from './fixtures/test-account';
 import {
-	registerNewAccount,
-	signOut,
+	signIn,
+	revealSeedPhraseOptions,
 	setupConsoleLogging,
 } from './fixtures/auth-helpers';
 
@@ -24,18 +24,17 @@ test.describe('Sign-In Flow', () => {
 		page,
 		testAccountLoggedOut,
 	}) => {
-		// Step 1: Navigate to login page
+		// Navigate to login and reveal seed phrase options. revealSeedPhraseOptions
+		// uses click-and-retry instead of networkidle (which tanks parallel runs
+		// under Vite HMR — see playwright.config.ts:28-33).
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		// Reveal seed phrase options (hidden behind "Sign in with seed phrase instead")
-		await page.click('button:has-text("Sign in with seed phrase instead")');
-		const importButton = page.locator('button:has-text("Import Existing")');
-		await expect(importButton).toBeVisible();
+		await revealSeedPhraseOptions(page);
 
-		// Step 2: Click "Import Existing"
+		// Click "Import Existing"
+		const importButton = page.locator('button:has-text("Import Existing")');
 		await importButton.click();
 
-		// Step 3: Enter seed phrase
+		// Enter seed phrase
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await expect(seedInput).toBeVisible();
 		await seedInput.fill(testAccountLoggedOut.seedPhrase);
@@ -45,7 +44,7 @@ test.describe('Sign-In Flow', () => {
 		await expect(continueBtn).toBeEnabled();
 		await continueBtn.click();
 
-		// Step 4: Should auto-detect account and show success
+		// Should auto-detect account and show success
 		await expect(
 			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 10000 });
@@ -55,10 +54,10 @@ test.describe('Sign-In Flow', () => {
 			page.locator(`text=@${testAccountLoggedOut.username}`),
 		).toBeVisible();
 
-		// Step 5: Go to dashboard
+		// Go to dashboard
 		await page.click('button:has-text("Go to Dashboard")');
 
-		// Step 6: Verify dashboard access
+		// Verify dashboard access
 		await expect(page).toHaveURL(/\/dashboard/);
 
 		// Authenticated state is confirmed by the presence of the Logout button
@@ -70,8 +69,7 @@ test.describe('Sign-In Flow', () => {
 
 	test('should reject invalid seed phrase', async ({ page }) => {
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
@@ -92,25 +90,8 @@ test.describe('Sign-In Flow', () => {
 	});
 
 	test('should maintain session after page refresh', async ({ page, testAccountLoggedOut }) => {
-		// Sign in
-		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
-		await page.locator('button:has-text("Import Existing")').click();
-
-		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
-		await seedInput.fill(testAccountLoggedOut.seedPhrase);
-		await page.click('button:has-text("Continue")');
-
-		await expect(
-			page.locator('text=Welcome to Decent Cloud'),
-		).toBeVisible({ timeout: 10000 });
-		await page.click('button:has-text("Go to Dashboard")');
-
-		// Verify signed in
-		await expect(page).toHaveURL(/\/dashboard/);
-		// Authenticated state is confirmed by the presence of the Logout button
-		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
+		// Sign in (uses the shared helper: fewer clicks + no networkidle)
+		await signIn(page, testAccountLoggedOut);
 
 		// Refresh page
 		await page.reload();
@@ -121,23 +102,8 @@ test.describe('Sign-In Flow', () => {
 	});
 
 	test('should sign out successfully', async ({ page, testAccountLoggedOut }) => {
-		// Sign in first
-		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
-		await page.locator('button:has-text("Import Existing")').click();
-
-		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
-		await seedInput.fill(testAccountLoggedOut.seedPhrase);
-		await page.click('button:has-text("Continue")');
-
-		await expect(
-			page.locator('text=Welcome to Decent Cloud'),
-		).toBeVisible({ timeout: 10000 });
-		await page.click('button:has-text("Go to Dashboard")');
-
-		// Wait for dashboard
-		await expect(page).toHaveURL(/\/dashboard/);
+		// Sign in first (shared helper)
+		await signIn(page, testAccountLoggedOut);
 
 		// Click logout
 		await page.click('button:has-text("Logout")');
@@ -153,21 +119,18 @@ test.describe('Sign-In Flow', () => {
 	});
 
 	test('should auto-detect account from seed phrase', async ({ page, testAccountLoggedOut }) => {
-		// Step 1: Navigate to login
+		// Navigate to login and reveal seed phrase options
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-
-		// Step 2: Click "Import Existing"
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Import Existing")').click();
 
-		// Step 3: Enter seed phrase
+		// Enter seed phrase
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
 		await seedInput.fill(testAccountLoggedOut.seedPhrase);
 		await page.click('button:has-text("Continue")');
 
-		// Step 4: Should show "Detecting Account" briefly then auto-sign in
-		// The account detection step may be very fast, so we wait for success
+		// Should show "Detecting Account" briefly then auto-sign in.
+		// The account detection step may be very fast, so we wait for success.
 		await expect(
 			page.locator('text=Welcome to Decent Cloud'),
 		).toBeVisible({ timeout: 15000 });
@@ -177,7 +140,7 @@ test.describe('Sign-In Flow', () => {
 			page.locator(`text=@${testAccountLoggedOut.username}`),
 		).toBeVisible();
 
-		// Step 5: Go to dashboard
+		// Go to dashboard
 		await page.click('button:has-text("Go to Dashboard")');
 		await expect(page).toHaveURL(/\/dashboard/);
 	});
@@ -185,10 +148,7 @@ test.describe('Sign-In Flow', () => {
 	test('should redirect to returnUrl after successful sign-in', async ({ page, testAccountLoggedOut }) => {
 		// Navigate to login with returnUrl parameter
 		await page.goto('/login?returnUrl=%2Fdashboard%2Frentals');
-		await page.waitForLoadState('networkidle');
-
-		// Complete sign-in flow
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Import Existing")').click();
 
 		// Enter seed phrase
@@ -211,23 +171,30 @@ test.describe('Sign-In Flow', () => {
 	test('should redirect to returnUrl when accessing protected page directly', async ({ page, testAccountLoggedOut }) => {
 		// Try to access protected page directly while logged out
 		await page.goto('/dashboard/account');
-		await page.waitForLoadState('networkidle');
 
-		// Should stay on page with login prompt (not redirect)
+		// Should stay on page with login prompt (not redirect).
+		// The "Login Required" text is SSR-rendered, so waiting for it is
+		// deterministic (no networkidle needed).
 		await expect(page).toHaveURL('/dashboard/account');
 		await expect(page.getByText('Login Required')).toBeVisible();
 
-		// Click the login button in main content
+		// Click the login button in main content. Like the seed-phrase CTA,
+		// it's SSR-rendered but its onclick isn't bound until SvelteKit
+		// hydrates — click-and-retry instead of networkidle. Check URL first
+		// so we never click during an in-progress navigation.
 		const loginButton = page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i });
 		await expect(loginButton).toBeVisible();
-		await loginButton.click();
+		for (let attempt = 0; attempt < 10; attempt++) {
+			if (page.url().includes('/login')) break;
+			await loginButton.click({ timeout: 5000 }).catch(() => {});
+			await page.waitForURL(/\/login/, { timeout: 1000 }).catch(() => {});
+		}
 
 		// Should navigate to login with returnUrl
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Faccount');
 
 		// Complete sign-in
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Import Existing")').click();
 
 		const seedInput = page.locator('textarea[placeholder*="word1 word2 word3"]');
