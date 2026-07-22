@@ -22,7 +22,6 @@ test.describe('Recovery Flow', () => {
 
 	test('should show "Lost access?" link on login page that navigates to /recover', async ({ page }) => {
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
 
 		// Verify "Lost access?" link is visible
 		const recoveryLink = page.locator('a:has-text("Lost access? Recover your account")');
@@ -37,7 +36,6 @@ test.describe('Recovery Flow', () => {
 
 	test('should display email input form on /recover page', async ({ page }) => {
 		await page.goto('/recover');
-		await page.waitForLoadState('networkidle');
 
 		// Verify page title and description
 		await expect(page.getByText('Account Recovery', { exact: true })).toBeVisible();
@@ -83,7 +81,6 @@ test.describe('Recovery Flow', () => {
 
 	test('should validate email field is required', async ({ page }) => {
 		await page.goto('/recover');
-		await page.waitForLoadState('networkidle');
 
 		// Try to submit without entering email
 		const submitButton = page.locator('button:has-text("Send Recovery Link")');
@@ -121,7 +118,6 @@ test.describe('Recovery Flow', () => {
 	test('should show seed phrase generation flow when token is provided in URL', async ({ page }) => {
 		// Navigate to /recover with a token parameter
 		await page.goto('/recover?token=test-recovery-token-123');
-		await page.waitForLoadState('networkidle');
 
 		// Should skip email request and go directly to seed phrase generation
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
@@ -135,7 +131,6 @@ test.describe('Recovery Flow', () => {
 	test('should complete recovery flow with valid token', async ({ page }) => {
 		// Navigate with token
 		await page.goto('/recover?token=test-recovery-token-123');
-		await page.waitForLoadState('networkidle');
 
 		// Wait for seed phrase step - auto-generates when token is provided
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
@@ -162,7 +157,6 @@ test.describe('Recovery Flow', () => {
 	test('should show error message when completing recovery with invalid token', async ({ page }) => {
 		// Navigate with invalid token
 		await page.goto('/recover?token=invalid-token-that-does-not-exist');
-		await page.waitForLoadState('networkidle');
 
 		// Wait for seed phrase step - auto-generates when token is provided
 		await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });

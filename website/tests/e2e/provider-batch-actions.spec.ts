@@ -18,7 +18,6 @@ anonymousTest.describe('Provider Requests - Batch Actions (anonymous)', () => {
 
 	anonymousTest('should not show batch action buttons for anonymous users', async ({ page }) => {
 		await page.goto('/dashboard/provider/requests');
-		await page.waitForLoadState('networkidle');
 
 		// Anonymous users see the login prompt, not the requests list
 		await expect(page.locator('h2:has-text("Login Required")')).toBeVisible();
@@ -30,7 +29,6 @@ anonymousTest.describe('Provider Requests - Batch Actions (anonymous)', () => {
 anonymousTest.describe('Provider Requests page - structure', () => {
 	anonymousTest('should render the Pending Requests section heading', async ({ page }) => {
 		await page.goto('/dashboard/provider/requests');
-		await page.waitForLoadState('networkidle');
 
 		// Page title is always rendered regardless of auth state
 		await expect(page.locator('h1:has-text("Provider Requests")')).toBeVisible();

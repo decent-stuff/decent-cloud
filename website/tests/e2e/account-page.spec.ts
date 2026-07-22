@@ -54,7 +54,6 @@ test.describe('Account Settings Page', () => {
 
 	test('account page: sidebar link navigates to account page', async ({ page }) => {
 		// Fixture already leaves us on /dashboard, just ensure page is ready
-		await page.waitForLoadState('networkidle');
 
 		// Verify the "Account" link exists in the sidebar (exact match — the
 		// dashboard cards use longer text like "Profile Account settings").

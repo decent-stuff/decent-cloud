@@ -18,7 +18,6 @@ test.describe('Offerings Template Download', () => {
 		page,
 	}) => {
 		await page.goto('/dashboard/offerings');
-		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("My Offerings")')).toBeVisible();
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
@@ -33,7 +32,6 @@ test.describe('Offerings Template Download', () => {
 
 	test('should display product type options in template dialog', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
-		await page.waitForLoadState('networkidle');
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
 		await expect(downloadBtn).toBeVisible();
@@ -47,7 +45,6 @@ test.describe('Offerings Template Download', () => {
 
 	test('should close template dialog when clicking Cancel', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
-		await page.waitForLoadState('networkidle');
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
 		await expect(downloadBtn).toBeVisible();
@@ -82,7 +79,6 @@ test.describe('Offerings Template Download', () => {
 
 	test('should show Edit options when offerings list is empty', async ({ page }) => {
 		await page.goto('/dashboard/offerings');
-		await page.waitForLoadState('networkidle');
 
 		const downloadBtn = page.locator('button:has-text("Download Template")');
 		await expect(downloadBtn).toBeVisible();

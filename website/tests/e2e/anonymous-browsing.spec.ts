@@ -165,9 +165,6 @@ test.describe('Anonymous Browsing', () => {
 	test('should show sidebar for anonymous users with all navigation items', async ({ page }) => {
 		await page.goto('/dashboard');
 
-		// Wait for page to load
-		await page.waitForLoadState('networkidle');
-
 		// Sidebar shows the public "Browse" navigation items.
 		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 		await expect(page.locator('aside a[href="/dashboard/reputation"]')).toBeVisible();

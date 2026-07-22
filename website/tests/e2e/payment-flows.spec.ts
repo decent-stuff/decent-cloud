@@ -170,7 +170,6 @@ test.describe('Payment Flows', () => {
 
 		// Navigate to marketplace
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
 		// Wait for offerings to load — at least one table row should render
@@ -271,7 +270,6 @@ test.describe('Payment Flows', () => {
 
 		// Navigate to marketplace
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
 		// Wait for offerings to load — at least one table row should render
