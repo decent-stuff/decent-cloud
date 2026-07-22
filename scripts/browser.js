@@ -34,9 +34,13 @@
 
 'use strict';
 
-const { chromium, firefox } = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
+const path = require('path');
+// Resolve website/ node_modules relative to this script so the tool works from
+// any checkout location (no hardcoded absolute paths).
+const WM = (m) => require(path.resolve(__dirname, '..', 'website', 'node_modules', m));
+const { chromium, firefox } = WM('playwright');
 const fs = require('fs');
-const bip39 = require('/code/decent-cloud/website/node_modules/bip39');
+const bip39 = WM('bip39');
 
 const DEFAULT_TIMEOUT = 20000;
 const TIMEOUT = parseInt(process.env.BROWSER_TIMEOUT || process.env.TIMEOUT || DEFAULT_TIMEOUT, 10);

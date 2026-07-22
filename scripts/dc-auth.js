@@ -22,12 +22,15 @@
 
 'use strict';
 
-const NM      = '/code/decent-cloud/website/node_modules';
+// Resolve website/ node_modules relative to this script so the tool works from
+// any checkout location (no hardcoded absolute paths).
+const path  = require('path');
+const NM    = path.resolve(__dirname, '..', 'website', 'node_modules');
 const bip39   = require(`${NM}/bip39`);
 const { hmac }      = require(`${NM}/@noble/hashes/hmac`);
 const { sha512 }    = require(`${NM}/@noble/hashes/sha512`);
 const { ed25519ph } = require(`${NM}/@noble/curves/ed25519`);
-const { chromium }  = require('/home/ubuntu/.npm-global/lib/node_modules/playwright');
+const { chromium }  = require(`${NM}/playwright`);
 const https   = require('https');
 const http    = require('http');
 const fs      = require('fs');
