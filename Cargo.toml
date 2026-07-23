@@ -9,6 +9,7 @@ edition = "2021"
 [workspace.dependencies]
 ahash = { version = "0.8", default-features = false }
 anyhow = "1.0"
+assert_cmd = "2.0"
 async-trait = "0.1"
 base32 = "0.5"
 base64 = "0.22"
@@ -56,6 +57,7 @@ pem = "3.0"
 pkcs8 = "0.10"
 pocket-ic = "10"
 poem = "3.0"
+predicates = "3"
 pretty_env_logger = "0.5"
 regex = "1.12.2"
 reqwest = { version = "0.12", features = [

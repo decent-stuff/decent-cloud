@@ -51,4 +51,6 @@ tiny-bip39.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
 tempfile.workspace = true

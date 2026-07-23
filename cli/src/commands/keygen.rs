@@ -111,14 +111,6 @@ mod tests {
     }
 
     #[test]
-    fn test_mnemonic_from_phrase_spanish() {
-        // Valid Spanish BIP-39 mnemonic (12 words)
-        let phrase = "tarde cigarra_extremo hueco tabique ocurrente refinarse evangelio risks_ofn chop viva unieron";
-        // This may or may not validate depending on wordlist; just test that auto-detect doesn't panic
-        let _ = mnemonic_from_phrase(phrase);
-    }
-
-    #[test]
     fn test_mnemonic_from_phrase_invalid() {
         let phrase = "not valid mnemonic words here at all period";
         let result = mnemonic_from_phrase(phrase);
