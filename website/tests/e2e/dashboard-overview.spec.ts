@@ -69,4 +69,29 @@ test.describe('/dashboard overview', () => {
 		await expect(page.locator('h2', { hasText: 'My Resources' })).toBeVisible({ timeout: 5000 });
 		expect(oldEndpoints, 'dashboard must not call the old per-section endpoints').toEqual([]);
 	});
+
+	test('"Get Started" CTA links to the live provider setup wizard, not a 404 (F1)', async ({
+		page,
+	}) => {
+		// A fresh fixture account has zero offerings, so the "My Resources"
+		// empty state renders a "Get Started" CTA. It must link to the setup
+		// wizard (/dashboard/provider/support), which is a real route — NOT
+		// /dashboard/provider (a bare directory with no +page.svelte → 404).
+		await page.goto('/dashboard');
+		await waitForAuthReady(page);
+
+		// Wait for the empty state to render (My Resources section visible).
+		await expect(page.locator('h2', { hasText: 'My Resources' })).toBeVisible({ timeout: 10000 });
+
+		const cta = page.getByRole('link', { name: /Get Started/i });
+		// The CTA only renders in the zero-offerings empty state. If it is not
+		// present the account already has offerings and this test is a no-op
+		// for that branch — but a fresh fixture account always has zero.
+		await expect(cta).toBeVisible({ timeout: 10000 });
+
+		// Clicking must navigate to the setup wizard (a live route), never a 404.
+		await cta.click();
+		await page.waitForURL('**/dashboard/provider/support**', { timeout: 15000 });
+		await expect(page).not.toHaveURL(/.*\/error.*/i);
+	});
 });

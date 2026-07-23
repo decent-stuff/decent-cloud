@@ -784,7 +784,7 @@
 					<p class="text-sm text-neutral-500">No resources yet</p>
 					<p class="text-xs text-neutral-600 mt-1 mb-4">Create offerings to manage your own infrastructure</p>
 					<a
-						href="/dashboard/provider"
+						href="/dashboard/provider/support"
 						class="inline-flex items-center gap-2 px-4 py-2 text-sm bg-primary-500 hover:bg-primary-600 text-white transition-colors"
 					>
 						<Icon name="plus" size={16} />
