@@ -15,7 +15,10 @@
 
 	let { identity = null }: { identity?: IdentityInfo | null } = $props();
 
-	let open = $state(browser ? !isOnboardingCompleted(sessionStorage) : false);
+	// Persist completion in localStorage (NOT sessionStorage): sessionStorage
+	// clears on every new browser session, so returning users kept seeing the
+	// modal again. localStorage survives browser restarts (audit F2).
+	let open = $state(browser ? !isOnboardingCompleted(localStorage) : false);
 	let step = $state<OnboardingStep>(1);
 	let hasSshKey = $state(false);
 	let sshKeysLoading = $state(false);
@@ -26,10 +29,11 @@
 	let email = $derived(identity?.account?.email ?? '');
 	let hasUsername = $derived(username.length > 0);
 	let hasEmail = $derived(email.length > 0);
+	let profileComplete = $derived(hasUsername && hasEmail);
 
 	function finishOnboarding() {
 		if (browser) {
-			completeOnboarding(sessionStorage);
+			completeOnboarding(localStorage);
 		}
 		open = false;
 	}
@@ -92,9 +96,13 @@
 					<div class="icon-box-accent w-12 h-12">
 						<Icon name="user" size={24} />
 					</div>
-					<h2 class="text-xl font-bold text-white">Complete your profile</h2>
+					<h2 class="text-xl font-bold text-white">{profileComplete ? 'Your profile is ready' : 'Complete your profile'}</h2>
 					<p class="text-neutral-400 text-sm leading-relaxed">
-						Confirm your account details so providers can trust your requests and platform notifications can reach you.
+						{#if profileComplete}
+							Your account details are confirmed. Providers can trust your requests and platform notifications can reach you.
+						{:else}
+							Confirm your account details so providers can trust your requests and platform notifications can reach you.
+						{/if}
 					</p>
 					<div class="space-y-2 rounded border border-neutral-800 bg-surface-elevated p-3 text-sm">
 						<div class="flex items-center justify-between">

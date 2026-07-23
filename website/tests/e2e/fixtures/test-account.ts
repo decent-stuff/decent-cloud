@@ -67,7 +67,7 @@ export const test = baseFixtures.extend({
 		const seed = testAccount.seedPhrase;
 		await context.addInitScript((s: string) => {
 			localStorage.setItem('seed_phrases', JSON.stringify([s]));
-			sessionStorage.setItem('first_login_onboarding_completed', 'true');
+			localStorage.setItem('first_login_onboarding_completed', 'true');
 		}, seed);
 		await use(context);
 	},

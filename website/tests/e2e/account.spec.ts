@@ -63,7 +63,7 @@ test.describe('/dashboard/account error recovery', () => {
 		});
 		await context.addInitScript((s: string) => {
 			localStorage.setItem('seed_phrases', JSON.stringify([s]));
-			sessionStorage.setItem('first_login_onboarding_completed', 'true');
+			localStorage.setItem('first_login_onboarding_completed', 'true');
 		}, credentials.seedPhrase);
 
 		const page = await context.newPage();
