@@ -315,6 +315,26 @@ impl Database {
             ));
         }
 
+        // R1 / A2: never deliver a VM on an unpaid contract. A transition into
+        // Provisioned or Active is the "user gets the resource" boundary, so a
+        // non-free contract (payment_amount_e9s > 0) must have collected funds
+        // (payment_status = 'succeeded') first. Free / self-rental contracts
+        // (amount == 0) are exempt. Migration 048 mirrors this as a DB CHECK so
+        // it cannot be bypassed even via direct SQL; this is the loud,
+        // caller-visible gate.
+        if matches!(target_status, ContractStatus::Provisioned | ContractStatus::Active)
+            && contract.payment_amount_e9s > 0
+            && contract.payment_status != dcc_common::payment_status::SUCCEEDED
+        {
+            return Err(anyhow::anyhow!(
+                "Contract {} cannot transition to {} while unpaid: payment_status is '{}' but payment_amount_e9s is {} (>0 requires payment_status='succeeded')",
+                hex::encode(contract_id),
+                target_status,
+                contract.payment_status,
+                contract.payment_amount_e9s
+            ));
+        }
+
         // Convert target status to string for database storage
         let new_status_str = target_status.to_string();
 

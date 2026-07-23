@@ -5153,3 +5153,202 @@ async fn test_payment_status_check_constraint_blocks_raw_update() {
         "violation must reference the check constraint / column, got: {err}"
     );
 }
+
+// -----------------------------------------------------------------------------
+// R1 / A2: provider status transitions MUST NOT reach provisioned/active on an
+// unpaid contract. A provider driving requested -> accepted -> provisioning ->
+// provisioned while payment_status is still 'pending' delivers a VM against a
+// payment that never landed. The only existing gate was the later
+// acquire_provisioning_lock conditional UPDATE; update_contract_status itself
+// never read payment_status.
+
+/// Override payment_status / amount on an inserted contract. Runtime query
+/// (not sqlx::query!) so test setup never forces a sqlx-prepare cycle.
+async fn set_contract_payment(
+    db: &Database,
+    contract_id: &[u8],
+    payment_status: &str,
+    payment_amount_e9s: i64,
+) {
+    sqlx::query(
+        "UPDATE contract_sign_requests SET payment_status = $1, payment_amount_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(payment_status)
+    .bind(payment_amount_e9s)
+    .bind(contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_update_contract_status_blocks_provisioned_when_unpaid() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xD1; 32];
+
+    // Paid contract whose checkout never completed: non-zero amount, payment
+    // still pending. Status already at 'provisioning' so the only remaining
+    // hop is provisioning -> provisioned. (insert_contract_request defaults
+    // payment_status='succeeded'; flip it to 'pending' to model the unpaid case.)
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a2",
+        0,
+        "provisioning",
+    )
+    .await;
+    set_contract_payment(&db, &contract_id, "pending", 1000).await;
+
+    let result = db
+        .update_contract_status(&contract_id, "provisioned", &provider_pk, None)
+        .await;
+    assert!(
+        result.is_err(),
+        "transition to provisioned must be rejected while payment_status is pending"
+    );
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(
+        err.to_lowercase().contains("payment"),
+        "error must explain the payment gate, got: {err}"
+    );
+
+    // Row untouched -- no silent partial transition.
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "provisioning");
+    assert_eq!(contract.payment_status, "pending");
+}
+
+#[tokio::test]
+async fn test_update_contract_status_blocks_active_when_unpaid() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xD2; 32];
+
+    // Start from 'paused' (NOT provisioned/active): migration 048 forbids a
+    // provisioned/active row from holding an unpaid, non-zero state, so we
+    // cannot construct one. 'paused' is a valid ->active source state and is
+    // outside the 048 gate, letting us model an unpaid contract attempting to
+    // (re)enter 'active'. The code gate must refuse it.
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a2",
+        0,
+        "paused",
+    )
+    .await;
+    set_contract_payment(&db, &contract_id, "pending", 1000).await;
+
+    let result = db
+        .update_contract_status(&contract_id, "active", &provider_pk, None)
+        .await;
+    assert!(
+        result.is_err(),
+        "transition to active must be rejected while payment_status is pending"
+    );
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(err.to_lowercase().contains("payment"), "got: {err}");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "paused");
+}
+
+#[tokio::test]
+async fn test_update_contract_status_allows_provisioned_when_paid() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xD3; 32];
+
+    // Same transition, but payment_status='succeeded' (the insert default) ->
+    // must succeed.
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a2",
+        0,
+        "provisioning",
+    )
+    .await;
+
+    db.update_contract_status(&contract_id, "provisioned", &provider_pk, None)
+        .await
+        .expect("paid contract may transition to provisioned");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "provisioned");
+}
+
+#[tokio::test]
+async fn test_update_contract_status_allows_provisioned_when_free() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xD4; 32];
+
+    // Free / self-rental contract: payment_amount_e9s == 0. Must NOT be blocked
+    // even though payment_status is not 'succeeded'.
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a2",
+        0,
+        "provisioning",
+    )
+    .await;
+    set_contract_payment(&db, &contract_id, "pending", 0).await;
+
+    db.update_contract_status(&contract_id, "provisioned", &provider_pk, None)
+        .await
+        .expect("free (amount=0) contract may transition regardless of payment_status");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "provisioned");
+}
+
+/// R1 / A2 belt-and-suspenders: the DB CHECK (migration 048) makes the gate
+/// un-bypassable even via direct SQL. Start from 'provisioning' (allowed by
+/// 048 to hold an unpaid, non-zero state) and attempt a raw UPDATE to a gated
+/// status ('provisioned') -- the constraint must reject it.
+#[tokio::test]
+async fn test_provisioning_requires_payment_check_constraint() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xD5; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a2",
+        0,
+        "provisioning",
+    )
+    .await;
+    set_contract_payment(&db, &contract_id, "pending", 1000).await;
+
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET status = 'provisioned' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+    assert!(
+        result.is_err(),
+        "CHECK constraint must reject provisioned on an unpaid non-zero contract"
+    );
+}
