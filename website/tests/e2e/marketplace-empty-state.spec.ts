@@ -1,39 +1,36 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/test-account';
 
-test.describe('Marketplace empty-state defaults', () => {
-	test('when all offerings are hidden by demo/offline defaults, offers a reveal action', async ({
-		page,
-	}) => {
+/**
+ * E2E coverage for the marketplace default-hide empty state.
+ *
+ * Demo offerings (is_example) and offline offerings are hidden by default
+ * (showDemoOfferings / showOfflineOfferings both default to false). When every
+ * offering is hidden this way, the marketplace renders an empty state with a
+ * one-click "Show N offerings" reveal action — distinct from "Clear all
+ * filters", which only appears when user filters are narrowing the results.
+ *
+ * In the warm stack every seed offering comes from the example provider
+ * (is_example=true), so the default-hide empty state appears on a fresh visit
+ * with no filters applied — no fixture seeding needed.
+ */
+test.describe('Marketplace default-hide empty state', () => {
+	test('offers a reveal action when all offerings are hidden by default', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 
-		// Wait for the offerings grid/empty-state to settle (not the spinner).
-		const spinner = page.locator('.animate-spin');
-		await expect(spinner).toBeHidden({ timeout: 10000 });
+		// Empty state: no visible offerings after the default-hide filters run.
+		await expect(page.getByText('No offerings found')).toBeVisible({ timeout: 10000 });
+		await expect(page.locator('[id^="offering-"]')).toHaveCount(0);
 
-		const emptyState = page.locator('text=No offerings found');
-		const offeringCount = page.locator(
-			'[id^="offering-"], [data-testid="offering-card"]',
-		);
-
-		// If there ARE offerings visible, the default-hide issue doesn't apply
-		// right now — nothing to assert. This keeps the test robust to seed state.
-		if ((await offeringCount.count()) > 0) {
-			test.skip(true, 'offerings already visible; default-hide scenario N/A');
-			return;
-		}
-
-		// The empty state must exist and offer a one-click reveal.
-		await expect(emptyState).toBeVisible();
-
-		// "Clear all filters" should NOT be the only escape — it resets to the
-		// same hiding defaults. A distinct reveal action must exist.
-		const reveal = page.locator(
-			'button:has-text("Show "), button:has-text("Show demo"), button:has-text("Show all")',
-		);
+		// The reveal button (not "Clear all filters") surfaces the hidden
+		// demo/offline offerings. It reads "Show N offering(s)".
+		const reveal = page.getByRole('button', { name: /^Show \d+ offering/ });
 		await expect(reveal).toBeVisible();
+		await expect(
+			page.getByText('hidden because no providers are currently online'),
+		).toBeVisible();
 
-		// Clicking reveal must surface the hidden offerings.
-		await reveal.first().click();
-		await expect(offeringCount.first()).toBeVisible({ timeout: 10000 });
+		// Clicking reveal surfaces the previously-hidden offerings.
+		await reveal.click();
+		await expect(page.locator('[id^="offering-"]').first()).toBeVisible({ timeout: 10000 });
 	});
 });
