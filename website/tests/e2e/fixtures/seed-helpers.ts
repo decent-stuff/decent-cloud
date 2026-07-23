@@ -265,6 +265,11 @@ export interface OfferingSeedOverrides {
 	stockStatus?: string;
 	/** Optional name override. Default 'Test Offering'. */
 	name?: string;
+	/** offering_source column. Default unset (NULL → treated as a normal provider
+	 * offering, which is offline without an agent pool). Set 'self_provisioned'
+	 * to make the offering always online (compute_provider_online_status treats
+	 * self_provisioned as always-online, bypassing pool/agent requirements). */
+	offeringSource?: string;
 }
 
 /**
@@ -282,22 +287,57 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 	const stockStatus = overrides?.stockStatus ?? 'in_stock';
 	const name = (overrides?.name ?? 'Test Offering').replace(/'/g, "''");
 	const createdAt = nowNs().toString();
+	const sourceCol = overrides?.offeringSource ? ', offering_source' : '';
+	const sourceVal = overrides?.offeringSource ? `, '${overrides.offeringSource.replace(/'/g, "''")}'` : '';
 	const result = await sql(`
 		INSERT INTO provider_offerings (
 			pubkey, offering_id, offer_name, currency, monthly_price,
 			visibility, product_type, billing_interval, stock_status,
-			datacenter_country, datacenter_city, created_at_ns
+			datacenter_country, datacenter_city, created_at_ns${sourceCol}
 		) VALUES (
 			decode('${pubkeyHex}', 'hex'),
 			'${offeringId}',
 			'${name}',
 			'ICP', 25.0,
 			'${visibility}', 'compute', 'monthly', '${stockStatus}',
-			'US', 'New York', ${createdAt}
+			'US', 'New York', ${createdAt}${sourceVal}
 		)
 		RETURNING id
 	`);
 	const numericId = result.split('\n').map((l) => l.trim()).find((l) => /^\d+$/.test(l));
 	if (!numericId) throw new Error(`seedOffering did not RETURN a numeric id; got: ${result}`);
 	return numericId;
+}
+
+/**
+ * Seed a rentable marketplace offering under a fresh random non-example provider
+ * pubkey. Uses offering_source='self_provisioned' so compute_provider_online_status
+ * marks it online without requiring an agent pool or provider_agent_status row.
+ * Returns identifiers for navigation + cleanup.
+ *
+ * The random pubkey is not a registered account, which is fine: provider_offerings
+ * has no FK on pubkey and the marketplace query LEFT JOINs accounts (owner_username
+ * is null). is_example is false (random pubkey != example provider pubkey).
+ */
+export async function seedRentableOffering(overrides?: OfferingSeedOverrides): Promise<{
+	providerPubkeyHex: string;
+	offeringNumericId: string;
+	offeringId: string;
+	offeringName: string;
+}> {
+	const providerPubkeyHex = randomHex(32);
+	const offeringId = overrides?.offeringId ?? `rentable-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+	const offeringName = overrides?.name ?? 'E2E Rentable Offering';
+	const offeringNumericId = await seedOffering(providerPubkeyHex, {
+		...overrides,
+		offeringId,
+		name: offeringName,
+		offeringSource: overrides?.offeringSource ?? 'self_provisioned',
+	});
+	return { providerPubkeyHex, offeringNumericId, offeringId, offeringName };
+}
+
+/** Delete all offerings for a provider pubkey (cleanup). */
+export async function deleteOfferingsByProvider(pubkeyHex: string): Promise<void> {
+	await sql(`DELETE FROM provider_offerings WHERE pubkey = decode('${pubkeyHex}', 'hex')`);
 }
