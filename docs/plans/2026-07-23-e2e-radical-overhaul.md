@@ -116,7 +116,7 @@ are correct and stay regardless. (commit `297009d9`)
 
 - Updated `docs/OPEN_ISSUES.md` with all session results.
 - Updated `website/AGENTS.md` + plan file.
-- Final full-suite: **205 passed, 0 failed, ~192s, 4 workers** (single warm stack).
+- Final full-suite: **209 passed, 0 failed, ~4.5m, 4 workers** (single warm stack).
 
 ## Session commits (in order)
 `c8e25e3a` → `9dad0734` → `c29173b5` → `db5997cd` → (fragile-fixes) → (F2) → `297009d9` → `c97a497d`

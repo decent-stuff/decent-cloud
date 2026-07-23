@@ -83,7 +83,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | `recovery-flow.spec.ts` 2× `waitForTimeout(100)` sleeps | Fragile | Shipped (fragile commit): replaced with `waitForResponse` on the recovery API. |
 | Sharding harness built + two blockers it exposed | Infra | Shipped in `297009d9`: dev CORS now allows any `localhost/127.0.0.1:*` origin (was a static list — shard ports 403'd); service worker no longer intercepts non-navigate fetches (was masking real API errors as 503); new `fixtures/api-base.ts` resolves API URL from stack port (4 specs hardcoded 59011). |
 | Offering EDIT flow `/dashboard/offerings/[id]/edit` — zero coverage | Coverage | Shipped in `c97a497d`: 4 e2e tests (pre-fill, live diff panel, submit+redirect+DB persistence, validation). No source bug found. |
-| Full suite baseline | — | **205 passed, 0 failed, 0 skipped, 0 networkidle, ~192s, 4 workers** (single warm stack). |
+| Full suite baseline | — | **209 passed, 0 failed, 0 skipped, 0 networkidle, ~4.5m, 4 workers** (single warm stack). |
 
 ### 2026-07-23 session (e2e harness hardening + skip-gap closure + UX audit)
 
