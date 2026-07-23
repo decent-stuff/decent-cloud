@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { clickAndRetry } from './fixtures/auth-helpers';
 
 /**
  * E2E Tests for Auth Protection
@@ -41,12 +42,14 @@ test.describe('Auth Protection', () => {
 
 	test('should redirect to /login with returnUrl when clicking login button', async ({ page }) => {
 		await page.goto('/dashboard/rentals');
-		await page.waitForLoadState('networkidle');
 
-		// Click the login button in main content
+		// AuthRequiredCard is SSR'd for anonymous visitors, so the Login button's
+		// onclick binds only on hydration — clickAndRetry until the URL changes.
 		const loginButton = page.getByRole('main').getByRole('button', { name: /Login \/ Create Account/i });
 		await expect(loginButton).toBeVisible();
-		await loginButton.click();
+		await clickAndRetry(page, loginButton, async () =>
+			page.url().includes('/login'),
+		);
 
 		// Should navigate to /login with returnUrl
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Frentals');

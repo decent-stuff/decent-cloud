@@ -1,4 +1,4 @@
-import { type Page, expect } from '@playwright/test';
+import { type Page, type Locator, expect } from '@playwright/test';
 
 /**
  * Test helper utilities for authentication flows
@@ -54,19 +54,11 @@ export async function registerNewAccount(
 ): Promise<AuthCredentials> {
 	const username = generateTestUsername();
 
-	// Navigate to login page
+	// Navigate to login page and reveal seed-phrase options. The button is
+	// SSR-rendered but its onclick binds on hydration — clickAndRetry (via
+	// revealSeedPhraseOptions) handles this deterministically (no networkidle).
 	await page.goto('/login');
-
-	// Wait for page to load and click "Sign in with seed phrase instead".
-	// networkidle is load-bearing here: the button is in the SSR HTML so it's
-	// visible immediately, but its onclick handler isn't bound until SvelteKit
-	// hydrates. Clicking before hydration is a silent no-op. There is no clean
-	// public hydration signal, so we accept the networkidle wait — this is the
-	// account-creation path, runs once per worker, not on the per-test hot path.
-	await page.waitForLoadState('networkidle');
-	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
-	await expect(seedPhraseButton).toBeVisible({ timeout: 10000 });
-	await seedPhraseButton.click();
+	await revealSeedPhraseOptions(page);
 
 	// Wait for seed phrase choice to appear and be interactive
 	const generateNewButton = page.locator('button:has-text("Generate New")');
@@ -129,25 +121,52 @@ export async function registerNewAccount(
 }
 
 /**
+ * Click `target` and retry until `success` is satisfied.
+ *
+ * Replaces waitForLoadState('networkidle') on SSR'd SvelteKit pages: the
+ * element is visible in the SSR HTML immediately, but its onclick handler
+ * binds only on hydration, so a click before hydration is a silent no-op.
+ * Retrying until the click's observable effect appears makes the wait
+ * deterministic under Vite HMR, which keeps the network busy and makes
+ * networkidle contend across parallel workers.
+ *
+ * `success` is either a Locator (waited via isVisible) for the common case of
+ * an element appearing, or a predicate for navigation-style effects (e.g. a
+ * URL change) where no single element marks completion.
+ */
+export async function clickAndRetry(
+	page: Page,
+	target: Locator,
+	success: Locator | (() => Promise<boolean>),
+): Promise<void> {
+	const check =
+		typeof success === 'function' ? success : () => success.isVisible();
+	for (let attempt = 0; attempt < 20; attempt++) {
+		await target.click({ timeout: 5000 }).catch(() => {});
+		if (await check().catch(() => false)) return;
+		await page.waitForTimeout(100);
+	}
+	if (typeof success === 'function') {
+		expect(await check(), 'clickAndRetry: readiness never satisfied').toBe(true);
+	} else {
+		await expect(success).toBeVisible({ timeout: 10000 });
+	}
+}
+
+/**
  * On the /login page, click "Sign in with seed phrase instead" and wait for
  * the "Import Existing" option to appear.
  *
  * The button is SSR-rendered (visible immediately) but its onclick handler
- * isn't bound until SvelteKit hydrates. Previously this waited for
- * `networkidle`, but Vite HMR keeps the network busy and that tanks parallel
- * runs (see playwright.config.ts:28-33). Click-and-retry instead: if the click
- * landed before hydration (no-op), "Import Existing" won't appear — so retry.
- * On a warm stack the first click always lands post-hydration.
+ * isn't bound until SvelteKit hydrates. Uses clickAndRetry so a pre-hydration
+ * click is retried rather than silently dropped.
  */
 export async function revealSeedPhraseOptions(page: Page): Promise<void> {
-	const seedPhraseButton = page.locator('button:has-text("Sign in with seed phrase instead")');
-	const importButton = page.locator('button:has-text("Import Existing")');
-	for (let attempt = 0; attempt < 20; attempt++) {
-		await seedPhraseButton.click({ timeout: 5000 }).catch(() => {});
-		if (await importButton.isVisible().catch(() => false)) break;
-		await page.waitForTimeout(100);
-	}
-	await expect(importButton).toBeVisible({ timeout: 10000 });
+	await clickAndRetry(
+		page,
+		page.locator('button:has-text("Sign in with seed phrase instead")'),
+		page.locator('button:has-text("Import Existing")'),
+	);
 }
 
 /**

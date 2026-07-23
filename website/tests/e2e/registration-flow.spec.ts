@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
 	generateTestUsername,
+	revealSeedPhraseOptions,
 	waitForApiResponse,
 	setupConsoleLogging,
 } from './fixtures/auth-helpers';
@@ -25,12 +26,11 @@ test.describe('Account Registration Flow', () => {
 	}) => {
 		const username = generateTestUsername();
 
-		// Step 1: Navigate to login page
+		// Step 1: Navigate to login page and reveal seed-phrase options.
+		// The "Sign in with seed phrase" button is SSR'd but its onclick binds
+		// on hydration; revealSeedPhraseOptions clicks-and-retries (no networkidle).
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		
-		// Click "Sign in with seed phrase instead" to reveal seed phrase options
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		
 		// Step 2: Click "Generate New" to generate seed phrase
 		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
@@ -108,8 +108,7 @@ test.describe('Account Registration Flow', () => {
 
 		// First registration
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -153,8 +152,7 @@ test.describe('Account Registration Flow', () => {
 		const username = generateTestUsername();
 
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -188,10 +186,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Navigate to login with returnUrl parameter
 		await page.goto('/login?returnUrl=%2Fdashboard%2Fmarketplace');
-		await page.waitForLoadState('networkidle');
-
-		// Complete registration flow
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -231,9 +226,7 @@ test.describe('Account Registration Flow', () => {
 
 		// Navigate to login with NO explicit returnUrl — exercise the new default.
 		await page.goto('/login');
-		await page.waitForLoadState('networkidle');
-
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		await revealSeedPhraseOptions(page);
 		await page.locator('button:has-text("Generate New")').click();
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 		await page.check('input[type="checkbox"]');
@@ -268,11 +261,8 @@ test.describe('Account Registration Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
-		// Wait for SvelteKit hydration so the button's onclick handler is bound
-		// before we click (the redirect is server-side, so the URL is correct
-		// but the client-side state machine isn't ready until networkidle).
-		await page.waitForLoadState('networkidle');
-		await page.click('button:has-text("Sign in with seed phrase instead")');
+		// The seed-phrase button binds on hydration — click-and-retry, no networkidle.
+		await revealSeedPhraseOptions(page);
 		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 	});
 });

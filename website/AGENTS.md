@@ -65,7 +65,9 @@ E2E_AUTO_SERVER=1 npm run test:e2e  # one-shot mode (spawns + tears down its own
 
 - **Never use `waitForLoadState('networkidle')`** — Vite HMR keeps the network busy, causing
   workers to contend on network settle. Use deterministic waits: `waitForResponse`, `waitForURL`,
-  or element visibility. Zero `networkidle` calls in the suite as of 2026-07-22.
+  element visibility, or the shared `clickAndRetry(page, target, success)` helper
+  (`fixtures/auth-helpers.ts`) for SSR'd buttons whose onclick binds on hydration. Zero
+  `networkidle` calls in the suite as of 2026-07-23.
 - **Never use `registerNewAccount()` in API-only tests** — it runs a 10-15s UI registration flow.
   Use `seedAccountDirect()` (DB-direct INSERT) or the `testAccount` fixture instead.
 - **Serial mode for shared-pubkey DB tests**: all `testAccount` users share the same pubkey.

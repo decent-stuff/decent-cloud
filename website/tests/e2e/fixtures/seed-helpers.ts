@@ -67,8 +67,8 @@ export function nowNs(): bigint {
 
 /**
  * Create a test account directly in the DB, bypassing the ~10-15s UI
- * registration flow (goto /login → networkidle → "Generate New" → fill
- * username/email → "Create Account" → "Go to Dashboard").
+ * registration flow (goto /login → revealSeedPhraseOptions → "Generate New"
+ * → fill username/email → "Create Account" → "Go to Dashboard").
  *
  * Mirrors exactly what the API's `create_account()` does
  * (`api/src/database/accounts.rs:155`): generates a 16-byte random id for

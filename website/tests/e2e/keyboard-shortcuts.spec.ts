@@ -2,8 +2,14 @@ import { test, expect } from './fixtures/test-account';
 
 test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	test('/ focuses marketplace search input', async ({ page }) => {
+		// The '/' handler binds via <svelte:window onkeydown> at hydration, and
+		// the page fetches /api/v1/offerings in onMount — so that response is a
+		// deterministic hydration signal (registered before goto to avoid a race).
+		const offeringsReady = page.waitForResponse((r) =>
+			r.url().includes('/api/v1/offerings'),
+		);
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
+		await offeringsReady;
 
 		// Type / — should focus the search input, not insert text
 		await page.keyboard.press('/');
@@ -17,8 +23,11 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	});
 
 	test('/ does not hijack input when already typing in a field', async ({ page }) => {
+		const offeringsReady = page.waitForResponse((r) =>
+			r.url().includes('/api/v1/offerings'),
+		);
 		await page.goto('/dashboard/marketplace');
-		await page.waitForLoadState('networkidle');
+		await offeringsReady;
 
 		const searchInput = page.locator('#marketplace-search');
 		await searchInput.click();
@@ -31,8 +40,10 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	});
 
 	test('email verification banner can be dismissed per-session', async ({ page }) => {
+		// The banner is client-rendered (reads authStore), so toBeVisible already
+		// gates hydration — no networkidle needed. The Dismiss button lives in the
+		// same component, so it is hydrated once the banner is visible.
 		await page.goto('/dashboard');
-		await page.waitForLoadState('networkidle');
 
 		// Banner should be visible (test account has unverified email)
 		const banner = page.getByText('Verify Your Email Address');
@@ -46,7 +57,6 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 
 		// Navigate to another page — banner stays dismissed
 		await page.goto('/dashboard/account');
-		await page.waitForLoadState('networkidle');
 		await expect(banner).not.toBeVisible();
 	});
 });

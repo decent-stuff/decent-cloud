@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/test-account';
+import { clickAndRetry } from './fixtures/auth-helpers';
 
 /**
  * E2E Tests for Provider Support Page - Notification Settings
@@ -71,31 +72,32 @@ test.describe('Provider Support - Notification Settings', () => {
 
 	test('notification settings: telegram checkbox reveals chat ID input', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
-		// networkidle is load-bearing here: the Telegram label is SSR'd before
-		// its onclick handler binds, so clicking pre-hydration is a silent no-op.
-		await page.waitForLoadState('networkidle');
-		// Click the label containing "Telegram" to toggle the checkbox
-		await page.click('label:has-text("Telegram")');
-		await expect(page.locator('input[placeholder="Chat ID"]')).toBeVisible();
+		// The Notifications section renders from a client-read localStorage
+		// wizard step, so its checkbox onclick binds on hydration — clickAndRetry
+		// until the Chat ID input appears (replaces networkidle).
+		const chatIdInput = page.locator('input[placeholder="Chat ID"]');
+		await clickAndRetry(page, page.locator('label:has-text("Telegram")'), chatIdInput);
+		await expect(chatIdInput).toBeVisible();
 		// Should show link to Telegram bot
 		await expect(page.locator('a[href^="https://t.me/"]')).toBeVisible();
 	});
 
 	test('notification settings: sms checkbox reveals phone input', async ({ page }) => {
 		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
-		await page.click('label:has-text("SMS")');
-		await expect(page.locator('input[placeholder="+1 555-123-4567"]')).toBeVisible();
+		const phoneInput = page.locator('input[placeholder="+1 555-123-4567"]');
+		await clickAndRetry(page, page.locator('label:has-text("SMS")'), phoneInput);
+		await expect(phoneInput).toBeVisible();
 	});
 
 	test('notification settings: multiple channels can be selected simultaneously', async ({
 		page,
 	}) => {
 		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
-		await page.click('label:has-text("Telegram")');
+		const chatIdInput = page.locator('input[placeholder="Chat ID"]');
+		// First click waits for hydration via clickAndRetry; SMS then toggles plainly.
+		await clickAndRetry(page, page.locator('label:has-text("Telegram")'), chatIdInput);
 		await page.click('label:has-text("SMS")');
-		await expect(page.locator('input[placeholder="Chat ID"]')).toBeVisible();
+		await expect(chatIdInput).toBeVisible();
 		await expect(page.locator('input[placeholder="+1 555-123-4567"]')).toBeVisible();
 	});
 
@@ -103,11 +105,11 @@ test.describe('Provider Support - Notification Settings', () => {
 		page,
 	}) => {
 		await page.goto('/dashboard/provider/support');
-		await page.waitForLoadState('networkidle');
 
 		// Enable Telegram and enter a chat ID
-		await page.click('label:has-text("Telegram")');
-		await page.fill('input[placeholder="Chat ID"]', '123456789');
+		const chatIdInput = page.locator('input[placeholder="Chat ID"]');
+		await clickAndRetry(page, page.locator('label:has-text("Telegram")'), chatIdInput);
+		await chatIdInput.fill('123456789');
 
 		// Test button should appear
 		await expect(page.locator('button:has-text("Send Test")')).toBeVisible();
