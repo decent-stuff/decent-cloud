@@ -112,6 +112,18 @@ are correct and stay regardless. (commit `297009d9`)
 - UX: F1 (dead-end 404) + F2 (modal reappears) were the highest-impact UX wins and are
   shipped. F3 (`/docs`,`/pricing` 404 — not linked anywhere) is cosmetic/optional.
 
+### Decision: provisioning for the cancel e2e (d+b)
+- **(d)** Real UI flow: rent → pay (Stripe SDK mock, the one allowed external-boundary mock)
+  → contract lands at `pending` (no dc-agent polling) → `isCancellable()` includes
+  `pending` so the Cancel button renders → view rental detail → cancel via real API.
+  Covers the genuine user journey + cancel-while-provisioning, no mocks of first-party
+  code, no infra. **This is the complete happy path.**
+- **(b)** DB state injection only if cancel-on-`active` (VM termination) is later wanted
+  in the UI suite — that path needs a dc-agent + real VM otherwise. DB-seeding the contract
+  into `active` is the established, endorsed pattern (`seedContract`), not a mock.
+- Rejected: **(a) mocking** the cancel API (tests nothing real) and **(c) real infra**
+  for the fast suite (1-2 min/run + cost; belongs in a separate integration suite).
+
 ## Phase 5 — Docs + verification ✓
 
 - Updated `docs/OPEN_ISSUES.md` with all session results.
