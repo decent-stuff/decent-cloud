@@ -1477,7 +1477,9 @@ async fn test_cancel_contract_stripe_payment_without_client() {
     // Verify contract is cancelled with refund amount but no refund ID
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "refunded");
+    // R5: no Stripe client -> refund NOT issued, so payment_status must stay
+    // 'succeeded' (never claim 'refunded' with no money returned).
+    assert_eq!(contract.payment_status, "succeeded");
     assert!(contract.refund_amount_e9s.is_some());
     assert!(contract.stripe_refund_id.is_none()); // No client to process refund
 }
@@ -1602,7 +1604,8 @@ async fn test_cancel_contract_icpay_refund_calculation() {
     // Verify refund was calculated
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "refunded");
+    // R5: no ICPay client -> refund NOT issued; payment_status stays 'succeeded'.
+    assert_eq!(contract.payment_status, "succeeded");
     assert!(contract.refund_amount_e9s.is_some());
     let refund = contract.refund_amount_e9s.unwrap();
     // Should be prorated (2/3 of amount since 10/30 days used)
@@ -1704,7 +1707,8 @@ async fn test_cancel_contract_icpay_with_released_amount() {
     // Refund should be prorated amount minus already released
     // Expected: 1B * (20/30) - 300M = 666.67M - 300M = 366.67M
     if let Some(refund) = contract.refund_amount_e9s {
-        assert_eq!(contract.payment_status, "refunded");
+        // R5: no client -> refund NOT issued, payment_status stays 'succeeded'.
+        assert_eq!(contract.payment_status, "succeeded");
         assert!(refund > 0);
         // Should be less than what it would be without released amount (2/3 of 1 ICP = ~667M)
         assert!(refund < 667_000_000);
@@ -1767,7 +1771,8 @@ async fn test_cancel_stripe_contract_subtracts_released_amount() {
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "refunded");
+    // R5: no Stripe client -> refund NOT issued, payment_status stays 'succeeded'.
+    assert_eq!(contract.payment_status, "succeeded");
 
     // Gross prorated refund computed exactly as the handler does.
     let gross = Database::calculate_prorated_refund(
@@ -2333,7 +2338,8 @@ async fn test_cancel_active_contract_with_prorated_refund() {
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "refunded");
+    // R5: no ICPay client -> refund NOT issued, payment_status stays 'succeeded'.
+    assert_eq!(contract.payment_status, "succeeded");
     assert!(contract.refund_amount_e9s.is_some());
     // Prorated refund should be present (23/24 hours remaining = ~96% of 1 ICP)
     let refund = contract.refund_amount_e9s.unwrap();
@@ -5466,4 +5472,107 @@ async fn test_release_refund_integrity_check_constraint() {
         result.is_err(),
         "CHECK constraint must reject released+refunded > payment"
     );
+}
+
+// -----------------------------------------------------------------------------
+// R5 / A4: no silent refund marking.
+//
+// issue_audited_refund returns Ok(None) when no Stripe client is configured
+// (pure-DB / dry-run). Callers used to treat that as success and flip
+// payment_status to 'refunded' -- telling the customer "refunded" while no
+// money was actually returned. The invariant: payment_status='refunded' is
+// ONLY ever set when a real refund id (Stripe re_* / ICPay) was recorded.
+
+/// With no Stripe client, a cancel computes the refund but cannot issue it, so
+/// payment_status must NOT become 'refunded' (it stays in its prior state).
+#[tokio::test]
+async fn test_cancel_stripe_without_client_does_not_mark_refunded() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xF1; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
+    let start_ns = now_ns - 1_000_000_000;
+    let end_ns = now_ns + 10_000_000_000;
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-a4".to_string(),
+            payment_intent_id: "pi_a4_noclient".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    // Cancel with NO Stripe client: refund computes but cannot be issued.
+    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+        .await
+        .expect("cancel must still succeed (status flip)");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    // R5 invariant: no refund id -> payment_status must NOT be 'refunded'.
+    assert_ne!(
+        contract.payment_status, "refunded",
+        "payment_status must not become 'refunded' when no refund was actually issued"
+    );
+    assert_eq!(
+        contract.payment_status, "succeeded",
+        "prior payment_status must be preserved"
+    );
+    assert!(
+        contract.stripe_refund_id.is_none(),
+        "no Stripe client -> no refund id"
+    );
+}
+
+/// Mirror of the above for the reject path: rejecting a succeeded Stripe
+/// contract with no client must NOT mark payment_status='refunded'.
+#[tokio::test]
+async fn test_reject_stripe_without_client_does_not_mark_refunded() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xF2; 32];
+
+    let now_ns = crate::now_ns().unwrap();
+    let start_ns = now_ns;
+    let end_ns = now_ns + 10_000_000_000;
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-a4-reject".to_string(),
+            payment_intent_id: "pi_a4_reject".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None, None)
+        .await
+        .expect("reject must still succeed (status flip)");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "rejected");
+    assert_ne!(
+        contract.payment_status, "refunded",
+        "reject with no client must not mark refunded"
+    );
+    assert_eq!(contract.payment_status, "succeeded");
+    assert!(contract.stripe_refund_id.is_none());
 }

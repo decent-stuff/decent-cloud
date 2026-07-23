@@ -514,13 +514,31 @@ impl Database {
         let rejected_status = ContractStatus::Rejected.to_string();
         let mut tx = self.pool.begin().await?;
 
+        // R5: only flip payment_status to 'refunded' when a real refund id was
+        // returned. When the refund computed but no client issued it (no id),
+        // record the amount for ops reconciliation but leave payment_status
+        // untouched -- never claim a refund that did not actually happen.
+        let refund_issued = stripe_refund_id.is_some() || icpay_refund_id.is_some();
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
+            if !refund_issued {
+                tracing::warn!(
+                    "Refund for rejected contract {} computed at {:?} e9s but NOT issued (no Stripe/ICPay client configured); payment_status left as '{}'",
+                    hex::encode(contract_id),
+                    refund_amount_e9s,
+                    contract.payment_status
+                );
+            }
+            let payment_status_value = if refund_issued {
+                dcc_common::payment_status::REFUNDED
+            } else {
+                contract.payment_status.as_str()
+            };
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
                 rejected_status,
                 updated_at_ns,
                 rejected_by_pubkey,
-                "refunded",
+                payment_status_value,
                 refund_amount_e9s,
                 stripe_refund_id,
                 icpay_refund_id,
@@ -723,14 +741,32 @@ impl Database {
         let cancelled_status = ContractStatus::Cancelled.to_string();
         let mut tx = self.pool.begin().await?;
 
+        // R5: only flip payment_status to 'refunded' when a real refund id was
+        // returned. When the refund computed but no client issued it (no id),
+        // record the amount for ops reconciliation but leave payment_status
+        // untouched -- never claim a refund that did not actually happen.
+        let refund_issued = stripe_refund_id.is_some() || icpay_refund_id.is_some();
         // Update contract status to cancelled with refund info
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
+            if !refund_issued {
+                tracing::warn!(
+                    "Refund for cancelled contract {} computed at {:?} e9s but NOT issued (no Stripe/ICPay client configured); payment_status left as '{}'",
+                    hex::encode(contract_id),
+                    refund_amount_e9s,
+                    contract.payment_status
+                );
+            }
+            let payment_status_value = if refund_issued {
+                dcc_common::payment_status::REFUNDED
+            } else {
+                contract.payment_status.as_str()
+            };
             sqlx::query!(
                 "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
                 cancelled_status,
                 updated_at_ns,
                 cancelled_by_pubkey,
-                "refunded",
+                payment_status_value,
                 refund_amount_e9s,
                 stripe_refund_id,
                 icpay_refund_id,

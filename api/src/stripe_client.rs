@@ -644,6 +644,30 @@ pub struct CheckoutSessionResult {
     pub invoice_id: Option<String>,
 }
 
+/// Fail-fast boot validation: in production (`environment == "prod"`) Stripe
+/// MUST be configured. Without `STRIPE_SECRET_KEY`, refunds cannot be issued
+/// (`issue_audited_refund` returns `None` -> the R5 silent-refund hole where a
+/// contract is marked `refunded` with no money returned). Without
+/// `STRIPE_WEBHOOK_SECRET`, payment-confirmation webhooks cannot be verified.
+/// Refuse to start rather than boot into a state where refunds silently
+/// no-op. In non-prod the keys stay optional (dev / test / dry-run). The
+/// `"prod"` literal matches the existing CORS gate (`main.rs`).
+pub fn require_stripe_in_prod(environment: &str) -> Result<()> {
+    if environment == "prod" {
+        if std::env::var("STRIPE_SECRET_KEY").is_err() {
+            return Err(anyhow::anyhow!(
+                "STRIPE_SECRET_KEY is required when ENVIRONMENT=prod; without it refunds/payments silently no-op. Set STRIPE_SECRET_KEY or run with ENVIRONMENT != prod."
+            ));
+        }
+        if std::env::var("STRIPE_WEBHOOK_SECRET").is_err() {
+            return Err(anyhow::anyhow!(
+                "STRIPE_WEBHOOK_SECRET is required when ENVIRONMENT=prod; without it payment-confirmation webhooks cannot be verified. Set STRIPE_WEBHOOK_SECRET or run with ENVIRONMENT != prod."
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -708,5 +732,52 @@ mod tests {
         let url =
             std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
         assert_eq!(url, "http://localhost:59010");
+    }
+
+    // --- R5 / A4: prod boot gate ---
+
+    #[test]
+    #[serial]
+    fn test_require_stripe_in_prod_rejects_missing_secret_key() {
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        std::env::remove_var("STRIPE_WEBHOOK_SECRET");
+        let err = require_stripe_in_prod("prod").expect_err("prod must require STRIPE_SECRET_KEY");
+        let msg = format!("{err}");
+        assert!(msg.contains("STRIPE_SECRET_KEY"), "error must name the key: {msg}");
+        assert!(msg.contains("prod"), "error must mention prod: {msg}");
+    }
+
+    #[test]
+    #[serial]
+    fn test_require_stripe_in_prod_rejects_missing_webhook_secret() {
+        std::env::set_var("STRIPE_SECRET_KEY", "sk_live_dummy");
+        std::env::remove_var("STRIPE_WEBHOOK_SECRET");
+        let err =
+            require_stripe_in_prod("prod").expect_err("prod must require STRIPE_WEBHOOK_SECRET");
+        let msg = format!("{err}");
+        assert!(msg.contains("STRIPE_WEBHOOK_SECRET"), "error must name the key: {msg}");
+        // cleanup
+        std::env::remove_var("STRIPE_SECRET_KEY");
+    }
+
+    #[test]
+    #[serial]
+    fn test_require_stripe_in_prod_accepts_when_both_keys_set() {
+        std::env::set_var("STRIPE_SECRET_KEY", "sk_live_dummy");
+        std::env::set_var("STRIPE_WEBHOOK_SECRET", "whsec_dummy");
+        require_stripe_in_prod("prod").expect("prod with both keys set must pass");
+        // cleanup
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        std::env::remove_var("STRIPE_WEBHOOK_SECRET");
+    }
+
+    #[test]
+    #[serial]
+    fn test_require_stripe_in_prod_skipped_in_non_prod() {
+        // dev must NOT require Stripe (local/test runs work without keys)
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        std::env::remove_var("STRIPE_WEBHOOK_SECRET");
+        require_stripe_in_prod("dev").expect("dev must not require Stripe");
+        require_stripe_in_prod("staging").expect("non-prod values must not require Stripe");
     }
 }

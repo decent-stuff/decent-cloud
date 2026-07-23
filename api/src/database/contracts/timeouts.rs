@@ -431,26 +431,42 @@ impl Database {
                     })
                     .await?;
 
-                // Persist refund accounting on the contract row regardless
-                // of whether Stripe accepted the call -- the audit row is
-                // already in place; reconciliation tools rely on this row.
-                sqlx::query(
-                    "UPDATE contract_sign_requests SET refund_amount_e9s = $1, stripe_refund_id = $2, refund_created_at_ns = $3, payment_status = 'refunded' WHERE contract_id = $4",
-                )
-                .bind(payment_amount_e9s)
-                .bind(refund_id.as_deref())
-                .bind(now_ns)
-                .bind(contract_id)
-                .execute(&self.pool)
-                .await?;
-
+                // R5: only flip payment_status to 'refunded' when a real Stripe
+                // refund id was returned. When no client is configured the
+                // refund is NOT issued; record the attempted amount for
+                // reconciliation but never claim 'refunded' (the customer would
+                // see "refunded" while no money moved).
                 if let Some(ref id) = refund_id {
+                    sqlx::query(
+                        "UPDATE contract_sign_requests SET refund_amount_e9s = $1, stripe_refund_id = $2, refund_created_at_ns = $3, payment_status = 'refunded' WHERE contract_id = $4",
+                    )
+                    .bind(payment_amount_e9s)
+                    .bind(id)
+                    .bind(now_ns)
+                    .bind(contract_id)
+                    .execute(&self.pool)
+                    .await?;
+
                     tracing::info!(
                         contract_id = %hex::encode(contract_id),
                         stripe_refund_id = %id,
                         refund_cents,
                         "Provisioning-failure auto-refund issued"
                     );
+                } else {
+                    tracing::warn!(
+                        contract_id = %hex::encode(contract_id),
+                        refund_cents,
+                        "Provisioning-failure refund computed but NOT issued (no Stripe client configured); payment_status left unchanged"
+                    );
+                    sqlx::query(
+                        "UPDATE contract_sign_requests SET refund_amount_e9s = $1, refund_created_at_ns = $2 WHERE contract_id = $3",
+                    )
+                    .bind(payment_amount_e9s)
+                    .bind(now_ns)
+                    .bind(contract_id)
+                    .execute(&self.pool)
+                    .await?;
                 }
             }
         }
@@ -751,9 +767,12 @@ mod tests {
 
         let after = db.get_contract(&contract_id).await.unwrap().unwrap();
         assert_eq!(after.status, "provisioningfailed");
+        // R5: no Stripe client passed -> refund computed but NOT issued, so
+        // payment_status must NOT be flipped to 'refunded'. The attempted
+        // amount is still recorded for reconciliation.
         assert_eq!(
-            after.payment_status, "refunded",
-            "payment_status must reflect the refund attempt"
+            after.payment_status, "succeeded",
+            "payment_status must stay 'succeeded' when no refund was issued"
         );
         assert_eq!(after.refund_amount_e9s, Some(500_000_000));
 

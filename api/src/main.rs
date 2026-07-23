@@ -1133,6 +1133,20 @@ async fn serve_command() -> Result<(), std::io::Error> {
     let port = env::var("API_SERVER_PORT").unwrap_or_else(|_| "59011".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
+    // R5 / A4: in production, Stripe MUST be configured before we accept a
+    // single request. Without STRIPE_SECRET_KEY refunds silently no-op
+    // (issue_audited_refund returns None -> a contract can be marked
+    // 'refunded' with no money returned); without STRIPE_WEBHOOK_SECRET
+    // payment confirmations cannot be trusted. Fail fast at boot. Non-prod
+    // keeps Stripe optional (dev/test/dry-run).
+    let environment_for_stripe = env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
+    crate::stripe_client::require_stripe_in_prod(&environment_for_stripe).map_err(|e| {
+        std::io::Error::other(format!(
+            "Refusing to start in production with Stripe misconfigured: {:#}",
+            e
+        ))
+    })?;
+
     // Validate CREDENTIAL_ENCRYPTION_KEY at startup (fail fast on misconfiguration)
     match std::env::var("CREDENTIAL_ENCRYPTION_KEY") {
         Ok(_) => {
