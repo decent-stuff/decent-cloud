@@ -168,7 +168,11 @@ test.describe('Search DSL', () => {
 		await searchInput.fill('type:gpu');
 		await typeResponse;
 
+		// waitForResponse resolves on HTTP receipt, not on Svelte re-render.
+		// Gate on a GPU row appearing before counting so a render gap can't
+		// produce a transient 0 count under parallel load.
 		const offeringRows = page.locator('tbody tr');
+		await expect(offeringRows.filter({ hasText: /gpu/i }).first()).toBeVisible({ timeout: 5000 });
 		const count = await offeringRows.count();
 		expect(count).toBeGreaterThan(0);
 		for (let i = 0; i < count; i++) {
