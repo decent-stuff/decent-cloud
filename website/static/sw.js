@@ -18,15 +18,23 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+	const req = event.request;
+
+	// Only the app shell (HTML navigations) gets offline fallback. All other
+	// requests (API/XHR, static assets) pass straight to the network and are
+	// NEVER intercepted. Previously the SW caught every fetch and converted any
+	// failure — including transient API hiccups — into an opaque 503, which
+	// masked real errors and broke cross-origin API caching (e.g. a cold
+	// service-worker registration on a fresh shard origin returned 503 for
+	// every API call even though the API itself was healthy).
+	if (req.mode !== 'navigate') {
+		return;
+	}
+
 	event.respondWith(
-		caches.match(event.request).then((cached) => {
+		caches.match(req).then((cached) => {
 			if (cached) return cached;
-			return fetch(event.request).catch(() => {
-				if (event.request.mode === 'navigate') {
-					return caches.match('/offline');
-				}
-				return new Response('', { status: 503 });
-			});
+			return fetch(req).catch(() => caches.match('/offline'));
 		})
 	);
 });

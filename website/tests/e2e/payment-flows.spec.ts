@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures/test-account';
 import { setupConsoleLogging } from './fixtures/auth-helpers';
 import { seedRentableOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
+import { API_BASE_URL } from './fixtures/api-base';
 import { createHmac } from 'crypto';
 
 /**
@@ -19,11 +20,8 @@ import { createHmac } from 'crypto';
  */
 
 /** API base URL for direct backend calls (webhook sim, contract fetch).
- *  Mirrors playwright.config.ts apiURL default. The previous derivation
- *  (`baseURL.replace('59000','59001')`) was a no-op against the warm stack
- *  (59010 has no '59000' substring) and would have POSTed webhooks to the
- *  web server. */
-const API_BASE_URL = process.env.PLAYWRIGHT_API_URL || 'http://localhost:59011';
+ *  Derived per-stack from PLAYWRIGHT_BASE_URL (api port = web port + 1) or
+ *  PLAYWRIGHT_API_URL — see fixtures/api-base.ts. */
 
 /**
  * Helper: Get contract details via API

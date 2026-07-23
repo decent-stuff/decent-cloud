@@ -2,8 +2,7 @@ import { test, expect } from './fixtures/test-account';
 import { ed25519ph } from '@noble/curves/ed25519';
 import { mnemonicToSeedSync } from 'bip39';
 import { sha512 } from '@noble/hashes/sha512';
-
-const API_BASE_URL = process.env.VITE_DECENT_CLOUD_API_URL || 'http://localhost:59011';
+import { API_BASE_URL } from './fixtures/api-base';
 const ED25519_SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 function bytesToHex(bytes: Uint8Array): string {

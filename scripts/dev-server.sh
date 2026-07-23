@@ -29,7 +29,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PIDS="$ROOT/.dev-pids"
+# Per-stack isolation: STACK_INDEX (env, default 0) selects a separate pid/log
+# dir so multiple stacks can coexist (used by scripts/e2e-shard.sh). Stack 0
+# keeps the legacy .dev-pids/ location for backward compatibility.
+STACK_INDEX="${STACK_INDEX:-0}"
+if [ "$STACK_INDEX" -eq 0 ] 2>/dev/null; then
+  PIDS="$ROOT/.dev-pids"
+else
+  PIDS="$ROOT/.dev-pids/stack-$STACK_INDEX"
+fi
 API_PORT="${API_PORT:-59011}"
 WEB_PORT="${WEB_PORT:-59010}"
 REMOTE_API_URL="https://dev-api.decent-cloud.org"

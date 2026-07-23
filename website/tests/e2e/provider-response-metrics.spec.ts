@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-const API_BASE_URL = process.env.VITE_DECENT_CLOUD_API_URL || 'http://localhost:59011';
+import { API_BASE_URL } from './fixtures/api-base';
 
 test.describe('Provider Contract Request Response Metrics', () => {
 	test('@smoke GET /providers/:pubkey/response-metrics returns contract request SLA metrics', async ({

@@ -1,6 +1,5 @@
 import { test, expect } from './fixtures/test-account';
-
-const API_BASE_URL = process.env.VITE_DECENT_CLOUD_API_URL || 'http://localhost:59011';
+import { API_BASE_URL } from './fixtures/api-base';
 
 /**
  * Find the id of the first offline offering in the dev DB.

@@ -1293,20 +1293,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
             ])
             .allow_credentials(true)
     } else {
-        // Development: allow all localhost origins for testing
-        tracing::info!("CORS: Development mode - allowing all localhost origins");
+        // Development: allow all loopback/localhost origins on ANY port/scheme, plus
+        // the staging domain. Previously this was a hardcoded static list that silently
+        // 403'd any unlisted local port (e.g. the parallel e2e shard stacks on
+        // 59110/59120/59130). The predicate reflects the matched origin back, which is
+        // credentials-compatible (no wildcard). Prod stays locked to the branch above.
+        tracing::info!("CORS: Development mode - allowing all loopback origins");
         Cors::new()
             .allow_origin("https://dev.decent-cloud.org")
-            .allow_origin("http://localhost:59000")
-            .allow_origin("http://localhost:59010")
-            .allow_origin("http://localhost:3000")
-            .allow_origin("http://localhost:5173")
-            .allow_origin("http://localhost:5174")
-            .allow_origin("http://127.0.0.1:59000")
-            .allow_origin("http://127.0.0.1:59010")
-            .allow_origin("http://127.0.0.1:3000")
-            .allow_origin("http://127.0.0.1:5173")
-            .allow_origin("http://127.0.0.1:5174")
+            .allow_origins_fn(|origin: &str| {
+                ["http://localhost", "https://localhost", "http://127.0.0.1", "https://127.0.0.1"]
+                    .iter()
+                    .any(|base| origin == *base || origin.starts_with(&format!("{base}:")))
+            })
             .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
             .allow_headers(vec![
                 "content-type",
