@@ -481,15 +481,11 @@ impl Database {
             return Ok((None, None));
         };
 
-        let total_paused_ns = self.get_total_paused_ns(contract_id).await?;
         let now_ns = crate::now_ns()?;
-        let refund_e9s = Self::calculate_prorated_refund(
-            contract.payment_amount_e9s,
-            contract.provisioning_completed_at_ns,
-            contract.end_timestamp_ns,
-            now_ns,
-            total_paused_ns,
-        );
+        // Net refund: prorated for unused time MINUS funds already released to
+        // the provider. Sharing calculate_net_refund_e9s with the cancel/reject
+        // paths prevents over-refunding when daily releases have been recorded.
+        let refund_e9s = self.calculate_net_refund_e9s(&contract, now_ns).await?;
         if refund_e9s <= 0 {
             return Ok((None, None));
         }

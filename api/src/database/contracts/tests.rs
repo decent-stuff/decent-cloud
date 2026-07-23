@@ -1792,6 +1792,80 @@ async fn test_cancel_stripe_contract_subtracts_released_amount() {
     );
 }
 
+/// Dispute-lost refund must subtract funds already released to the provider
+/// (`total_released_e9s`), matching the cancel/reject paths. Regression guard
+/// for R9: the dispute path used the gross prorated refund and could over-pay
+/// when daily releases had already been recorded.
+#[tokio::test]
+async fn test_dispute_lost_refund_subtracts_released_amount() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![81u8; 32];
+    let payment_amount_e9s = 1_000_000_000i64; // $1.00 == 100 cents
+
+    let now_ns = crate::now_ns().unwrap();
+    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64); // started 10 days ago
+    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30-day term
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk,
+            provider_pubkey: provider_pk,
+            offering_id: "off-1".to_string(),
+            payment_intent_id: "pi_test_dispute".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s,
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    // Service started at start_ns; provider already paid for elapsed time.
+    let released_e9s = 200_000_000i64;
+    sqlx::query(
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(start_ns)
+    .bind(released_e9s)
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let now_before = crate::now_ns().unwrap();
+    // No Stripe client -> issue_audited_refund returns None (no real refund),
+    // but the refund_amount_e9s IS persisted for reconciliation.
+    let (refund_e9s, refund_id) = db
+        .process_dispute_lost_refund(&contract_id, "du_r9", None)
+        .await
+        .unwrap();
+
+    assert!(refund_id.is_none(), "no Stripe client -> no real refund id");
+
+    let gross = Database::calculate_prorated_refund(
+        payment_amount_e9s,
+        Some(start_ns),
+        Some(end_ns),
+        now_before,
+        0,
+    );
+    let expected_net = (gross - released_e9s).max(0);
+    let refund = refund_e9s.expect("dispute-lost must record a refund amount");
+    assert!(
+        (refund - expected_net).abs() < 1_000_000,
+        "dispute-lost refund must subtract released funds: expected ~{expected_net} (gross {gross} - released {released_e9s}), got {refund}"
+    );
+    // Hard money invariant: released + refund must never exceed the payment.
+    assert!(
+        released_e9s + refund <= payment_amount_e9s,
+        "over-refund: released({released_e9s}) + refund({refund}) > payment({payment_amount_e9s})"
+    );
+}
+
 /// A succeeded Stripe payment that carries neither a PaymentIntent id nor a
 /// checkout session id is a data-integrity violation. Cancellation must fail
 /// loudly rather than silently cancel the contract without refunding.
