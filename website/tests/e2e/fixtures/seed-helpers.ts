@@ -265,6 +265,10 @@ export interface OfferingSeedOverrides {
 	stockStatus?: string;
 	/** Optional name override. Default 'Test Offering'. */
 	name?: string;
+	/** Currency code for the offering's price. Default 'ICP'. Use 'USD' (or
+	 * other fiat) to enable the Stripe Credit Card payment path — the rental
+	 * dialog disables card payment for non-fiat currencies like ICP. */
+	currency?: string;
 	/** offering_source column. Default unset (NULL → treated as a normal provider
 	 * offering, which is offline without an agent pool). Set 'self_provisioned'
 	 * to make the offering always online (compute_provider_online_status treats
@@ -285,6 +289,7 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 	const offeringId = overrides?.offeringId ?? `test-${Date.now()}`;
 	const visibility = overrides?.visibility ?? 'public';
 	const stockStatus = overrides?.stockStatus ?? 'in_stock';
+	const currency = overrides?.currency ?? 'ICP';
 	const name = (overrides?.name ?? 'Test Offering').replace(/'/g, "''");
 	const createdAt = nowNs().toString();
 	const sourceCol = overrides?.offeringSource ? ', offering_source' : '';
@@ -298,7 +303,7 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 			decode('${pubkeyHex}', 'hex'),
 			'${offeringId}',
 			'${name}',
-			'ICP', 25.0,
+			'${currency}', 25.0,
 			'${visibility}', 'compute', 'monthly', '${stockStatus}',
 			'US', 'New York', ${createdAt}${sourceVal}
 		)

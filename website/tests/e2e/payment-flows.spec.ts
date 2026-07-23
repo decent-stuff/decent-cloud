@@ -1,33 +1,35 @@
 import { test, expect } from './fixtures/test-account';
-import { setupConsoleLogging, waitForApiResponse } from './fixtures/auth-helpers';
+import { setupConsoleLogging } from './fixtures/auth-helpers';
+import { seedRentableOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
 import { createHmac } from 'crypto';
 
 /**
  * E2E Tests for Rental Request Payment Flows
  *
  * Prerequisites:
- * - API server running at http://localhost:59001 (or configured base URL)
- * - Website running at http://localhost:59000
- * - At least one offering in the marketplace
- * - Stripe test keys configured (VITE_STRIPE_PUBLISHABLE_KEY, STRIPE_SECRET_KEY)
- * - Stripe webhook secret configured (STRIPE_WEBHOOK_SECRET)
+ * - Warm stack: API at http://localhost:59011, website at http://localhost:59010
+ *   (or PLAYWRIGHT_API_URL / PLAYWRIGHT_BASE_URL overrides).
+ * - A rentable offering is seeded per-suite via seedRentableOffering() (a
+ *   self_provisioned public offering, always-online, non-example).
  *
  * Test Coverage:
- * - ICPay payment method selection and contract creation
- * - Stripe payment success flow with webhook simulation
- * - Stripe payment failure flow with error handling
- * - Stripe UI availability for supported currencies
+ * - ICPay payment method selection and contract creation UI
+ * - Stripe payment-method option visibility for supported currencies
+ * - Stripe Elements rendering after Credit Card selection
  */
+
+/** API base URL for direct backend calls (webhook sim, contract fetch).
+ *  Mirrors playwright.config.ts apiURL default. The previous derivation
+ *  (`baseURL.replace('59000','59001')`) was a no-op against the warm stack
+ *  (59010 has no '59000' substring) and would have POSTed webhooks to the
+ *  web server. */
+const API_BASE_URL = process.env.PLAYWRIGHT_API_URL || 'http://localhost:59011';
 
 /**
  * Helper: Get contract details via API
  */
-async function getContract(page: any, contractId: string): Promise<any> {
-	const apiBaseUrl = page.context()._options.baseURL?.replace('59000', '59001') || 'http://localhost:59001';
-	const response = await page.request.get(
-		`${apiBaseUrl}/api/v1/contracts/${contractId}`
-	);
-
+async function getContract(page: import('@playwright/test').Page, contractId: string): Promise<any> {
+	const response = await page.request.get(`${API_BASE_URL}/api/v1/contracts/${contractId}`);
 	const result = await response.json();
 	return result.data;
 }
@@ -40,14 +42,12 @@ async function getContract(page: any, contractId: string): Promise<any> {
  * Signature format: "t=<timestamp>,v1=<HMAC-SHA256>"
  */
 async function simulateIcpayWebhook(
-	page: any,
+	page: import('@playwright/test').Page,
 	eventType: string,
 	paymentId: string,
 	contractIdHex: string,
 	webhookSecret: string = 'whsec_test_secret'
 ): Promise<void> {
-	const apiBaseUrl = page.context()._options.baseURL?.replace('59000', '59001') || 'http://localhost:59001';
-
 	const event = {
 		id: `evt_icpay_${Date.now()}`,
 		type: eventType,
@@ -72,7 +72,7 @@ async function simulateIcpayWebhook(
 		.update(signedPayload)
 		.digest('hex');
 
-	await page.request.post(`${apiBaseUrl}/api/v1/webhooks/icpay`, {
+	await page.request.post(`${API_BASE_URL}/api/v1/webhooks/icpay`, {
 		data: payload,
 		headers: {
 			'x-icpay-signature': `t=${timestamp},v1=${signature}`
@@ -88,13 +88,11 @@ async function simulateIcpayWebhook(
  * This matches the actual webhook format Stripe sends in production
  */
 async function simulateStripeWebhook(
-	page: any,
+	page: import('@playwright/test').Page,
 	eventType: string,
 	paymentIntentId: string,
 	webhookSecret: string = 'whsec_test_secret'
 ): Promise<void> {
-	const apiBaseUrl = page.context()._options.baseURL?.replace('59000', '59001') || 'http://localhost:59001';
-
 	// Create event matching real Stripe webhook structure
 	// Based on actual webhook payload from Stripe docs
 	const event = {
@@ -134,7 +132,7 @@ async function simulateStripeWebhook(
 		.update(signedPayload)
 		.digest('hex');
 
-	await page.request.post(`${apiBaseUrl}/api/v1/webhooks/stripe`, {
+	await page.request.post(`${API_BASE_URL}/api/v1/webhooks/stripe`, {
 		data: payload,
 		headers: {
 			'stripe-signature': `t=${timestamp},v1=${signature}`
@@ -143,9 +141,49 @@ async function simulateStripeWebhook(
 }
 
 test.describe('Payment Flows', () => {
+	// Seeded once per worker in beforeAll and cleaned in afterAll. The three
+	// tests only READ the offering (open its rental dialog), so parallel
+	// workers are safe — each seeds+cleans its own unique-pubkey offerings.
+	// Two currencies: ICP drives the ICPay wallet-connection guard; USD enables
+	// the Stripe Credit Card path (card payment is disabled for ICP offerings).
+	let icpOffering: { providerPubkeyHex: string; offeringName: string };
+	let usdOffering: { providerPubkeyHex: string; offeringName: string };
+
+	test.beforeAll(async () => {
+		icpOffering = await seedRentableOffering({ name: 'E2E ICPay Offering', currency: 'ICP' });
+		usdOffering = await seedRentableOffering({ name: 'E2E Stripe Offering', currency: 'USD' });
+	});
+	test.afterAll(async () => {
+		await deleteOfferingsByProvider(icpOffering.providerPubkeyHex);
+		await deleteOfferingsByProvider(usdOffering.providerPubkeyHex);
+	});
+
 	test.beforeEach(async ({ page }) => {
 		setupConsoleLogging(page);
 	});
+
+	/**
+	 * Open the rental dialog from the marketplace for the seeded rentable offering.
+	 *
+	 * The marketplace action button reads "Rent" (enabled) for online non-example
+	 * offerings; our self_provisioned seed is always-online and non-example, so its
+	 * Rent button is enabled. Demo offerings render a disabled "Demo only" button
+	 * and are skipped by getByRole({ name: 'Rent', exact: true }). The dialog that
+	 * opens is titled "Rent Resource" (RentalRequestDialog.svelte).
+	 */
+	async function openRentalDialog(page: import('@playwright/test').Page, offeringName: string) {
+		await page.goto('/dashboard/marketplace');
+		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
+		// The marketplace renders offerings as table rows; scope the Rent button
+		// to THIS offering's row so multiple rentable offerings don't collide
+		// (a global .first() would click whichever row renders first).
+		const row = page.locator('tr').filter({ hasText: offeringName }).first();
+		await expect(row).toBeVisible({ timeout: 10000 });
+		const rentButton = row.getByRole('button', { name: 'Rent', exact: true });
+		await expect(rentButton).toBeVisible({ timeout: 5000 });
+		await rentButton.click();
+		await expect(page.getByRole('heading', { name: 'Rent Resource' })).toBeVisible({ timeout: 5000 });
+	}
 
 	test('ICPay Payment UI - should show ICPay payment option and wallet connection requirement', async ({
 		page,
@@ -168,25 +206,7 @@ test.describe('Payment Flows', () => {
 		 * - Backend webhook tests verify payment confirmation logic
 		 */
 
-		// Navigate to marketplace
-		await page.goto('/dashboard/marketplace');
-		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
-
-		// Wait for offerings to load — at least one table row should render
-		// before probing the rent button. The skip path below handles the
-		// empty-marketplace case.
-		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
-
-		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
-		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
-		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
-			return;
-		}
-		await enabledRentButton.click();
-
-		// Wait for rental dialog to appear
-		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
+		await openRentalDialog(page, icpOffering.offeringName);
 
 		// ICPay should be selected by default
 		const icpayButton = page.locator('button:has-text("Crypto (ICPay)")');
@@ -219,25 +239,7 @@ test.describe('Payment Flows', () => {
 	test('Stripe payment UI - should show credit card option for supported currencies', async ({
 		page,
 	}) => {
-		// Navigate to marketplace
-		await page.goto('/dashboard/marketplace');
-		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
-
-		// Wait for offerings to load — at least one table row should render
-		// before probing the rent button. The skip path below handles the
-		// empty-marketplace case.
-		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
-
-		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
-		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
-		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
-			return;
-		}
-		await enabledRentButton.click();
-
-		// Wait for rental dialog to appear
-		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
+		await openRentalDialog(page, usdOffering.offeringName);
 
 		// Should show payment method options
 		await expect(page.locator('legend:has-text("Payment Method")')).toBeVisible();
@@ -247,99 +249,54 @@ test.describe('Payment Flows', () => {
 		await expect(page.locator('button:has-text("Credit Card")')).toBeVisible();
 	});
 
-	test('Stripe Payment UI - should show Stripe Elements and payment UI', async ({
+	test('Stripe Payment UI - should show Stripe Checkout redirect UI for fiat currencies', async ({
 		page,
 	}) => {
-		/**
-		 * NOTE: Full Stripe payment flow testing requires manual testing or Stripe CLI.
-		 *
-		 * This test verifies:
-		 * - Stripe payment UI loads correctly
-		 * - Payment method selection works
-		 * - All form fields are present
-		 *
-		 * Cannot test (limitations of e2e testing with Stripe Elements):
-		 * - Actual card entry (Stripe Elements use cross-origin iframes)
-		 * - Payment processing (requires real Stripe integration or complex mocking)
-		 *
-		 * For full payment flow testing:
-		 * - Manual testing with test cards: https://stripe.com/docs/testing#cards
-		 * - Stripe CLI: stripe listen --forward-to http://localhost:59001/api/v1/webhooks/stripe
-		 * - Integration tests with mocked Stripe.js at build level
-		 */
+		// The Stripe integration is redirect-based (Stripe Checkout), NOT embedded
+		// Stripe Elements — there is no in-page card-entry iframe. After selecting
+		// Credit Card the dialog shows a redirect explainer (+ test card reference
+		// in DEV). Submitting hands off to Stripe's hosted checkout page.
+		await openRentalDialog(page, usdOffering.offeringName);
 
-		// Navigate to marketplace
-		await page.goto('/dashboard/marketplace');
-		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
+		// For USD, Credit Card (Stripe) is available; ICPay is disabled.
+		const creditCard = page.locator('button:has-text("Credit Card")');
+		await expect(creditCard).toBeVisible();
+		await creditCard.click();
 
-		// Wait for offerings to load — at least one table row should render
-		// before probing the rent button. The skip path below handles the
-		// empty-marketplace case.
-		await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 5000 }).catch(() => {});
+		// Stripe Checkout section renders with the redirect explainer.
+		await expect(page.getByRole('heading', { name: 'Credit Card Payment via Stripe' })).toBeVisible({ timeout: 5000 });
+		await expect(page.getByText("You will be redirected to Stripe's secure checkout")).toBeVisible();
 
-		// Find an enabled "Rent Resource" button (skip demo offerings which are disabled)
-		const enabledRentButton = page.locator('button:has-text("Rent Resource"):not([disabled])').first();
-		if (!await enabledRentButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-			test.skip(true, 'No rentable offerings available (only demo offerings in marketplace)');
-			return;
-		}
-		await enabledRentButton.click();
-
-		// Wait for rental dialog to appear
-		await expect(page.locator('h2:has-text("Rent Resource")')).toBeVisible();
-
-		// Verify both payment methods are available
-		await expect(page.locator('button:has-text("ICPay")')).toBeVisible();
-		await expect(page.locator('button:has-text("Credit Card")')).toBeVisible();
-
-		// Select Stripe payment method
-		await page.click('button:has-text("Credit Card")');
-
-		// Stripe Elements render asynchronously after method selection.
-		await expect(page.locator('legend:has-text("Card Information")')).toBeVisible({ timeout: 5000 });
-
-		// Verify help text about when card will be charged
-		await expect(page.locator('text=Your card will be charged after the provider accepts')).toBeVisible();
-
-		// Verify all other form fields are still present
+		// Rental form fields are present below the payment section.
 		await expect(page.locator('textarea[placeholder*="ssh-ed25519"]')).toBeVisible();
 		await expect(page.locator('input[placeholder*="email:you@example.com"]')).toBeVisible();
 		await expect(page.locator('textarea[placeholder*="special requirements"]')).toBeVisible();
 
-		// Verify submit button shows "Pay now" when payment is required
+		// Submit button shows "Pay now" (payment is required up front).
 		await expect(page.locator('button:has-text("Pay now")')).toBeVisible();
-
-		// Test passed - Stripe UI loads correctly
 	});
 
 	/**
 	 * Stripe Payment Success/Failure Flow Tests
 	 *
-	 * These tests are not included in the automated e2e suite because Stripe Elements
-	 * use cross-origin iframes that cannot be accessed by Playwright for security reasons.
+	 * Not in the automated e2e suite: completing a Stripe payment requires the
+	 * hosted Stripe Checkout page (an external, cross-origin redirect), which
+	 * Playwright cannot drive in-process. The redirect handoff + webhook-driven
+	 * contract activation are covered instead via:
 	 *
-	 * To test the full payment flows:
+	 * 1. **Manual Testing** (development)
+	 *    - Start API and website servers (warm stack: 59010/59011).
+	 *    - Marketplace → click "Rent" on a USD offering → Credit Card → "Pay now".
+	 *    - Test cards: 4242 4242 4242 4242 (success), 4000 0000 0000 0002 (declined),
+	 *      more at https://stripe.com/docs/testing#cards
 	 *
-	 * 1. **Manual Testing** (Recommended for development)
-	 *    - Run: ./tests/e2e/setup-stripe-testing.sh
-	 *    - Start API and website servers
-	 *    - Navigate to marketplace and click "Rent Resource"
-	 *    - Select "Credit Card" payment method
-	 *    - Test cards:
-	 *      - Success: 4242 4242 4242 4242
-	 *      - Declined: 4000 0000 0000 0002
-	 *      - More: https://stripe.com/docs/testing#cards
-	 *
-	 * 2. **Stripe CLI Testing** (Recommended for webhook verification)
-	 *    ```bash
-	 *    stripe listen --forward-to http://localhost:59001/api/v1/webhooks/stripe
+	 * 2. **Stripe CLI** (webhook verification)
+	 *    stripe listen --forward-to http://localhost:59011/api/v1/webhooks/stripe
 	 *    stripe trigger payment_intent.succeeded
-	 *    ```
 	 *
-	 * 3. **Integration Tests with Mocked Stripe.js**
-	 *    - Requires build-time configuration to mock @stripe/stripe-js package
-	 *    - See fixtures/stripe-mock.ts for mock implementation (currently unused)
-	 *
-	 * The existing webhook simulation tests verify the backend logic works correctly.
+	 * 3. **Backend webhook logic** — simulateIcpayWebhook / simulateStripeWebhook /
+	 *    getContract above sign payloads and POST to the real webhook endpoints,
+	 *    exercising the backend's signature verification + contract-state transitions
+	 *    once wired into a flow that has created a real contract id.
 	 */
 });
