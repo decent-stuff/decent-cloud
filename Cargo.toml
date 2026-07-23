@@ -22,7 +22,6 @@ csv = "1.4"
 data-encoding = "2.9"
 dcc-common = { path = "common" }
 derp = "0.0.15"
-dialoguer = "0.12"
 dirs = "6.0"
 dotenv = "0.15"
 ed25519-dalek = { version = "2", default-features = false, features = [
