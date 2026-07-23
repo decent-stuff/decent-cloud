@@ -1,10 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Auto-start servers when E2E_AUTO_SERVER=1 (for development container)
-// Uses dedicated ports (59010/59011) to avoid conflicts with Docker dev (59000/59001)
+// Auto-start servers when E2E_AUTO_SERVER=1 (for development container).
+// The warm stack (the default dev workflow per repo/AGENTS.md) runs on 59010/59011.
+// Docker mode (59000/59001) is opt-in: `npm run test:e2e:docker` sets PLAYWRIGHT_BASE_URL.
 const autoStartServers = process.env.E2E_AUTO_SERVER === '1';
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || (autoStartServers ? 'http://localhost:59010' : 'http://localhost:59000');
-const apiURL = autoStartServers ? 'http://localhost:59011' : 'http://localhost:59001';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:59010';
+const apiURL = process.env.PLAYWRIGHT_API_URL || 'http://localhost:59011';
 // In agent container, PostgreSQL runs on hostname 'postgres' (docker-compose service)
 const databaseUrl = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
 const canisterId = process.env.CANISTER_ID || 'ggi4a-wyaaa-aaaai-actqq-cai';
@@ -12,11 +13,14 @@ const canisterId = process.env.CANISTER_ID || 'ggi4a-wyaaa-aaaai-actqq-cai';
 /**
  * Playwright E2E Test Configuration
  *
- * DEFAULT: npm run test:e2e - Auto-starts API server (port 59011) + website (port 59010)
+ * DEFAULT: bare `npx playwright test` or `npm run test:e2e:fast` hits the warm stack
+ * at http://localhost:59010 (brought up via `npm run e2e:up`). No env required.
  *
- * Alternative run modes:
- *   npm run test:e2e:docker  - Expect Docker containers running (ports 59000/59001)
- *   PLAYWRIGHT_BASE_URL=http://localhost:5173 npm run test:e2e:docker - Custom servers
+ * Auto-spawn mode: `npm run test:e2e` (sets E2E_AUTO_SERVER=1) spawns its own
+ * API (59011) + website (59010) and tears them down afterwards.
+ *
+ * Docker mode: `npm run test:e2e:docker` expects Docker containers on 59000/59001
+ * (sets PLAYWRIGHT_BASE_URL=http://localhost:59000). Override any URL via env.
  *
  * The API server is built with SQLX_OFFLINE=true and uses PostgreSQL.
  */

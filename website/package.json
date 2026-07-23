@@ -21,7 +21,7 @@
 		"e2e:up": "bash ../scripts/dev-server.sh start --e2e",
 		"e2e:down": "bash ../scripts/dev-server.sh stop",
 		"e2e:status": "bash ../scripts/dev-server.sh status",
-		"test:e2e:docker": "playwright test",
+		"test:e2e:docker": "PLAYWRIGHT_BASE_URL=http://localhost:59000 playwright test",
 		"test:e2e:ui": "E2E_AUTO_SERVER=1 playwright test --ui",
 		"test:e2e:debug": "E2E_AUTO_SERVER=1 playwright test --debug",
 		"test:e2e:headed": "E2E_AUTO_SERVER=1 playwright test --headed",
