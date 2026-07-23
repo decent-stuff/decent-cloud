@@ -1,5 +1,13 @@
 import { test, expect, waitForAuthReady } from './fixtures/test-account';
-import { pubkeyHexFromSeed, sql, nowNs, deleteSavedOfferingsForUser } from './fixtures/seed-helpers';
+import {
+	pubkeyHexFromSeed,
+	sql,
+	nowNs,
+	deleteSavedOfferingsForUser,
+	seedOffering,
+	deleteOfferingsByProvider,
+	randomHex,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for /dashboard/saved.
@@ -14,10 +22,30 @@ import { pubkeyHexFromSeed, sql, nowNs, deleteSavedOfferingsForUser } from './fi
  *  - Interactive action: unsave an offering (optimistic UI update).
  *  - Bulk action: select-all + remove.
  *  - Compare-saved CTA appears when >=2 offerings are saved.
+ *
+ * Self-contained: offerings are seeded under a fresh provider pubkey via
+ * seedOffering (not the demo seed_data.sql rows) so the test never depends on
+ * externally-maintained seed rows drifting.
  */
 
+const PROVIDER_PUBKEY = randomHex(32);
+const OFFERING_NAMES = ['E2E Saved Alpha', 'E2E Saved Beta', 'E2E Saved Gamma'];
+let offeringIds: string[] = [];
+
+/** Seed the 3 offerings once for the whole spec (parallel-safe: random pubkey). */
+test.beforeAll(async () => {
+	for (const name of OFFERING_NAMES) {
+		const id = await seedOffering(PROVIDER_PUBKEY, { name, offeringSource: 'self_provisioned' });
+		offeringIds.push(id);
+	}
+});
+
+test.afterAll(async () => {
+	await deleteOfferingsByProvider(PROVIDER_PUBKEY);
+});
+
 /** Insert a saved_offering row for the test user. */
-async function seedSavedOffering(requesterPubkeyHex: string, offeringId: number): Promise<void> {
+async function seedSavedOffering(requesterPubkeyHex: string, offeringId: string): Promise<void> {
 	await sql(`
 		INSERT INTO saved_offerings (user_pubkey, offering_id, saved_at)
 		VALUES (decode('${requesterPubkeyHex}', 'hex'), ${offeringId}, ${nowNs().toString()})
@@ -46,20 +74,19 @@ test.describe('/dashboard/saved', () => {
 	test('populated state: shows saved offerings with links to marketplace detail', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
-			// Save offerings 1 and 2 (compute-001 Basic VPS, compute-002 Performance VPS).
-			await seedSavedOffering(pubkey, 1);
-			await seedSavedOffering(pubkey, 2);
+			await seedSavedOffering(pubkey, offeringIds[0]);
+			await seedSavedOffering(pubkey, offeringIds[1]);
 
 			await page.goto('/dashboard/saved');
 			await waitForAuthReady(page);
 
 			// Both offerings visible by their names
-			await expect(page.getByRole('link', { name: 'Basic VPS' })).toBeVisible();
-			await expect(page.getByRole('link', { name: 'Performance VPS' })).toBeVisible();
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[0] })).toBeVisible();
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[1] })).toBeVisible();
 
 			// Each links to its marketplace detail page
-			await expect(page.getByRole('link', { name: 'Basic VPS' })).toHaveAttribute('href', '/dashboard/marketplace/1');
-			await expect(page.getByRole('link', { name: 'Performance VPS' })).toHaveAttribute('href', '/dashboard/marketplace/2');
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[0] })).toHaveAttribute('href', `/dashboard/marketplace/${offeringIds[0]}`);
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[1] })).toHaveAttribute('href', `/dashboard/marketplace/${offeringIds[1]}`);
 
 			// 'Compare Saved' CTA appears when >=2 offerings are saved
 			await expect(page.getByRole('link', { name: /Compare Saved/ })).toBeVisible();
@@ -74,26 +101,25 @@ test.describe('/dashboard/saved', () => {
 	test('action: unsave a single offering removes it from the list', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
-			await seedSavedOffering(pubkey, 1);
-			await seedSavedOffering(pubkey, 2);
+			await seedSavedOffering(pubkey, offeringIds[0]);
+			await seedSavedOffering(pubkey, offeringIds[1]);
 
 			await page.goto('/dashboard/saved');
 			await waitForAuthReady(page);
 
 			// Initially both offerings are present
-			await expect(page.getByRole('link', { name: 'Basic VPS' })).toBeVisible();
-			await expect(page.getByRole('link', { name: 'Performance VPS' })).toBeVisible();
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[0] })).toBeVisible();
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[1] })).toBeVisible();
 
-			// Click the unsave button (the bookmark icon button next to 'Basic VPS')
-			// Each row has a 'View' link and an unsave button. Scope to the row.
-			const basicVpsRow = page.locator('div.card', { hasText: 'Basic VPS' });
-			const unsaveButton = basicVpsRow.locator('button[title="Remove from saved"]');
+			// Click the unsave button (the bookmark icon button next to the first offering)
+			const firstRow = page.locator('div.card', { hasText: OFFERING_NAMES[0] });
+			const unsaveButton = firstRow.locator('button[title="Remove from saved"]');
 			await unsaveButton.click();
 
-			// The Basic VPS row disappears (optimistic UI update)
-			await expect(page.getByRole('link', { name: 'Basic VPS' })).toHaveCount(0);
-			// Performance VPS still present
-			await expect(page.getByRole('link', { name: 'Performance VPS' })).toBeVisible();
+			// The first offering row disappears (optimistic UI update)
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[0] })).toHaveCount(0);
+			// Second offering still present
+			await expect(page.getByRole('link', { name: OFFERING_NAMES[1] })).toBeVisible();
 		} finally {
 			await deleteSavedOfferingsForUser(pubkey);
 		}
@@ -102,9 +128,9 @@ test.describe('/dashboard/saved', () => {
 	test('bulk action: Select all + Remove N selected deletes all saved', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
-			await seedSavedOffering(pubkey, 1);
-			await seedSavedOffering(pubkey, 2);
-			await seedSavedOffering(pubkey, 3);
+			await seedSavedOffering(pubkey, offeringIds[0]);
+			await seedSavedOffering(pubkey, offeringIds[1]);
+			await seedSavedOffering(pubkey, offeringIds[2]);
 
 			await page.goto('/dashboard/saved');
 			await waitForAuthReady(page);
@@ -128,8 +154,8 @@ test.describe('/dashboard/saved', () => {
 	test('row selection: clicking checkbox on a single row toggles bulk button', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
-			await seedSavedOffering(pubkey, 1);
-			await seedSavedOffering(pubkey, 2);
+			await seedSavedOffering(pubkey, offeringIds[0]);
+			await seedSavedOffering(pubkey, offeringIds[1]);
 
 			await page.goto('/dashboard/saved');
 			await waitForAuthReady(page);
@@ -137,15 +163,15 @@ test.describe('/dashboard/saved', () => {
 			// No bulk-remove button initially
 			await expect(page.getByRole('button', { name: /Remove.*selected/ })).toHaveCount(0);
 
-			// Check the row-level checkbox for the first offering (id=1)
-			const basicVpsRow = page.locator('div.card', { hasText: 'Basic VPS' });
-			await basicVpsRow.locator('input[type="checkbox"]').check();
+			// Check the row-level checkbox for the first offering
+			const firstRow = page.locator('div.card', { hasText: OFFERING_NAMES[0] });
+			await firstRow.locator('input[type="checkbox"]').check();
 
 			// Bulk-remove button now appears with "1 selected"
 			await expect(page.getByRole('button', { name: /Remove 1 selected/ })).toBeVisible();
 
 			// Uncheck — button disappears
-			await basicVpsRow.locator('input[type="checkbox"]').uncheck();
+			await firstRow.locator('input[type="checkbox"]').uncheck();
 			await expect(page.getByRole('button', { name: /Remove.*selected/ })).toHaveCount(0);
 		} finally {
 			await deleteSavedOfferingsForUser(pubkey);
