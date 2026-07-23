@@ -69,6 +69,22 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-07-23 session (e2e radical overhaul + issue sweep + sharding harness)
+
+| Fix | Severity | Resolution |
+|-----|----------|------------|
+| `reputation-detail.spec.ts` hardcoded `uxaudit` pubkey (drifted after re-seed) | Fragile | Shipped in `c8e25e3a`: self-contained test seeds its own account, derives pubkey, asserts, cleans up. Was the 1 failure in a re-baselined 201/1 suite. |
+| F1: `/dashboard` 'Get Started' CTA → `/dashboard/provider` 404s (no such route) | High | Shipped in `9dad0734`: href → `/dashboard/provider/support` (the setup wizard). The only broken link in the dashboard; 19/20 internal hrefs resolve. TDD RED→GREEN. |
+| F2: onboarding modal gated on `sessionStorage` (reappears each browser session) + always said 'Complete your profile' even when complete | Medium | Shipped (F2): switched to `localStorage` (`WelcomeModal.svelte`); dynamic copy 'Your profile is ready' when username+email both set. Fixtures + existing onboarding tests updated. |
+| CLI: dead `dialoguer` dependency (never used) | Tech debt | Shipped in `c29173b5`: removed from `cli/Cargo.toml` + workspace `Cargo.toml`. |
+| CLI: 20 fake string-literal tests (asserted Display strings, never invoked the binary) | Tech debt | Shipped in `db5997cd`: replaced with 10 real `assert_cmd` subprocess smoke tests (`--help`/`-V`, keygen generate/import, ledger-local list, network dispatch, clap validation). Binary e2e coverage 0%→real. Net 39→29 tests. |
+| saved-offerings + offering-detail-save hardcoded seed_data IDs/names | Fragile | Shipped (fragile commit): both specs now seed their own offerings under a random pubkey. |
+| `account.spec.ts` seeded account with no cleanup (orphaned rows/run) | Fragile | Shipped (fragile commit): added `deleteAccountByUsername` in finally. |
+| `recovery-flow.spec.ts` 2× `waitForTimeout(100)` sleeps | Fragile | Shipped (fragile commit): replaced with `waitForResponse` on the recovery API. |
+| Sharding harness built + two blockers it exposed | Infra | Shipped in `297009d9`: dev CORS now allows any `localhost/127.0.0.1:*` origin (was a static list — shard ports 403'd); service worker no longer intercepts non-navigate fetches (was masking real API errors as 503); new `fixtures/api-base.ts` resolves API URL from stack port (4 specs hardcoded 59011). |
+| Offering EDIT flow `/dashboard/offerings/[id]/edit` — zero coverage | Coverage | Shipped in `c97a497d`: 4 e2e tests (pre-fill, live diff panel, submit+redirect+DB persistence, validation). No source bug found. |
+| Full suite baseline | — | **205 passed, 0 failed, 0 skipped, 0 networkidle, ~192s, 4 workers** (single warm stack). |
+
 ### 2026-07-23 session (e2e harness hardening + skip-gap closure + UX audit)
 
 | Fix | Severity | Resolution |
@@ -133,5 +149,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | Finding | Status |
 |---------|--------|
-| Full suite 152s for 202 tests; <60s goal needs multi-stack sharding | **Deferred** — `playwright.config.ts:32-36` documents 8 workers = no gain (box 64% idle, not CPU/Vite/DB-pool-bound). Bottleneck = sequential browser-driven page loads vs a single API+Postgres stack. 0.75s/test wall is already efficient. Reaching <60s realistically needs Playwright `--shard` across N warm stacks — an infra investment beyond harness-hardening scope. |
+| Full suite 192s for 205 tests; <60s goal needs multi-stack sharding | **Empirically investigated — sharding does NOT help on this box.** Built full harness (`scripts/e2e-shard.sh`, `dev-server.sh` STACK_INDEX, `fixtures/api-base.ts`). Root cause: 3 shard stacks share ONE Postgres → competing pools = worse DB contention than single-stack's single pool (3×4w=22 fails/4m30s; 3×2w=4 flakes). **Single stack 4 workers = 205/0 green ~192s = proven optimum.** For sharding to truly help, each shard needs its own Postgres instance (future CI-runner work). As a side benefit, dev CORS now correctly allows any localhost origin and the service worker no longer masks API errors. |
 | `scripts/browser.js eval --seed <phrase>` throws "UtilityScript.evaluate" | **Minor tooling** — `authenticatePage` (browser.js:332-336) does an extra `goto`+`networkidle`+300ms after seed inject; a SvelteKit client-side redirect/WelcomeModal likely destroys the eval context. `snap`/`shot`/`errs`/`html`/`tour` all work with `--seed`; only `eval` is affected. For authed JS eval, use the e2e framework. |
+| Coverage gap: rent→pay→view→cancel happy path (UI-created contract, not DB-seeded) | **Known gap** — the primary tenant flow is only fragmented (cancel asserted on DB-seeded contracts). Payment-bound (Stripe); higher effort. Parked. |
+| Coverage gap: provider agent-pool mgmt `/dashboard/provider/agents/[pool_id]` | **Known gap** — pool create + detail/edit untested. Needs a populated provider fixture. Parked. |

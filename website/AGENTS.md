@@ -23,7 +23,7 @@ website/
 | Generated API types | `src/lib/types/generated/` | Do not hand-edit |
 | Unit test setup | `vitest.config.ts`, `src/test/setup.ts` | jsdom + globals |
 | E2E flow | `playwright.config.ts`, `tests/e2e/` | Two modes: warm-stack `test:e2e:fast` (preferred) or one-shot `E2E_AUTO_SERVER=1` (slower). See `repo/AGENTS.md` for the warm-stack workflow. |
-| E2E fixtures | `tests/e2e/fixtures/` | `test-account.ts` (fast-auth via `addInitScript` seed injection), `test-admin-account.ts` (DB-direct admin grant), `seed-helpers.ts` (DB-direct psql seeding), `auth-helpers.ts` (UI sign-in helpers), `stripe-mock.ts` (Stripe SDK mock — external-dep boundary only). |
+| E2E fixtures | `tests/e2e/fixtures/` | `test-account.ts` (fast-auth via `addInitScript` seed injection), `test-admin-account.ts` (DB-direct admin grant), `seed-helpers.ts` (DB-direct psql seeding), `auth-helpers.ts` (UI sign-in helpers), `api-base.ts` (resolves the API base URL from `PLAYWRIGHT_API_URL`→baseURL port+1→59011; use in specs making direct API calls so they work on any shard stack), `stripe-mock.ts` (Stripe SDK mock — external-dep boundary only). |
 
 ## CONVENTIONS
 - Keep API access centralized in `src/lib/services/` instead of ad hoc fetches inside pages.
@@ -54,9 +54,11 @@ E2E_AUTO_SERVER=1 npm run test:e2e  # one-shot mode (spawns + tears down its own
   `localStorage['seed_phrases']` via a context-level `addInitScript` before the first navigation.
   The per-test `page` fixture then goes to `/dashboard` and waits for the Logout button. Tests
   that explicitly exercise the UI sign-in flow can still import `signIn` from `auth-helpers.ts`.
-- `first_login_onboarding_completed` is also pre-set in `sessionStorage` at the context level so
+- `first_login_onboarding_completed` is pre-set in **`localStorage`** at the context level so
   the WelcomeModal doesn't intercept clicks on underlying dashboard chrome; tests that exercise
   the WelcomeModal remove that key via a page-level `addInitScript` (page-level runs after context-level).
+  (Was `sessionStorage` until 2026-07-23 — switched so returning users don't see the modal each
+  new browser session.)
 - Dev iteration target: smoke 4 tests in ~20 s against a warm stack; full suite ~200 tests in ~2.9 m.
 - See `repo/AGENTS.md` → "Playwright E2E (repo-local)" for the full warm-stack workflow and the
   `RATE_LIMIT_ENABLED` note (parallel workers need it disabled to avoid mass 429s).

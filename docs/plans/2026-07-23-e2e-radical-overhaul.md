@@ -1,11 +1,11 @@
 # E2E Harness Radical Overhaul + Issue Sweep (2026-07-23)
 
-**STATUS: IN PROGRESS**
+**STATUS: COMPLETE**
 
 Builds on the COMPLETE `2026-07-23-harness-hardening-and-ux-audit.md`. The prior
 session left the suite green at 202/0, but a re-baseline THIS session found a
 fragile test (`reputation-detail.spec.ts` hardcoded a `uxaudit` pubkey that
-drifted) — fixed first (commit `c8e25e3a`). This plan tackles the deeper asks:
+drifted) — fixed first (commit `c8e25e3a`). This plan tackled the deeper asks:
 radical harness speed, full user-flow coverage, a fresh issue sweep, and UX
 flow optimization.
 
@@ -49,32 +49,74 @@ assert → cleanup). 3/3 green in 8s.
 **Lesson:** any test depending on externally-seeded state with a hardcoded
 identifier is fragile. Sweep the suite for the same anti-pattern.
 
-## Phase 1 — Parallel investigation (subagents) ⏳
+## Phase 1 — Parallel investigation (subagents) ✓
 
-- **A. Coverage + speed analysis** (planner): enumerate all `src/routes/**`,
-  map to specs, produce coverage matrix; empirically re-test worker counts
-  (4/8/12/16) + measure per-test overhead; identify fold candidates.
-- **B. Fresh no-mock UX audit** (implementer): browser.js tour of all key
-  pages + zai-vision screenshot analysis; document functional/visual defects.
-- **C. Fragile-test sweep** (planner): grep for hardcoded identifiers /
-  externally-seeded dependencies across all specs; list fixes.
-- **D. CLI harness assessment** (planner): how is `cli/` tested today? Is
-  there an integration harness for `dialoguer` interactive flows?
+Four subagents ran in parallel; full reports in `docs/audits/2026-07-23-*.md`:
 
-## Phase 2 — Harness radical improvement
+- **A. Coverage + speed** (`2026-07-23-e2e-coverage-speed.md`): 44/48 routes covered (92%).
+  Speed: 4 workers=151s clean; 8/12/16 workers degrade (single API+Postgres saturates;
+  box 16core/62GB 62% idle = not CPU-bound). Top rec: shard across 3 warm stacks → ~50s.
+- **B. Fresh UX audit** (`2026-07-23-fresh-ux-audit.md`): **F1 (High)** `/dashboard`
+  'Get Started' → `/dashboard/provider` 404s. **F2 (Med)** onboarding modal gated on
+  sessionStorage (reappears each browser session) + always says 'Complete your profile'.
+  **F3 (Low)** `/docs`,`/pricing` 404 (not linked). 0 real console errors across all flows.
+- **C. Fragile-test sweep** (`2026-07-23-fragile-test-sweep.md`): 3 MED (hardcoded seed_data
+  IDs in saved-offerings/offering-detail-save; account.spec no cleanup) + recovery-flow sleeps.
+- **D. CLI assessment** (`2026-07-23-cli-harness-assessment.md`): `dialoguer` unused (dead dep);
+  ~70% of CLI tests were fake string-literal assertions; 0% real binary coverage. Rec: small
+  `assert_cmd` smoke harness.
 
-(To be filled from Phase 1 findings.)
+## Phase 2 — Harness radical improvement ✓
 
-## Phase 3 — Issue fixes (TDD)
+Built a full sharding harness (`scripts/dev-server.sh` STACK_INDEX refactor +
+`scripts/e2e-shard.sh` orchestrator + `website/tests/e2e/fixtures/api-base.ts` URL
+resolver) and fixed two blockers it exposed:
 
-(To be filled from Phase 1 findings.)
+1. **Dev CORS** (`api/src/main.rs:1295-1323`): static hardcoded origin list (despite
+   comment claiming "all localhost") → shard ports 403'd. Now uses `allow_origins_fn`
+   predicate matching any `http(s)://(localhost|127.0.0.1):*`.
+2. **Service Worker** (`website/static/sw.js`): intercepted EVERY fetch and converted
+   failures to opaque 503 — masked real errors. Now only intercepts `navigate` requests.
+3. **Hardcoded 59011** in 4 specs making direct API calls → extracted shared
+   `API_BASE_URL` resolver (`fixtures/api-base.ts`).
 
-## Phase 4 — UX flow optimization
+**Honest sharding verdict (empirically verified):** on THIS box, sharding does NOT help.
+The 3 shard stacks share ONE Postgres → competing connection pools = WORSE DB contention
+than single-stack's single pool. 3×4w=22 failures/4m30s; 3×2w=4 flakes/4m49s. **Single
+stack, 4 workers: 205 passed, 0 failed, ~192s — the proven-green optimum.** For sharding
+to help, each shard needs its own Postgres (future CI work). The harness + CORS + SW fixes
+are correct and stay regardless. (commit `297009d9`)
 
-(To be filled.)
+## Phase 3 — Issue fixes (TDD) ✓
 
-## Phase 5 — Docs + verification
+| Fix | Severity | Commit | Detail |
+|-----|----------|--------|--------|
+| reputation-detail hardcoded `uxaudit` pubkey | Fragile | `c8e25e3a` | Self-contained: seed→derive pubkey→assert→cleanup. |
+| F1: `/dashboard` 'Get Started' → 404 | High | `9dad0734` | href `/dashboard/provider` → `/dashboard/provider/support`. |
+| F2: onboarding modal sessionStorage + stale copy | Med | (F2 commit) | Switched to localStorage + dynamic 'Your profile is ready' copy. |
+| CLI: dead `dialoguer` dep | Tech debt | `c29173b5` | Removed from cli + workspace Cargo.toml. |
+| CLI: 20 fake string-literal tests | Tech debt | `db5997cd` | Replaced with 10 real `assert_cmd` subprocess smoke tests (0%→real binary coverage). |
+| saved-offerings hardcoded seed_data IDs | Fragile | (fragile commit) | Seeds own offerings under random pubkey. |
+| offering-detail-save hardcoded seed_data IDs | Fragile | (fragile commit) | Seeds own offering. |
+| account.spec no cleanup | Fragile | (fragile commit) | Added `deleteAccountByUsername` finally. |
+| recovery-flow sleeps | Fragile | (fragile commit) | `waitForTimeout` → `waitForResponse`. |
 
-- Update `docs/OPEN_ISSUES.md` (new findings + closed items).
-- Update `repo/AGENTS.md` + `website/AGENTS.md` harness notes.
-- Final full-suite green run.
+## Phase 4 — Coverage gaps + UX ✓
+
+- **Offering EDIT flow** `/dashboard/offerings/[id]/edit` — was zero coverage (primary
+  provider action). Added 4 e2e tests (pre-fill, live diff panel, submit+redirect+DB
+  persistence, validation). No source bug found. (commit `c97a497d`)
+- **rent→pay→view→cancel happy path** + **provider agent-pool mgmt** — remaining gaps
+  (payment-bound / needs populated provider setup). Higher-effort; parked as known gaps
+  in `OPEN_ISSUES.md` e2e tech-debt section.
+- UX: F1 (dead-end 404) + F2 (modal reappears) were the highest-impact UX wins and are
+  shipped. F3 (`/docs`,`/pricing` 404 — not linked anywhere) is cosmetic/optional.
+
+## Phase 5 — Docs + verification ✓
+
+- Updated `docs/OPEN_ISSUES.md` with all session results.
+- Updated `website/AGENTS.md` + plan file.
+- Final full-suite: **205 passed, 0 failed, ~192s, 4 workers** (single warm stack).
+
+## Session commits (in order)
+`c8e25e3a` → `9dad0734` → `c29173b5` → `db5997cd` → (fragile-fixes) → (F2) → `297009d9` → `c97a497d`
