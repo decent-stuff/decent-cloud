@@ -346,3 +346,132 @@ export async function seedRentableOffering(overrides?: OfferingSeedOverrides): P
 export async function deleteOfferingsByProvider(pubkeyHex: string): Promise<void> {
 	await sql(`DELETE FROM provider_offerings WHERE pubkey = decode('${pubkeyHex}', 'hex')`);
 }
+
+/**
+ * Seed for a REAL tenant→provider rental flow (rent-flow.spec.ts).
+ *
+ * `seedRentableOffering` alone makes an offering VISIBLE+ONLINE in the marketplace
+ * (self_provisioned → provider_online=true), but the API's `create_rental_request`
+ * for a self_provisioned offering ALSO reserves a `cloud_resources` row
+ * (listing_mode='marketplace', status='running', contract_id IS NULL) and rolls
+ * the whole insert back with "out of stock" if none is available. So a genuine
+ * UI rental that lands a real contract needs the full chain this helper wires:
+ *   provider account → cloud_account → cloud_resource(s) → self_provisioned offering.
+ *
+ * The offering is under a RANDOM provider pubkey (not the testAccount pubkey), so
+ * the rental is a real tenant→provider request (not a degenerate self-rental).
+ * `resourceCount` defaults to 4 so several serial rentals (rent+cancel from both
+ * the list and the detail page) don't exhaust stock. `currency` defaults to 'USD'
+ * so the rental dialog selects the Stripe (Credit Card) path — the only payment
+ * path with no pre-submit wallet/config guard, and the one whose external boundary
+ * (Stripe) is permitted to be mocked in e2e.
+ */
+export interface RentableWithResourceSeed {
+	/** Random 32-byte hex pubkey of the (synthetic) provider. */
+	providerPubkeyHex: string;
+	/** 16-byte hex id of the synthetic provider accounts row (for cleanup). */
+	providerAccountIdHex: string;
+	/** Numeric BIGSERIAL id of the provider_offerings row (for /marketplace/<id>). */
+	offeringNumericId: string;
+	/** String offering_id (e.g. rentflow-<tag>). */
+	offeringId: string;
+	/** Human-readable offering name (for marketplace matching). */
+	offeringName: string;
+	/** cloud_resources.external_id values seeded (for cleanup). */
+	resourceExternalIds: string[];
+}
+
+export async function seedRentableWithResource(opts?: {
+	name?: string;
+	currency?: string;
+	resourceCount?: number;
+}): Promise<RentableWithResourceSeed> {
+	const providerPubkeyHex = randomHex(32);
+	const providerAccountIdHex = randomHex(16);
+	const tag = randomHex(4);
+	const cloudAccountName = `e2e-ca-${tag}`;
+	const providerUsername = `e2eprov-${tag}`;
+	const providerEmail = `${providerUsername}@test.example.com`;
+	const offeringId = `rentflow-${tag}`;
+	const offeringName = opts?.name ?? 'E2E Rent Flow Offering';
+	const currency = opts?.currency ?? 'USD';
+	const resourceCount = opts?.resourceCount ?? 4;
+
+	// Provider accounts row — cloud_accounts.account_id has an FK to accounts.id (bytea).
+	await sql(`
+		INSERT INTO accounts (id, username, email)
+		VALUES (decode('${providerAccountIdHex}', 'hex'), '${providerUsername}', '${providerEmail}')
+	`);
+
+	// cloud_account (id is auto-gen uuid); RETURNING id gives the uuid for the resources.
+	// psql emits a trailing "INSERT 0 1" command tag even with --tuples-only, so split
+	// and pick the uuid line (same trick seedOffering uses for its RETURNING id).
+	const cloudAccountRaw = await sql(`
+		INSERT INTO cloud_accounts (account_id, backend_type, name, credentials_encrypted)
+		VALUES (decode('${providerAccountIdHex}', 'hex'), 'hetzner', '${cloudAccountName}', 'encrypted')
+		RETURNING id
+	`);
+	const cloudAccountUuid = cloudAccountRaw
+		.split('\n')
+		.map((l) => l.trim())
+		.find((l) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(l));
+	if (!cloudAccountUuid) {
+		throw new Error(
+			`seedRentableWithResource: cloud_accounts RETURNING id did not yield a uuid; got: ${cloudAccountRaw}`,
+		);
+	}
+
+	// self_provisioned public offering under the random provider pubkey.
+	const offeringNumericId = await seedOffering(providerPubkeyHex, {
+		offeringId,
+		name: offeringName,
+		currency,
+		offeringSource: 'self_provisioned',
+		stockStatus: 'in_stock',
+	});
+
+	// Reservable cloud_resources linked to this offering, listed on the marketplace.
+	const resourceExternalIds: string[] = [];
+	for (let i = 0; i < resourceCount; i++) {
+		const ext = `e2e-res-${tag}-${i}`;
+		resourceExternalIds.push(ext);
+		await sql(`
+			INSERT INTO cloud_resources (
+				cloud_account_id, external_id, name, server_type, location,
+				image, ssh_pubkey, status, offering_id, listing_mode
+			) VALUES (
+				'${cloudAccountUuid}', '${ext}', 'e2e-vm-${tag}-${i}', 'cx22', 'nbg1',
+				'ubuntu-24.04', 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIe2eowner', 'running',
+				${offeringNumericId}, 'marketplace'
+			)
+		`);
+	}
+
+	return {
+		providerPubkeyHex,
+		providerAccountIdHex,
+		offeringNumericId,
+		offeringId,
+		offeringName,
+		resourceExternalIds,
+	};
+}
+
+/**
+ * Tear down a `seedRentableWithResource` seed. Clears resource→contract links
+ * first (cloud_resources.contract_id has a NO-ACTION FK to contract_sign_requests,
+ * so an un-cancelled contract would otherwise block deletion), then removes the
+ * resources, the offering, and the provider account (cascades cloud_account).
+ *
+ * The rental CONTRACTS themselves belong to the requester (testAccount) pubkey,
+ * not the provider — clean those with `deleteContractsForRequester(requesterHex)`.
+ */
+export async function cleanupRentableWithResource(seed: RentableWithResourceSeed): Promise<void> {
+	const extList = seed.resourceExternalIds.map((e) => `'${e}'`).join(',');
+	await sql(`
+		UPDATE cloud_resources SET contract_id = NULL WHERE external_id IN (${extList});
+		DELETE FROM cloud_resources WHERE external_id IN (${extList});
+		DELETE FROM provider_offerings WHERE pubkey = decode('${seed.providerPubkeyHex}', 'hex');
+		DELETE FROM accounts WHERE id = decode('${seed.providerAccountIdHex}', 'hex');
+	`);
+}
