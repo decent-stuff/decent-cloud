@@ -69,6 +69,38 @@ pub fn is_stripe_supported_currency(currency: &str) -> bool {
     STRIPE_SUPPORTED_CURRENCIES.contains(&currency.to_lowercase().as_str())
 }
 
+/// The set of allowed `payment_status` values for a contract.
+///
+/// Single source of truth for the `contract_sign_requests.payment_status`
+/// column. Defined here (alongside `PaymentMethod`) so every payment-status
+/// comparison, write, and DB CHECK constraint across the monorepo references
+/// these names instead of duplicating raw string literals. The DB-level CHECK
+/// constraint (migration `047_payment_status_check.sql`) mirrors `ALL` exactly
+/// so the invariant cannot be bypassed even via direct SQL.
+pub mod payment_status {
+    /// Payment initiated but not yet confirmed (e.g. Stripe checkout pending
+    /// webhook, or ICPay transaction awaiting settlement).
+    pub const PENDING: &str = "pending";
+    /// Payment confirmed/collected; provisioning is permitted.
+    pub const SUCCEEDED: &str = "succeeded";
+    /// Funds returned to the customer. Only ever set when a real refund id
+    /// was recorded (Stripe `re_*` or ICPay refund id).
+    pub const REFUNDED: &str = "refunded";
+    /// Payment failed / charge declined.
+    pub const FAILED: &str = "failed";
+    /// A Stripe dispute was opened on the payment.
+    pub const DISPUTED: &str = "disputed";
+
+    /// The complete allow-list, in canonical order. The DB CHECK constraint
+    /// must mirror this set verbatim.
+    pub const ALL: &[&str] = &[PENDING, SUCCEEDED, REFUNDED, FAILED, DISPUTED];
+
+    /// True iff `status` is one of the allowed `payment_status` values.
+    pub fn is_valid(status: &str) -> bool {
+        ALL.contains(&status)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

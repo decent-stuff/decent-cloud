@@ -5035,3 +5035,121 @@ async fn test_cancel_refund_uses_idempotency_key() {
     assert!(amount_cents > 0, "refund must be positive on a fresh cancel");
     assert!(refund_id.is_none(), "no Stripe call -> no refund_id");
 }
+
+// =============================================================================
+// Money-safety hardening (Phase 1A).
+// =============================================================================
+
+/// R10 / A1: `update_icpay_payment_status` MUST reject any value outside the
+/// allow-list instead of binding an arbitrary string straight into the
+/// `payment_status` column. A bogus status poisons every downstream guard that
+/// compares `== "succeeded"`. Regression guard for the code-level validation.
+#[tokio::test]
+async fn test_update_icpay_payment_status_rejects_unknown_value() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xC1; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+
+    let result = db
+        .update_icpay_payment_status(&contract_id, "totally_bogus_status")
+        .await;
+    assert!(
+        result.is_err(),
+        "unknown payment_status must be rejected, not written"
+    );
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(
+        err.contains("totally_bogus_status"),
+        "error must name the offending value, got: {err}"
+    );
+    assert!(
+        err.contains("succeeded"),
+        "error must list the allowed set, got: {err}"
+    );
+
+    // The row must be untouched -- no silent partial write.
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(
+        contract.payment_status, "succeeded",
+        "rejected update must not mutate payment_status"
+    );
+}
+
+/// R10 / A1 positive path: an allow-listed value ('failed') writes through.
+#[tokio::test]
+async fn test_update_icpay_payment_status_accepts_known_value() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xC2; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+
+    db.update_icpay_payment_status(&contract_id, "failed")
+        .await
+        .expect("known payment_status must succeed");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "failed");
+}
+
+/// R10 / A1 belt-and-suspenders: the DB CHECK constraint (migration 047)
+/// makes the allow-list un-bypassable even via direct SQL. A raw UPDATE with
+/// a garbage value must violate the constraint.
+#[tokio::test]
+async fn test_payment_status_check_constraint_blocks_raw_update() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xC3; 32];
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "requested",
+    )
+    .await;
+
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET payment_status = 'garbage' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+    assert!(
+        result.is_err(),
+        "CHECK constraint must reject a garbage payment_status via direct SQL"
+    );
+    let err = format!("{:#}", result.unwrap_err());
+    assert!(
+        err.to_lowercase().contains("check")
+            || err.to_lowercase().contains("constraint")
+            || err.contains("payment_status"),
+        "violation must reference the check constraint / column, got: {err}"
+    );
+}

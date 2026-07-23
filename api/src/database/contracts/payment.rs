@@ -225,12 +225,28 @@ impl Database {
         Ok(())
     }
 
-    /// Update ICPay payment status
+    /// Update ICPay payment status.
+    ///
+    /// Validates `new_status` against the single source of truth
+    /// (`dcc_common::payment_status::ALL`) before writing. A bogus value
+    /// would otherwise land in the `payment_status` column and poison every
+    /// downstream guard that compares `== "succeeded"`. The DB CHECK
+    /// constraint (migration 047) is the un-bypassable backstop; this is the
+    /// loud, caller-visible validation that names the bad value.
     pub async fn update_icpay_payment_status(
         &self,
         contract_id: &[u8],
         new_status: &str,
     ) -> Result<()> {
+        if !dcc_common::payment_status::is_valid(new_status) {
+            return Err(anyhow::anyhow!(
+                "Invalid payment_status '{}' for contract {}: allowed values are {:?}",
+                new_status,
+                hex::encode(contract_id),
+                dcc_common::payment_status::ALL,
+            ));
+        }
+
         sqlx::query!(
             "UPDATE contract_sign_requests SET payment_status = $1 WHERE contract_id = $2",
             new_status,
