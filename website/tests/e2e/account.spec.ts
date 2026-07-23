@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { setupConsoleLogging } from './fixtures/auth-helpers';
-import { seedAccountDirect } from './fixtures/seed-helpers';
+import { seedAccountDirect, deleteAccountByUsername } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the /dashboard/account page's error-recovery path.
@@ -36,6 +36,15 @@ test.describe('/dashboard/account error recovery', () => {
 		// obtain credentials for a second browser context.
 		const credentials = await seedAccountDirect();
 
+		// Clean up the seeded account after the test (no orphan rows).
+		const cleanup = async () => {
+			try {
+				await deleteAccountByUsername(credentials.username);
+			} catch {
+				// best-effort; row may already be gone
+			}
+		};
+
 		// Fresh context. Pre-seed the seed phrase + dismiss the WelcomeModal
 		// exactly like the fast-auth fixture does.
 		const context = await browser.newContext();
@@ -59,21 +68,24 @@ test.describe('/dashboard/account error recovery', () => {
 
 		const page = await context.newPage();
 		setupConsoleLogging(page);
-		await page.goto('/dashboard/account');
+		try {
+			await page.goto('/dashboard/account');
 
-		// The error card must render — not the perpetual "Loading..." placeholder.
-		await expect(page.getByText(/couldn't load your account|failed to load your account/i)).toBeVisible({ timeout: 15000 });
+			// The error card must render — not the perpetual "Loading..." placeholder.
+			await expect(page.getByText(/couldn't load your account|failed to load your account/i)).toBeVisible({ timeout: 15000 });
 
-		// Retry button must be present so the user can recover without leaving the page.
-		await expect(page.getByRole('button', { name: /^retry$/i })).toBeVisible();
+			// Retry button must be present so the user can recover without leaving the page.
+			await expect(page.getByRole('button', { name: /^retry$/i })).toBeVisible();
 
-		// Logout button must be present so the user can escape the broken session.
-		await expect(page.getByRole('button', { name: /^logout$/i })).toBeVisible();
+			// Logout button must be present so the user can escape the broken session.
+			await expect(page.getByRole('button', { name: /^logout$/i })).toBeVisible();
 
-		// The perpetual "Loading..." text must NOT be the final state.
-		await expect(page.getByText('Loading...', { exact: true })).toHaveCount(0);
-
-		await context.close();
+			// The perpetual "Loading..." text must NOT be the final state.
+			await expect(page.getByText('Loading...', { exact: true })).toHaveCount(0);
+		} finally {
+			await context.close();
+			await cleanup();
+		}
 	});
 });
 

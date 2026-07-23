@@ -69,7 +69,12 @@ test.describe('Recovery Flow', () => {
 			if (await successHeading.isVisible().catch(() => false)) break;
 			await emailInput.fill('test@example.com');
 			await submitButton.click({ timeout: 5000 }).catch(() => {});
-			await page.waitForTimeout(100);
+			// Wait for the recovery API response (proves hydration completed and
+			// the click registered). Times out → loop retries the fill+submit.
+			// Replaces a fixed waitForTimeout sleep (see playwright.config.ts).
+			await page
+				.waitForResponse((r) => r.url().includes('/api/v1/accounts/recovery/request'), { timeout: 1000 })
+				.catch(() => {});
 		}
 		await expect(successHeading).toBeVisible({ timeout: 5000 });
 
@@ -110,7 +115,12 @@ test.describe('Recovery Flow', () => {
 			if (await successHeading.isVisible().catch(() => false)) break;
 			await emailInput.fill('first@example.com');
 			await submitButton.click({ timeout: 5000 }).catch(() => {});
-			await page.waitForTimeout(100);
+			// Wait for the recovery API response (proves hydration completed and
+			// the click registered). Times out → loop retries the fill+submit.
+			// Replaces a fixed waitForTimeout sleep (see playwright.config.ts).
+			await page
+				.waitForResponse((r) => r.url().includes('/api/v1/accounts/recovery/request'), { timeout: 1000 })
+				.catch(() => {});
 		}
 		await expect(successHeading).toBeVisible({ timeout: 5000 });
 
