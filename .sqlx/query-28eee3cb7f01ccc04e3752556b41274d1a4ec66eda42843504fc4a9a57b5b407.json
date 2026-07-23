@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 2000, 'memo', 1000, 'active', 'succeeded', $4, $5, $6, 'usd')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "28eee3cb7f01ccc04e3752556b41274d1a4ec66eda42843504fc4a9a57b5b407"
+}
