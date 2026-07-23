@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-07-22. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-07-23. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -69,6 +69,18 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-07-23 session (e2e harness hardening + skip-gap closure + UX audit)
+
+| Fix | Severity | Resolution |
+|-----|----------|------------|
+| `npx playwright test` defaulted to Docker port (59000), not warm stack | Test | Shipped in `3f7f9512`: `baseURL` now defaults to warm-stack 59010; Docker mode sets env explicitly. Bare `npx playwright test` Just Works. |
+| 4 always-skipping e2e tests (payment-flows ×3, post-rental-welcome, marketplace-empty-state) | Test | Shipped in `6b8bafad`/`b7c05d17`/`b64effe0`/`0978c404`: new `seedRentableOffering` fixture (self_provisioned → always online). payment-flows root cause was a stale selector ("Rent Resource" button never existed; button reads "Rent"). post-rental-welcome rewritten against real `?welcome=true` banner + seeded contract (dropped first-party verify-checkout mock). marketplace-empty-state rewritten against the real default-hide path. **0 skipped now (was 4).** |
+| ~19 active `networkidle` calls across 6 specs (prior "0" claim was inaccurate) | Test | Shipped in `e59e76d4`: replaced all with deterministic waits via new `clickAndRetry` helper (SSR-hydration-safe click loop) + `waitForResponse`. **Suite now genuinely 0 networkidle.** |
+| payment-flows webhook helpers POST to wrong server | Test | Shipped in `b7c05d17`: `baseURL.replace('59000','59001')` was a no-op against warm stack 59010 → would POST webhooks to the web server. Now uses `PLAYWRIGHT_API_URL \|\| 59011`. |
+| search-dsl `type:gpu` test flaked under parallel load | Test | Shipped in `995ac799`: `count()` immediately after `waitForResponse` hit a render gap. Gated on a GPU row rendering first. |
+| Full suite baseline | — | **202 passed, 0 failed, 0 skipped, 0 networkidle, 152s, 4 workers.** |
+| Live UX audit (10 pages, no mocks) | — | No actionable defects. zai-vision's 4 flags were all false positives (dark-theme contrast is 7.3:1 = WCAG AAA; truncation is intentional). Console clean apart from known dev warnings. |
+
 ### 2026-07-22 session (e2e harness overhaul + UX fixes)
 
 | Fix | Severity | Resolution |
@@ -116,3 +128,10 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | H2 | Transfers page has no Send/Receive UI | **Feature gap** — P2P send needs IC canister integration (product decision, not a bug). Balance card already explains rentals are per-transaction at checkout. Related: #433 (closed, small-fix), #420 (ICPay deferred). |
 | M5 | Billing VAT country EU-only | **Known limitation** — global country list needs server-side VAT rule changes. Low priority pre-launch. |
 | L1 | Security page: seed-login device is 'Unnamed Device' | **Minor UX** — consider prompting device name on first login. |
+
+### E2E harness tech debt (in-repo, surfaced 2026-07-23)
+
+| Finding | Status |
+|---------|--------|
+| Full suite 152s for 202 tests; <60s goal needs multi-stack sharding | **Deferred** — `playwright.config.ts:32-36` documents 8 workers = no gain (box 64% idle, not CPU/Vite/DB-pool-bound). Bottleneck = sequential browser-driven page loads vs a single API+Postgres stack. 0.75s/test wall is already efficient. Reaching <60s realistically needs Playwright `--shard` across N warm stacks — an infra investment beyond harness-hardening scope. |
+| `scripts/browser.js eval --seed <phrase>` throws "UtilityScript.evaluate" | **Minor tooling** — `authenticatePage` (browser.js:332-336) does an extra `goto`+`networkidle`+300ms after seed inject; a SvelteKit client-side redirect/WelcomeModal likely destroys the eval context. `snap`/`shot`/`errs`/`html`/`tour` all work with `--seed`; only `eval` is affected. For authed JS eval, use the e2e framework. |
