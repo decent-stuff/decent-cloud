@@ -413,84 +413,97 @@ impl Database {
             ));
         }
 
-        // Full refund if payment succeeded (user never got the service)
+        // Refund only the net amount still held by the platform if payment
+        // succeeded. Reject is only valid pre-service (requested/pending/
+        // accepted), so the prorated refund == the full payment; subtracting
+        // already-released funds (`calculate_net_refund_e9s`) yields
+        // `payment - released`. Refunding the raw gross here would double-pay
+        // on top of any daily release (R3 variant). Routed through the SAME
+        // net calc the cancel path uses so both honour the policy.
+        let reject_ts_ns = crate::now_ns()?;
         let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
-            == "succeeded"
+            == dcc_common::payment_status::SUCCEEDED
         {
-            let full_refund = contract.payment_amount_e9s;
-            match contract.payment_method.as_str() {
-                "stripe" => {
-                    // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
-                    // ID (cs_*) for legacy rows that predate the column split.
-                    let stripe_id = contract
-                        .stripe_payment_intent_id
-                        .as_deref()
-                        .or(contract.stripe_checkout_session_id.as_deref());
-                    if let Some(payment_intent_id) = stripe_id {
-                        let refund_cents = full_refund / 10_000_000;
-                        let reject_ts_ns = crate::now_ns()?;
-                        let unique_token = format!("reject:{}", reject_ts_ns);
-                        let key = crate::refund::refund_idempotency_key(
-                            "reject",
-                            contract_id,
-                            &unique_token,
-                        );
-                        let refund_id = self
-                            .issue_audited_refund(
-                                crate::database::refund_audit::AuditedRefundInput {
-                                    contract_id,
-                                    idempotency_key: &key,
-                                    payment_intent_id,
-                                    refund_cents,
-                                    currency: &contract.currency,
-                                    reason: "reject",
-                                    stripe_dispute_id: None,
-                                    stripe_client,
-                                },
-                            )
-                            .await?;
-                        if let Some(ref id) = refund_id {
-                            tracing::info!(
-                                "Stripe full refund created: {} for rejected contract {} (amount: {} cents)",
-                                id,
-                                hex::encode(contract_id),
-                                refund_cents
+            let net_refund_e9s = self
+                .calculate_net_refund_e9s(&contract, reject_ts_ns)
+                .await?;
+            if net_refund_e9s <= 0 {
+                (None, None, None)
+            } else {
+                match contract.payment_method.as_str() {
+                    "stripe" => {
+                        // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
+                        // ID (cs_*) for legacy rows that predate the column split.
+                        let stripe_id = contract
+                            .stripe_payment_intent_id
+                            .as_deref()
+                            .or(contract.stripe_checkout_session_id.as_deref());
+                        if let Some(payment_intent_id) = stripe_id {
+                            let refund_cents = net_refund_e9s / 10_000_000;
+                            let unique_token = format!("reject:{}", reject_ts_ns);
+                            let key = crate::refund::refund_idempotency_key(
+                                "reject",
+                                contract_id,
+                                &unique_token,
                             );
+                            let refund_id = self
+                                .issue_audited_refund(
+                                    crate::database::refund_audit::AuditedRefundInput {
+                                        contract_id,
+                                        idempotency_key: &key,
+                                        payment_intent_id,
+                                        refund_cents,
+                                        currency: &contract.currency,
+                                        reason: "reject",
+                                        stripe_dispute_id: None,
+                                        stripe_client,
+                                    },
+                                )
+                                .await?;
+                            if let Some(ref id) = refund_id {
+                                tracing::info!(
+                                    "Stripe net refund created: {} for rejected contract {} (amount: {} cents)",
+                                    id,
+                                    hex::encode(contract_id),
+                                    refund_cents
+                                );
+                            }
+                            (Some(net_refund_e9s), refund_id, None)
+                        } else {
+                            (Some(net_refund_e9s), None, None)
                         }
-                        (Some(full_refund), refund_id, None)
-                    } else {
-                        (Some(full_refund), None, None)
                     }
-                }
-                "icpay" => {
-                    if let Some(client) = icpay_client {
-                        if let Some(payment_id) = &contract.icpay_payment_id {
-                            match client.create_refund(payment_id, Some(full_refund)).await {
-                                Ok(refund_id) => {
-                                    tracing::info!(
-                                        "ICPay full refund created: {} for rejected contract {}",
-                                        refund_id,
-                                        hex::encode(contract_id)
-                                    );
-                                    (Some(full_refund), None, Some(refund_id))
-                                }
-                                Err(e) => {
-                                    tracing::error!(
+                    "icpay" => {
+                        if let Some(client) = icpay_client {
+                            if let Some(payment_id) = &contract.icpay_payment_id {
+                                match client.create_refund(payment_id, Some(net_refund_e9s)).await {
+                                    Ok(refund_id) => {
+                                        tracing::info!(
+                                            "ICPay net refund created: {} for rejected contract {} (amount: {} e9s)",
+                                            refund_id,
+                                            hex::encode(contract_id),
+                                            net_refund_e9s
+                                        );
+                                        (Some(net_refund_e9s), None, Some(refund_id))
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
                                             "Failed to create ICPay refund for rejected contract {}: {}",
                                             hex::encode(contract_id),
                                             e
                                         );
-                                    (Some(full_refund), None, None)
+                                        (Some(net_refund_e9s), None, None)
+                                    }
                                 }
+                            } else {
+                                (Some(net_refund_e9s), None, None)
                             }
                         } else {
-                            (Some(full_refund), None, None)
+                            (Some(net_refund_e9s), None, None)
                         }
-                    } else {
-                        (Some(full_refund), None, None)
                     }
+                    _ => (None, None, None),
                 }
-                _ => (None, None, None),
             }
         } else {
             (None, None, None)

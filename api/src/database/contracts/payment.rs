@@ -346,8 +346,16 @@ impl Database {
         Ok(contracts)
     }
 
-    /// Calculate and create a payment release record for a contract
-    pub async fn create_payment_release(
+    /// Atomically record a provider payment release and bump
+    /// `total_released_e9s`, refusing to over-pay. The increment only applies
+    /// when `total_released_e9s + amount_e9s <= payment_amount_e9s`; the
+    /// `payment_releases` row and the contract counter are written in the SAME
+    /// transaction so a concurrent release cannot push the total past the
+    /// payment (R2/R3 TOCTOU). Returns `Ok(None)` when the release was refused
+    /// (would exceed `payment_amount_e9s`); the caller logs that loudly. The
+    /// DB CHECK constraint (migration 049) is the un-bypassable backstop; this
+    /// conditional UPDATE is the graceful, race-free path.
+    pub async fn create_capped_payment_release(
         &self,
         contract_id: &[u8],
         release_type: &str,
@@ -355,9 +363,30 @@ impl Database {
         period_end_ns: i64,
         amount_e9s: i64,
         provider_pubkey: &[u8],
-    ) -> Result<PaymentRelease> {
+    ) -> Result<Option<PaymentRelease>> {
         let created_at_ns = crate::now_ns()?;
         let status = "pending";
+        let mut tx = self.pool.begin().await?;
+
+        // Conditional increment: only commits when it stays within payment.
+        // 0 rows affected => over-pay refused; roll back and signal the caller.
+        let inc = sqlx::query(
+            r#"UPDATE contract_sign_requests
+                  SET total_released_e9s = total_released_e9s + $1,
+                      last_release_at_ns = $2
+                WHERE contract_id = $3
+                  AND total_released_e9s + $1 <= payment_amount_e9s"#,
+        )
+        .bind(amount_e9s)
+        .bind(created_at_ns)
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if inc.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Ok(None);
+        }
 
         let id: i64 = sqlx::query_scalar(
             r#"INSERT INTO payment_releases (contract_id, release_type, period_start_ns, period_end_ns, amount_e9s, provider_pubkey, status, created_at_ns)
@@ -372,10 +401,12 @@ impl Database {
         .bind(provider_pubkey)
         .bind(status)
         .bind(created_at_ns)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
 
-        Ok(PaymentRelease {
+        tx.commit().await?;
+
+        Ok(Some(PaymentRelease {
             id,
             contract_id: contract_id.to_vec(),
             release_type: release_type.to_string(),
@@ -387,26 +418,7 @@ impl Database {
             created_at_ns,
             released_at_ns: None,
             payout_id: None,
-        })
-    }
-
-    /// Update contract's release tracking fields
-    pub async fn update_contract_release_tracking(
-        &self,
-        contract_id: &[u8],
-        last_release_at_ns: i64,
-        total_released_e9s: i64,
-    ) -> Result<()> {
-        sqlx::query!(
-            "UPDATE contract_sign_requests SET last_release_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
-            last_release_at_ns,
-            total_released_e9s,
-            contract_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
+        }))
     }
 
     /// Get pending releases for a provider (ready for payout)

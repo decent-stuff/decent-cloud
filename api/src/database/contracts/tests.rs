@@ -1676,17 +1676,20 @@ async fn test_cancel_contract_icpay_with_released_amount() {
     let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
     let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
 
-    // Set ICPay payment with some amount already released to provider
-    sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, start_timestamp_ns = $4, end_timestamp_ns = $5, total_released_e9s = $6 WHERE contract_id = $7",
-        "icpay",
-        "succeeded",
-        "pay_test_456",
-        start_ns,
-        end_ns,
-        300_000_000i64, // 0.3 ICP already released
-        contract_id
+    // Set ICPay payment with the real 1 ICP amount, the service-start
+    // timestamp (so the prorated calc reflects the 10/30-day window the
+    // assertions expect), and 0.3 ICP already released to the provider. All
+    // three are required for the state to match the test's documented math AND
+    // to satisfy migration 049 (released + refunded <= payment). Runtime query
+    // (not sqlx::query!) mirrors the stripe analog and avoids offline-cache
+    // churn.
+    sqlx::query(
+        "UPDATE contract_sign_requests SET payment_method = 'icpay', payment_status = 'succeeded', icpay_payment_id = 'pay_test_456', start_timestamp_ns = $1, end_timestamp_ns = $2, provisioning_completed_at_ns = $1, payment_amount_e9s = 1000000000, total_released_e9s = $3 WHERE contract_id = $4",
     )
+    .bind(start_ns)
+    .bind(end_ns)
+    .bind(300_000_000i64) // 0.3 ICP already released
+    .bind(&contract_id)
     .execute(&db.pool)
     .await
     .unwrap();
@@ -5350,5 +5353,117 @@ async fn test_provisioning_requires_payment_check_constraint() {
     assert!(
         result.is_err(),
         "CHECK constraint must reject provisioned on an unpaid non-zero contract"
+    );
+}
+
+// -----------------------------------------------------------------------------
+// R2/R3 / A3: refund + release accounting integrity.
+//
+// reject_contract refunded the raw payment_amount_e9s, ignoring funds already
+// released to the provider, so a contract that had any daily release could be
+// refunded for the full gross on top of the release (over-refund). The release
+// path also wrote total_released unconditionally (TOCTOU: a concurrent release
+// could push total_released past payment_amount). The fixes route reject
+// through calculate_net_refund_e9s and make the release a conditional UPDATE;
+// migration 049 is the un-bypassable CHECK that released + refunded <= payment.
+
+/// R3 variant: reject MUST refund only the net amount still held by the
+/// platform (payment - already_released), never the raw gross. Regression
+/// guard for the over-refund where reject used payment_amount_e9s directly.
+#[tokio::test]
+async fn test_reject_contract_refunds_net_not_gross() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xE1; 32];
+    let payment_amount_e9s = 1_000_000_000i64; // 1 ICP
+    let released_e9s = 400_000_000i64; // 0.4 ICP already released to provider
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a3",
+        0,
+        "accepted", // reject is valid from accepted
+    )
+    .await;
+    // insert_contract_request forces amount=1000; set the realistic amount +
+    // simulate funds already released to the provider.
+    sqlx::query(
+        "UPDATE contract_sign_requests SET payment_amount_e9s = $1, total_released_e9s = $2, payment_status = 'succeeded', payment_method = 'icpay' WHERE contract_id = $3",
+    )
+    .bind(payment_amount_e9s)
+    .bind(released_e9s)
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None, None)
+        .await
+        .expect("reject must succeed");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "rejected");
+    let refund = contract
+        .refund_amount_e9s
+        .expect("reject of a succeeded payment must record a refund");
+    let net_cap = payment_amount_e9s - released_e9s; // 600M
+    assert!(
+        refund <= net_cap,
+        "reject refund must be the net (payment - released = {net_cap}), not the gross; got {refund}"
+    );
+    // The invariant the whole module exists to enforce:
+    assert!(
+        released_e9s + refund <= payment_amount_e9s,
+        "released ({released_e9s}) + refunded ({refund}) must never exceed payment ({payment_amount_e9s})"
+    );
+}
+
+/// R2 / A3 belt-and-suspenders: the DB CHECK (migration 049) makes
+/// "released + refunded <= payment" un-bypassable even via direct SQL. A raw
+/// UPDATE that pushes the sum over payment_amount must violate the constraint.
+#[tokio::test]
+async fn test_release_refund_integrity_check_constraint() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![0xE2; 32];
+    let payment_amount_e9s = 1_000_000_000i64;
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-a3",
+        0,
+        "accepted",
+    )
+    .await;
+    // Set payment + an already-released amount that leaves room for a small
+    // refund, then attempt to push the refund past the ceiling via direct SQL.
+    sqlx::query(
+        "UPDATE contract_sign_requests SET payment_amount_e9s = $1, total_released_e9s = $2 WHERE contract_id = $3",
+    )
+    .bind(payment_amount_e9s)
+    .bind(800_000_000i64) // released 0.8 ICP
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // 0.8 released + 0.3 refund = 1.1 > 1.0 payment -> must be rejected.
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET refund_amount_e9s = 300_000_000 WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+    assert!(
+        result.is_err(),
+        "CHECK constraint must reject released+refunded > payment"
     );
 }

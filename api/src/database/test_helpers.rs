@@ -356,6 +356,7 @@ fn migration_hash() -> String {
     include_str!("../../migrations_pg/046_pending_timeout_index.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/047_payment_status_check.sql").hash(&mut hasher);
     include_str!("../../migrations_pg/048_provisioning_requires_payment_check.sql").hash(&mut hasher);
+    include_str!("../../migrations_pg/049_release_refund_integrity_check.sql").hash(&mut hasher);
     format!("{:x}", hasher.finish())
 }
 
@@ -717,6 +718,10 @@ async fn ensure_template_db(base_url: &str) -> String {
                 (
                     "048_provisioning_requires_payment_check.sql",
                     include_str!("../../migrations_pg/048_provisioning_requires_payment_check.sql"),
+                ),
+                (
+                    "049_release_refund_integrity_check.sql",
+                    include_str!("../../migrations_pg/049_release_refund_integrity_check.sql"),
                 ),
             ];
 

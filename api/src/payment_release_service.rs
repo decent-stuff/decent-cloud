@@ -99,21 +99,25 @@ impl PaymentReleaseService {
                 continue;
             }
 
-            // Create payment release record
+            // Create payment release record. The capped method increments
+            // total_released_e9s and inserts the payment_releases row in ONE
+            // transaction, refusing the release when it would push the total
+            // past payment_amount_e9s (R2/R3: no over-pay, no TOCTOU).
+            let provider_pubkey_bytes = hex::decode(&contract.provider_pubkey)
+                .map_err(|e| anyhow::anyhow!("Invalid provider_pubkey hex: {}", e))?;
             match self
                 .database
-                .create_payment_release(
+                .create_capped_payment_release(
                     &contract_id_bytes,
                     "daily",
                     period_start_ns,
                     period_end_ns,
                     release_amount_e9s,
-                    &hex::decode(&contract.provider_pubkey)
-                        .map_err(|e| anyhow::anyhow!("Invalid provider_pubkey hex: {}", e))?,
+                    &provider_pubkey_bytes,
                 )
                 .await
             {
-                Ok(release) => {
+                Ok(Some(release)) => {
                     tracing::info!(
                         "Created payment release {} for contract {} (amount: {} e9s, period: {} - {})",
                         release.id,
@@ -122,29 +126,21 @@ impl PaymentReleaseService {
                         period_start_ns,
                         period_end_ns
                     );
-
-                    // Update contract tracking fields
-                    let new_total_released =
-                        contract.total_released_e9s.unwrap_or(0) + release_amount_e9s;
-                    if let Err(e) = self
-                        .database
-                        .update_contract_release_tracking(
-                            &contract_id_bytes,
-                            current_timestamp_ns,
-                            new_total_released,
-                        )
-                        .await
-                    {
-                        tracing::error!(
-                            "Failed to update release tracking for contract {}: {}",
-                            contract.contract_id,
-                            e
-                        );
-                    }
+                }
+                Ok(None) => {
+                    // Refused: the release would exceed payment_amount_e9s.
+                    // This is expected once a contract is fully released; log
+                    // it loud rather than silently skipping (money path).
+                    tracing::warn!(
+                        "Payment release for contract {} refused: amount {} e9s would push total_released past payment_amount {} e9s",
+                        contract.contract_id,
+                        release_amount_e9s,
+                        contract.payment_amount_e9s
+                    );
                 }
                 Err(e) => {
                     tracing::error!(
-                        "Failed to create payment release for contract {}: {}",
+                        "Failed to create payment release for contract {}: {:#}",
                         contract.contract_id,
                         e
                     );
