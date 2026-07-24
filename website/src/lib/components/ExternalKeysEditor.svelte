@@ -31,6 +31,10 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
+	// Inline two-step delete (commit 1077dd33 pattern): the first click on a
+	// row's Delete button only sets pendingDeleteId, revealing an inline
+	// Confirm/Cancel pair for that row; the real delete runs in confirmDelete.
+	let pendingDeleteId = $state<number | null>(null);
 
 	onMount(() => {
 		loadKeys();
@@ -98,9 +102,15 @@
 		}
 	}
 
-	async function handleDelete(keyId: number) {
-		if (!confirm("Delete this external key?")) return;
+	function requestDelete(keyId: number) {
+		pendingDeleteId = keyId;
+	}
 
+	function cancelDelete() {
+		pendingDeleteId = null;
+	}
+
+	async function confirmDelete(keyId: number) {
 		error = null;
 		successMessage = null;
 
@@ -126,6 +136,8 @@
 				err instanceof Error
 					? err.message
 					: "Failed to delete external key";
+		} finally {
+			pendingDeleteId = null;
 		}
 	}
 </script>
@@ -153,12 +165,33 @@
 							</span>
 						{/if}
 					</div>
-					<button
-						onclick={() => handleDelete(key.id)}
-						class="text-red-400 hover:text-red-300 transition-colors text-sm"
-					>
-						Delete
-					</button>
+				<div class="flex items-center gap-3">
+					{#if pendingDeleteId === key.id}
+						<span class="text-xs text-neutral-400">Delete?</span>
+						<button
+							type="button"
+							onclick={() => confirmDelete(key.id)}
+							class="text-red-400 hover:text-red-300 transition-colors text-sm"
+						>
+							Confirm
+						</button>
+						<button
+							type="button"
+							onclick={cancelDelete}
+							class="text-neutral-400 hover:text-white transition-colors text-sm"
+						>
+							Cancel
+						</button>
+					{:else}
+						<button
+							onclick={() => requestDelete(key.id)}
+							disabled={pendingDeleteId !== null}
+							class="text-red-400 hover:text-red-300 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							Delete
+						</button>
+					{/if}
+				</div>
 				</div>
 				<div class="text-xs text-neutral-500 font-mono break-all">
 					{key.keyData.substring(0, 80)}{key.keyData.length > 80
