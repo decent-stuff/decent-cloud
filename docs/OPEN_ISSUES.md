@@ -69,6 +69,28 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-07-23 session (money-safety hardening + route audit + UX review)
+
+| Fix | Severity | Resolution |
+|-----|----------|------------|
+| R1: provider can drive requested→active unpaid | Critical | Shipped in `e6b5441e`: `update_contract_status` gates Provisioned/Active on `payment_status='succeeded'` OR `payment_amount_e9s=0`. Migration 048 DB CHECK. |
+| R2/R3: refund+release unbounded + TOCTOU | Critical | Shipped in `45d40d82`: migration 049 CHECK `released+refund<=payment`; conditional UPDATE release path; `reject_contract`→`calculate_net_refund_e9s`. |
+| R5: "refunded" with no money returned | Critical | Shipped in `6b3ad47e`: callers treat `Ok(None)` as "refund NOT performed"; `STRIPE_SECRET_KEY` required when `ENVIRONMENT=prod`. |
+| R9: dispute-lost refund over-pays released funds | High | Shipped in `46edc93c`: `process_dispute_lost_refund` uses `calculate_net_refund_e9s` (subtracts `total_released_e9s`). |
+| R10: `payment_status` accepts any string | High | Shipped in `220c2a82`: allow-list in code + migration 047 DB CHECK. |
+| SSE auth double-prefix bug (`/api/v1/api/v1/...`) | Critical | Shipped in `d5a2e019`: SSE handlers verified against REAL request path. Was masked by env var bug. |
+| Cluster A: SSE 404s (wrong env var `VITE_API_BASE_URL`) | High | Shipped in `02affbf7`: import `API_BASE_URL` from `api.ts` (2 pages). |
+| B1: contract usage 401 (wrong signature path) | Medium | Shipped in `f40e35eb`: sign for correct `/contracts/{id}/usage` path. |
+| B2: pending-password-reset 401 (agent-only auth) | Medium | Shipped in `e7519ee4`: `AgentAuthenticatedUser` → `ProviderOrAgentAuth`. |
+| B3/B4: user activity 401 (own-only endpoint on public pages) | Medium | Shipped in `6b4d36e2`: new `GET /users/:pk/public-profile` with `PublicContractSummary` (no payment/SSH/gateway). |
+| Command palette keyboard nav completely broken | High | Shipped in `09097cda`: arrows/Enter/Escape now work; visible Cmd/Ctrl+K trigger in sidebar. |
+| Provider shown as raw hex pubkey on rentals | Medium | Shipped in `1921474b`: contracts query LEFT JOINs username; UI shows `@username`. |
+| Test-infra: hardcoded 49-entry migration array | Tech debt | Shipped in `51131bfd`: replaced with `sqlx::migrate!()` (+37/−290 lines). |
+| E2e smoke tier: only 4 tests | Coverage | Shipped in `0c033da2`+`4ead5c05`: 17 `@smoke` tests in 18s; scripts scan via `--grep`. |
+| E2e: no flow catalog | Coverage | Shipped in `517b97cb`: `FLOWS.md` — 74 flows cataloged. |
+| E2e: provider accept/reject uncovered | Coverage | Shipped in `dd955f4f`: 4 serial tests (see pending, accept, reject, auto-accept toggle). |
+| Full suite baseline | — | **264 passed, 0 failed, 3.8m, 4 workers.** |
+
 ### 2026-07-23 session (e2e radical overhaul + issue sweep + sharding harness)
 
 | Fix | Severity | Resolution |
@@ -151,5 +173,13 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 |---------|--------|
 | Full suite 192s for 205 tests; <60s goal needs multi-stack sharding | **Empirically investigated — sharding does NOT help on this box.** Built full harness (`scripts/e2e-shard.sh`, `dev-server.sh` STACK_INDEX, `fixtures/api-base.ts`). Root cause: 3 shard stacks share ONE Postgres → competing pools = worse DB contention than single-stack's single pool (3×4w=22 fails/4m30s; 3×2w=4 flakes). **Single stack 4 workers = 205/0 green ~192s = proven optimum.** For sharding to truly help, each shard needs its own Postgres instance (future CI-runner work). As a side benefit, dev CORS now correctly allows any localhost origin and the service worker no longer masks API errors. |
 | `scripts/browser.js eval --seed <phrase>` throws "UtilityScript.evaluate" | **Minor tooling** — `authenticatePage` (browser.js:332-336) does an extra `goto`+`networkidle`+300ms after seed inject; a SvelteKit client-side redirect/WelcomeModal likely destroys the eval context. `snap`/`shot`/`errs`/`html`/`tour` all work with `--seed`; only `eval` is affected. For authed JS eval, use the e2e framework. |
+| `scripts/browser.js --seed` greedily consumes positional args | **Minor tooling** — `--seed <phrase> <url>` fails ("Got 14 words") because the parser consumes all subsequent non-flag args as seed words. Documented usage `snap <url> --seed "$SEED"` (seed last) works. One-line fix possible but it's a test helper, not product. |
 | Coverage gap: rent→pay→view→cancel happy path (UI-created contract, not DB-seeded) | **Known gap** — the primary tenant flow is only fragmented (cancel asserted on DB-seeded contracts). Payment-bound (Stripe); higher effort. Parked. |
 | Coverage gap: provider agent-pool mgmt `/dashboard/provider/agents/[pool_id]` | **Known gap** — pool create + detail/edit untested. Needs a populated provider fixture. Parked. |
+
+### Deferred product decisions (surfaced 2026-07-23 UX review)
+
+| Finding | Status |
+|---------|--------|
+| No `?` keyboard-shortcut help overlay | **Nice-to-have** — `/` (search) and Cmd/Ctrl+K (palette) are now discoverable after command palette fix. A dedicated help overlay remains a UX enhancement. |
+| Dashboard shows provider-monitoring stats to brand-new renters | **Design judgment** — fresh renters see "Infrastructure Uptime", "Contracts Monitored", "Red Flags Detected" cards. Non-Providers may find this confusing. Needs product input on conditional rendering. |

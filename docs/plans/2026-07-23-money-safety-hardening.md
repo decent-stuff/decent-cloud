@@ -7,7 +7,7 @@ for the full analysis). That doc is research-only; THIS plan implements its **Ph
 build sequence against real code, then continues with a fresh functional/visual issue sweep
 and e2e coverage.
 
-**STATUS: Phase 1A+1B+1A.5 COMPLETE — Phase 1C IN PROGRESS**
+**STATUS: ALL PHASES COMPLETE — see session commit log below**
 
 ## Why this exists
 The user brief: "If there are documented (pre-existing) issues, fix them ALL first." The
@@ -102,13 +102,31 @@ Also: `7da934bc` — saved-offerings spec serial mode (parallel DB cleanup race 
 4. **UX optimization** — reduce clicks, keyboard shortcuts, simplify flows (with e2e tests codifying the optimized flows).
 5. **Speed** — smoke tier in seconds for dev loop; full suite acceptable for CI.
 
-### Coverage gaps identified (preliminary)
-| Gap | Priority | Notes |
-|-----|----------|-------|
-| Provider accept/reject contract requests | HIGH | Only anonymous test exists; no authenticated accept/reject flow |
-| Password reset interactions | MEDIUM | Page loads (fixed in 1B) but no interaction test |
-| Provider agent pool management | LOW | Only heading smoke test |
-| Full rent→accept→provision cycle | MEDIUM | Only up to `requested` (Stripe can't complete in harness) |
+### Phase 1C — COMPLETE
+
+**E2e harness improvements:**
+| Commit | What |
+|--------|------|
+| `0c033da2` | Expanded `@smoke` tier from 4→17 critical-path tests |
+| `4ead5c05` | Smoke scripts scan all `@smoke` via `--grep` (was hardcoded 3-file allowlist) |
+| `517b97cb` | `FLOWS.md`: single-source-of-truth flow catalog (74 flows: 60✅ 11⚠️ 2❌) |
+| `dd955f4f` | `provider-accept-reject.spec.ts`: 4 serial tests (see pending, accept, reject, auto-accept toggle) |
+
+**Smoke tier:** 17 tests in 18s (4 workers). Full suite: 264 tests in 3.8min, 0 failures.
+**Coverage gaps closed:** provider accept/reject ✅, auto-accept toggle ✅. Remaining gaps: admin
+mutating actions, full rent→pay→provision cycle (Stripe-bound), agent-pool create (documented in FLOWS.md).
+
+### Phase 1C UX review — COMPLETE (real browser, no mocks)
+| Commit | Fix | Impact |
+|--------|-----|--------|
+| `09097cda` | Command palette discoverability + keyboard nav fix | Cmd/Ctrl+K trigger visible in sidebar; arrows/Enter/Escape now work (was completely broken) |
+| `1921474b` | Resolve provider username on rentals pages | Shows `@username` instead of raw hex pubkey |
+
+**Reported findings (not implemented — below 8/8 confidence or need design decisions):**
+- No `?` keyboard-shortcut help overlay (correctness 8, safety 7).
+- Dashboard shows provider-monitoring stats to brand-new renters (correctness 7, safety 6).
+- `browser.js --seed` greedily consumes positional args (dev tooling, not product).
+- Offering-detail provider label format slightly awkward (cosmetic).
 
 ### Current harness state
 - 56 spec files, 256 tests, 3.7 min with 4 workers.
@@ -142,9 +160,32 @@ items needing product decisions — parked in `cost-safe-billing.md`.
 full `payment_amount_e9s` (safe today, fragile); ICPay "succeeded immediately" timing (R2.9);
 test-helper `insert_contract_request` hardcodes `payment_amount_e9s=1000` + ambiguous 6th arg.
 
-## Phase 1A.5 — test-infra DRY + dev-cycle (planned)
-- `test_helpers.rs:529-726` migration list is a 49-entry hardcoded `include_str!` array → every
-  new migration must be hand-added or tests SILENTLY skip it. Replace with `sqlx::migrate!`
-  (auto-discovers + orders `.sql` files) — eliminates the footgun + DRYs.
-- Dev cycle: targeted nextest runs are already 1-11s (the goal). Full suite (~2537 tests) needs
-  a wall-clock budget, not per-invocation. Document the targeted-loop workflow.
+### Phase 1A.5 — test-infra DRY
+| Commit | Item |
+|--------|------|
+| `51131bfd` | Replace 49-entry hardcoded migration array with `sqlx::migrate!()` (+37/−290 lines) |
+
+### Phase 1B — route audit + functional fixes
+| Commit | Item |
+|--------|------|
+| `02affbf7` | Cluster A: SSE env var fix (2 pages) |
+| `f40e35eb` | B1: `getContractUsage` signed for correct path |
+| `d5a2e019` | SSE auth double-prefix bug (discovered, all SSE handlers) |
+| `ab460a6e` | clippy fixup for auth.rs |
+| `e7519ee4` | B2: pending-password-reset `AgentAuthenticatedUser` → `ProviderOrAgentAuth` |
+| `6b4d36e2` | B3+B4: new `GET /users/:pk/public-profile` (no sensitive data) |
+
+43/43 routes PASS, `KNOWN_BROKEN` map empty.
+
+### Phase 1C — e2e harness + UX
+| Commit | Item |
+|--------|------|
+| `7da934bc` | saved-offerings spec serial mode fix |
+| `0c033da2` | Expanded `@smoke` tier (4→17 tests, <30s) |
+| `4ead5c05` | Smoke scripts scan all `@smoke` via `--grep` |
+| `517b97cb` | `FLOWS.md` flow catalog (74 flows) |
+| `dd955f4f` | provider-accept-reject spec (4 tests) |
+| `09097cda` | Command palette discoverability + keyboard nav fix |
+| `1921474b` | Resolve provider username on rentals pages |
+
+Full suite: 264 passed, 0 failed, 3.8m.

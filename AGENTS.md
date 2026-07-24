@@ -405,5 +405,9 @@ ssh root@proxmox-host dc-agent doctor --no-test-provision
 | `MAILCHANNELS_API_KEY` | api-cli health | Email verification |
 
 ## KNOWN ISSUES
+- **In-repo issue inventory:** `docs/OPEN_ISSUES.md` — categorized list of open issues, deferred
+  product decisions, and e2e coverage gaps. Updated each session. Read it before starting work.
+- **E2e flow catalog:** `website/tests/e2e/FLOWS.md` — single-source-of-truth mapping of all user
+  flows → test coverage status. Update when adding tests or closing coverage gaps.
 - DNS propagation can delay Let's Encrypt visibility after record creation.
 - First wildcard cert issuance on a new host often requires checking `journalctl -u caddy` if Cloudflare config is wrong.
