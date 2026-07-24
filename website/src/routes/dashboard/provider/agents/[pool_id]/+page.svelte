@@ -36,6 +36,11 @@
 	let showGenerateOfferingsDialog = $state(false);
 	let latestVersion = $state<string | null>(null);
 	let upgradeRequesting = $state(false);
+	// Inline two-step confirms (commit 1077dd33 pattern): native confirm() blocks
+	// headless e2e and is poor on mobile. The first click only arms the action;
+	// the real API call fires from the confirm*() handler.
+	let pendingRevokeAgentPubkey = $state<string | null>(null);
+	let pendingUpgrade = $state(false);
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;
@@ -176,9 +181,17 @@
 		tokens = await listSetupTokens(providerHex, poolId, signedList.headers);
 	}
 
-	async function handleRevokeAgent(agentPubkey: string) {
-		if (!confirm("Are you sure you want to revoke this agent's access?")) return;
+	// First Revoke click only arms the inline confirm — no native dialog, no
+	// API call. The real revocation runs in confirmRevokeAgent().
+	function requestRevokeAgent(agentPubkey: string) {
+		pendingRevokeAgentPubkey = agentPubkey;
+	}
 
+	function cancelRevokeAgent() {
+		pendingRevokeAgentPubkey = null;
+	}
+
+	async function confirmRevokeAgent(agentPubkey: string) {
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) throw new Error("Not authenticated");
 
@@ -194,6 +207,8 @@
 			await refreshAgentData();
 		} catch (e) {
 			alert(e instanceof Error ? e.message : "Failed to revoke agent");
+		} finally {
+			pendingRevokeAgentPubkey = null;
 		}
 	}
 
@@ -278,9 +293,19 @@
 			: []
 	);
 
-	async function handleRequestUpgrade() {
+	// First Upgrade click only arms the inline confirm — no native dialog, no
+	// API call. The real upgrade request runs in confirmUpgrade(). Name distinct
+	// from handleCancelUpgrade() which cancels an ALREADY-requested upgrade.
+	function requestUpgrade() {
+		pendingUpgrade = true;
+	}
+
+	function cancelUpgradeConfirm() {
+		pendingUpgrade = false;
+	}
+
+	async function confirmUpgrade() {
 		if (!latestVersion || !signingIdentityInfo) return;
-		if (!confirm(`Upgrade all agents in this pool to v${latestVersion}?`)) return;
 
 		try {
 			upgradeRequesting = true;
@@ -297,6 +322,7 @@
 			alert(e instanceof Error ? e.message : "Failed to request upgrade");
 		} finally {
 			upgradeRequesting = false;
+			pendingUpgrade = false;
 		}
 	}
 
@@ -404,7 +430,7 @@
 					Cancel
 				</button>
 			</div>
-		{:else if latestVersion && outdatedAgents.length > 0}
+			{:else if latestVersion && outdatedAgents.length > 0}
 			<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-center justify-between">
 				<div>
 					<span class="text-amber-300 font-medium">
@@ -414,13 +440,33 @@
 						— latest version: v{latestVersion}
 					</span>
 				</div>
-				<button
-					onclick={handleRequestUpgrade}
-					disabled={upgradeRequesting}
-					class="px-4 py-1.5 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors disabled:opacity-50"
-				>
-					{upgradeRequesting ? 'Requesting...' : 'Upgrade Agents'}
-				</button>
+				{#if pendingUpgrade}
+					<div class="flex items-center gap-2">
+						<span class="text-xs text-neutral-400">Upgrade to v{latestVersion}?</span>
+						<button
+							onclick={confirmUpgrade}
+							disabled={upgradeRequesting}
+							class="px-3 py-1.5 text-sm bg-amber-500/30 text-amber-200 border border-amber-500/40 rounded hover:bg-amber-500/40 transition-colors disabled:opacity-50"
+						>
+							{upgradeRequesting ? 'Requesting...' : 'Confirm'}
+						</button>
+						<button
+							onclick={cancelUpgradeConfirm}
+							disabled={upgradeRequesting}
+							class="px-3 py-1.5 text-sm bg-surface-elevated text-neutral-400 border border-neutral-700 rounded hover:text-white transition-colors disabled:opacity-50"
+						>
+							Cancel
+						</button>
+					</div>
+				{:else}
+					<button
+						onclick={requestUpgrade}
+						disabled={upgradeRequesting}
+						class="px-4 py-1.5 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+					>
+						{upgradeRequesting ? 'Requesting...' : 'Upgrade Agents'}
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -508,15 +554,34 @@
 									>
 										Edit
 									</button>
-									{#if delegation.active}
+								{#if delegation.active}
+									{#if pendingRevokeAgentPubkey === delegation.agentPubkey}
+										<span class="text-xs text-neutral-400">Revoke?</span>
 										<button
-											onclick={() => handleRevokeAgent(delegation.agentPubkey)}
-											class="px-3 py-1 text-xs bg-red-500/20 text-red-300 border border-red-500/30 rounded hover:bg-red-500/30 transition-colors"
+											onclick={() => confirmRevokeAgent(delegation.agentPubkey)}
+											class="px-3 py-1 text-xs bg-red-500/40 text-red-200 border border-red-500/40 rounded hover:bg-red-500/50 transition-colors"
+											title="Confirm revoke agent access"
+										>
+											Confirm
+										</button>
+										<button
+											onclick={cancelRevokeAgent}
+											class="px-3 py-1 text-xs bg-surface-elevated text-neutral-400 border border-neutral-700 rounded hover:text-white transition-colors"
+											title="Abort revoke"
+										>
+											Cancel
+										</button>
+									{:else}
+										<button
+											onclick={() => requestRevokeAgent(delegation.agentPubkey)}
+											disabled={pendingRevokeAgentPubkey !== null}
+											class="px-3 py-1 text-xs bg-red-500/20 text-red-300 border border-red-500/30 rounded hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 											title="Revoke agent access"
 										>
 											Revoke
 										</button>
 									{/if}
+								{/if}
 								</div>
 							</td>
 						</tr>
