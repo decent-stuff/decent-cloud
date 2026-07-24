@@ -504,17 +504,11 @@ CREATE TABLE contract_sign_requests (
     gateway_port_range_start INTEGER,
     gateway_port_range_end INTEGER,
     -- Added: payment methods (migration 010)
-    payment_method TEXT NOT NULL DEFAULT 'icpay',
+    payment_method TEXT NOT NULL DEFAULT 'test',
     stripe_payment_intent_id TEXT,
     stripe_customer_id TEXT,
     -- Added: payment status (migration 011)
     payment_status TEXT NOT NULL DEFAULT 'pending',
-    -- Added: ICPay tracking (migrations 025, 030)
-    icpay_transaction_id TEXT,
-    icpay_payment_id TEXT,
-    icpay_refund_id TEXT,
-    total_released_e9s BIGINT DEFAULT 0,
-    last_release_at_ns BIGINT,
     -- Added: Stripe invoice (migration 044)
     stripe_invoice_id TEXT,
     -- Added: refund tracking (migration 012)
@@ -1076,27 +1070,6 @@ CREATE TABLE chatwoot_provider_resources (
 --------------------------------------------------------------------------------
 -- PAYMENT RELEASES
 --------------------------------------------------------------------------------
-
--- Payment releases for ICPay periodic payouts (migration 030)
-CREATE TABLE payment_releases (
-    id BIGSERIAL PRIMARY KEY,
-    contract_id BYTEA NOT NULL REFERENCES contract_sign_requests(contract_id) ON DELETE CASCADE,
-    release_type TEXT NOT NULL CHECK(release_type IN ('daily', 'hourly', 'final', 'cancellation')),
-    period_start_ns BIGINT NOT NULL,
-    period_end_ns BIGINT NOT NULL,
-    amount_e9s BIGINT NOT NULL,
-    provider_pubkey BYTEA NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'released', 'paid_out', 'refunded')),
-    created_at_ns BIGINT NOT NULL,
-    released_at_ns BIGINT,
-    payout_id TEXT
-);
-
-CREATE INDEX idx_payment_releases_contract ON payment_releases(contract_id);
-CREATE INDEX idx_payment_releases_provider ON payment_releases(provider_pubkey);
-CREATE INDEX idx_payment_releases_status ON payment_releases(status);
-
---------------------------------------------------------------------------------
 -- MISC TABLES
 --------------------------------------------------------------------------------
 
@@ -1185,7 +1158,6 @@ CREATE INDEX idx_contract_sign_requests_payment_method ON contract_sign_requests
 CREATE INDEX idx_contract_sign_requests_stripe_payment_intent ON contract_sign_requests(stripe_payment_intent_id) WHERE stripe_payment_intent_id IS NOT NULL;
 CREATE INDEX idx_contract_sign_requests_payment_status ON contract_sign_requests(payment_status);
 CREATE INDEX idx_contract_sign_requests_payment_method_status ON contract_sign_requests(payment_method, payment_status);
-CREATE INDEX idx_contract_sign_requests_icpay_transaction ON contract_sign_requests(icpay_transaction_id) WHERE icpay_transaction_id IS NOT NULL;
 CREATE INDEX idx_contract_sign_requests_stripe_invoice ON contract_sign_requests(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL;
 CREATE INDEX idx_contract_refund_id ON contract_sign_requests(stripe_refund_id) WHERE stripe_refund_id IS NOT NULL;
 
