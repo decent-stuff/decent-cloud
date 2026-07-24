@@ -20,7 +20,7 @@ test.describe('Sign-In Flow', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('should sign in successfully with valid credentials', async ({
+	test('@smoke should sign in successfully with valid credentials', async ({
 		page,
 		testAccountLoggedOut,
 	}) => {
@@ -101,7 +101,7 @@ test.describe('Sign-In Flow', () => {
 		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
 	});
 
-	test('should sign out successfully', async ({ page, testAccountLoggedOut }) => {
+	test('@smoke should sign out successfully', async ({ page, testAccountLoggedOut }) => {
 		// Sign in first (shared helper)
 		await signIn(page, testAccountLoggedOut);
 

@@ -8,6 +8,17 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Anonymous Browsing', () => {
+	test('@smoke landing page (/) renders title, hero, and marketplace stats', async ({ page }) => {
+		// The public marketing landing page is the first thing every visitor
+		// sees. It is fully SSR'd (no auth), so title + the static "Marketplace
+		// Statistics" heading are deterministic, sub-second assertions — the
+		// cheapest possible signal that the app booted and rendered.
+		const res = await page.goto('/');
+		expect(res?.status()).toBe(200);
+		await expect(page).toHaveTitle(/Decent Cloud/);
+		await expect(page.getByRole('heading', { name: 'Marketplace Statistics' })).toBeVisible();
+	});
+
 	test('should allow anonymous user to view dashboard home', async ({ page }) => {
 		await page.goto('/dashboard');
 
@@ -23,7 +34,7 @@ test.describe('Anonymous Browsing', () => {
 		await expect(page).toHaveURL('/dashboard');
 	});
 
-	test('should allow anonymous user to view marketplace', async ({ page }) => {
+	test('@smoke should allow anonymous user to view marketplace', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 
 		// Should show marketplace content
@@ -61,7 +72,7 @@ test.describe('Anonymous Browsing', () => {
 		await expect(loginButtons.first()).toBeVisible();
 	});
 
-	test('should show auth modal when anonymous user tries to rent resource', async ({ page }) => {
+	test('@smoke should show auth modal when anonymous user tries to rent resource', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 
 		// Wait for offerings to load
@@ -174,7 +185,7 @@ test.describe('Anonymous Browsing', () => {
 		await expect(page).toHaveURL('/login?returnUrl=%2Fdashboard%2Fmarketplace');
 	});
 
-	test('should show sidebar for anonymous users with all navigation items', async ({ page }) => {
+	test('@smoke should show sidebar for anonymous users with all navigation items', async ({ page }) => {
 		await page.goto('/dashboard');
 
 		// Sidebar shows the public "Browse" navigation items.

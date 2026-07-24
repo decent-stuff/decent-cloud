@@ -27,7 +27,7 @@ test.describe('/dashboard/rentals', () => {
 	// users derive the same key). Parallel cleanup would nuke sibling tests' data.
 	test.describe.configure({ mode: 'serial' });
 
-	test('empty state: fresh user sees onboarding steps and marketplace CTAs', async ({ page, testAccount }) => {
+	test('@smoke empty state: fresh user sees onboarding steps and marketplace CTAs', async ({ page, testAccount }) => {
 		await page.goto('/dashboard/rentals');
 
 		// Header
@@ -139,7 +139,7 @@ test.describe('/dashboard/rentals', () => {
 		}
 	});
 
-	test('action: Cancel a requested contract moves it to Cancelled tab', async ({ page, testAccount }) => {
+	test('@smoke action: Cancel a requested contract moves it to Cancelled tab', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
 			const contractId = await seedContract({

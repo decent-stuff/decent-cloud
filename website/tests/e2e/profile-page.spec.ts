@@ -20,7 +20,7 @@ test.describe('Public Profile page', () => {
 		).toBeVisible();
 	});
 
-	test('profile edit persists after save and reload', async ({ page }) => {
+	test('@smoke profile edit persists after save and reload', async ({ page }) => {
 		await page.goto('/dashboard/account/profile');
 		await expect(page.locator('#display-name')).toBeVisible({
 			timeout: 10000,

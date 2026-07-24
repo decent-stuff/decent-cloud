@@ -25,7 +25,7 @@ test.describe('/dashboard overview', () => {
 		await expect(myResources).not.toContainText(/rent for free/i);
 	});
 
-	test('dashboard loads all sections via the single combined /provider/dashboard call', async ({
+	test('@smoke dashboard loads all sections via the single combined /provider/dashboard call', async ({
 		page,
 	}) => {
 		// The dashboard previously fanned out to 5 endpoints on every load. It

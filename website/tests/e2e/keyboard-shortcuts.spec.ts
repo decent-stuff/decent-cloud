@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures/test-account';
 
 test.describe('/ keyboard shortcut + email banner dismiss', () => {
-	test('/ focuses marketplace search input', async ({ page }) => {
+	test('@smoke / focuses marketplace search input', async ({ page }) => {
 		// The '/' handler binds via <svelte:window onkeydown> at hydration, and
 		// the page fetches /api/v1/offerings in onMount — so that response is a
 		// deterministic hydration signal (registered before goto to avoid a race).

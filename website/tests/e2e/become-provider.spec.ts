@@ -10,7 +10,7 @@ import { test, expect } from './fixtures/test-account';
  * provider_offerings row.
  */
 test.describe('/dashboard/offerings/create wizard', () => {
-	test('renders step 1, advances to step 2, and links Hetzner onboarding', async ({ page }) => {
+	test('@smoke renders step 1, advances to step 2, and links Hetzner onboarding', async ({ page }) => {
 		await page.goto('/dashboard/offerings/create');
 
 		// Step 1 must render with its required form fields. Waiting on the
