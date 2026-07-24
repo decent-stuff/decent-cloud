@@ -953,7 +953,11 @@ pub async fn authenticate_provider_or_agent_from_request(
         .or_else(|| get_query_param(query, "nonce"))
         .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
-    let full_path = format!("/api/v1{}", request.uri().path());
+    // The SSE handlers that use this auth are mounted directly at `/api/v1/...`
+    // (via Router::at, NOT nested under the OpenApiService), so `uri().path()`
+    // already includes the `/api/v1` prefix the client signs. Prepending it again
+    // would double the prefix and break signature verification.
+    let full_path = request.uri().path();
 
     let pubkey = verify_request_signature(
         pubkey_hex,
@@ -1025,7 +1029,11 @@ pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>
         .or_else(|| get_query_param(query, "nonce"))
         .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
-    let full_path = format!("/api/v1{}", request.uri().path());
+    // The SSE handlers that use this auth are mounted directly at `/api/v1/...`
+    // (via Router::at, NOT nested under the OpenApiService), so `uri().path()`
+    // already includes the `/api/v1` prefix the client signs. Prepending it again
+    // would double the prefix and break signature verification.
+    let full_path = request.uri().path();
 
     verify_request_signature(
         pubkey_hex,

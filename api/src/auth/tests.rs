@@ -369,11 +369,9 @@ fn test_authenticate_user_from_request_valid_signature() {
 
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
-    // full_path is what the frontend signs (full path including /api/v1 prefix)
+    // full_path is what the frontend signs AND what the SSE router serves (the SSE
+    // handlers are mounted directly at /api/v1/..., so uri().path() already has it).
     let full_path = "/api/v1/users/abc/contract-events";
-    // stripped_path is what poem passes to the handler after stripping the /api/v1 nest prefix
-    // authenticate_user_from_request prepends /api/v1 to reconstruct the full path
-    let stripped_path = "/users/abc/contract-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -387,7 +385,7 @@ fn test_authenticate_user_from_request_valid_signature() {
     let sig = identity.sign(&msg).expect("sign");
     let sig_hex = hex::encode(sig.to_bytes());
 
-    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path)
+    let uri: poem::http::Uri = format!("http://localhost{}", full_path)
         .parse()
         .expect("valid URI");
     let req = poem::Request::builder()
@@ -420,7 +418,6 @@ fn test_authenticate_user_from_request_query_params() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/users/abc/contract-events";
-    let stripped_path = "/users/abc/contract-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -436,7 +433,7 @@ fn test_authenticate_user_from_request_query_params() {
     // Build URL with query params instead of headers (for EventSource)
     let uri: poem::http::Uri = format!(
         "http://localhost{}?pubkey={}&signature={}&timestamp={}&nonce={}",
-        stripped_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
+        full_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
     )
     .parse()
     .expect("valid URI");
@@ -467,7 +464,6 @@ fn test_authenticate_user_from_request_headers_preferred_over_query() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/users/test/contract-events";
-    let stripped_path = "/users/test/contract-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -483,7 +479,7 @@ fn test_authenticate_user_from_request_headers_preferred_over_query() {
     // URL has invalid query params, but headers should be preferred
     let uri: poem::http::Uri = format!(
         "http://localhost{}?pubkey=invalid&signature=invalid&timestamp=invalid&nonce=invalid",
-        stripped_path
+        full_path
     )
     .parse()
     .expect("valid URI");
@@ -545,7 +541,6 @@ fn test_authenticate_provider_or_agent_provider_headers() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/providers/abc/password-reset-events";
-    let stripped_path = "/providers/abc/password-reset-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -558,7 +553,7 @@ fn test_authenticate_provider_or_agent_provider_headers() {
     let sig = identity.sign(&msg).expect("sign");
     let sig_hex = hex::encode(sig.to_bytes());
 
-    let uri: poem::http::Uri = format!("http://localhost{}", stripped_path)
+    let uri: poem::http::Uri = format!("http://localhost{}", full_path)
         .parse()
         .expect("valid URI");
     let req = poem::Request::builder()
@@ -636,7 +631,6 @@ fn test_authenticate_provider_or_agent_provider_query_params() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/providers/xyz/password-reset-events";
-    let stripped_path = "/providers/xyz/password-reset-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -651,7 +645,7 @@ fn test_authenticate_provider_or_agent_provider_query_params() {
 
     let uri: poem::http::Uri = format!(
         "http://localhost{}?pubkey={}&signature={}&timestamp={}&nonce={}",
-        stripped_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
+        full_path, pubkey_hex, sig_hex, timestamp_str, nonce_str
     )
     .parse()
     .expect("valid URI");
@@ -683,7 +677,6 @@ fn test_authenticate_provider_or_agent_agent_query_params_invalid_signature() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/providers/test/password-reset-events";
-    let stripped_path = "/providers/test/password-reset-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -700,7 +693,7 @@ fn test_authenticate_provider_or_agent_agent_query_params_invalid_signature() {
 
     let uri: poem::http::Uri = format!(
         "http://localhost{}?agent_pubkey={}&signature={}&timestamp={}&nonce={}",
-        stripped_path, agent_pubkey_hex, wrong_sig_hex, timestamp_str, nonce_str
+        full_path, agent_pubkey_hex, wrong_sig_hex, timestamp_str, nonce_str
     )
     .parse()
     .expect("valid URI");
@@ -728,7 +721,6 @@ fn test_authenticate_provider_or_agent_agent_query_params_valid_signature() {
     let timestamp = chrono::Utc::now().timestamp_nanos_opt().unwrap();
     let nonce = uuid::Uuid::new_v4();
     let full_path = "/api/v1/providers/test/password-reset-events";
-    let stripped_path = "/providers/test/password-reset-events";
 
     let timestamp_str = timestamp.to_string();
     let nonce_str = nonce.to_string();
@@ -743,7 +735,7 @@ fn test_authenticate_provider_or_agent_agent_query_params_valid_signature() {
 
     let uri: poem::http::Uri = format!(
         "http://localhost{}?agent_pubkey={}&signature={}&timestamp={}&nonce={}",
-        stripped_path, agent_pubkey_hex, sig_hex, timestamp_str, nonce_str
+        full_path, agent_pubkey_hex, sig_hex, timestamp_str, nonce_str
     )
     .parse()
     .expect("valid URI");
@@ -807,7 +799,9 @@ fn authenticate_provider_or_agent_from_request_sync_provider_path(
         .or_else(|| get_query_param(query, "nonce"))
         .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
-    let full_path = format!("/api/v1{}", request.uri().path());
+    // Mirror the real function: SSE handlers are mounted directly at /api/v1/...,
+    // so uri().path() already includes the prefix the client signs.
+    let full_path = request.uri().path();
 
     let pubkey = verify_request_signature(
         pubkey_hex,
@@ -877,7 +871,9 @@ fn authenticate_provider_or_agent_from_request_sync_agent_path(
         .or_else(|| get_query_param(query, "nonce"))
         .ok_or_else(|| AuthError::MissingHeader("X-Nonce or nonce query param".to_string()))?;
 
-    let full_path = format!("/api/v1{}", request.uri().path());
+    // Mirror the real function: SSE handlers are mounted directly at /api/v1/...,
+    // so uri().path() already includes the prefix the client signs.
+    let full_path = request.uri().path();
 
     let pubkey = verify_request_signature(
         pubkey_hex,
