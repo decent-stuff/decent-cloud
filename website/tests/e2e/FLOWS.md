@@ -120,7 +120,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Flow | Status | Tags | Spec | Test |
 |------|--------|------|------|------|
 | Become provider / setup wizard | ⚠️ | `@smoke` `@provider` | `become-provider.spec.ts` · `dashboard-overview.spec.ts` | `@smoke renders step 1, advances to step 2, and links Hetzner onboarding` — wizard render + Get Started CTA; full onboarding submit not asserted |
-| Create offering (full submit) | ⚠️ | `@provider` | `become-provider.spec.ts` | wizard stops before the create submit (commented out — would create a real row). CSV template download covered in `offerings-template.spec.ts`. |
+| Create offering (full submit) | ⚠️ | `@provider` | — | **Blocked by src bug** (issue #440): `offerings/create/+page.svelte` POSTs the offering without the required `pubkey` field → backend `Offering.pubkey: String` rejects with 400 on every create. CSV template download covered in `offerings-template.spec.ts`. Edit flow works (spreads `...existing` incl. pubkey). |
 | Edit offering | ✅ | `@provider` | `offering-edit.spec.ts` | `submit persists the change and redirects to the offerings list` |
 | Offering status badge (a11y) | ✅ | `@provider` | `offering-status-badge.spec.ts` | `tooltip becomes visible when the badge button receives focus (#15)` |
 | Manage visibility | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `visibility menu lists all states with descriptions and persists selection` |
