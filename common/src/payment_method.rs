@@ -20,18 +20,12 @@ pub const STRIPE_SUPPORTED_CURRENCIES: &[&str] = &[
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaymentMethod {
-    #[serde(rename = "icpay")]
-    ICPay,
     Stripe,
-    /// Test payment method for E2E testing - auto-succeeds without checkout
+    /// Test payment method for E2E/testing - auto-succeeds without checkout
     Test,
 }
 
 impl PaymentMethod {
-    pub fn is_icpay(&self) -> bool {
-        matches!(self, PaymentMethod::ICPay)
-    }
-
     pub fn is_stripe(&self) -> bool {
         matches!(self, PaymentMethod::Stripe)
     }
@@ -44,7 +38,6 @@ impl PaymentMethod {
 impl std::fmt::Display for PaymentMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PaymentMethod::ICPay => write!(f, "icpay"),
             PaymentMethod::Stripe => write!(f, "stripe"),
             PaymentMethod::Test => write!(f, "test"),
         }
@@ -56,7 +49,6 @@ impl std::str::FromStr for PaymentMethod {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "icpay" => Ok(PaymentMethod::ICPay),
             "stripe" => Ok(PaymentMethod::Stripe),
             "test" => Ok(PaymentMethod::Test),
             _ => Err(format!("Invalid payment method: {}", s)),
@@ -79,12 +71,12 @@ pub fn is_stripe_supported_currency(currency: &str) -> bool {
 /// so the invariant cannot be bypassed even via direct SQL.
 pub mod payment_status {
     /// Payment initiated but not yet confirmed (e.g. Stripe checkout pending
-    /// webhook, or ICPay transaction awaiting settlement).
+    /// webhook).
     pub const PENDING: &str = "pending";
     /// Payment confirmed/collected; provisioning is permitted.
     pub const SUCCEEDED: &str = "succeeded";
     /// Funds returned to the customer. Only ever set when a real refund id
-    /// was recorded (Stripe `re_*` or ICPay refund id).
+    /// was recorded (Stripe `re_*`).
     pub const REFUNDED: &str = "refunded";
     /// Payment failed / charge declined.
     pub const FAILED: &str = "failed";
@@ -106,41 +98,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_payment_method_is_icpay() {
-        assert!(PaymentMethod::ICPay.is_icpay());
-        assert!(!PaymentMethod::Stripe.is_icpay());
-        assert!(!PaymentMethod::Test.is_icpay());
-    }
-
-    #[test]
     fn test_payment_method_is_stripe() {
         assert!(PaymentMethod::Stripe.is_stripe());
-        assert!(!PaymentMethod::ICPay.is_stripe());
         assert!(!PaymentMethod::Test.is_stripe());
     }
 
     #[test]
     fn test_payment_method_is_test() {
         assert!(PaymentMethod::Test.is_test());
-        assert!(!PaymentMethod::ICPay.is_test());
         assert!(!PaymentMethod::Stripe.is_test());
     }
 
     #[test]
     fn test_payment_method_from_str_valid() {
         // unwrap() is acceptable here: these are test cases with known valid inputs
-        assert_eq!(
-            "icpay".parse::<PaymentMethod>().unwrap(),
-            PaymentMethod::ICPay
-        );
-        assert_eq!(
-            "ICPay".parse::<PaymentMethod>().unwrap(),
-            PaymentMethod::ICPay
-        );
-        assert_eq!(
-            "ICPAY".parse::<PaymentMethod>().unwrap(),
-            PaymentMethod::ICPay
-        );
         assert_eq!(
             "stripe".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::Stripe
@@ -171,22 +142,18 @@ mod tests {
     fn test_payment_method_from_str_invalid() {
         assert!("paypal".parse::<PaymentMethod>().is_err());
         assert!("bitcoin".parse::<PaymentMethod>().is_err());
+        assert!("icpay".parse::<PaymentMethod>().is_err());
         assert!("".parse::<PaymentMethod>().is_err());
     }
 
     #[test]
     fn test_payment_method_display() {
-        assert_eq!(PaymentMethod::ICPay.to_string(), "icpay");
         assert_eq!(PaymentMethod::Stripe.to_string(), "stripe");
         assert_eq!(PaymentMethod::Test.to_string(), "test");
     }
 
     #[test]
     fn test_payment_method_serialize() {
-        let icpay = PaymentMethod::ICPay;
-        let json = serde_json::to_string(&icpay).unwrap();
-        assert_eq!(json, r#""icpay""#);
-
         let stripe = PaymentMethod::Stripe;
         let json = serde_json::to_string(&stripe).unwrap();
         assert_eq!(json, r#""stripe""#);
@@ -198,9 +165,6 @@ mod tests {
 
     #[test]
     fn test_payment_method_deserialize() {
-        let icpay: PaymentMethod = serde_json::from_str(r#""icpay""#).unwrap();
-        assert_eq!(icpay, PaymentMethod::ICPay);
-
         let stripe: PaymentMethod = serde_json::from_str(r#""stripe""#).unwrap();
         assert_eq!(stripe, PaymentMethod::Stripe);
 
@@ -212,6 +176,10 @@ mod tests {
     fn test_payment_method_deserialize_invalid() {
         let result: Result<PaymentMethod, _> = serde_json::from_str(r#""paypal""#);
         assert!(result.is_err());
+
+        // ICPay is fully retired; the serialized form must no longer parse.
+        let retired: Result<PaymentMethod, _> = serde_json::from_str(r#""icpay""#);
+        assert!(retired.is_err());
     }
 
     #[test]
