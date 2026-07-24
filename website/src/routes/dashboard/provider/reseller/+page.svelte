@@ -452,21 +452,40 @@
 											>
 												Cancel
 											</button>
+									{:else}
+										<button
+											onclick={() => startEdit(relationship)}
+											disabled={pendingDeletePubkey !== null}
+											class="px-4 py-2 bg-primary-500/20 border border-primary-500/30  text-primary-300 hover:bg-primary-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											Edit
+										</button>
+										{#if pendingDeletePubkey === relationship.external_provider_pubkey}
+											<span class="text-sm text-neutral-400">Stop reselling?</span>
+											<button
+												onclick={() => confirmDeleteRelationship(relationship)}
+												disabled={deletingRelationship[relationship.external_provider_pubkey]}
+												class="px-4 py-2 bg-red-500/40 border border-red-500/40 text-red-200 hover:bg-red-500/50 transition-colors disabled:opacity-50"
+											>
+												{deletingRelationship[relationship.external_provider_pubkey] ? "Deleting..." : "Confirm"}
+											</button>
+											<button
+												onclick={cancelDeleteRelationship}
+												disabled={deletingRelationship[relationship.external_provider_pubkey]}
+												class="px-4 py-2 bg-surface-elevated border border-neutral-800  text-neutral-400 hover:bg-surface-elevated transition-colors disabled:opacity-50"
+											>
+												Cancel
+											</button>
 										{:else}
 											<button
-												onclick={() => startEdit(relationship)}
-												class="px-4 py-2 bg-primary-500/20 border border-primary-500/30  text-primary-300 hover:bg-primary-500/30 transition-colors"
+												onclick={() => requestDeleteRelationship(relationship)}
+												disabled={pendingDeletePubkey !== null}
+												class="px-4 py-2 bg-red-500/20 border border-red-500/30  text-red-300 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 											>
-												Edit
-											</button>
-											<button
-												onclick={() => handleDeleteRelationship(relationship)}
-												disabled={deletingRelationship[relationship.external_provider_pubkey]}
-												class="px-4 py-2 bg-red-500/20 border border-red-500/30  text-red-300 hover:bg-red-500/30 transition-colors disabled:opacity-50"
-											>
-												{deletingRelationship[relationship.external_provider_pubkey] ? "Deleting..." : "Delete"}
+												Delete
 											</button>
 										{/if}
+									{/if}
 									</div>
 								</div>
 							</div>
