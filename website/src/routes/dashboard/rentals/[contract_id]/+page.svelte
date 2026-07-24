@@ -1717,12 +1717,6 @@
 								<span class="text-neutral-300 ml-2 font-mono text-xs">{contract.stripe_refund_id}</span>
 							</div>
 						{/if}
-						{#if contract.icpay_refund_id}
-							<div>
-								<span class="text-neutral-500">ICPay Refund ID:</span>
-								<span class="text-neutral-300 ml-2 font-mono text-xs">{contract.icpay_refund_id}</span>
-							</div>
-						{/if}
 					</div>
 					<p class="text-amber-400/70 text-xs mt-3">
 						Refunds typically appear on your original payment method within 5-10 business days.
