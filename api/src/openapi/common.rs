@@ -42,10 +42,18 @@ pub fn default_weeks() -> i32 {
     8
 }
 
+/// Hex-decode a path/segment value into bytes with a consistent, detailed
+/// error message. Use for URL path segments and other hex inputs that are NOT
+/// subject to a fixed length (contract ids, generic ids). For 32-byte pubkeys
+/// prefer [`decode_pubkey`], which adds the length check on top of this.
+pub fn decode_hex_path(hex_str: &str, label: &str) -> Result<Vec<u8>, String> {
+    hex::decode(hex_str)
+        .map_err(|e| format!("Invalid {label} hex: {e} (value: {hex_str})"))
+}
+
 /// Decode a hex-encoded public key with detailed error messages
 pub fn decode_pubkey(pubkey_hex: &str) -> Result<Vec<u8>, String> {
-    let bytes = hex::decode(pubkey_hex)
-        .map_err(|e| format!("Invalid pubkey hex: {} (value: {})", e, pubkey_hex))?;
+    let bytes = decode_hex_path(pubkey_hex, "pubkey")?;
     if bytes.len() != 32 {
         return Err(format!(
             "Public key must be 32 bytes, got {} bytes (value: {})",

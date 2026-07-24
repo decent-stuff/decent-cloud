@@ -1,4 +1,4 @@
-use super::common::{ApiResponse, ApiTags};
+use super::common::{decode_hex_path, ApiResponse, ApiTags};
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
 use crate::invoices::{get_invoice_metadata, get_invoice_pdf, Invoice};
@@ -26,13 +26,13 @@ impl InvoicesApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> PoemResponse<InvoicePdfResponse> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return PoemResponse::new(InvoicePdfResponse::BadRequest(Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })))
             }
         };
@@ -116,13 +116,13 @@ impl InvoicesApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Invoice>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };

@@ -1,5 +1,6 @@
 use super::common::{
-    check_authorization, decode_pubkey, default_limit, default_weeks, AddAccountContactRequest,
+    check_authorization, decode_hex_path, decode_pubkey, default_limit, default_weeks,
+    AddAccountContactRequest,
     AllowlistAddRequest, ApiResponse, ApiTags, AutoAcceptRequest, AutoAcceptResponse,
     BulkUpdatePricesRequest, BulkUpdateStatusRequest, CreatePoolRequest, CreateSetupTokenRequest,
     CsvImportError, CsvImportResult, DuplicateOfferingRequest, EmptyResponse,
@@ -86,8 +87,8 @@ pub async fn password_reset_events(
     use poem::http::StatusCode;
     use poem::web::sse::{Event, SSE};
 
-    let pubkey_bytes = hex::decode(&pubkey)
-        .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
+    let pubkey_bytes = decode_pubkey(&pubkey)
+        .map_err(|e| poem::Error::from_string(e, StatusCode::BAD_REQUEST))?;
 
     let provider_pubkey = crate::auth::authenticate_provider_or_agent_from_request(req, &db)
         .await
@@ -157,8 +158,8 @@ pub async fn contract_status_events(
     use poem::http::StatusCode;
     use poem::web::sse::{Event, SSE};
 
-    let pubkey_bytes = hex::decode(&pubkey)
-        .map_err(|_| poem::Error::from_string("Invalid pubkey format", StatusCode::BAD_REQUEST))?;
+    let pubkey_bytes = decode_pubkey(&pubkey)
+        .map_err(|e| poem::Error::from_string(e, StatusCode::BAD_REQUEST))?;
 
     let auth_pubkey = crate::auth::authenticate_user_from_request(req)
         .map_err(|e| poem::Error::from_string(e.to_string(), StatusCode::UNAUTHORIZED))?;
@@ -550,13 +551,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::providers::ProviderProfile>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(e) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid pubkey hex: {} (value: {})", e, &pubkey.0)),
+                    error: Some(msg),
                 })
             }
         };
@@ -593,13 +594,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::providers::ProviderContact>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(e) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid pubkey hex: {} (value: {})", e, &pubkey.0)),
+                    error: Some(msg),
                 })
             }
         };
@@ -751,13 +752,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::stats::ProviderStats>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -787,13 +788,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::stats::RevenueByMonth>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -826,13 +827,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::stats::ProviderTrustMetrics>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1017,13 +1018,13 @@ impl ProvidersApi {
             });
         }
 
-        let contract_id_bytes = match hex::decode(&contract_id.0) {
+        let contract_id_bytes = match decode_hex_path(&contract_id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1104,13 +1105,13 @@ impl ProvidersApi {
             });
         }
 
-        let contract_id_bytes = match hex::decode(&contract_id.0) {
+        let contract_id_bytes = match decode_hex_path(&contract_id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1171,13 +1172,13 @@ impl ProvidersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<ResponseMetricsResponse>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1211,13 +1212,13 @@ impl ProvidersApi {
         auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1262,13 +1263,13 @@ impl ProvidersApi {
         auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractWithSpecs>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1361,13 +1362,13 @@ impl ProvidersApi {
         auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingTermination>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1414,13 +1415,13 @@ impl ProvidersApi {
         auth: ProviderOrAgentAuth,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1467,13 +1468,13 @@ impl ProvidersApi {
         auth: AgentAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingSshKeyRotation>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1518,13 +1519,13 @@ impl ProvidersApi {
         auth: ProviderOrAgentAuth,
         id: Path<String>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1609,24 +1610,24 @@ impl ProvidersApi {
         pubkey: Path<String>,
         contract_id: Path<String>,
     ) -> Json<ApiResponse<bool>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
 
-        let contract_id_bytes = match hex::decode(&contract_id.0) {
+        let contract_id_bytes = match decode_hex_path(&contract_id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -2641,13 +2642,13 @@ impl ProvidersApi {
         id: Path<String>,
         req: Json<RentalResponseRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -2742,13 +2743,13 @@ impl ProvidersApi {
         id: Path<String>,
         req: Json<ProvisioningStatusRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -2878,13 +2879,13 @@ impl ProvidersApi {
         id: Path<String>,
         req: Json<UpdatePasswordRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -3755,13 +3756,13 @@ impl ProvidersApi {
         pubkey: Path<String>,
         req: Json<ReconcileRequest>,
     ) -> Json<ApiResponse<ReconcileResponse>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -4690,13 +4691,13 @@ impl ProvidersApi {
         }
 
         // Decode contract ID
-        let contract_bytes = match hex::decode(&contract_id.0) {
+        let contract_bytes = match decode_hex_path(&contract_id.0, "contract id") {
             Ok(b) => b,
-            Err(e) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid contract_id hex: {}", e)),
+                    error: Some(msg),
                 })
             }
         };
@@ -4775,13 +4776,13 @@ impl ProvidersApi {
         }
 
         // Decode contract ID
-        let contract_bytes = match hex::decode(&contract_id.0) {
+        let contract_bytes = match decode_hex_path(&contract_id.0, "contract id") {
             Ok(b) => b,
-            Err(e) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid contract_id hex: {}", e)),
+                    error: Some(msg),
                 })
             }
         };
@@ -6484,7 +6485,15 @@ mod tests {
 
         assert!(!response.success);
         assert!(response.data.is_none());
-        assert_eq!(response.error.as_deref(), Some("Invalid pubkey format"));
+        assert!(
+            response
+                .error
+                .as_ref()
+                .unwrap()
+                .starts_with("Invalid pubkey hex"),
+            "got: {:?}",
+            response.error
+        );
     }
 
     #[test]

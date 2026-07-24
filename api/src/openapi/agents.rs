@@ -2,7 +2,9 @@
 //!
 //! Handles agent delegations, heartbeats, and DNS management for provider provisioning agents.
 
-use super::common::{check_authorization, decode_pubkey, ApiResponse, RecordHealthCheckRequest};
+use super::common::{
+    check_authorization, decode_hex_path, decode_pubkey, ApiResponse, RecordHealthCheckRequest,
+};
 use crate::auth::{AgentAuthenticatedUser, ApiAuthenticatedUser};
 use crate::cloudflare_dns::CloudflareDns;
 use crate::database::agent_delegations::CreateAgentDelegationParams;
@@ -600,13 +602,13 @@ impl AgentsApi {
         }
 
         // Decode contract ID
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 });
             }
         };

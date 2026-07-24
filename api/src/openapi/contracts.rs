@@ -1,5 +1,5 @@
 use super::common::{
-    default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
+    decode_hex_path, decode_pubkey, default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
     ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, RotateSshKeyRequest,
     SetAutoRenewRequest, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
     VerifyCheckoutSessionResponse,
@@ -176,13 +176,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<crate::database::contracts::Contract>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -237,13 +237,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -317,13 +317,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -440,13 +440,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<RotateSshKeyRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -547,13 +547,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -827,13 +827,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<ExtendContractRequest>,
     ) -> Json<ApiResponse<ExtendContractResponse>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -888,13 +888,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<CancelContractRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -942,13 +942,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<SetAutoRenewRequest>,
     ) -> Json<ApiResponse<crate::database::contracts::Contract>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -996,13 +996,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractExtension>>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1064,13 +1064,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractHealthCheck>>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1132,13 +1132,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<crate::database::contracts::ContractHealthSummary>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1200,13 +1200,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<UpdateIcpayTransactionRequest>,
     ) -> Json<ApiResponse<String>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1314,13 +1314,13 @@ impl ContractsApi {
             }
         };
 
-        let contract_id_bytes = match hex::decode(&session_result.contract_id) {
+        let contract_id_bytes = match decode_hex_path(&session_result.contract_id, "contract id") {
             Ok(id) => id,
-            Err(e) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid contract_id in session: {}", e)),
+                    error: Some(msg),
                 })
             }
         };
@@ -1453,13 +1453,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<RecordUsageRequest>,
     ) -> Json<ApiResponse<i64>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1532,13 +1532,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<crate::database::contracts::ContractUsage>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1606,13 +1606,13 @@ impl ContractsApi {
         id: Path<String>,
         req: Json<crate::database::stats::SubmitFeedbackInput>,
     ) -> Json<ApiResponse<crate::database::stats::ContractFeedback>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1649,13 +1649,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Option<String>>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1717,13 +1717,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractEvent>>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
@@ -1784,13 +1784,13 @@ impl ContractsApi {
         auth: ApiAuthenticatedUser,
         id: Path<String>,
     ) -> Json<ApiResponse<Option<crate::database::stats::ContractFeedback>>> {
-        let contract_id = match hex::decode(&id.0) {
+        let contract_id = match decode_hex_path(&id.0, "contract id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(msg) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid contract ID format".to_string()),
+                    error: Some(msg),
                 })
             }
         };
