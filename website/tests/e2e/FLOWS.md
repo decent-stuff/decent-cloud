@@ -144,7 +144,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Access control: non-admin denied | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show access denied for non-admin users` |
 | Admin sidebar link gating | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show Admin link in sidebar for admin users` |
 | Failed-email error visibility | ✅ | `@admin` | `admin-dashboard.spec.ts` | `failed-email error is fully visible, not truncated (#11)` |
-| Admin actions (send email, manage accounts) | ❌ | `@admin` | — | No test exercises mutating admin actions from the UI. |
+| Admin actions (account mutations) | ✅ | `@admin` | `admin-account-mutations.spec.ts` | `setEmailVerified flips the target account email_verified flag` · `setAdminStatus grants and then revokes admin privileges` · `deleteAccount removes a non-admin target and a re-fetch reports it gone` — real signed mutations via the admin handlers. (Send Test Email still ❌ — needs MAILCHANNELS_API_KEY.) |
 
 ### Cross-cutting
 
