@@ -63,6 +63,12 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancelling = $state(false);
+	// Inline two-step cancel confirm: the first Cancel click only arms the
+	// action (pendingCancel=true); the real PUT /cancel fires from
+	// confirmCancelContract() after the user clicks the inline Confirm button.
+	// Mirrors the offerings delete pattern (commit 1077dd33) — native confirm()
+	// blocks headless e2e and is poor on mobile.
+	let pendingCancel = $state(false);
 	let downloadingInvoice = $state(false);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
@@ -755,12 +761,19 @@
 		}
 	}
 
-	async function handleCancelContract() {
+	// First Cancel click only arms the inline confirm — no native dialog, no
+	// API call. The real cancellation runs in confirmCancelContract().
+	function requestCancelContract() {
 		if (!contract || !isCancellable(contract.status)) return;
+		pendingCancel = true;
+	}
 
-		if (!confirm("Are you sure you want to cancel this rental request?")) {
-			return;
-		}
+	function cancelCancelContract() {
+		pendingCancel = false;
+	}
+
+	async function confirmCancelContract() {
+		if (!contract || !isCancellable(contract.status)) return;
 
 		try {
 			cancelling = true;
@@ -789,6 +802,7 @@
 			console.error("Error cancelling rental request:", e);
 		} finally {
 			cancelling = false;
+			pendingCancel = false;
 		}
 	}
 
@@ -1040,13 +1054,31 @@
 							{statusBadge.text}
 						</span>
 						{#if isCancellable(contract.status) && !cancelling}
-							<button
-								onclick={handleCancelContract}
-								class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
-								title="Cancel this rental request"
-							>
-								Cancel
-							</button>
+							{#if pendingCancel}
+								<span class="text-xs text-neutral-400">Cancel?</span>
+								<button
+									onclick={confirmCancelContract}
+									class="px-2 py-1 text-xs bg-red-600/90 text-white rounded hover:bg-red-700 transition-colors"
+									title="Confirm cancel this rental request"
+								>
+									Confirm
+								</button>
+								<button
+									onclick={cancelCancelContract}
+									class="px-2 py-1 text-xs bg-surface-elevated text-neutral-400 rounded hover:text-white transition-colors"
+									title="Abort cancel"
+								>
+									Abort
+								</button>
+							{:else}
+								<button
+									onclick={requestCancelContract}
+									class="px-2 py-1 text-xs bg-red-600/80 text-white rounded hover:bg-red-700 transition-colors"
+									title="Cancel this rental request"
+								>
+									Cancel
+								</button>
+							{/if}
 						{/if}
 						{#if (contract.payment_status === "succeeded" || contract.payment_status === "refunded" || ["active", "provisioned", "provisioning", "accepted"].includes(contract.status.toLowerCase())) && !downloadingInvoice}
 							<button
@@ -1158,10 +1190,14 @@
 									class="px-2 py-1 bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
 								>Contact Provider</button>
 								{#if isCancellable(contract.status)}
-									<button
-										onclick={handleCancelContract}
-										class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors"
-									>Cancel Contract</button>
+									{#if pendingCancel}
+										<span class="text-xs text-red-400">↑ confirm above</span>
+									{:else}
+										<button
+											onclick={requestCancelContract}
+											class="px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30 transition-colors"
+										>Cancel Contract</button>
+									{/if}
 								{/if}
 							</div>
 						</div>
