@@ -17,6 +17,10 @@ test.describe('Anonymous Browsing', () => {
 		expect(res?.status()).toBe(200);
 		await expect(page).toHaveTitle(/Decent Cloud/);
 		await expect(page.getByRole('heading', { name: 'Marketplace Statistics' })).toBeVisible();
+
+		// Footer copyright year must be current, not a hardcoded stale value.
+		const year = new Date().getFullYear().toString();
+		await expect(page.locator('footer')).toContainText(year);
 	});
 
 	test('should allow anonymous user to view dashboard home', async ({ page }) => {

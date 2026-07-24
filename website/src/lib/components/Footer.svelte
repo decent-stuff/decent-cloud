@@ -78,7 +78,7 @@
 		<!-- Bottom bar -->
 		<div class="border-t border-neutral-800/80 pt-6 text-center">
 			<p class="text-neutral-600 text-[10px] uppercase tracking-label">
-				&copy; 2025 Decent Cloud &middot; Apache 2.0 License
+				&copy; {new Date().getFullYear()} Decent Cloud &middot; Apache 2.0 License
 			</p>
 		</div>
 	</div>
