@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,7 +169,7 @@ pub async fn call_llm_api(prompt: &str, max_tokens: u32) -> Result<String> {
         content: prompt.to_string(),
     };
 
-    let client = Client::new();
+    let client = crate::http_util::http_client();
 
     let request = match provider {
         LlmProvider::Anthropic => LlmRequest::Anthropic {

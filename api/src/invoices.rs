@@ -508,7 +508,9 @@ async fn fetch_and_persist_stripe_pdf(contract_id: &[u8], invoice_id: &str) -> R
         .context("Stripe invoice PDF not yet available")?;
 
     // Download PDF from Stripe URL
-    let response = reqwest::get(&pdf_url)
+    let response = crate::http_util::http_client()
+        .get(&pdf_url)
+        .send()
         .await
         .context("Failed to download invoice PDF from Stripe")?;
 

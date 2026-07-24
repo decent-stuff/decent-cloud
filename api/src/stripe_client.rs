@@ -570,7 +570,7 @@ impl StripeClient {
         action: &str,
     ) -> Result<UsageRecordResult> {
         let secret_key = std::env::var("STRIPE_SECRET_KEY")?;
-        let client = reqwest::Client::new();
+        let client = crate::http_util::http_client();
 
         let mut form = vec![
             ("quantity", quantity.to_string()),

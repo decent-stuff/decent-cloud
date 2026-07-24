@@ -45,7 +45,7 @@ impl SignedClient {
             identity: dcc_identity,
             public_key_hex: identity.public_key_hex.clone(),
             base_url: base_url.trim_end_matches('/').to_string(),
-            http: Client::new(),
+            http: api::http_util::http_client(),
         })
     }
 
@@ -56,7 +56,7 @@ impl SignedClient {
             identity,
             public_key_hex,
             base_url: base_url.trim_end_matches('/').to_string(),
-            http: Client::new(),
+            http: api::http_util::http_client(),
         })
     }
 

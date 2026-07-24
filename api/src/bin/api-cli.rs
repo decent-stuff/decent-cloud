@@ -1049,7 +1049,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             limit,
         } => {
             // Use a dummy identity just for public endpoint access
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
             let mut url = format!("{}/api/v1/offerings?limit={}", api_url, limit);
             if let Some(p) = provider {
                 url.push_str(&format!("&provider={}", p));
@@ -1230,7 +1230,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
 // =============================================================================
 
 async fn handle_offering_action(action: OfferingAction, api_url: &str) -> Result<()> {
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
 
     match action {
         OfferingAction::List { filter, limit } => {
@@ -1300,7 +1300,7 @@ struct ProviderProfile {
 }
 
 async fn handle_provider_action(action: ProviderAction, api_url: &str) -> Result<()> {
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
 
     match action {
         ProviderAction::List { limit } => {
@@ -1422,7 +1422,7 @@ async fn handle_notify_action(action: NotifyAction) -> Result<()> {
         NotifyAction::Telegram { chat_id, message } => {
             let bot_token = env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN not set")?;
 
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
             let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
 
             let params = serde_json::json!({
@@ -1454,7 +1454,7 @@ async fn handle_dns_action(action: DnsAction) -> Result<()> {
     let domain = env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
     let base_domain = format!("{}.{}", gw_prefix, domain);
 
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
     let base_url = format!(
         "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
         zone_id
@@ -1743,7 +1743,7 @@ async fn handle_gateway_action(action: GatewayAction, api_url: &str) -> Result<(
 // =============================================================================
 
 async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()> {
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
 
     async fn check_health(name: &str, result: Result<String, anyhow::Error>) {
         match result {
@@ -1928,7 +1928,7 @@ async fn connect_db() -> Result<Database> {
 }
 
 async fn fetch_offerings(api_url: &str) -> Result<Vec<Offering>> {
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
     let url = format!("{}/api/v1/offerings?limit=50&in_stock_only=true", api_url);
     let response = http.get(&url).send().await?;
     let text = response.text().await?;
@@ -2119,7 +2119,7 @@ async fn run_dns_e2e_test() -> Result<()> {
     let domain = env::var("CF_DOMAIN").unwrap_or_else(|_| "decent-cloud.org".to_string());
     let base_domain = format!("{}.{}", gw_prefix, domain);
 
-    let http = reqwest::Client::new();
+    let http = api::http_util::http_client();
     let base_url = format!(
         "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
         zone_id
@@ -2515,7 +2515,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
 
             // Test 1: Health check
             println!("\n--- Test 1: Health Check ---");
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
             let url = format!("{}/api/v1/offerings?limit=1", api_url);
             match http.get(&url).send().await {
                 Ok(resp) if resp.status().is_success() => {
@@ -3162,7 +3162,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
         RecipeAction::Validate { script, file } => {
             let script_content = load_recipe_input(script, file)?;
 
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
             let url = format!("{}/api/v1/recipes/validate", api_url);
             let response = http
                 .post(&url)
@@ -3198,7 +3198,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
         RecipeAction::Review { script, file } => {
             let script_content = load_recipe_input(script, file)?;
 
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
             let url = format!("{}/api/v1/recipes/review", api_url);
             let response = http
                 .post(&url)
@@ -3230,7 +3230,7 @@ async fn handle_recipe_action(action: RecipeAction, api_url: &str) -> Result<()>
             offering_id,
             ssh_pubkey,
         } => {
-            let http = reqwest::Client::new();
+            let http = api::http_util::http_client();
 
             println!("Dry-run: simulating contract for offering {}", offering_id);
 

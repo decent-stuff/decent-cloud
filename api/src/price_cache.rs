@@ -88,7 +88,7 @@ mod tests {
     use super::*;
 
     fn make_cache() -> PriceCache {
-        PriceCache::new(reqwest::Client::new())
+        PriceCache::new(crate::http_util::http_client())
     }
 
     #[test]
@@ -121,7 +121,7 @@ mod tests {
     #[tokio::test]
     async fn returns_none_on_unreachable_host() {
         // Use a URL that will fail immediately (local unreachable port)
-        let client = reqwest::Client::new();
+        let client = crate::http_util::http_client();
         let cache = PriceCache {
             inner: Arc::new(RwLock::new(None)),
             http: client,

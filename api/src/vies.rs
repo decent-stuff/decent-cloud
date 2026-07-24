@@ -34,7 +34,7 @@ pub async fn validate_vat_id(country_code: &str, vat_number: &str) -> Result<Vie
         country_code, vat_number
     );
 
-    let client = reqwest::Client::new();
+    let client = crate::http_util::http_client();
     let response = client
         .post(VIES_SOAP_URL)
         .header("Content-Type", "text/xml; charset=utf-8")

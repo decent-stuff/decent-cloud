@@ -57,7 +57,7 @@ impl IcpayClient {
         let secret_key = std::env::var("ICPAY_SECRET_KEY")
             .context("ICPAY_SECRET_KEY environment variable not set")?;
 
-        let client = reqwest::Client::new();
+        let client = crate::http_util::http_client();
         Ok(Self { secret_key, client })
     }
 
@@ -284,7 +284,7 @@ mod tests {
         // Override API URL for testing
         let client = IcpayClient {
             secret_key: "sk_test_dummy".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::http_util::http_client(),
         };
 
         // Temporarily patch API URL - we'll use the client directly
@@ -341,7 +341,7 @@ mod tests {
         let url = format!("{}/sdk/private/payments/by-metadata", server.url());
         let client = IcpayClient {
             secret_key: "sk_test_dummy".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::http_util::http_client(),
         };
 
         let response = client
@@ -385,7 +385,7 @@ mod tests {
         let url = format!("{}/sdk/private/refunds", server.url());
         let client = IcpayClient {
             secret_key: "sk_test_dummy".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::http_util::http_client(),
         };
 
         let request_body = CreateRefundRequest {
@@ -433,7 +433,7 @@ mod tests {
         let url = format!("{}/sdk/private/refunds", server.url());
         let client = IcpayClient {
             secret_key: "sk_test_dummy".to_string(),
-            client: reqwest::Client::new(),
+            client: crate::http_util::http_client(),
         };
 
         let request_body = CreateRefundRequest {

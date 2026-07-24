@@ -12,6 +12,7 @@ use std::process::Command;
 const GITHUB_REPO: &str = "decent-stuff/decent-cloud";
 const BINARY_NAME: &str = "dc-agent-linux-amd64";
 const LOCK_FILE: &str = "/var/run/dc-agent-upgrade.lock";
+const UPGRADE_TIMEOUT_SECS: u64 = 120;
 
 /// Parse a version string like "0.4.9" or "v0.4.9" into (major, minor, patch).
 pub fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
@@ -42,7 +43,10 @@ pub async fn check_latest_version() -> Result<String> {
         GITHUB_REPO
     );
 
-    let client = reqwest::Client::builder().user_agent("dc-agent").build()?;
+    let client = reqwest::Client::builder()
+        .user_agent("dc-agent")
+        .timeout(std::time::Duration::from_secs(UPGRADE_TIMEOUT_SECS))
+        .build()?;
 
     let response = client
         .get(&url)
@@ -69,7 +73,10 @@ pub async fn check_latest_version() -> Result<String> {
 
 /// Download a file from URL to the specified path.
 async fn download_file(url: &str, dest: &Path) -> Result<()> {
-    let client = reqwest::Client::builder().user_agent("dc-agent").build()?;
+    let client = reqwest::Client::builder()
+        .user_agent("dc-agent")
+        .timeout(std::time::Duration::from_secs(UPGRADE_TIMEOUT_SECS))
+        .build()?;
 
     let response = client
         .get(url)

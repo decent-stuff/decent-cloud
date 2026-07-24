@@ -185,7 +185,7 @@ pub async fn google_callback(
 
     // Fetch user info
     let access_token = token_response.access_token().secret();
-    let user_info: GoogleUserInfo = reqwest::Client::new()
+    let user_info: GoogleUserInfo = crate::http_util::http_client()
         .get("https://www.googleapis.com/oauth2/v2/userinfo")
         .bearer_auth(access_token)
         .send()

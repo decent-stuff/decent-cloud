@@ -76,7 +76,7 @@ struct TwilioErrorResponse {
 impl TwilioClient {
     pub fn from_env() -> Result<Self> {
         Ok(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             account_sid: std::env::var("TWILIO_ACCOUNT_SID")
                 .context("TWILIO_ACCOUNT_SID not set")?,
             auth_token: std::env::var("TWILIO_AUTH_TOKEN").context("TWILIO_AUTH_TOKEN not set")?,
@@ -171,7 +171,7 @@ impl TextBeeClient {
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "https://api.textbee.dev".to_string());
         Ok(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             api_url,
             device_id: std::env::var("TEXTBEE_DEVICE_ID").context("TEXTBEE_DEVICE_ID not set")?,
             api_key: std::env::var("TEXTBEE_API_KEY").context("TEXTBEE_API_KEY not set")?,

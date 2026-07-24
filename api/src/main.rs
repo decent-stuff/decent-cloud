@@ -11,6 +11,7 @@ mod database;
 mod email_processor;
 mod email_service;
 mod helpcenter;
+mod http_util;
 mod icpay_client;
 mod invoice_storage;
 mod invoices;
@@ -276,7 +277,7 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     }
 
     // Price cache setup (shares the existing reqwest client from the binary)
-    let price_cache = Arc::new(PriceCache::new(reqwest::Client::new()));
+    let price_cache = Arc::new(PriceCache::new(crate::http_util::http_client()));
 
     Ok(AppContext {
         database,
@@ -482,7 +483,7 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
     println!("Events: {:?}", events);
 
     // Use Stripe API to list existing webhooks
-    let client = reqwest::Client::new();
+    let client = crate::http_util::http_client();
 
     // First, check if a webhook for this URL already exists
     print!("\nChecking existing webhooks... ");

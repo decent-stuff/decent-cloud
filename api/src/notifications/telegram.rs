@@ -50,7 +50,7 @@ impl TelegramClient {
         let base_url = format!("https://api.telegram.org/bot{}", bot_token);
 
         Ok(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             base_url,
         })
     }

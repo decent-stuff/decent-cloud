@@ -62,7 +62,7 @@ impl CloudflareDns {
         let gw_prefix = std::env::var("CF_GW_PREFIX").unwrap_or_else(|_| "gw".to_string());
 
         Some(Arc::new(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             api_token,
             zone_id,
             domain,
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn test_gateway_fqdn() {
         let dns = CloudflareDns {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             api_token: String::new(),
             zone_id: String::new(),
             domain: "decent-cloud.org".to_string(),
@@ -409,7 +409,7 @@ mod tests {
         );
 
         let dns_prod = CloudflareDns {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             api_token: String::new(),
             zone_id: String::new(),
             domain: "decent-cloud.org".to_string(),

@@ -74,7 +74,7 @@ impl ChatwootPlatformClient {
     #[cfg(test)]
     pub(crate) fn new_for_test(base_url: String, platform_token: String, account_id: u32) -> Self {
         Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             base_url,
             platform_token,
             account_id,
@@ -92,7 +92,7 @@ impl ChatwootPlatformClient {
             .context("CHATWOOT_ACCOUNT_ID must be a number")?;
 
         Ok(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             base_url,
             platform_token,
             account_id,
@@ -487,7 +487,7 @@ impl ChatwootClient {
     #[cfg(test)]
     pub(crate) fn new_for_test(base_url: String, api_token: String, account_id: u32) -> Self {
         Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             frontend_url: base_url.clone(),
             base_url,
             api_token,
@@ -509,7 +509,7 @@ impl ChatwootClient {
             .context("CHATWOOT_ACCOUNT_ID must be a number")?;
 
         Ok(Self {
-            client: Client::new(),
+            client: crate::http_util::http_client(),
             base_url,
             frontend_url,
             api_token,

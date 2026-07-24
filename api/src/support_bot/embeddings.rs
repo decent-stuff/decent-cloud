@@ -2,7 +2,6 @@
 //! Uses OpenAI's text-embedding-3-small model for generating embeddings.
 
 use anyhow::{Context, Result};
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -90,7 +89,7 @@ pub async fn get_embedding(text: &str) -> Result<Vec<f32>> {
 async fn fetch_embedding(text: &str) -> Result<Vec<f32>> {
     let api_key = std::env::var("OPENAI_API_KEY").context("OPENAI_API_KEY not set")?;
 
-    let client = Client::new();
+    let client = crate::http_util::http_client();
     let resp = client
         .post("https://api.openai.com/v1/embeddings")
         .header("Authorization", format!("Bearer {}", api_key))
