@@ -29,12 +29,12 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	// Default 4 workers: measured 8 workers gives no improvement (2.9m vs 2.7m).
-	// Not CPU-bound (box is 64% idle at 8 workers); not Vite-dev-bound (preview
-	// mode measured same speed); not DB-pool-bound (larger pool regressed). The
-	// bottleneck is the sequential nature of browser-driven page loads against a
-	// single API+Postgres stack. Override per-run with E2E_WORKERS=N.
-	workers: process.env.CI ? 2 : (process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 4),
+	// Default 2 workers locally: the dev box runs the agent harness + MCP
+	// servers as a persistent CPU baseline, so 4 Chromium workers contend and
+	// produce intermittent auth-settle timeouts (1 random flake per run, all
+	// passing in isolation). 2 workers is the reliable default; CI uses 2 too.
+	// On an idle box, override per-run with E2E_WORKERS=4.
+	workers: process.env.CI ? 2 : (process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 2),
 	// Per-test timeout. The fast-auth fixture lands on /dashboard in <2s; 30s
 	// leaves plenty of headroom for actual test body work under parallel load.
 	timeout: 30_000,
