@@ -186,7 +186,6 @@ start_stack() {
       "VITE_DECENT_CLOUD_API_URL=$api_url" \
       "VITE_CHATWOOT_WEBSITE_TOKEN=" \
       "VITE_CHATWOOT_BASE_URL=" \
-      "VITE_ICPAY_PUBLISHABLE_KEY=dev_icpay_publishable_key_placeholder" \
       npm run dev -- --host 127.0.0.1 --port "$WEB_PORT" --strictPort
     _wait_for "website" "http://localhost:$WEB_PORT" 60 || return 1
   fi

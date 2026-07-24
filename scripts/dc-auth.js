@@ -497,7 +497,7 @@ async function cmdSeedContracts(args) {
       offering_db_id: offering.id,
       ssh_pubkey: sshPubkey,
       duration_hours: minHours,
-      payment_method: 'icpay',
+      payment_method: 'test',
     });
     const createHdrs = buildHeaders(sk, 'POST', createPath, createBody);
     const result = await apiRequest('POST', createPath, createHdrs, createBody);
