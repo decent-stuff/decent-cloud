@@ -80,6 +80,11 @@ const BENIGN_CONSOLE = [
 	/favicon/i,
 	/downloading the (react|vue) devtools/i,
 	/listening on ws:\/\/\/ws/i, // vite dev websocket announce
+	// SvelteKit aborts in-flight fetches on navigation; in dev mode under
+	// parallel workers these surface as "TypeError: Failed to fetch". They are
+	// NOT application defects — a real outage would instead trip the
+	// checkStuckLoading / checkErrorPage consequence checks below, which remain.
+	/Failed to fetch/i,
 ];
 
 function isBenign(text: string): boolean {
