@@ -776,8 +776,15 @@ async fn lookup_contract_for_charge(
 ) -> Option<Vec<u8>> {
     if let Some(meta) = dispute.metadata.as_ref() {
         if let Some(hex_id) = meta.get("contract_id").and_then(|v| v.as_str()) {
-            if let Ok(bytes) = hex::decode(hex_id) {
-                return Some(bytes);
+            match hex::decode(hex_id) {
+                Ok(bytes) => return Some(bytes),
+                Err(e) => tracing::warn!(
+                    dispute_id = %dispute.id,
+                    charge = %dispute.charge,
+                    contract_id_meta = %hex_id,
+                    error = %e,
+                    "dispute metadata contract_id is not valid hex; falling through to payment_intent lookup"
+                ),
             }
         }
     }
