@@ -67,10 +67,6 @@ const KNOWN_BROKEN = new Map<string, string>([
 	// Discovered by the audit run. Each entry flips the route to expected-failure
 	// so the committed suite is green; the defects remain listed in the report.
 	[
-		'/dashboard/provider/password-resets',
-		'console 404 (SSE uses wrong env var VITE_API_BASE_URL in +page.svelte:15) + console 401 on GET /providers/{pk}/contracts/pending-password-reset (api.ts:1587)',
-	],
-	[
 		'/dashboard/reputation/[identifier]',
 		'console 401 on GET /users/{pk}/activity (api-user-activity.ts:40) — endpoint requires auth but page calls it unsigned; activity silently null',
 	],

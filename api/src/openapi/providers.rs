@@ -1401,7 +1401,8 @@ impl ProvidersApi {
     ///
     /// Returns active contracts where the user has requested a password reset.
     /// The agent should reset the password via SSH and call the password update endpoint.
-    /// Requires agent authentication - agent can only access their delegated provider's contracts.
+    /// Accepts provider auth (the provider viewing their own dashboard) or agent auth
+    /// (a delegated provisioning agent); either way the caller must match the path pubkey.
     #[oai(
         path = "/providers/:pubkey/contracts/pending-password-reset",
         method = "get",
@@ -1410,7 +1411,7 @@ impl ProvidersApi {
     async fn get_pending_password_reset_contracts(
         &self,
         db: Data<&Arc<Database>>,
-        auth: AgentAuthenticatedUser,
+        auth: ProviderOrAgentAuth,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<Vec<crate::database::contracts::Contract>>> {
         let pubkey_bytes = match hex::decode(&pubkey.0) {
@@ -1424,13 +1425,13 @@ impl ProvidersApi {
             }
         };
 
-        // Authorization: agent can only access contracts for their delegated provider
+        // Authorization: caller (provider or delegated agent) must match the path pubkey.
         if auth.provider_pubkey != pubkey_bytes {
             return Json(ApiResponse {
                 success: false,
                 data: None,
                 error: Some(
-                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
+                    "Unauthorized: can only access your own provider's contracts".to_string(),
                 ),
             });
         }
