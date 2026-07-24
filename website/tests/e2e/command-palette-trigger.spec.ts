@@ -53,4 +53,21 @@ test.describe('command palette desktop trigger', () => {
 		await page.keyboard.press('Enter');
 		await expect(dialog).not.toBeVisible();
 	});
+
+	test('@smoke authenticated palette lists provider actions and navigates on select', async ({ page }) => {
+		// Authenticated users should see provider-facing quick actions in the
+		// palette, not just generic nav. Open via the keyboard shortcut.
+		await page.keyboard.press('Control+k');
+		const dialog = page.getByRole('dialog', { name: 'Command palette' });
+		await expect(dialog).toBeVisible();
+
+		// A provider action must be present.
+		const createOffering = dialog.getByRole('option', { name: /Create Offering/i });
+		await expect(createOffering).toBeVisible();
+
+		// Selecting it navigates to the create-offering route.
+		await createOffering.click();
+		await expect(dialog).not.toBeVisible();
+		await expect(page).toHaveURL(/\/dashboard\/offerings\/create/);
+	});
 });

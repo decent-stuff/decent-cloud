@@ -61,19 +61,28 @@
 		{ type: 'nav', label: 'Account', description: 'Manage your account', href: '/dashboard/account', icon: 'user' },
 	];
 
-	const groups = $derived<ResultGroup[]>(buildGroups(query, offeringResults, contractResults));
+	const PROVIDER_ITEMS: NavResult[] = [
+		{ type: 'nav', label: 'Create Offering', description: 'Publish a new offering', href: '/dashboard/offerings/create', icon: 'plus' },
+		{ type: 'nav', label: 'My Offerings', description: 'Manage your offerings', href: '/dashboard/offerings', icon: 'server' },
+		{ type: 'nav', label: 'Agent Pools', description: 'Manage your provider agents', href: '/dashboard/provider/agents', icon: 'bot' },
+		{ type: 'nav', label: 'Billing Settings', description: 'Configure payout details', href: '/dashboard/account/billing', icon: 'wallet' },
+	];
 
-	function buildGroups(q: string, offerings: OfferingResult[], contracts: ContractResult[]): ResultGroup[] {
+	const groups = $derived<ResultGroup[]>(buildGroups(query, offeringResults, contractResults, isAuthenticated));
+
+	function buildGroups(q: string, offerings: OfferingResult[], contracts: ContractResult[], authed: boolean): ResultGroup[] {
 		const result: ResultGroup[] = [];
 		const trimmed = q.trim();
 
 		if (!trimmed) {
 			result.push({ heading: 'Navigation', items: NAV_ITEMS });
+			if (authed) result.push({ heading: 'Provider', items: PROVIDER_ITEMS });
 		} else {
 			if (offerings.length > 0) result.push({ heading: 'Offerings', items: offerings });
 			if (contracts.length > 0) result.push({ heading: 'My Contracts', items: contracts });
 			if (offerings.length === 0 && contracts.length === 0) {
-				const filtered = NAV_ITEMS.filter(
+				const allNav = [...NAV_ITEMS, ...(authed ? PROVIDER_ITEMS : [])];
+				const filtered = allNav.filter(
 					(n) =>
 						n.label.toLowerCase().includes(trimmed.toLowerCase()) ||
 						n.description.toLowerCase().includes(trimmed.toLowerCase())
