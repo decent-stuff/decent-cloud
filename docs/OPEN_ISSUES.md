@@ -95,7 +95,7 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 | Create-offering 400 on every UI create (#440) | Bug (critical) | Shipped in `ebebff02`: poem-openapi ignores `#[serde(default)]`; applied `#[oai(default)]` to `Offering.pubkey` so missing field deserializes, then handler overwrites from URL path. |
 | E2E coverage: 7 documented gaps closed | Coverage | add-device `@smoke` (`0730350e`), compare `@smoke` (`18b4a35b`), agent-pool (`f7b38826`), earnings (`dc84a706`), onboarding (`5f2ca8d4`), admin mutations ❌→✅ (`157ec457`), create-offering (`ebebff02`). New seed-helpers: `deleteContractsByProvider`, `deleteAgentPoolsByProvider`, `deleteProviderProfileByPubkey`, `signedApiCall`, `identityFromSeedPhrase`. |
 | Stale test assertion (unified pubkey error msg) | Test | Shipped in `54c1e54d`: `provider-response-metrics.spec` asserted old terse msg; updated to `toContain('Invalid pubkey hex')` + echoed bad value. |
-| Full suite baseline | — | See final verification at session end (this doc updated before final run). |
+| Full suite baseline | — | **300 passed, 0 failed, 5.6m, 4 workers** (was 267 at session start; +33 tests from coverage closures + confirm-conversion specs). |
 
 ### 2026-07-23 session (money-safety hardening + route audit + UX review)
 
