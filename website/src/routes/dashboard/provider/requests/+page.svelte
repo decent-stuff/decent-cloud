@@ -45,6 +45,11 @@
 		updating = $state<Record<string, boolean>>({});
 	let batchProcessing = $state(false),
 		batchProgress = $state<string | null>(null);
+	// Inline two-step batch confirm (commit 1077dd33 pattern): native confirm()
+	// blocks headless e2e and is poor on mobile. The first Accept/Reject All
+	// click only arms the action (pendingBatch: 'accept' | 'reject'); the real
+	// batch loop runs in confirmBatchAction() after the user clicks Confirm.
+	let pendingBatch = $state<'accept' | 'reject' | null>(null);
 	let isAuthenticated = $state(false);
 	let onboardingCompleted = $state<boolean | null>(null);
 	let unsubscribeAuth: (() => void) | null = null;
@@ -328,17 +333,28 @@
 		}
 	}
 
-	async function handleBatchAction(accept: boolean) {
+	// First Accept/Reject All click only arms the inline confirm — no native
+	// dialog, no API calls. The real batch loop runs in confirmBatchAction().
+	function requestBatchAction(accept: boolean) {
+		pendingBatch = accept ? 'accept' : 'reject';
+	}
+
+	function cancelBatchAction() {
+		pendingBatch = null;
+	}
+
+	async function confirmBatchAction(accept: boolean) {
 		const action = accept ? "Accept" : "Reject";
-		if (!window.confirm(`${action} all ${filteredPendingRequests.length} pending requests?`)) return;
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) {
 			error = "Missing signing identity";
+			pendingBatch = null;
 			return;
 		}
 		error = null;
 		actionMessage = null;
 		batchProcessing = true;
+		pendingBatch = null;
 		const snapshot = [...filteredPendingRequests];
 		const errors: string[] = [];
 		for (let i = 0; i < snapshot.length; i++) {
@@ -621,16 +637,35 @@
 					{#if batchProgress}
 						<span class="text-sm text-neutral-400">{batchProgress}</span>
 					{/if}
-					{#if filteredPendingRequests.length > 1}
+					{#if pendingBatch}
+						<!-- Inline two-step confirm for the armed batch action -->
+						<span class="text-sm text-neutral-400">
+							{pendingBatch === 'accept' ? 'Accept' : 'Reject'} all {filteredPendingRequests.length}?
+						</span>
 						<button
-							onclick={() => handleBatchAction(true)}
+							onclick={() => confirmBatchAction(pendingBatch === 'accept')}
+							disabled={batchProcessing}
+							class="text-sm px-3 py-1.5 border {pendingBatch === 'accept' ? 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10' : 'border-red-500/40 text-red-400 hover:bg-red-500/10'} disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+						>
+							{batchProcessing ? 'Working...' : 'Confirm'}
+						</button>
+						<button
+							onclick={cancelBatchAction}
+							disabled={batchProcessing}
+							class="text-sm px-3 py-1.5 border border-neutral-700 text-neutral-400 hover:bg-neutral-800 disabled:opacity-50 transition-colors"
+						>
+							Cancel
+						</button>
+					{:else if filteredPendingRequests.length > 1}
+						<button
+							onclick={() => requestBatchAction(true)}
 							disabled={batchProcessing || Object.values(responding).some((v) => v)}
 							class="text-sm px-3 py-1.5 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
 							Accept All
 						</button>
 						<button
-							onclick={() => handleBatchAction(false)}
+							onclick={() => requestBatchAction(false)}
 							disabled={batchProcessing || Object.values(responding).some((v) => v)}
 							class="text-sm px-3 py-1.5 border border-red-500/40 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
 						>
