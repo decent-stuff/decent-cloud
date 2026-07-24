@@ -39,6 +39,52 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 		await expect(searchInput).toHaveValue('already here/');
 	});
 
+	test.describe('? keyboard help overlay', () => {
+		test('@smoke ? opens help overlay listing all shortcuts', async ({ page }) => {
+			// The page fixture lands on /dashboard and waits for the Logout
+			// button, which is the dashboard-layout hydration signal — the
+			// <svelte:window onkeydown> handler for '?' binds at that point.
+			await page.keyboard.press('?');
+
+			const overlay = page.getByTestId('keyboard-help');
+			await expect(overlay).toBeVisible();
+
+			// Every documented shortcut must be listed.
+			await expect(overlay.getByText('Focus marketplace search')).toBeVisible();
+			await expect(overlay.getByText('Open command palette')).toBeVisible();
+			await expect(overlay.getByText('Show this help')).toBeVisible();
+			await expect(overlay.getByText('Close dialogs/overlays')).toBeVisible();
+		});
+
+		test('Esc closes the help overlay', async ({ page }) => {
+			await page.keyboard.press('?');
+			const overlay = page.getByTestId('keyboard-help');
+			await expect(overlay).toBeVisible();
+
+			await page.keyboard.press('Escape');
+			await expect(overlay).not.toBeVisible();
+		});
+
+		test('? does not trigger while typing in an input', async ({ page }) => {
+			// The '/' handler + marketplace search live on the marketplace
+			// route; wait for its hydration signal (offerings fetch) before
+			// interacting. The help handler guards on activeElement tag.
+			const offeringsReady = page.waitForResponse((r) =>
+				r.url().includes('/api/v1/offerings'),
+			);
+			await page.goto('/dashboard/marketplace');
+			await offeringsReady;
+
+			const searchInput = page.locator('#marketplace-search');
+			await searchInput.click();
+
+			// Typing '?' into the field must insert the character, not open help.
+			await page.keyboard.type('?');
+			await expect(searchInput).toHaveValue('?');
+			await expect(page.getByTestId('keyboard-help')).toHaveCount(0);
+		});
+	});
+
 	test('email verification banner can be dismissed per-session', async ({ page }) => {
 		// The banner is client-rendered (reads authStore), so toBeVisible already
 		// gates hydration — no networkidle needed. The Dismiss button lives in the

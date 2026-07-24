@@ -9,6 +9,7 @@
 	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
 	import SeedPhraseBackupBanner from '$lib/components/SeedPhraseBackupBanner.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
+	import KeyboardHelpOverlay from '$lib/components/KeyboardHelpOverlay.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import Icon from '$lib/components/Icons.svelte';
@@ -21,6 +22,7 @@
 	let isInitialized = $state(false);
 	let isSidebarOpen = $state(false);
 	let commandPalette = $state<{ openPalette: () => void } | null>(null);
+	let showKeyboardHelp = $state(false);
 	let account = $state<AccountInfo | null>(null);
 	let activeIdentity = $state<IdentityInfo | null>(null);
 	let seedBackupDismissed = $state(browser ? localStorage.getItem(SEED_BACKUP_DISMISSED_KEY) === '1' : true);
@@ -50,6 +52,28 @@
 
 	function toggleSidebar() {
 		isSidebarOpen = !isSidebarOpen;
+	}
+
+	// True when the user is actively typing somewhere we must not hijack. Covers
+	// INPUT/TEXTAREA/SELECT and contentEditable elements. Mirrors the marketplace
+	// '/' guard (+page.svelte) but extended to the full set the overlay must avoid.
+	function isTypingTarget(el: Element | null): boolean {
+		if (!el) return false;
+		const tag = el.tagName;
+		return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+			(el as HTMLElement).isContentEditable;
+	}
+
+	// '?' toggles the keyboard help overlay; Escape closes it. Both guards keep
+	// the help from firing while typing (e.g. '?' in the search box inserts the
+	// character instead of opening help).
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if (e.key === '?' && !isTypingTarget(document.activeElement)) {
+			e.preventDefault();
+			showKeyboardHelp = !showKeyboardHelp;
+		} else if (e.key === 'Escape' && showKeyboardHelp) {
+			showKeyboardHelp = false;
+		}
 	}
 
 	const isCheckoutOrMarketplacePage = $derived(
@@ -97,9 +121,14 @@
 	}
 </script>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 <div class="min-h-screen bg-base">
 	<!-- Command Palette -->
 	<CommandPalette bind:this={commandPalette} />
+
+	<!-- Keyboard shortcut help overlay (? key) -->
+	<KeyboardHelpOverlay bind:open={showKeyboardHelp} />
 
 	<!-- Sidebar -->
 	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} openPalette={() => commandPalette?.openPalette()} />
