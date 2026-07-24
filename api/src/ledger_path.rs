@@ -4,8 +4,6 @@ use std::io;
 use std::path::PathBuf;
 
 const DEFAULT_LEDGER_DIR_NAME: &str = "decent-cloud-ledger";
-#[allow(dead_code)] // Used by network_metrics in binary target
-const LEDGER_FILE_NAME: &str = "main.bin";
 
 pub fn ledger_dir_path() -> io::Result<PathBuf> {
     if let Ok(path) = env::var("LEDGER_DIR") {
@@ -20,11 +18,6 @@ pub fn ledger_dir_path() -> io::Result<PathBuf> {
         env::set_var("LEDGER_DIR", as_str);
     }
     Ok(fallback)
-}
-
-#[allow(dead_code)] // Used by network_metrics in binary target
-pub fn ledger_file_path() -> io::Result<PathBuf> {
-    Ok(ledger_dir_path()?.join(LEDGER_FILE_NAME))
 }
 
 #[cfg(test)]
