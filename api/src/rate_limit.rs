@@ -269,7 +269,6 @@ mod tests {
         assert!(should_skip("/api/v1/swagger/ui"));
         assert!(should_skip("/api/v1/openapi.json"));
         assert!(should_skip("/api/v1/webhooks/stripe"));
-        assert!(should_skip("/api/v1/webhooks/icpay"));
         assert!(should_skip("/api/v1/acme-dns/update"));
         assert!(should_skip("/api/v1/health"));
     }

@@ -44,7 +44,7 @@ async fn test_get_platform_stats_with_data() {
         let contract_id_ref: &[u8] = &contract_id;
         let requester_pubkey_ref: &[u8] = &requester_pubkey;
         let pubkey_ref: &[u8] = &pubkey;
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -163,7 +163,7 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref: &[u8] = &pending_contract_id;
         let requester_ref: &[u8] = &pending_requester;
         let pubkey_ref: &[u8] = &pubkey;
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -185,7 +185,7 @@ async fn test_get_provider_stats_with_data() {
         let contract_id_ref: &[u8] = &active_contract_id;
         let requester_ref: &[u8] = &active_requester;
         let pubkey_ref: &[u8] = &pubkey;
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -224,7 +224,7 @@ async fn test_get_provider_revenue_by_month_excludes_old_contracts() {
     let pubkey = vec![3u8; 32];
     let contract_id = vec![3u8; 32];
     let requester_pubkey = vec![4u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     {
@@ -401,7 +401,7 @@ async fn test_search_accounts_with_reputation_and_activity() {
 
     // Add contract for alice
     let contract_id = vec![3u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
@@ -545,7 +545,7 @@ async fn test_get_offering_satisfaction_stats_with_feedback() {
     // Contract 1 → offering sat-off-2 (both yes)
     let contract_id1 = vec![31u8; 32];
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 100, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 100, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id1.as_slice())
     .bind(tenant_pubkey.as_slice())
@@ -567,7 +567,7 @@ async fn test_get_offering_satisfaction_stats_with_feedback() {
     // Contract 2 → offering sat-off-2 (service=yes, rent_again=no)
     let contract_id2 = vec![32u8; 32];
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 300, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-2', 1000, 'memo', 300, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id2.as_slice())
     .bind(tenant_pubkey.as_slice())
@@ -589,7 +589,7 @@ async fn test_get_offering_satisfaction_stats_with_feedback() {
     // Contract 3 → offering sat-off-3 (both no)
     let contract_id3 = vec![33u8; 32];
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-3', 1000, 'memo', 500, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-off-3', 1000, 'memo', 500, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id3.as_slice())
     .bind(tenant_pubkey.as_slice())
@@ -653,7 +653,7 @@ async fn test_get_offering_satisfaction_stats_isolates_providers() {
     // Contract + feedback for provider A only
     let contract_id = vec![50u8; 32];
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-iso-off-a', 1000, 'memo', 100, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'sat-iso-off-a', 1000, 'memo', 100, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id.as_slice())
     .bind(tenant.as_slice())
@@ -710,7 +710,7 @@ async fn test_get_provider_all_feedback_returns_entries_ordered_by_newest_first(
 
     // Insert two completed contracts via dynamic query (no sqlx cache needed)
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 1000, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 1000, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id.as_slice())
     .bind(tenant_pubkey.as_slice())
@@ -720,7 +720,7 @@ async fn test_get_provider_all_feedback_returns_entries_ordered_by_newest_first(
     .unwrap();
 
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 2000, 'memo', 2000, 'completed', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 2000, 'memo', 2000, 'completed', 'test', NULL, NULL, 'usd')",
     )
     .bind(contract_id2.as_slice())
     .bind(tenant_pubkey.as_slice())
@@ -1162,7 +1162,7 @@ async fn test_get_provider_trust_metrics_with_contracts() {
     for i in 0..5 {
         let contract_id = vec![i + 10; 32];
         let requester = if i % 2 == 0 { &requester1 } else { &requester2 };
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -1226,7 +1226,7 @@ async fn test_provider_tenure_new() {
     for i in 0..4 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -1265,7 +1265,7 @@ async fn test_provider_tenure_growing() {
     for i in 0..5 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -1304,7 +1304,7 @@ async fn test_provider_tenure_growing_at_boundary() {
     for i in 0..20 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -1343,7 +1343,7 @@ async fn test_provider_tenure_established() {
     for i in 0..21 {
         let contract_id = vec![i + 10; 32];
         let requester = vec![2u8; 32];
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
         sqlx::query!(
@@ -1422,7 +1422,7 @@ async fn test_avg_contract_duration_ratio_completed_exact() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64; // 1000 seconds
     let end_ns = start_ns + (100 * 3600 * 1_000_000_000i64); // +100 hours in nanoseconds
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1467,7 +1467,7 @@ async fn test_avg_contract_duration_ratio_completed_longer() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64;
     let end_ns = start_ns + (150 * 3600 * 1_000_000_000i64);
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1512,7 +1512,7 @@ async fn test_avg_contract_duration_ratio_cancelled_early() {
     let requester = vec![2u8; 32];
     let start_ns = 1000000000000i64;
     let status_updated_ns = start_ns + (25 * 3600 * 1_000_000_000i64);
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1556,7 +1556,7 @@ async fn test_avg_contract_duration_ratio_mixed_contracts() {
     let requester = vec![2u8; 32];
     let start_ns1 = 1000000000000i64;
     let end_ns1 = start_ns1 + (100 * 3600 * 1_000_000_000i64);
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1619,7 +1619,7 @@ async fn test_avg_contract_duration_ratio_ignores_active_contracts() {
     // Active contract (should be ignored)
     let contract_id = vec![10u8; 32];
     let requester = vec![2u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1683,7 +1683,7 @@ async fn test_no_response_rate_pct_zero() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * 10 * ns_per_day; // 10, 20, 30, 40, 50 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1732,7 +1732,7 @@ async fn test_no_response_rate_pct_all_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_7d_ns - (i as i64 + 1) * ns_per_day; // 8, 9, 10 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1781,7 +1781,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_7d_ns - (i as i64 + 1) * ns_per_day;
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1805,7 +1805,7 @@ async fn test_no_response_rate_pct_partial_ignored() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * ns_per_day; // 3, 4, 5 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1854,7 +1854,7 @@ async fn test_no_response_rate_pct_recent_requested_not_counted() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = now_ns - (i as i64 + 1) * ns_per_day; // 1, 2, 3 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1903,7 +1903,7 @@ async fn test_no_response_rate_pct_only_counts_last_90_days() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let created_ns = cutoff_90d_ns - (i as i64 + 1) * ns_per_day; // 91, 92 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -1949,7 +1949,7 @@ async fn test_abandonment_velocity_none_no_baseline() {
     let contract_id = vec![10u8; 32];
     let requester = vec![2u8; 32];
     let status_updated_ns = now_ns - 10 * ns_per_day; // 10 days ago (recent)
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -1996,7 +1996,7 @@ async fn test_abandonment_velocity_zero_no_recent() {
         let contract_id = vec![i + 10u8; 32];
         let requester = vec![2u8; 32];
         let status_updated_ns = now_ns - (40 + i as i64 * 5) * ns_per_day; // 40, 45, 50, 55, 60 days ago
-        let payment_method = "icpay";
+        let payment_method = "test";
         let stripe_payment_intent_id: Option<&str> = None;
         let stripe_customer_id: Option<&str> = None;
 
@@ -2039,7 +2039,7 @@ async fn test_abandonment_velocity_stable() {
         .expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2140,7 +2140,7 @@ async fn test_abandonment_velocity_improving() {
         .expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2241,7 +2241,7 @@ async fn test_abandonment_velocity_spike() {
         .expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2342,7 +2342,7 @@ async fn test_abandonment_velocity_baseline_zero_cancellations() {
         .expect("timestamp overflow (year > 2262)");
     let ns_per_day: i64 = 24 * 3600 * 1_000_000_000;
     let requester = vec![2u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2428,7 +2428,7 @@ async fn test_submit_feedback_success() {
     .unwrap();
 
     // Create a completed contract
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query(
@@ -2479,7 +2479,7 @@ async fn test_submit_feedback_unauthorized_user() {
     .unwrap();
 
     // Create a completed contract
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query(
@@ -2528,7 +2528,7 @@ async fn test_submit_feedback_non_terminal_status() {
     .unwrap();
 
     // Create a contract in non-terminal status (pending)
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query(
@@ -2577,7 +2577,7 @@ async fn test_submit_feedback_duplicate() {
     .unwrap();
 
     // Create a completed contract
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query(
@@ -2631,7 +2631,7 @@ async fn test_get_contract_feedback() {
     .unwrap();
 
     // Create a completed contract
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query(
@@ -2704,7 +2704,7 @@ async fn test_get_provider_feedback_stats_aggregation() {
     .await
     .unwrap();
 
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2774,7 +2774,7 @@ async fn test_reliability_score_with_contracts_only() {
     let db = setup_test_db().await;
     let pubkey = vec![0x01u8; 32];
     let requester = vec![0x02u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2809,7 +2809,7 @@ async fn test_reliability_score_perfect_uptime() {
     let db = setup_test_db().await;
     let pubkey = vec![0x03u8; 32];
     let requester = vec![0x04u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2866,7 +2866,7 @@ async fn test_reliability_score_partial_uptime_and_rejections() {
     let db = setup_test_db().await;
     let pubkey = vec![0x05u8; 32];
     let requester = vec![0x06u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -2938,7 +2938,7 @@ async fn test_reliability_score_neutral_uptime_for_new_provider_with_contracts()
     let db = setup_test_db().await;
     let pubkey = vec![0x07u8; 32];
     let requester = vec![0x08u8; 32];
-    let payment_method = "icpay";
+    let payment_method = "test";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
 
@@ -3066,7 +3066,7 @@ async fn test_get_offering_conversion_stats_with_recent_data() {
     for i in 0u8..2 {
         let contract_id = vec![0xA2u8 + i; 32];
         sqlx::query(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-a2', 1000000000, 'memo', $4, 'active', 'succeeded', 'icpay', NULL, NULL, 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-a2', 1000000000, 'memo', $4, 'active', 'succeeded', 'test', NULL, NULL, 'usd')",
         )
         .bind(&contract_id)
         .bind(&requester)
@@ -3119,7 +3119,7 @@ async fn test_get_offering_conversion_stats_only_counts_own_provider() {
     // Only provider_b has a rental
     let contract_id = vec![0xA7u8; 32];
     sqlx::query(
-        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-pb', 500, 'memo', $4, 'active', 'succeeded', 'icpay', NULL, NULL, 'usd')",
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-pb', 500, 'memo', $4, 'active', 'succeeded', 'test', NULL, NULL, 'usd')",
     )
     .bind(&contract_id)
     .bind(&requester)

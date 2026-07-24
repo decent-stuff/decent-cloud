@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", NULL::TEXT as offering_name, c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_checkout_session_id, c.stripe_payment_intent_id, c.stripe_customer_id, c.icpay_transaction_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns, c.icpay_payment_id, c.icpay_refund_id, c.total_released_e9s, c.last_release_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n                pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system,\n               NULL::TEXT as provider_username, NULL::TEXT as requester_username\n                FROM contract_sign_requests c\n                LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n                WHERE c.auto_renew = TRUE\n                 AND c.status = 'active'\n                 AND c.end_timestamp_ns IS NOT NULL\n                 AND c.end_timestamp_ns <= $1\n                 AND (c.payment_status = 'succeeded' OR c.payment_method = 'self_rental')",
+  "query": "SELECT lower(encode(c.contract_id, 'hex')) as \"contract_id!: String\", lower(encode(c.requester_pubkey, 'hex')) as \"requester_pubkey!: String\", c.requester_ssh_pubkey as \"requester_ssh_pubkey!\", c.requester_contact as \"requester_contact!\", lower(encode(c.provider_pubkey, 'hex')) as \"provider_pubkey!: String\",\n               c.offering_id as \"offering_id!\", o.offer_name as \"offering_name?\", c.region_name, c.instance_config, c.payment_amount_e9s, c.start_timestamp_ns, c.end_timestamp_ns,\n               c.duration_hours, c.original_duration_hours, c.request_memo as \"request_memo!\", c.created_at_ns, c.status as \"status!\",\n               c.provisioning_instance_details, c.provisioning_completed_at_ns, c.payment_method as \"payment_method!\", c.stripe_checkout_session_id, c.stripe_payment_intent_id, c.stripe_customer_id, c.payment_status as \"payment_status!\",\n               c.currency as \"currency!\", c.refund_amount_e9s, c.stripe_refund_id, c.refund_created_at_ns, c.status_updated_at_ns,\n               c.tax_amount_e9s, c.tax_rate_percent, c.tax_type, c.tax_jurisdiction, c.customer_tax_id, c.reverse_charge, c.buyer_address, c.stripe_invoice_id, c.receipt_number, c.receipt_sent_at_ns,\n               c.stripe_subscription_id, c.subscription_status, c.current_period_end_ns, COALESCE(c.cancel_at_period_end, FALSE) as \"cancel_at_period_end!: bool\",\n               COALESCE(c.auto_renew, FALSE) as \"auto_renew!: bool\",\n               c.gateway_slug, c.gateway_subdomain, c.gateway_ssh_port, c.gateway_port_range_start, c.gateway_port_range_end,\n               pd.password_reset_requested_at_ns, pd.ssh_key_rotation_requested_at_ns, c.operating_system,\n               pacc.username as \"provider_username?\", racc.username as \"requester_username?\"\n               FROM contract_sign_requests c\n               LEFT JOIN contract_provisioning_details pd ON pd.contract_id = c.contract_id\n               LEFT JOIN provider_offerings o ON o.offering_id = c.offering_id AND o.pubkey = c.provider_pubkey\n               LEFT JOIN account_public_keys papk ON c.provider_pubkey = papk.public_key AND papk.is_active = TRUE\n               LEFT JOIN accounts pacc ON papk.account_id = pacc.id\n               LEFT JOIN account_public_keys rapk ON c.requester_pubkey = rapk.public_key AND rapk.is_active = TRUE\n               LEFT JOIN accounts racc ON rapk.account_id = racc.id\n               WHERE c.requester_pubkey = $1 ORDER BY c.created_at_ns DESC",
   "describe": {
     "columns": [
       {
@@ -35,7 +35,7 @@
       },
       {
         "ordinal": 6,
-        "name": "offering_name",
+        "name": "offering_name?",
         "type_info": "Text"
       },
       {
@@ -120,188 +120,163 @@
       },
       {
         "ordinal": 23,
-        "name": "icpay_transaction_id",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 24,
         "name": "payment_status!",
         "type_info": "Text"
       },
       {
-        "ordinal": 25,
+        "ordinal": 24,
         "name": "currency!",
         "type_info": "Text"
       },
       {
-        "ordinal": 26,
+        "ordinal": 25,
         "name": "refund_amount_e9s",
         "type_info": "Int8"
       },
       {
-        "ordinal": 27,
+        "ordinal": 26,
         "name": "stripe_refund_id",
         "type_info": "Text"
       },
       {
-        "ordinal": 28,
+        "ordinal": 27,
         "name": "refund_created_at_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 29,
+        "ordinal": 28,
         "name": "status_updated_at_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 30,
-        "name": "icpay_payment_id",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 31,
-        "name": "icpay_refund_id",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 32,
-        "name": "total_released_e9s",
-        "type_info": "Int8"
-      },
-      {
-        "ordinal": 33,
-        "name": "last_release_at_ns",
-        "type_info": "Int8"
-      },
-      {
-        "ordinal": 34,
+        "ordinal": 29,
         "name": "tax_amount_e9s",
         "type_info": "Int8"
       },
       {
-        "ordinal": 35,
+        "ordinal": 30,
         "name": "tax_rate_percent",
         "type_info": "Float8"
       },
       {
-        "ordinal": 36,
+        "ordinal": 31,
         "name": "tax_type",
         "type_info": "Text"
       },
       {
-        "ordinal": 37,
+        "ordinal": 32,
         "name": "tax_jurisdiction",
         "type_info": "Text"
       },
       {
-        "ordinal": 38,
+        "ordinal": 33,
         "name": "customer_tax_id",
         "type_info": "Text"
       },
       {
-        "ordinal": 39,
+        "ordinal": 34,
         "name": "reverse_charge",
         "type_info": "Bool"
       },
       {
-        "ordinal": 40,
+        "ordinal": 35,
         "name": "buyer_address",
         "type_info": "Text"
       },
       {
-        "ordinal": 41,
+        "ordinal": 36,
         "name": "stripe_invoice_id",
         "type_info": "Text"
       },
       {
-        "ordinal": 42,
+        "ordinal": 37,
         "name": "receipt_number",
         "type_info": "Int8"
       },
       {
-        "ordinal": 43,
+        "ordinal": 38,
         "name": "receipt_sent_at_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 44,
+        "ordinal": 39,
         "name": "stripe_subscription_id",
         "type_info": "Text"
       },
       {
-        "ordinal": 45,
+        "ordinal": 40,
         "name": "subscription_status",
         "type_info": "Text"
       },
       {
-        "ordinal": 46,
+        "ordinal": 41,
         "name": "current_period_end_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 47,
+        "ordinal": 42,
         "name": "cancel_at_period_end!: bool",
         "type_info": "Bool"
       },
       {
-        "ordinal": 48,
+        "ordinal": 43,
         "name": "auto_renew!: bool",
         "type_info": "Bool"
       },
       {
-        "ordinal": 49,
+        "ordinal": 44,
         "name": "gateway_slug",
         "type_info": "Text"
       },
       {
-        "ordinal": 50,
+        "ordinal": 45,
         "name": "gateway_subdomain",
         "type_info": "Text"
       },
       {
-        "ordinal": 51,
+        "ordinal": 46,
         "name": "gateway_ssh_port",
         "type_info": "Int4"
       },
       {
-        "ordinal": 52,
+        "ordinal": 47,
         "name": "gateway_port_range_start",
         "type_info": "Int4"
       },
       {
-        "ordinal": 53,
+        "ordinal": 48,
         "name": "gateway_port_range_end",
         "type_info": "Int4"
       },
       {
-        "ordinal": 54,
+        "ordinal": 49,
         "name": "password_reset_requested_at_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 55,
+        "ordinal": 50,
         "name": "ssh_key_rotation_requested_at_ns",
         "type_info": "Int8"
       },
       {
-        "ordinal": 56,
+        "ordinal": 51,
         "name": "operating_system",
         "type_info": "Text"
       },
       {
-        "ordinal": 57,
-        "name": "provider_username",
+        "ordinal": 52,
+        "name": "provider_username?",
         "type_info": "Text"
       },
       {
-        "ordinal": 58,
-        "name": "requester_username",
+        "ordinal": 53,
+        "name": "requester_username?",
         "type_info": "Text"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8"
+        "Bytea"
       ]
     },
     "nullable": [
@@ -311,7 +286,7 @@
       false,
       null,
       false,
-      null,
+      false,
       true,
       true,
       false,
@@ -328,13 +303,8 @@
       true,
       true,
       true,
-      true,
       false,
       false,
-      true,
-      true,
-      true,
-      true,
       true,
       true,
       true,
@@ -362,9 +332,9 @@
       true,
       true,
       true,
-      null,
-      null
+      false,
+      false
     ]
   },
-  "hash": "1528f1afedcc5984b6bf3fdf788ee5488ec1507ecd308c3aa8f0984841439fbe"
+  "hash": "65a4d9b927f167c88e9f898761e2db9959be60cc780a766a1de2fa3d87326e2d"
 }

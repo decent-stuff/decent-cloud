@@ -1,7 +1,7 @@
 use super::common::{
     decode_hex_path, decode_pubkey, default_limit, ApiResponse, ApiTags, CancelContractRequest, ExtendContractRequest,
     ExtendContractResponse, RecordUsageRequest, RentalRequestResponse, RotateSshKeyRequest,
-    SetAutoRenewRequest, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
+    SetAutoRenewRequest, VerifyCheckoutSessionRequest,
     VerifyCheckoutSessionResponse,
 };
 use crate::auth::{AdminAuthenticatedUser, ApiAuthenticatedUser};
@@ -729,9 +729,9 @@ impl ContractsApi {
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
                 // Self-rental: no payment needed, skip Stripe checkout
-                // Also applies to ICPay which is pre-paid
+                // Also applies to the Test payment method which auto-succeeds without checkout
                 let checkout_url = if is_self_rental || payment_method.to_lowercase() != "stripe" {
-                    // Self-rental or ICPay: payment_status is "succeeded" immediately, try auto-accept
+                    // Self-rental or Test: payment_status is "succeeded" immediately, try auto-accept
                     match db.try_auto_accept_contract(&contract_id).await {
                         Ok(true) => {
                             if let Err(e) = db
@@ -899,9 +899,8 @@ impl ContractsApi {
             }
         };
 
-        // Create Stripe and ICPay clients for potential refund processing
+        // Create Stripe client for potential refund processing
         let stripe_client = crate::stripe_client::StripeClient::new().ok();
-        let icpay_client = crate::icpay_client::IcpayClient::new().ok();
 
         match db
             .cancel_contract(
@@ -909,7 +908,6 @@ impl ContractsApi {
                 &auth.pubkey,
                 req.memo.as_deref(),
                 stripe_client.as_ref(),
-                icpay_client.as_ref(),
             )
             .await
         {
@@ -1175,87 +1173,6 @@ impl ContractsApi {
             Ok(summary) => Json(ApiResponse {
                 success: true,
                 data: Some(summary),
-                error: None,
-            }),
-            Err(e) => Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            }),
-        }
-    }
-
-    /// Update ICPay transaction ID
-    ///
-    /// Updates the ICPay transaction ID for a contract after payment (requires authentication)
-    #[oai(
-        path = "/contracts/:id/icpay-transaction",
-        method = "put",
-        tag = "ApiTags::Contracts"
-    )]
-    async fn update_icpay_transaction(
-        &self,
-        db: Data<&Arc<Database>>,
-        auth: ApiAuthenticatedUser,
-        id: Path<String>,
-        req: Json<UpdateIcpayTransactionRequest>,
-    ) -> Json<ApiResponse<String>> {
-        let contract_id = match decode_hex_path(&id.0, "contract id") {
-            Ok(id) => id,
-            Err(msg) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(msg),
-                })
-            }
-        };
-
-        // Verify contract exists, user is the requester, and payment hasn't been confirmed
-        let contract = match db.get_contract(&contract_id).await {
-            Ok(Some(contract)) => contract,
-            Ok(None) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some("Contract not found".to_string()),
-                })
-            }
-            Err(e) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(e.to_string()),
-                })
-            }
-        };
-
-        if contract.requester_pubkey != hex::encode(&auth.pubkey) {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Unauthorized: only requester can update transaction ID".to_string()),
-            });
-        }
-
-        // Prevent updating transaction ID if payment already confirmed by webhook
-        if contract.icpay_payment_id.is_some() {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(
-                    "Transaction ID already confirmed by payment webhook - cannot update".into(),
-                ),
-            });
-        }
-
-        match db
-            .update_icpay_transaction_id(&contract_id, &req.transaction_id)
-            .await
-        {
-            Ok(_) => Json(ApiResponse {
-                success: true,
-                data: Some("ICPay transaction ID updated successfully".to_string()),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {
@@ -1846,7 +1763,7 @@ mod tests {
     use crate::openapi::common::ApiResponse;
     use crate::openapi::common::{
         CancelContractRequest, ExtendContractRequest, ExtendContractResponse, RecordUsageRequest,
-        RentalRequestResponse, UpdateIcpayTransactionRequest, VerifyCheckoutSessionRequest,
+        RentalRequestResponse, VerifyCheckoutSessionRequest,
         VerifyCheckoutSessionResponse,
     };
 
@@ -1876,17 +1793,12 @@ mod tests {
             stripe_checkout_session_id: None,
             stripe_payment_intent_id: None,
             stripe_customer_id: None,
-            icpay_transaction_id: None,
             payment_status: "pending".to_string(),
             currency: "usd".to_string(),
             refund_amount_e9s: None,
             stripe_refund_id: None,
             refund_created_at_ns: None,
             status_updated_at_ns: None,
-            icpay_payment_id: None,
-            icpay_refund_id: None,
-            total_released_e9s: None,
-            last_release_at_ns: None,
             tax_amount_e9s: None,
             tax_rate_percent: None,
             tax_type: None,
@@ -2183,13 +2095,6 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["contractId"], "deadbeef");
         assert_eq!(json["paymentStatus"], "succeeded");
-    }
-
-    #[test]
-    fn test_update_icpay_transaction_request_deserialization() {
-        let json = r#"{"transactionId":"tx-001"}"#;
-        let req: UpdateIcpayTransactionRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.transaction_id, "tx-001");
     }
 
     #[test]

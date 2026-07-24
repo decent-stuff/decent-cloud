@@ -1115,8 +1115,8 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
             let client = SignedClient::new(&id, api_url)?;
 
             let payment_method = if skip_payment {
-                // For testing: use "icpay" payment method that auto-succeeds without checkout
-                Some("icpay".to_string())
+                // For testing: use the "test" payment method that auto-succeeds without checkout
+                Some("test".to_string())
             } else {
                 Some("stripe".to_string())
             };
@@ -1136,7 +1136,7 @@ async fn handle_contract_action(action: ContractAction, api_url: &str) -> Result
                 println!("  Checkout URL: {}", url);
             }
             if skip_payment {
-                println!("\nNote: --skip-payment used icpay method (payment auto-succeeds).");
+                println!("\nNote: --skip-payment used the test method (payment auto-succeeds).");
             }
         }
         ContractAction::Get {
@@ -2106,7 +2106,7 @@ async fn create_contract_for_testing(
         offering_db_id: offering_id,
         ssh_pubkey: Some(ssh_pubkey.to_string()),
         duration_hours: Some(1),
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
     };
     let response: RentalRequestResponse = client.post_api("/contracts", &request).await?;
     Ok(response.contract_id)
@@ -2229,7 +2229,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;
 
-            // Step 1: Create contract (icpay payment auto-succeeds and auto-accepts)
+            // Step 1: Create contract (test payment auto-succeeds and auto-accepts)
             println!("Step 1: Creating contract...");
             let contract_id =
                 create_contract_for_testing(&client, offering_id, &ssh_pubkey).await?;
@@ -2303,7 +2303,7 @@ async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Result<()> {
                 }
             };
 
-            // Step 2: Create contract (icpay auto-succeeds payment)
+            // Step 2: Create contract (test method auto-succeeds payment)
             let ssh_key = ssh_pubkey.unwrap_or_else(|| {
                 "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-lifecycle-test".to_string()
             });

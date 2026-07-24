@@ -482,9 +482,10 @@ impl Database {
         };
 
         let now_ns = crate::now_ns()?;
-        // Net refund: prorated for unused time MINUS funds already released to
-        // the provider. Sharing calculate_net_refund_e9s with the cancel/reject
-        // paths prevents over-refunding when daily releases have been recorded.
+        // Gross prorated refund for unused time. Under Stripe-only no funds are
+        // ever pre-released to the provider, so calculate_net_refund_e9s returns
+        // the full prorated remainder — sharing it with the cancel/reject paths
+        // keeps refund policy consistent across all three flows.
         let refund_e9s = self.calculate_net_refund_e9s(&contract, now_ns).await?;
         if refund_e9s <= 0 {
             return Ok((None, None));

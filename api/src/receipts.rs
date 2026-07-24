@@ -61,18 +61,15 @@ pub async fn send_payment_receipt(
     // Format payment method for display
     let payment_method_display = match contract.payment_method.as_str() {
         "stripe" => "Credit Card (Stripe)",
-        "icpay" => "Cryptocurrency (ICPay)",
         "dct" => "DCT Token",
         other => other,
     };
 
-    // Transaction ID - prefer real PI (pi_*), fall back to checkout session (cs_*) for
-    // legacy rows pre-dating the column split, then to ICPay identifiers.
+    // Transaction ID - prefer real PI (pi_*), fall back to checkout session (cs_*)
+    // for legacy rows pre-dating the column split.
     let transaction_id = contract
         .stripe_payment_intent_id
         .or(contract.stripe_checkout_session_id)
-        .or(contract.icpay_payment_id)
-        .or(contract.icpay_transaction_id)
         .unwrap_or_else(|| "N/A".to_string());
 
     // Format duration
@@ -487,7 +484,6 @@ pub async fn send_contract_rejected_notification(
             "A full refund has been initiated to your original payment method. \
                      It may take 5-10 business days to appear on your statement."
         }
-        "icpay" => "A full refund has been initiated to your original wallet.",
         _ => "A refund has been initiated.",
     };
 
@@ -762,25 +758,5 @@ mod tests {
         assert!(email.body.contains("declined"));
         assert!(email.body.contains("Resource unavailable"));
         assert!(email.body.contains("5-10 business days")); // Stripe refund info
-    }
-
-    #[tokio::test]
-    async fn test_send_contract_rejected_notification_icpay_refund_info() {
-        let db = setup_test_db().await;
-        let contract_id = vec![12u8; 32];
-
-        create_test_contract(&db, &contract_id, "icpay").await;
-
-        send_contract_rejected_notification(&db, &contract_id, None).await;
-
-        let email: QueuedEmail =
-            sqlx::query_as("SELECT subject, body FROM email_queue WHERE to_addr = $1")
-                .bind("user@test.example")
-                .fetch_one(&db.pool)
-                .await
-                .unwrap();
-
-        assert!(email.body.contains("original wallet")); // ICPay refund info
-        assert!(email.body.contains("No reason provided")); // Default reason
     }
 }

@@ -331,7 +331,7 @@ mod tests {
         status: &str,
     ) {
         sqlx::query!(
-            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, $4, 'icpay', 'succeeded', 'usd')",
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', 1000, 'memo', 0, $4, 'test', 'succeeded', 'usd')",
             contract_id,
             requester_pubkey,
             provider_pubkey,

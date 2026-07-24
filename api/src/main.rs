@@ -12,7 +12,6 @@ mod email_processor;
 mod email_service;
 mod helpcenter;
 mod http_util;
-mod icpay_client;
 mod invoice_storage;
 mod invoices;
 mod ledger_client;
@@ -22,7 +21,6 @@ mod metadata_cache;
 mod notifications;
 mod oauth_simple;
 mod openapi;
-mod payment_release_service;
 mod price_cache;
 mod publish_scheduled_service;
 mod rate_limit;
@@ -89,7 +87,6 @@ use email_service::EmailService;
 use ledger_client::LedgerClient;
 use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
-use payment_release_service::PaymentReleaseService;
 use timeout_cleanup_service::TimeoutCleanupService;
 use poem::web::{Data, Redirect};
 use poem::{
@@ -1064,23 +1061,6 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
-    // === ICPay Integration ===
-    println!("\nICPay (ICP Payments):");
-    check_env!("ICPAY_SECRET_KEY", optional, "ICP payments disabled");
-    check_env!("ICPAY_WEBHOOK_SECRET", optional, "ICPay webhooks disabled");
-
-    // Test ICPay connectivity if configured
-    if env::var("ICPAY_SECRET_KEY").is_ok() {
-        print!("  Checking ICPay API configuration... ");
-        match crate::icpay_client::IcpayClient::new() {
-            Ok(_) => println!("[OK] client configured"),
-            Err(e) => {
-                println!("[ERROR] {:#}", e);
-                errors += 1;
-            }
-        }
-    }
-
     // === Critical URLs (used in emails, OAuth, payments) ===
     println!("\nCritical URLs:");
     match env::var("FRONTEND_URL") {
@@ -1364,10 +1344,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
             post(openapi::webhooks::stripe_webhook),
         )
         .at(
-            "/api/v1/webhooks/icpay",
-            post(openapi::webhooks::icpay_webhook),
-        )
-        .at(
             "/api/v1/webhooks/chatwoot",
             post(openapi::webhooks::chatwoot_webhook),
         )
@@ -1512,24 +1488,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
         None
     };
 
-    // Start payment release service in background (runs every 24 hours)
-    let release_interval_hours = env::var("PAYMENT_RELEASE_INTERVAL_HOURS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(24);
-
-    let db_for_release = ctx.database.clone();
-    let release_shutdown = shutdown_tx.subscribe();
-    let payment_release_task = tokio::spawn(async move {
-        let payment_release_service =
-            PaymentReleaseService::new(db_for_release, release_interval_hours);
-        tracing::info!(
-            "Starting payment release service (interval: {}h)",
-            release_interval_hours
-        );
-        payment_release_service.run(release_shutdown).await;
-    });
-
     // Start auto-renewal service in background (runs every 6 hours)
     let auto_renewal_interval_hours = env::var("AUTO_RENEWAL_INTERVAL_HOURS")
         .ok()
@@ -1641,7 +1599,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
         metadata_cache_task,
         cleanup_task,
         timeout_cleanup_task,
-        payment_release_task,
         auto_renewal_task,
         sla_alert_task,
         publish_scheduled_task,

@@ -11,8 +11,8 @@ async fn insert_contract_request(
     created_at_ns: i64,
     status: &str,
 ) {
-    let payment_method = "icpay";
-    let payment_status = "succeeded"; // ICPay payments are pre-paid
+    let payment_method = "test";
+    let payment_status = "succeeded"; // Test payments auto-succeed without checkout
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
     sqlx::query!(
@@ -258,7 +258,7 @@ async fn test_get_contract_by_id_not_found() {
 }
 
 #[tokio::test]
-async fn test_create_rental_request_with_icpay_payment_method() {
+async fn test_create_rental_request_with_test_payment_method() {
     let db = setup_test_db().await;
     let user_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -279,14 +279,16 @@ async fn test_create_rental_request_with_icpay_payment_method() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
         duration_hours: None,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     };
 
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.payment_method, "icpay");
+    assert_eq!(contract.payment_method, "test");
+    // Test payment method auto-succeeds without a checkout flow.
+    assert_eq!(contract.payment_status, "succeeded");
 }
 
 #[tokio::test]
@@ -469,7 +471,7 @@ async fn test_create_rental_request_with_defaults() {
         contact_method: None,
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     };
@@ -494,7 +496,7 @@ async fn test_create_rental_request_offering_not_found() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     };
@@ -529,7 +531,7 @@ async fn test_create_rental_request_calculates_price() {
         contact_method: Some("contact".to_string()),
         request_memo: None,
         duration_hours: None,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     };
@@ -989,7 +991,6 @@ async fn test_cancel_contract_success_requested() {
         &requester_pk,
         Some("User requested cancellation"),
         None,
-        None,
     )
     .await
     .unwrap();
@@ -1050,7 +1051,7 @@ async fn test_cancel_contract_success_all_cancellable_statuses() {
         .await;
 
         let result = db
-            .cancel_contract(&contract_id, &requester_pk, None, None, None)
+            .cancel_contract(&contract_id, &requester_pk, None, None)
             .await;
         assert!(
             result.is_ok(),
@@ -1091,7 +1092,7 @@ async fn test_cancel_contract_rejects_unauthorized_user() {
     .await;
 
     let result = db
-        .cancel_contract(&contract_id, &attacker_pk, None, None, None)
+        .cancel_contract(&contract_id, &attacker_pk, None, None)
         .await;
     assert!(result.is_err());
     assert!(result
@@ -1129,7 +1130,7 @@ async fn test_cancel_contract_rejects_provider_cancellation() {
     .await;
 
     let result = db
-        .cancel_contract(&contract_id, &provider_pk, None, None, None)
+        .cancel_contract(&contract_id, &provider_pk, None, None)
         .await;
     assert!(result.is_err());
     assert!(result
@@ -1162,7 +1163,7 @@ async fn test_cancel_contract_fails_for_non_cancellable_statuses() {
         .await;
 
         let result = db
-            .cancel_contract(&contract_id, &requester_pk, None, None, None)
+            .cancel_contract(&contract_id, &requester_pk, None, None)
             .await;
         assert!(
             result.is_err(),
@@ -1187,7 +1188,7 @@ async fn test_cancel_contract_not_found_includes_hex_id() {
     let requester_pk = vec![1u8; 32];
 
     let result = db
-        .cancel_contract(&nonexistent_id, &requester_pk, None, None, None)
+        .cancel_contract(&nonexistent_id, &requester_pk, None, None)
         .await;
     assert!(result.is_err());
 
@@ -1197,7 +1198,7 @@ async fn test_cancel_contract_not_found_includes_hex_id() {
 }
 
 #[tokio::test]
-async fn test_payment_status_icpay_payment_succeeds_immediately() {
+async fn test_payment_status_test_payment_succeeds_immediately() {
     let db = setup_test_db().await;
     let user_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -1218,7 +1219,7 @@ async fn test_payment_status_icpay_payment_succeeds_immediately() {
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: Some("Test rental".to_string()),
         duration_hours: None,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     };
@@ -1226,8 +1227,8 @@ async fn test_payment_status_icpay_payment_succeeds_immediately() {
     let contract_id = db.create_rental_request(&user_pk, params).await.unwrap();
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
 
-    // ICPay payments are pre-paid, so payment_status should be 'succeeded'
-    assert_eq!(contract.payment_method, "icpay");
+    // Test payments auto-succeed without a checkout flow, so payment_status is 'succeeded'
+    assert_eq!(contract.payment_method, "test");
     assert_eq!(contract.payment_status, "succeeded");
 }
 
@@ -1448,13 +1449,13 @@ fn test_calculate_prorated_refund_credits_paused_time() {
 }
 
 #[tokio::test]
-async fn test_cancel_contract_with_icpay_payment_no_refund() {
+async fn test_cancel_contract_test_payment_no_refund() {
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![100u8; 32];
 
-    // Insert ICPay payment contract
+    // Insert Test payment contract (auto-succeeded, no checkout)
     insert_contract_request(
         &db,
         &contract_id,
@@ -1466,9 +1467,10 @@ async fn test_cancel_contract_with_icpay_payment_no_refund() {
     )
     .await;
 
-    // Cancel without Stripe client (ICPay payment)
+    // Cancel without a Stripe client. The Test payment method has no refund
+    // path, so no refund is issued and payment_status is left unchanged.
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
         .await;
 
     assert!(result.is_ok());
@@ -1476,7 +1478,7 @@ async fn test_cancel_contract_with_icpay_payment_no_refund() {
     // Verify contract is cancelled
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    assert_eq!(contract.payment_status, "succeeded"); // ICPay payment status unchanged
+    assert_eq!(contract.payment_status, "succeeded"); // Test payment status unchanged
     assert!(contract.refund_amount_e9s.is_none());
     assert!(contract.stripe_refund_id.is_none());
 }
@@ -1513,7 +1515,7 @@ async fn test_cancel_contract_stripe_payment_without_client() {
 
     // Cancel without Stripe client (refund amount calculated but not processed)
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
         .await;
 
     assert!(result.is_ok());
@@ -1554,7 +1556,6 @@ async fn test_cancel_contract_unauthorized() {
             &unauthorized_pk,
             Some("Unauthorized"),
             None,
-            None,
         )
         .await;
 
@@ -1587,7 +1588,7 @@ async fn test_cancel_contract_invalid_status() {
 
     // Attempt cancel
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
+        .cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None)
         .await;
 
     assert!(result.is_err());
@@ -1601,175 +1602,12 @@ async fn test_cancel_contract_invalid_status() {
     assert_eq!(contract.status, "completed");
 }
 
+/// The Stripe cancel path must refund the prorated remainder for unused time.
+/// Under Stripe-only no funds are ever pre-released to the provider, so the
+/// refund equals the gross prorated amount. Regression guard for the over-refund
+/// bug where Stripe refunded the full gross amount ignoring time used.
 #[tokio::test]
-async fn test_cancel_contract_icpay_refund_calculation() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![20u8; 32];
-
-    // Create contract with ICPay payment
-    insert_contract_request(
-        &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        1_000_000_000, // 1 ICP in e9s
-        "requested",
-    )
-    .await;
-
-    // Set up ICPay payment details
-    let now_ns = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .expect("timestamp overflow (year > 2262)");
-    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64); // Started 10 days ago
-    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64); // 30 day contract
-
-    sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, start_timestamp_ns = $4, end_timestamp_ns = $5 WHERE contract_id = $6",
-        "icpay",
-        "succeeded",
-        "pay_test_123",
-        start_ns,
-        end_ns,
-        contract_id
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    // Cancel the contract
-    db.cancel_contract(&contract_id, &requester_pk, Some("Test cancel"), None, None)
-        .await
-        .unwrap();
-
-    // Verify refund was calculated
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-    // R5: no ICPay client -> refund NOT issued; payment_status stays 'succeeded'.
-    assert_eq!(contract.payment_status, "succeeded");
-    assert!(contract.refund_amount_e9s.is_some());
-    let refund = contract.refund_amount_e9s.unwrap();
-    // Should be prorated (2/3 of amount since 10/30 days used)
-    assert!(refund > 0);
-    assert!(refund < 1_000_000_000); // Less than full amount
-}
-
-#[tokio::test]
-async fn test_cancel_contract_icpay_no_payment_id() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![21u8; 32];
-
-    // Create contract without ICPay payment ID
-    insert_contract_request(
-        &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        1_000_000_000,
-        "requested",
-    )
-    .await;
-
-    sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2 WHERE contract_id = $3",
-        "icpay",
-        "succeeded",
-        contract_id
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    // Cancel should succeed but not calculate refund
-    db.cancel_contract(&contract_id, &requester_pk, None, None, None)
-        .await
-        .unwrap();
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-    // No refund since no payment ID
-    assert!(contract.refund_amount_e9s.is_none());
-    assert!(contract.icpay_refund_id.is_none());
-}
-
-#[tokio::test]
-async fn test_cancel_contract_icpay_with_released_amount() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![22u8; 32];
-
-    // Create contract with ICPay payment
-    insert_contract_request(
-        &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        1_000_000_000,
-        "requested",
-    )
-    .await;
-
-    let now_ns = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .expect("timestamp overflow (year > 2262)");
-    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
-    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
-
-    // Set ICPay payment with the real 1 ICP amount, the service-start
-    // timestamp (so the prorated calc reflects the 10/30-day window the
-    // assertions expect), and 0.3 ICP already released to the provider. All
-    // three are required for the state to match the test's documented math AND
-    // to satisfy migration 049 (released + refunded <= payment). Runtime query
-    // (not sqlx::query!) mirrors the stripe analog and avoids offline-cache
-    // churn.
-    sqlx::query(
-        "UPDATE contract_sign_requests SET payment_method = 'icpay', payment_status = 'succeeded', icpay_payment_id = 'pay_test_456', start_timestamp_ns = $1, end_timestamp_ns = $2, provisioning_completed_at_ns = $1, payment_amount_e9s = 1000000000, total_released_e9s = $3 WHERE contract_id = $4",
-    )
-    .bind(start_ns)
-    .bind(end_ns)
-    .bind(300_000_000i64) // 0.3 ICP already released
-    .bind(&contract_id)
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    // Cancel the contract
-    db.cancel_contract(&contract_id, &requester_pk, None, None, None)
-        .await
-        .unwrap();
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-    // Refund should be prorated amount minus already released
-    // Expected: 1B * (20/30) - 300M = 666.67M - 300M = 366.67M
-    if let Some(refund) = contract.refund_amount_e9s {
-        // R5: no client -> refund NOT issued, payment_status stays 'succeeded'.
-        assert_eq!(contract.payment_status, "succeeded");
-        assert!(refund > 0);
-        // Should be less than what it would be without released amount (2/3 of 1 ICP = ~667M)
-        assert!(refund < 667_000_000);
-        // Should be more than 300M (since we released 300M and there's still 666M prorated)
-        assert!(refund > 300_000_000);
-    } else {
-        // If no refund, the released amount exceeded the prorated amount
-        assert_eq!(contract.payment_status, "succeeded");
-    }
-}
-
-/// The Stripe cancel path must refund only the remainder the platform still
-/// holds: the prorated refund for unused time minus funds already released to
-/// the provider (`total_released_e9s`), matching the ICPay path. Regression
-/// guard for the over-refund bug where Stripe refunded the full gross amount.
-#[tokio::test]
-async fn test_cancel_stripe_contract_subtracts_released_amount() {
+async fn test_cancel_stripe_contract_refund_is_prorated() {
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -1796,20 +1634,19 @@ async fn test_cancel_stripe_contract_subtracts_released_amount() {
     )
     .await;
 
-    // Service started at start_ns; provider has already been paid for elapsed time.
-    let released_e9s = 200_000_000i64; // 0.2 of $1 already released to provider
+    // Service started at start_ns; no funds are ever pre-released under
+    // Stripe-only, so the refund is the gross prorated amount for unused time.
     sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1 WHERE contract_id = $2",
     )
     .bind(start_ns)
-    .bind(released_e9s)
     .bind(&contract_id)
     .execute(&db.pool)
     .await
     .unwrap();
 
     let now_before_cancel = crate::now_ns().unwrap();
-    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None)
         .await
         .unwrap();
 
@@ -1818,7 +1655,7 @@ async fn test_cancel_stripe_contract_subtracts_released_amount() {
     // R5: no Stripe client -> refund NOT issued, payment_status stays 'succeeded'.
     assert_eq!(contract.payment_status, "succeeded");
 
-    // Gross prorated refund computed exactly as the handler does.
+    // Refund equals the gross prorated remainder (no released subtraction).
     let gross = Database::calculate_prorated_refund(
         payment_amount_e9s,
         Some(start_ns),
@@ -1826,22 +1663,20 @@ async fn test_cancel_stripe_contract_subtracts_released_amount() {
         now_before_cancel,
         0,
     );
-    let expected_net = gross - released_e9s;
     let refund = contract
         .refund_amount_e9s
         .expect("stripe cancel must record a refund");
     assert!(
-        (refund - expected_net).abs() < 1_000_000,
-        "Stripe refund must subtract already-released funds: expected ~{expected_net} (gross {gross} - released {released_e9s}), got {refund}"
+        (refund - gross).abs() < 1_000_000,
+        "Stripe refund must equal the gross prorated remainder: expected ~{gross}, got {refund}"
     );
 }
 
-/// Dispute-lost refund must subtract funds already released to the provider
-/// (`total_released_e9s`), matching the cancel/reject paths. Regression guard
-/// for R9: the dispute path used the gross prorated refund and could over-pay
-/// when daily releases had already been recorded.
+/// Dispute-lost refund equals the gross prorated remainder for unused time,
+/// matching the cancel/reject paths. Under Stripe-only no funds are ever
+/// pre-released, so there is nothing to subtract. Regression guard for R9.
 #[tokio::test]
-async fn test_dispute_lost_refund_subtracts_released_amount() {
+async fn test_dispute_lost_refund_is_gross_prorated() {
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -1868,13 +1703,12 @@ async fn test_dispute_lost_refund_subtracts_released_amount() {
     )
     .await;
 
-    // Service started at start_ns; provider already paid for elapsed time.
-    let released_e9s = 200_000_000i64;
+    // Service started at start_ns; under Stripe-only there are no pre-released
+    // funds, so the refund is the gross prorated amount for unused time.
     sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1 WHERE contract_id = $2",
     )
     .bind(start_ns)
-    .bind(released_e9s)
     .bind(&contract_id)
     .execute(&db.pool)
     .await
@@ -1897,16 +1731,15 @@ async fn test_dispute_lost_refund_subtracts_released_amount() {
         now_before,
         0,
     );
-    let expected_net = (gross - released_e9s).max(0);
     let refund = refund_e9s.expect("dispute-lost must record a refund amount");
     assert!(
-        (refund - expected_net).abs() < 1_000_000,
-        "dispute-lost refund must subtract released funds: expected ~{expected_net} (gross {gross} - released {released_e9s}), got {refund}"
+        (refund - gross).abs() < 1_000_000,
+        "dispute-lost refund must equal the gross prorated remainder: expected ~{gross}, got {refund}"
     );
-    // Hard money invariant: released + refund must never exceed the payment.
+    // Hard money invariant: refund must never exceed the collected payment.
     assert!(
-        released_e9s + refund <= payment_amount_e9s,
-        "over-refund: released({released_e9s}) + refund({refund}) > payment({payment_amount_e9s})"
+        refund <= payment_amount_e9s,
+        "over-refund: refund({refund}) > payment({payment_amount_e9s})"
     );
 }
 
@@ -1940,7 +1773,7 @@ async fn test_cancel_stripe_contract_without_payment_intent_id_fails_loudly() {
     .unwrap();
 
     let result = db
-        .cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None)
         .await;
     assert!(
         result.is_err(),
@@ -1958,67 +1791,11 @@ async fn test_cancel_stripe_contract_without_payment_intent_id_fails_loudly() {
     assert_eq!(contract.payment_status, "succeeded");
 }
 
-/// When funds already released to the provider exceed the prorated refund, the
-/// net refund clamps to zero: the platform never issues a negative or
-/// over-refund, and records no refund at all.
-#[tokio::test]
-async fn test_cancel_stripe_contract_released_exceeds_refund_pays_nothing() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![73u8; 32];
-    let payment_amount_e9s = 1_000_000_000i64;
-
-    let now_ns = crate::now_ns().unwrap();
-    let start_ns = now_ns - (10 * 24 * 3600 * 1_000_000_000i64);
-    let end_ns = start_ns + (30 * 24 * 3600 * 1_000_000_000i64);
-
-    insert_stripe_contract_with_timestamps(
-        &db,
-        StripeContractParams {
-            contract_id: contract_id.clone(),
-            requester_pubkey: requester_pk.clone(),
-            provider_pubkey: provider_pk.clone(),
-            offering_id: "off-1".to_string(),
-            payment_intent_id: "pi_test_overreleased".to_string(),
-            payment_status: "succeeded".to_string(),
-            payment_amount_e9s,
-            start_timestamp_ns: start_ns,
-            end_timestamp_ns: end_ns,
-        },
-    )
-    .await;
-
-    // Gross prorated refund is ~666M; release MORE than that to the provider.
-    sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
-    )
-    .bind(start_ns)
-    .bind(800_000_000i64)
-    .bind(&contract_id)
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
-        .await
-        .unwrap();
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.status, "cancelled");
-    assert!(
-        contract.refund_amount_e9s.is_none(),
-        "expected no refund when released exceeds gross, got {:?}",
-        contract.refund_amount_e9s
-    );
-    assert_eq!(contract.payment_status, "succeeded");
-}
-
 /// Live integration test (gated on a test-mode `STRIPE_SECRET_KEY`): proves the
 /// REAL refund path -- `cancel_contract` -> `StripeClient::create_refund` --
-/// issues the correct net refund (prorated minus already-released) and that
-/// Stripe's ledger reflects exactly the amount we recorded. Skipped when no
-/// test key is configured, so CI without secrets still passes.
+/// issues the correct prorated refund and that Stripe's ledger reflects exactly
+/// the amount we recorded. Skipped when no test key is configured, so CI
+/// without secrets still passes.
 #[tokio::test]
 async fn test_cancel_stripe_contract_issues_live_refund() {
     let secret_key = match std::env::var("STRIPE_SECRET_KEY") {
@@ -2059,7 +1836,7 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
         "test PaymentIntent must be succeeded: {pi:#}"
     );
 
-    // 2) Build a contract paid by that PaymentIntent, with some funds already released.
+    // 2) Build a contract paid by that PaymentIntent.
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
@@ -2083,12 +1860,11 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
         },
     )
     .await;
-    let released_e9s = 1_000_000_000i64; // 100 cents already released to provider
+    // Service started at start_ns; under Stripe-only no funds are pre-released.
     sqlx::query(
-        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1, total_released_e9s = $2 WHERE contract_id = $3",
+        "UPDATE contract_sign_requests SET provisioning_completed_at_ns = $1 WHERE contract_id = $2",
     )
     .bind(start_ns)
-    .bind(released_e9s)
     .bind(&contract_id)
     .execute(&db.pool)
     .await
@@ -2102,7 +1878,6 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
         &requester_pk,
         Some("live refund test"),
         Some(&stripe_client),
-        None,
     )
     .await
     .expect("cancel_contract with live refund");
@@ -2114,7 +1889,7 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
     let refund_id = contract.stripe_refund_id.expect("stripe refund id recorded");
     assert!(refund_id.starts_with("re_"), "unexpected refund id: {refund_id}");
 
-    // Net must equal gross minus released (i.e. released funds were subtracted).
+    // Refund equals the gross prorated remainder (no released subtraction).
     let gross = Database::calculate_prorated_refund(
         payment_amount_e9s,
         Some(start_ns),
@@ -2122,10 +1897,9 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
         now_before,
         0,
     );
-    let expected_net = gross - released_e9s;
     assert!(
-        (refund_e9s - expected_net).abs() < 1_000_000,
-        "net refund {refund_e9s} should equal gross {gross} - released {released_e9s}"
+        (refund_e9s - gross).abs() < 1_000_000,
+        "net refund {refund_e9s} should equal gross {gross}"
     );
 
     // 4) Stripe's ledger must reflect exactly the cents we recorded.
@@ -2288,7 +2062,7 @@ async fn insert_requested_contract_with_duration(
     offering_id: &str,
     duration_hours: Option<i64>,
 ) {
-    let payment_method = "icpay";
+    let payment_method = "test";
     let payment_status = "succeeded";
     let stripe_payment_intent_id: Option<&str> = None;
     let stripe_customer_id: Option<&str> = None;
@@ -2425,14 +2199,14 @@ async fn test_cancel_active_contract_with_prorated_refund() {
     let start_ns = now_ns - (3600 * 1_000_000_000i64); // Started 1 hour ago
     let end_ns = now_ns + (23 * 3600 * 1_000_000_000i64); // 24 hour contract, 23 hours left
 
-    // Set ICPay payment and instance details
+    // Set Stripe payment and instance details
     let instance_details =
         r#"{"external_id":"vm-12345","ip_address":"192.168.1.100","ssh_port":22}"#;
     sqlx::query!(
-        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, icpay_payment_id = $3, provisioning_instance_details = $4, provisioning_completed_at_ns = $5, start_timestamp_ns = $6, end_timestamp_ns = $7 WHERE contract_id = $8",
-        "icpay",
+        "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, stripe_payment_intent_id = $3, provisioning_instance_details = $4, provisioning_completed_at_ns = $5, start_timestamp_ns = $6, end_timestamp_ns = $7 WHERE contract_id = $8",
+        "stripe",
         "succeeded",
-        "pay_test_active",
+        "pi_test_active",
         instance_details,
         start_ns,
         start_ns,
@@ -2449,17 +2223,16 @@ async fn test_cancel_active_contract_with_prorated_refund() {
         &requester_pk,
         Some("User cancelled active rental"),
         None,
-        None,
     )
     .await
     .unwrap();
 
     let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
     assert_eq!(contract.status, "cancelled");
-    // R5: no ICPay client -> refund NOT issued, payment_status stays 'succeeded'.
+    // R5: no Stripe client -> refund NOT issued, payment_status stays 'succeeded'.
     assert_eq!(contract.payment_status, "succeeded");
     assert!(contract.refund_amount_e9s.is_some());
-    // Prorated refund should be present (23/24 hours remaining = ~96% of 1 ICP)
+    // Prorated refund should be present (23/24 hours remaining = ~96% of $1)
     let refund = contract.refund_amount_e9s.unwrap();
     assert!(refund > 0, "Should have a refund amount");
     assert!(
@@ -3728,7 +3501,7 @@ async fn test_create_rental_request_reserves_self_provisioned_resource() {
         contact_method: Some("email:tenant@example.com".to_string()),
         request_memo: Some("Rent self-provisioned VM".to_string()),
         duration_hours: Some(24),
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: Some("Ubuntu 24.04".to_string()),
     };
@@ -3916,7 +3689,7 @@ async fn test_cancel_contract_releases_self_provisioned_resource_not_deletes() {
         contact_method: Some("email:tenant@example.com".to_string()),
         request_memo: Some("Rent self-provisioned VM".to_string()),
         duration_hours: Some(24),
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: Some("Ubuntu 24.04".to_string()),
     };
@@ -3935,7 +3708,6 @@ async fn test_cancel_contract_releases_self_provisioned_resource_not_deletes() {
         &contract_id,
         &requester,
         Some("Tenant cancelled"),
-        None,
         None,
     )
     .await
@@ -4241,7 +4013,7 @@ fn rental_params(offering_db_id: i64, duration_hours: Option<i64>) -> RentalRequ
         contact_method: Some("email:test@example.com".to_string()),
         request_memo: None,
         duration_hours,
-        payment_method: Some("icpay".to_string()),
+        payment_method: Some("test".to_string()),
         buyer_address: None,
         operating_system: None,
     }
@@ -5137,7 +4909,7 @@ async fn test_cancel_refund_uses_idempotency_key() {
     )
     .await;
 
-    db.cancel_contract(&contract_id, &requester_pk, Some("e2e"), None, None)
+    db.cancel_contract(&contract_id, &requester_pk, Some("e2e"), None)
         .await
         .expect("cancel must succeed");
 
@@ -5166,80 +4938,6 @@ async fn test_cancel_refund_uses_idempotency_key() {
 // =============================================================================
 // Money-safety hardening (Phase 1A).
 // =============================================================================
-
-/// R10 / A1: `update_icpay_payment_status` MUST reject any value outside the
-/// allow-list instead of binding an arbitrary string straight into the
-/// `payment_status` column. A bogus status poisons every downstream guard that
-/// compares `== "succeeded"`. Regression guard for the code-level validation.
-#[tokio::test]
-async fn test_update_icpay_payment_status_rejects_unknown_value() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![0xC1; 32];
-
-    insert_contract_request(
-        &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        0,
-        "requested",
-    )
-    .await;
-
-    let result = db
-        .update_icpay_payment_status(&contract_id, "totally_bogus_status")
-        .await;
-    assert!(
-        result.is_err(),
-        "unknown payment_status must be rejected, not written"
-    );
-    let err = format!("{:#}", result.unwrap_err());
-    assert!(
-        err.contains("totally_bogus_status"),
-        "error must name the offending value, got: {err}"
-    );
-    assert!(
-        err.contains("succeeded"),
-        "error must list the allowed set, got: {err}"
-    );
-
-    // The row must be untouched -- no silent partial write.
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(
-        contract.payment_status, "succeeded",
-        "rejected update must not mutate payment_status"
-    );
-}
-
-/// R10 / A1 positive path: an allow-listed value ('failed') writes through.
-#[tokio::test]
-async fn test_update_icpay_payment_status_accepts_known_value() {
-    let db = setup_test_db().await;
-    let requester_pk = vec![1u8; 32];
-    let provider_pk = vec![2u8; 32];
-    let contract_id = vec![0xC2; 32];
-
-    insert_contract_request(
-        &db,
-        &contract_id,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        0,
-        "requested",
-    )
-    .await;
-
-    db.update_icpay_payment_status(&contract_id, "failed")
-        .await
-        .expect("known payment_status must succeed");
-
-    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
-    assert_eq!(contract.payment_status, "failed");
-}
 
 /// R10 / A1 belt-and-suspenders: the DB CHECK constraint (migration 047)
 /// makes the allow-list un-bypassable even via direct SQL. A raw UPDATE with
@@ -5481,27 +5179,24 @@ async fn test_provisioning_requires_payment_check_constraint() {
 }
 
 // -----------------------------------------------------------------------------
-// R2/R3 / A3: refund + release accounting integrity.
+// R2/R3 / A3: refund accounting integrity.
 //
-// reject_contract refunded the raw payment_amount_e9s, ignoring funds already
-// released to the provider, so a contract that had any daily release could be
-// refunded for the full gross on top of the release (over-refund). The release
-// path also wrote total_released unconditionally (TOCTOU: a concurrent release
-// could push total_released past payment_amount). The fixes route reject
-// through calculate_net_refund_e9s and make the release a conditional UPDATE;
-// migration 049 is the un-bypassable CHECK that released + refunded <= payment.
+// Under Stripe-only no funds are ever pre-released to the provider, so the
+// refund is bounded purely by the collected payment. reject/cancel/dispute
+// routes through calculate_net_refund_e9s (the gross prorated refund);
+// migration 049 is the un-bypassable CHECK that refunded <= payment.
 
-/// R3 variant: reject MUST refund only the net amount still held by the
-/// platform (payment - already_released), never the raw gross. Regression
-/// guard for the over-refund where reject used payment_amount_e9s directly.
+/// R3 variant: reject MUST record the prorated refund owed to the customer and
+/// never refund more than the collected payment. Regression guard for the
+/// over-refund where reject used payment_amount_e9s directly on top of an
+/// already-refunded/disputed contract.
 #[tokio::test]
-async fn test_reject_contract_refunds_net_not_gross() {
+async fn test_reject_contract_records_refund_not_exceeding_payment() {
     let db = setup_test_db().await;
     let requester_pk = vec![1u8; 32];
     let provider_pk = vec![2u8; 32];
     let contract_id = vec![0xE1; 32];
-    let payment_amount_e9s = 1_000_000_000i64; // 1 ICP
-    let released_e9s = 400_000_000i64; // 0.4 ICP already released to provider
+    let payment_amount_e9s = 1_000_000_000i64; // $1.00 == 100 cents
 
     insert_contract_request(
         &db,
@@ -5513,19 +5208,19 @@ async fn test_reject_contract_refunds_net_not_gross() {
         "accepted", // reject is valid from accepted
     )
     .await;
-    // insert_contract_request forces amount=1000; set the realistic amount +
-    // simulate funds already released to the provider.
+    // insert_contract_request forces amount=1000 and the Test method; set the
+    // realistic Stripe payment. Reject is pre-service, so the prorated refund
+    // equals the full payment.
     sqlx::query(
-        "UPDATE contract_sign_requests SET payment_amount_e9s = $1, total_released_e9s = $2, payment_status = 'succeeded', payment_method = 'icpay' WHERE contract_id = $3",
+        "UPDATE contract_sign_requests SET payment_amount_e9s = $1, payment_status = 'succeeded', payment_method = 'stripe', stripe_payment_intent_id = 'pi_test_reject' WHERE contract_id = $2",
     )
     .bind(payment_amount_e9s)
-    .bind(released_e9s)
     .bind(&contract_id)
     .execute(&db.pool)
     .await
     .unwrap();
 
-    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None, None)
+    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None)
         .await
         .expect("reject must succeed");
 
@@ -5534,21 +5229,20 @@ async fn test_reject_contract_refunds_net_not_gross() {
     let refund = contract
         .refund_amount_e9s
         .expect("reject of a succeeded payment must record a refund");
-    let net_cap = payment_amount_e9s - released_e9s; // 600M
+    // Pre-service reject refunds the full payment; never more.
     assert!(
-        refund <= net_cap,
-        "reject refund must be the net (payment - released = {net_cap}), not the gross; got {refund}"
+        refund <= payment_amount_e9s,
+        "reject refund ({refund}) must never exceed the collected payment ({payment_amount_e9s})"
     );
-    // The invariant the whole module exists to enforce:
     assert!(
-        released_e9s + refund <= payment_amount_e9s,
-        "released ({released_e9s}) + refunded ({refund}) must never exceed payment ({payment_amount_e9s})"
+        refund > 0,
+        "reject of a succeeded payment must record a positive refund"
     );
 }
 
 /// R2 / A3 belt-and-suspenders: the DB CHECK (migration 049) makes
-/// "released + refunded <= payment" un-bypassable even via direct SQL. A raw
-/// UPDATE that pushes the sum over payment_amount must violate the constraint.
+/// "refunded <= payment" un-bypassable even via direct SQL. A raw UPDATE that
+/// pushes the refund past payment_amount must violate the constraint.
 #[tokio::test]
 async fn test_release_refund_integrity_check_constraint() {
     let db = setup_test_db().await;
@@ -5567,28 +5261,27 @@ async fn test_release_refund_integrity_check_constraint() {
         "accepted",
     )
     .await;
-    // Set payment + an already-released amount that leaves room for a small
-    // refund, then attempt to push the refund past the ceiling via direct SQL.
+    // Set the collected payment, then attempt to push the refund past the
+    // ceiling via direct SQL.
     sqlx::query(
-        "UPDATE contract_sign_requests SET payment_amount_e9s = $1, total_released_e9s = $2 WHERE contract_id = $3",
+        "UPDATE contract_sign_requests SET payment_amount_e9s = $1 WHERE contract_id = $2",
     )
     .bind(payment_amount_e9s)
-    .bind(800_000_000i64) // released 0.8 ICP
     .bind(&contract_id)
     .execute(&db.pool)
     .await
     .unwrap();
 
-    // 0.8 released + 0.3 refund = 1.1 > 1.0 payment -> must be rejected.
+    // 1.1B refund > 1.0B payment -> must be rejected.
     let result = sqlx::query(
-        "UPDATE contract_sign_requests SET refund_amount_e9s = 300_000_000 WHERE contract_id = $1",
+        "UPDATE contract_sign_requests SET refund_amount_e9s = 1_100_000_000 WHERE contract_id = $1",
     )
     .bind(&contract_id)
     .execute(&db.pool)
     .await;
     assert!(
         result.is_err(),
-        "CHECK constraint must reject released+refunded > payment"
+        "CHECK constraint must reject refunded > payment"
     );
 }
 
@@ -5599,7 +5292,7 @@ async fn test_release_refund_integrity_check_constraint() {
 // (pure-DB / dry-run). Callers used to treat that as success and flip
 // payment_status to 'refunded' -- telling the customer "refunded" while no
 // money was actually returned. The invariant: payment_status='refunded' is
-// ONLY ever set when a real refund id (Stripe re_* / ICPay) was recorded.
+// ONLY ever set when a real refund id (Stripe re_*) was recorded.
 
 /// With no Stripe client, a cancel computes the refund but cannot issue it, so
 /// payment_status must NOT become 'refunded' (it stays in its prior state).
@@ -5632,7 +5325,7 @@ async fn test_cancel_stripe_without_client_does_not_mark_refunded() {
     .await;
 
     // Cancel with NO Stripe client: refund computes but cannot be issued.
-    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None, None)
+    db.cancel_contract(&contract_id, &requester_pk, Some("cancel"), None)
         .await
         .expect("cancel must still succeed (status flip)");
 
@@ -5681,7 +5374,7 @@ async fn test_reject_stripe_without_client_does_not_mark_refunded() {
     )
     .await;
 
-    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None, None)
+    db.reject_contract(&contract_id, &provider_pk, Some("reject"), None)
         .await
         .expect("reject must still succeed (status flip)");
 

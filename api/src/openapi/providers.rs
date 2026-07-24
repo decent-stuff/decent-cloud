@@ -2690,7 +2690,6 @@ impl ProvidersApi {
         } else {
             // Reject: trigger full refund since user never got the service
             let stripe_client = crate::stripe_client::StripeClient::new().ok();
-            let icpay_client = crate::icpay_client::IcpayClient::new().ok();
 
             match db
                 .reject_contract(
@@ -2698,7 +2697,6 @@ impl ProvidersApi {
                     &auth.pubkey,
                     req.memo.as_deref(),
                     stripe_client.as_ref(),
-                    icpay_client.as_ref(),
                 )
                 .await
             {

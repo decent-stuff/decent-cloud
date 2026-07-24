@@ -402,7 +402,7 @@ impl Database {
 
         // Issue the refund only when the customer has actually been charged.
         // For Stripe: payment_status == "succeeded" and we have a real PI.
-        // ICPay/self-rental/free flows fall through with no refund call.
+        // Test/self-rental/free flows fall through with no refund call.
         if payment_method == "stripe"
             && payment_status == "succeeded"
             && payment_amount_e9s > 0
@@ -534,7 +534,7 @@ mod tests {
             "active",
             0,
             Some(0),
-            "icpay",
+            "test",
             "succeeded",
             1_000_000_000,
             None,
@@ -699,7 +699,7 @@ mod tests {
             "provisioned",
             0,
             Some(0),
-            "icpay",
+            "test",
             "succeeded",
             1_000_000_000,
             None,
@@ -824,7 +824,7 @@ mod tests {
             "pending",
             0,
             Some(0),
-            "icpay",
+            "test",
             "succeeded",
             1,
             None,
@@ -1118,7 +1118,7 @@ mod tests {
             "active",
             0,
             Some(0),
-            "icpay",
+            "test",
             "succeeded",
             1_000_000_000,
             None,

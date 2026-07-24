@@ -150,9 +150,10 @@ impl Database {
 
         // Set payment_status based on payment method and self-rental
         // Self-rental is FREE - payment succeeds immediately
-        // ICPay payments are pre-paid, so they succeed immediately
+        // Test payment method auto-succeeds without a checkout flow (it stands in
+        // for ICPay's pre-paid behaviour in E2E/testing).
         // Stripe payments require webhook confirmation, so they start as pending
-        let payment_status = if is_self_rental || payment_method_str == "icpay" {
+        let payment_status = if is_self_rental || payment_method_str == "test" {
             "succeeded"
         } else {
             "pending"
@@ -389,7 +390,6 @@ impl Database {
         rejected_by_pubkey: &[u8],
         reject_memo: Option<&str>,
         stripe_client: Option<&crate::stripe_client::StripeClient>,
-        icpay_client: Option<&crate::icpay_client::IcpayClient>,
     ) -> Result<()> {
         let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
             anyhow::anyhow!("Contract not found (ID: {})", hex::encode(contract_id))
@@ -415,20 +415,19 @@ impl Database {
 
         // Refund only the net amount still held by the platform if payment
         // succeeded. Reject is only valid pre-service (requested/pending/
-        // accepted), so the prorated refund == the full payment; subtracting
-        // already-released funds (`calculate_net_refund_e9s`) yields
-        // `payment - released`. Refunding the raw gross here would double-pay
-        // on top of any daily release (R3 variant). Routed through the SAME
-        // net calc the cancel path uses so both honour the policy.
+        // accepted), so the prorated refund == the full payment; this is the
+        // gross prorated refund under Stripe-only (no funds are ever
+        // pre-released). Routed through the SAME net calc the cancel path uses
+        // so both honour the policy.
         let reject_ts_ns = crate::now_ns()?;
-        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
+        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_status
             == dcc_common::payment_status::SUCCEEDED
         {
             let net_refund_e9s = self
                 .calculate_net_refund_e9s(&contract, reject_ts_ns)
                 .await?;
             if net_refund_e9s <= 0 {
-                (None, None, None)
+                (None, None)
             } else {
                 match contract.payment_method.as_str() {
                     "stripe" => {
@@ -468,45 +467,16 @@ impl Database {
                                     refund_cents
                                 );
                             }
-                            (Some(net_refund_e9s), refund_id, None)
+                            (Some(net_refund_e9s), refund_id)
                         } else {
-                            (Some(net_refund_e9s), None, None)
+                            (Some(net_refund_e9s), None)
                         }
                     }
-                    "icpay" => {
-                        if let Some(client) = icpay_client {
-                            if let Some(payment_id) = &contract.icpay_payment_id {
-                                match client.create_refund(payment_id, Some(net_refund_e9s)).await {
-                                    Ok(refund_id) => {
-                                        tracing::info!(
-                                            "ICPay net refund created: {} for rejected contract {} (amount: {} e9s)",
-                                            refund_id,
-                                            hex::encode(contract_id),
-                                            net_refund_e9s
-                                        );
-                                        (Some(net_refund_e9s), None, Some(refund_id))
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            "Failed to create ICPay refund for rejected contract {}: {}",
-                                            hex::encode(contract_id),
-                                            e
-                                        );
-                                        (Some(net_refund_e9s), None, None)
-                                    }
-                                }
-                            } else {
-                                (Some(net_refund_e9s), None, None)
-                            }
-                        } else {
-                            (Some(net_refund_e9s), None, None)
-                        }
-                    }
-                    _ => (None, None, None),
+                    _ => (None, None),
                 }
             }
         } else {
-            (None, None, None)
+            (None, None)
         };
 
         // Update status and refund info atomically
@@ -518,11 +488,11 @@ impl Database {
         // returned. When the refund computed but no client issued it (no id),
         // record the amount for ops reconciliation but leave payment_status
         // untouched -- never claim a refund that did not actually happen.
-        let refund_issued = stripe_refund_id.is_some() || icpay_refund_id.is_some();
-        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
+        let refund_issued = stripe_refund_id.is_some();
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
             if !refund_issued {
                 tracing::warn!(
-                    "Refund for rejected contract {} computed at {:?} e9s but NOT issued (no Stripe/ICPay client configured); payment_status left as '{}'",
+                    "Refund for rejected contract {} computed at {:?} e9s but NOT issued (no Stripe client configured); payment_status left as '{}'",
                     hex::encode(contract_id),
                     refund_amount_e9s,
                     contract.payment_status
@@ -534,14 +504,13 @@ impl Database {
                 contract.payment_status.as_str()
             };
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, refund_created_at_ns = $7 WHERE contract_id = $8",
                 rejected_status,
                 updated_at_ns,
                 rejected_by_pubkey,
                 payment_status_value,
                 refund_amount_e9s,
                 stripe_refund_id,
-                icpay_refund_id,
                 updated_at_ns,
                 contract_id
             )
@@ -617,14 +586,13 @@ impl Database {
     /// - provisioned/active: Already deployed, requires termination instead
     /// - rejected/cancelled: Already in terminal state
     ///
-    /// For Stripe and ICPay payments: automatically processes prorated refund
+    /// For Stripe payments: automatically processes prorated refund
     pub async fn cancel_contract(
         &self,
         contract_id: &[u8],
         cancelled_by_pubkey: &[u8],
         cancel_memo: Option<&str>,
         stripe_client: Option<&crate::stripe_client::StripeClient>,
-        icpay_client: Option<&crate::icpay_client::IcpayClient>,
     ) -> Result<()> {
         // Get contract to verify it exists and check authorization
         let contract = self.get_contract(contract_id).await?.ok_or_else(|| {
@@ -648,9 +616,7 @@ impl Database {
 
         // Calculate prorated refund based on payment method
         let current_timestamp_ns = crate::now_ns()?;
-        let (refund_amount_e9s, stripe_refund_id, icpay_refund_id) = if contract.payment_status
-            == "succeeded"
-        {
+        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_status == "succeeded" {
             match contract.payment_method.as_str() {
                 "stripe" => {
                     // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
@@ -674,9 +640,9 @@ impl Database {
                         ));
                     };
 
-                    // Refund only the remainder still held by the platform: prorated for
-                    // unused time, minus funds already released to the provider. Shared
-                    // with the ICPay path via `calculate_net_refund_e9s`.
+                    // Refund the gross prorated remainder for unused time. Under Stripe-only
+                    // no funds are ever pre-released, so `calculate_net_refund_e9s` returns
+                    // the full prorated refund.
                     let refund_e9s = self
                         .calculate_net_refund_e9s(&contract, current_timestamp_ns)
                         .await?;
@@ -718,22 +684,16 @@ impl Database {
                                 refund_cents
                             ),
                         }
-                        (Some(refund_e9s), refund_id, None)
+                        (Some(refund_e9s), refund_id)
                     } else {
-                        (None, None, None)
+                        (None, None)
                     }
                 }
-                "icpay" => {
-                    let (amount, refund_id) = self
-                        .process_icpay_refund(&contract, icpay_client, current_timestamp_ns)
-                        .await?;
-                    (amount, None, refund_id)
-                }
-                _ => (None, None, None),
+                _ => (None, None),
             }
         } else {
             // Payment not succeeded yet
-            (None, None, None)
+            (None, None)
         };
 
         // Update status, refund info, and history atomically
@@ -745,12 +705,12 @@ impl Database {
         // returned. When the refund computed but no client issued it (no id),
         // record the amount for ops reconciliation but leave payment_status
         // untouched -- never claim a refund that did not actually happen.
-        let refund_issued = stripe_refund_id.is_some() || icpay_refund_id.is_some();
+        let refund_issued = stripe_refund_id.is_some();
         // Update contract status to cancelled with refund info
-        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() || icpay_refund_id.is_some() {
+        if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
             if !refund_issued {
                 tracing::warn!(
-                    "Refund for cancelled contract {} computed at {:?} e9s but NOT issued (no Stripe/ICPay client configured); payment_status left as '{}'",
+                    "Refund for cancelled contract {} computed at {:?} e9s but NOT issued (no Stripe client configured); payment_status left as '{}'",
                     hex::encode(contract_id),
                     refund_amount_e9s,
                     contract.payment_status
@@ -762,14 +722,13 @@ impl Database {
                 contract.payment_status.as_str()
             };
             sqlx::query!(
-                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, icpay_refund_id = $7, refund_created_at_ns = $8 WHERE contract_id = $9",
+                "UPDATE contract_sign_requests SET status = $1, status_updated_at_ns = $2, status_updated_by = $3, payment_status = $4, refund_amount_e9s = $5, stripe_refund_id = $6, refund_created_at_ns = $7 WHERE contract_id = $8",
                 cancelled_status,
                 updated_at_ns,
                 cancelled_by_pubkey,
                 payment_status_value,
                 refund_amount_e9s,
                 stripe_refund_id,
-                icpay_refund_id,
                 updated_at_ns,
                 contract_id
             )

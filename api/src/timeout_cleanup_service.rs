@@ -285,7 +285,7 @@ mod tests {
                     created_at_ns, status, status_updated_at_ns, payment_method,
                     payment_status, currency
                 ) VALUES ($1, $2, '', '', $3, 'off-loop', 0, '',
-                          $4, $5, $4, 'icpay', 'succeeded', 'usd')"#,
+                          $4, $5, $4, 'test', 'succeeded', 'usd')"#,
             )
             .bind(cid.as_slice())
             .bind(requester)

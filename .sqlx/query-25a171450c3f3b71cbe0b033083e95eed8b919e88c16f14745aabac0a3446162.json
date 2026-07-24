@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET payment_method = $1, payment_status = $2, stripe_payment_intent_id = $3, provisioning_instance_details = $4, provisioning_completed_at_ns = $5, start_timestamp_ns = $6, end_timestamp_ns = $7 WHERE contract_id = $8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "25a171450c3f3b71cbe0b033083e95eed8b919e88c16f14745aabac0a3446162"
+}

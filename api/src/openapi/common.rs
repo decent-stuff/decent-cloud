@@ -284,13 +284,6 @@ pub struct RecordHealthCheckRequest {
 #[derive(Debug, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
-pub struct UpdateIcpayTransactionRequest {
-    pub transaction_id: String,
-}
-
-#[derive(Debug, Deserialize, Object)]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
 pub struct VerifyCheckoutSessionRequest {
     pub session_id: String,
 }
@@ -424,14 +417,6 @@ pub struct AdminSetEmailVerifiedRequest {
 pub struct AdminAddRecoveryKeyRequest {
     pub public_key: String,
     pub reason: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Object)]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct AdminProcessPayoutRequest {
-    pub provider_pubkey: String,
-    pub wallet_address: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Object)]
