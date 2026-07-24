@@ -929,9 +929,9 @@
 										e.stopPropagation();
 										goto(`/dashboard/reputation/${contract.provider_pubkey}`);
 									}}
-									class="text-white text-sm font-mono hover:text-primary-400 transition-colors text-left"
+									class="text-white text-sm hover:text-primary-400 transition-colors text-left {contract.provider_username ? '' : 'font-mono'}"
 								>
-									{truncateHash(contract.provider_pubkey)}
+									{contract.provider_username ? `@${contract.provider_username}` : truncateHash(contract.provider_pubkey)}
 								</button>
 								<button
 									onclick={(e) => {

@@ -110,6 +110,50 @@ async fn test_get_user_contracts() {
 }
 
 #[tokio::test]
+async fn test_get_user_contracts_resolves_provider_username() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![3u8; 32];
+
+    // Provider has an account with a known username; requester does not.
+    db.create_account("provider_alice", &provider_pk, "provider@example.com")
+        .await
+        .expect("Failed to create provider account");
+
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "off-1",
+        0,
+        "pending",
+    )
+    .await;
+
+    let contracts = db.get_user_contracts(&requester_pk).await.unwrap();
+    assert_eq!(contracts.len(), 1);
+    assert_eq!(
+        contracts[0].provider_username,
+        Some("provider_alice".to_string()),
+        "get_user_contracts should resolve provider_username via account_public_keys join"
+    );
+    assert_eq!(
+        contracts[0].requester_username, None,
+        "requester without an account should yield requester_username = None"
+    );
+
+    // Single-contract lookup must resolve the username too.
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(
+        contract.provider_username,
+        Some("provider_alice".to_string()),
+        "get_contract should resolve provider_username via account_public_keys join"
+    );
+}
+
+#[tokio::test]
 async fn test_get_provider_contracts() {
     let db = setup_test_db().await;
     let user_pk = vec![1u8; 32];

@@ -1334,7 +1334,11 @@ export interface Contract {
 	requester_pubkey: string;
 	requester_ssh_pubkey: string;
 	requester_contact: string;
+	// Resolved from account_public_keys (undefined when no account)
+	requester_username?: string;
 	provider_pubkey: string;
+	// Resolved from account_public_keys (undefined when no account)
+	provider_username?: string;
 	offering_id: string;
 	offering_name?: string;
 	region_name?: string;

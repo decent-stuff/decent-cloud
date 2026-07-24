@@ -1246,9 +1246,9 @@
 					<div class="text-neutral-500 text-xs mb-1">Provider</div>
 					<a
 						href="/dashboard/reputation/{contract.provider_pubkey}"
-						class="text-white text-sm font-mono hover:text-primary-400 transition-colors"
+						class="text-white text-sm hover:text-primary-400 transition-colors {contract.provider_username ? '' : 'font-mono'}"
 					>
-						{truncateHash(contract.provider_pubkey)}
+						{contract.provider_username ? `@${contract.provider_username}` : truncateHash(contract.provider_pubkey)}
 					</a>
 				</div>
 			</div>
