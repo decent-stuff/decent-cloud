@@ -31,6 +31,11 @@
 	let selectedResourceType = $state<string>('');
 	let productTypes = $state<ProductType[]>([]);
 	let loadingExample = $state(false);
+	// Inline two-step replace guard (commit 1077dd33 pattern): loading example
+	// data when the sheet already holds data first reveals an inline
+	// Confirm/Cancel pair (pendingReplace); the destructive replace runs in
+	// confirmReplace only after the user confirms. Replaces the native confirm().
+	let pendingReplace = $state(false);
 
 	// Resource type definitions with key columns (keeping for reference, but will fetch from backend)
 	const RESOURCE_TYPES = {
@@ -181,17 +186,22 @@
 	}
 
 	// Load example data with confirmation if data exists
-	async function loadExampleData() {
-		// Check if there's existing data
+	function loadExampleData() {
+		// If the sheet already holds data, reveal the inline confirm first;
+		// the real replace runs in confirmReplace() after the user confirms.
 		if (!isSpreadsheetEmpty()) {
-			const confirmed = confirm(
-				'Warning: This will replace your existing data with example data. This action cannot be undone. Do you want to continue?'
-			);
-			if (!confirmed) {
-				return;
-			}
+			pendingReplace = true;
+			return;
 		}
+		void loadExampleDataInternal();
+	}
 
+	function cancelReplace() {
+		pendingReplace = false;
+	}
+
+	async function confirmReplace() {
+		pendingReplace = false;
 		await loadExampleDataInternal();
 	}
 
@@ -441,48 +451,78 @@
 
 					<!-- Load Example Data Button -->
 					{#if selectedResourceType}
-						<div class="flex items-center gap-3">
-							<button
-								onclick={loadExampleData}
-								class="px-4 py-2  font-medium transition-all flex items-center gap-2 {isSpreadsheetEmpty()
-									? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse hover:scale-105'
-									: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
-								disabled={importing || loadingExample}
-							>
-								{#if loadingExample}
-									<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
-										<circle
-											class="opacity-25"
-											cx="12"
-											cy="12"
-											r="10"
-											stroke="currentColor"
-											stroke-width="4"
-											fill="none"
-										/>
-										<path
-											class="opacity-75"
-											fill="currentColor"
-											d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-										/>
-									</svg>
-									Loading...
-								{:else}
-									<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-										/>
-									</svg>
-									Load Example Data
-								{/if}
-							</button>
-							{#if isSpreadsheetEmpty()}
-								<span class="text-emerald-400 text-sm">
-									← Click to load example data for {productTypes.find(t => t.key === selectedResourceType)?.label}
+						<div class="flex items-center gap-3 flex-wrap">
+							{#if pendingReplace}
+								<span class="text-amber-400 text-sm font-medium">
+									Replace existing data with example data? This cannot be undone.
 								</span>
+								<button
+									type="button"
+									onclick={confirmReplace}
+									disabled={importing || loadingExample}
+									class="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-medium hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+								>
+									{#if loadingExample}
+										<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" />
+											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+										</svg>
+										Loading...
+									{:else}
+										Confirm
+									{/if}
+								</button>
+								<button
+									type="button"
+									onclick={cancelReplace}
+									disabled={importing || loadingExample}
+									class="px-4 py-2 bg-surface-elevated text-neutral-400 hover:text-white font-medium transition-all disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{:else}
+								<button
+									onclick={loadExampleData}
+									class="px-4 py-2  font-medium transition-all flex items-center gap-2 {isSpreadsheetEmpty()
+										? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white animate-pulse hover:scale-105'
+										: 'bg-surface-elevated text-neutral-400 hover:bg-surface-elevated'}"
+									disabled={importing || loadingExample}
+								>
+									{#if loadingExample}
+										<svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+											<circle
+												class="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												stroke-width="4"
+												fill="none"
+											/>
+											<path
+												class="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+											/>
+										</svg>
+										Loading...
+									{:else}
+										<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+											/>
+										</svg>
+										Load Example Data
+									{/if}
+								</button>
+								{#if isSpreadsheetEmpty()}
+									<span class="text-emerald-400 text-sm">
+										← Click to load example data for {productTypes.find(t => t.key === selectedResourceType)?.label}
+									</span>
+								{/if}
 							{/if}
 						</div>
 					{/if}
