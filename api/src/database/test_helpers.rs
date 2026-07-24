@@ -302,61 +302,23 @@ fn wait_for_postgres(pg_bin_dir: &Path, base_url: &str, max_attempts: u32) -> Re
     ))
 }
 
-/// Calculate migration hash for versioning
+/// Calculate migration hash for versioning.
+///
+/// Derived from the compile-time `sqlx::migrate!` migrator (which auto-discovers
+/// every `.sql` file in `migrations_pg/`), so this stays in sync with the
+/// migrations directory automatically — no hand-maintained list of files. The
+/// hash changes whenever a migration is added, removed, or its content (and thus
+/// its checksum) changes, forcing the template database to be rebuilt.
 fn migration_hash() -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
     let mut hasher = DefaultHasher::new();
-    include_str!("../../migrations_pg/001_schema.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/002_seed_data.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/003_offering_templates.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/004_agent_resources.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/005_contract_health_checks.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/006_visibility_allowlist.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/007_encrypted_credentials.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/008_post_provision_script.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/009_contract_feedback.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/010_gateway_subdomain.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/011_acme_dns_accounts.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/012_acme_dns_provider_ownership.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/013_password_reset.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/014_cloud_accounts.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/015_cloud_ssh_key_tracking.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/016_recipe_provisioning.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/017_cloud_resource_error_message.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/018_recipe_log.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/019_per_agent_status.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/020_reliability_score.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/021_auto_renew.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/022_user_notifications.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/023_saved_offerings.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/024_contract_events.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/025_sla_uptime_config.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/026_api_tokens.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/027_offering_draft.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/028_spending_alerts.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/029_offering_views.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/030_offering_publish_at.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/031_provider_created_at.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/032_auto_accept_rules.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/033_contract_operating_system.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/034_free_plan_unlimited_rentals.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/035_pool_upgrade_to_version.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/036_ssh_key_rotation.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/037_totp_2fa.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/038_provider_offering_sli_reports.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/039_notification_offering_id.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/040_notification_price_direction.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/041_agents_waitlist.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/042_rename_payment_intent_to_session.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/043_dispute_pause_state.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/044_refund_audit.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/045_contract_timeout_states.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/046_pending_timeout_index.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/047_payment_status_check.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/048_provisioning_requires_payment_check.sql").hash(&mut hasher);
-    include_str!("../../migrations_pg/049_release_refund_integrity_check.sql").hash(&mut hasher);
+    let migrator = sqlx::migrate!("./migrations_pg");
+    for migration in migrator.iter() {
+        migration.version.hash(&mut hasher);
+        migration.checksum.hash(&mut hasher);
+    }
     format!("{:x}", hasher.finish())
 }
 
@@ -526,211 +488,14 @@ async fn ensure_template_db(base_url: &str) -> String {
                 .await
                 .expect("Failed to connect to template database");
 
-            let migrations = [
-                (
-                    "001_schema.sql",
-                    include_str!("../../migrations_pg/001_schema.sql"),
-                ),
-                (
-                    "002_seed_data.sql",
-                    include_str!("../../migrations_pg/002_seed_data.sql"),
-                ),
-                (
-                    "003_offering_templates.sql",
-                    include_str!("../../migrations_pg/003_offering_templates.sql"),
-                ),
-                (
-                    "004_agent_resources.sql",
-                    include_str!("../../migrations_pg/004_agent_resources.sql"),
-                ),
-                (
-                    "005_contract_health_checks.sql",
-                    include_str!("../../migrations_pg/005_contract_health_checks.sql"),
-                ),
-                (
-                    "006_visibility_allowlist.sql",
-                    include_str!("../../migrations_pg/006_visibility_allowlist.sql"),
-                ),
-                (
-                    "007_encrypted_credentials.sql",
-                    include_str!("../../migrations_pg/007_encrypted_credentials.sql"),
-                ),
-                (
-                    "008_post_provision_script.sql",
-                    include_str!("../../migrations_pg/008_post_provision_script.sql"),
-                ),
-                (
-                    "009_contract_feedback.sql",
-                    include_str!("../../migrations_pg/009_contract_feedback.sql"),
-                ),
-                (
-                    "010_gateway_subdomain.sql",
-                    include_str!("../../migrations_pg/010_gateway_subdomain.sql"),
-                ),
-                (
-                    "011_acme_dns_accounts.sql",
-                    include_str!("../../migrations_pg/011_acme_dns_accounts.sql"),
-                ),
-                (
-                    "012_acme_dns_provider_ownership.sql",
-                    include_str!("../../migrations_pg/012_acme_dns_provider_ownership.sql"),
-                ),
-                (
-                    "013_password_reset.sql",
-                    include_str!("../../migrations_pg/013_password_reset.sql"),
-                ),
-                (
-                    "014_cloud_accounts.sql",
-                    include_str!("../../migrations_pg/014_cloud_accounts.sql"),
-                ),
-                (
-                    "015_cloud_ssh_key_tracking.sql",
-                    include_str!("../../migrations_pg/015_cloud_ssh_key_tracking.sql"),
-                ),
-                (
-                    "016_recipe_provisioning.sql",
-                    include_str!("../../migrations_pg/016_recipe_provisioning.sql"),
-                ),
-                (
-                    "017_cloud_resource_error_message.sql",
-                    include_str!("../../migrations_pg/017_cloud_resource_error_message.sql"),
-                ),
-                (
-                    "018_recipe_log.sql",
-                    include_str!("../../migrations_pg/018_recipe_log.sql"),
-                ),
-                (
-                    "019_per_agent_status.sql",
-                    include_str!("../../migrations_pg/019_per_agent_status.sql"),
-                ),
-                (
-                    "020_reliability_score.sql",
-                    include_str!("../../migrations_pg/020_reliability_score.sql"),
-                ),
-                (
-                    "021_auto_renew.sql",
-                    include_str!("../../migrations_pg/021_auto_renew.sql"),
-                ),
-                (
-                    "022_user_notifications.sql",
-                    include_str!("../../migrations_pg/022_user_notifications.sql"),
-                ),
-                (
-                    "023_saved_offerings.sql",
-                    include_str!("../../migrations_pg/023_saved_offerings.sql"),
-                ),
-                (
-                    "024_contract_events.sql",
-                    include_str!("../../migrations_pg/024_contract_events.sql"),
-                ),
-                (
-                    "025_sla_uptime_config.sql",
-                    include_str!("../../migrations_pg/025_sla_uptime_config.sql"),
-                ),
-                (
-                    "026_api_tokens.sql",
-                    include_str!("../../migrations_pg/026_api_tokens.sql"),
-                ),
-                (
-                    "027_offering_draft.sql",
-                    include_str!("../../migrations_pg/027_offering_draft.sql"),
-                ),
-                (
-                    "028_spending_alerts.sql",
-                    include_str!("../../migrations_pg/028_spending_alerts.sql"),
-                ),
-                (
-                    "029_offering_views.sql",
-                    include_str!("../../migrations_pg/029_offering_views.sql"),
-                ),
-                (
-                    "030_offering_publish_at.sql",
-                    include_str!("../../migrations_pg/030_offering_publish_at.sql"),
-                ),
-                (
-                    "031_provider_created_at.sql",
-                    include_str!("../../migrations_pg/031_provider_created_at.sql"),
-                ),
-                (
-                    "032_auto_accept_rules.sql",
-                    include_str!("../../migrations_pg/032_auto_accept_rules.sql"),
-                ),
-                (
-                    "033_contract_operating_system.sql",
-                    include_str!("../../migrations_pg/033_contract_operating_system.sql"),
-                ),
-                (
-                    "034_free_plan_unlimited_rentals.sql",
-                    include_str!("../../migrations_pg/034_free_plan_unlimited_rentals.sql"),
-                ),
-                (
-                    "035_pool_upgrade_to_version.sql",
-                    include_str!("../../migrations_pg/035_pool_upgrade_to_version.sql"),
-                ),
-                (
-                    "036_ssh_key_rotation.sql",
-                    include_str!("../../migrations_pg/036_ssh_key_rotation.sql"),
-                ),
-                (
-                    "037_totp_2fa.sql",
-                    include_str!("../../migrations_pg/037_totp_2fa.sql"),
-                ),
-                (
-                    "038_provider_offering_sli_reports.sql",
-                    include_str!("../../migrations_pg/038_provider_offering_sli_reports.sql"),
-                ),
-                (
-                    "039_notification_offering_id.sql",
-                    include_str!("../../migrations_pg/039_notification_offering_id.sql"),
-                ),
-                (
-                    "040_notification_price_direction.sql",
-                    include_str!("../../migrations_pg/040_notification_price_direction.sql"),
-                ),
-                (
-                    "041_agents_waitlist.sql",
-                    include_str!("../../migrations_pg/041_agents_waitlist.sql"),
-                ),
-                (
-                    "042_rename_payment_intent_to_session.sql",
-                    include_str!("../../migrations_pg/042_rename_payment_intent_to_session.sql"),
-                ),
-                (
-                    "043_dispute_pause_state.sql",
-                    include_str!("../../migrations_pg/043_dispute_pause_state.sql"),
-                ),
-                (
-                    "044_refund_audit.sql",
-                    include_str!("../../migrations_pg/044_refund_audit.sql"),
-                ),
-                (
-                    "045_contract_timeout_states.sql",
-                    include_str!("../../migrations_pg/045_contract_timeout_states.sql"),
-                ),
-                (
-                    "046_pending_timeout_index.sql",
-                    include_str!("../../migrations_pg/046_pending_timeout_index.sql"),
-                ),
-                (
-                    "047_payment_status_check.sql",
-                    include_str!("../../migrations_pg/047_payment_status_check.sql"),
-                ),
-                (
-                    "048_provisioning_requires_payment_check.sql",
-                    include_str!("../../migrations_pg/048_provisioning_requires_payment_check.sql"),
-                ),
-                (
-                    "049_release_refund_integrity_check.sql",
-                    include_str!("../../migrations_pg/049_release_refund_integrity_check.sql"),
-                ),
-            ];
-
-            for (name, migration) in &migrations {
-                sqlx::raw_sql(migration)
-                    .execute(&template_pool)
-                    .await
-                    .unwrap_or_else(|e| panic!("Template migration failed for {}: {:#?}", name, e));
-            }
+            // Run all migrations, auto-discovered at compile time from migrations_pg/.
+            // This is the same macro production uses (core.rs), so the test template
+            // schema is guaranteed identical to the deployed schema — and adding a new
+            // migration no longer requires touching this file.
+            sqlx::migrate!("./migrations_pg")
+                .run(&template_pool)
+                .await
+                .expect("Template migrations failed");
 
             template_pool.close().await;
 

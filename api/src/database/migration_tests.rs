@@ -1,21 +1,22 @@
 /// Migration path verification tests
 ///
-/// This test file verifies that PostgreSQL migrations run correctly in all contexts:
-/// 1. From api-server (Database::new using sqlx::migrate!())
-/// 2. From tests (setup_test_db using include_str!())
+/// Migrations are applied identically in every context — production runtime and
+/// tests — via the single `sqlx::migrate!("./migrations_pg")` macro:
+/// - `api/src/database/core.rs` (`Database::new`) runs it against the live DB.
+/// - `api/src/database/test_helpers.rs` (`setup_test_db`) runs it against the
+///   ephemeral test template DB.
 ///
-/// The two approaches differ for valid reasons:
-/// - sqlx::migrate!() is relative to crate root, perfect for runtime
-/// - include_str!() is needed in tests because sqlx::migrate!() has issues
-///   with concurrent test execution and ephemeral database creation
+/// Both expand the same compile-time macro, so the test schema is guaranteed to
+/// match the deployed schema, and adding a migration requires touching neither
+/// file.
 ///
-/// Note: We don't use #[sqlx::test] for migration tests because:
+/// Note: We don't use #[sqlx::test] for these tests because:
 /// - It requires DATABASE_URL environment variable to be set
 /// - It doesn't integrate with our ephemeral PostgreSQL system (test_helpers.rs)
-/// - The migration functionality is already tested via setup_test_db() which uses
-///   the same SQL files through include_str!(), providing equivalent coverage
+/// - The migration functionality is already exercised via setup_test_db(), which
+///   runs the same `sqlx::migrate!` macro, providing equivalent coverage.
 ///
-/// Test that migration path resolution works relative to crate root
+/// Test that the migration directory is resolved relative to crate root
 #[tokio::test]
 async fn test_migration_path_from_crate_root() {
     // Verify the migration path "./migrations_pg" is resolved correctly
@@ -46,31 +47,12 @@ async fn test_migration_path_from_crate_root() {
     );
 }
 
-/// Test that both migration approaches (migrate! vs include_str) are equivalent
+/// Test that the migration files contain expected baseline schema/seed content.
 #[tokio::test]
-async fn test_migration_approaches_are_equivalent() {
-    // This test documents why we use two different approaches for migrations:
-
-    // 1. sqlx::migrate!() in core.rs (runtime/production):
-    //    - Relative path: "./migrations_pg"
-    //    - Resolved from CARGO_MANIFEST_DIR (api/ directory)
-    //    - Tracks migration state in __sqlx_migrations table
-    //    - Runs each migration only once (idempotent)
-    //    - Perfect for production use
-    //    - Called from Database::new() in api-server and CLI tools
-
-    // 2. include_str!() in test_helpers.rs (tests):
-    //    - Absolute path: "../../migrations_pg/..."
-    //    - Embeds SQL at compile time
-    //    - No migration tracking table needed
-    //    - Allows fresh schema for each test
-    //    - Better for test isolation and concurrent execution
-    //    - Works with ephemeral PostgreSQL system
-    //    - Used by setup_test_db() for all unit tests
-
-    // Both approaches execute the same SQL files, so the resulting schema is identical.
-    // This provides full coverage - migrations work in production (via sqlx::migrate!())
-    // and tests can run in parallel with isolated databases (via include_str!()).
+async fn test_migration_baseline_content() {
+    // A sanity check on two anchor migrations. Full migration execution is
+    // verified by every test that calls setup_test_db(), which runs the same
+    // sqlx::migrate!("./migrations_pg") macro used in production (core.rs).
 
     let migration_dir = format!("{}/migrations_pg", env!("CARGO_MANIFEST_DIR"));
 
