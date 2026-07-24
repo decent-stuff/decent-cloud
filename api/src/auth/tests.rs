@@ -809,7 +809,7 @@ fn authenticate_provider_or_agent_from_request_sync_provider_path(
         timestamp,
         nonce,
         request.method().as_str(),
-        &full_path,
+        full_path,
         &[],
         None,
     )?;
@@ -881,7 +881,7 @@ fn authenticate_provider_or_agent_from_request_sync_agent_path(
         timestamp,
         nonce,
         request.method().as_str(),
-        &full_path,
+        full_path,
         &[],
         None,
     )?;

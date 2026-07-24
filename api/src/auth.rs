@@ -965,7 +965,7 @@ pub async fn authenticate_provider_or_agent_from_request(
         timestamp,
         nonce,
         request.method().as_str(),
-        &full_path,
+        full_path,
         &[],
         None,
     )?;
@@ -1041,7 +1041,7 @@ pub fn authenticate_user_from_request(request: &poem::Request) -> Result<Vec<u8>
         timestamp,
         nonce,
         request.method().as_str(),
-        &full_path,
+        full_path,
         &[], // SSE GET has no body
         None,
     )
