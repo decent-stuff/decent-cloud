@@ -155,10 +155,16 @@ test.describe('/dashboard/rentals', () => {
 			await expect(card).toBeVisible();
 			await expect(card.getByText('Awaiting Payment')).toBeVisible();
 
-			// Click Cancel inside the card (the button has e.preventDefault so the
-			// link navigation is suppressed). Accept the confirm dialog.
-			page.once('dialog', (dialog) => dialog.accept());
+			// First Cancel click reveals an inline Confirm (no native dialog).
+			// The button has e.preventDefault so the link navigation is suppressed.
 			await card.getByRole('button', { name: 'Cancel' }).click();
+			const confirmBtn = card.getByRole('button', { name: 'Confirm' });
+			await expect(confirmBtn).toBeVisible();
+			// An Abort button lets the user back out.
+			await expect(card.getByRole('button', { name: 'Abort' })).toBeVisible();
+
+			// Second click performs the cancellation.
+			await confirmBtn.click();
 
 			// After cancel succeeds, the card shows the "Renew" button (only
 			// available for terminal/cancelled contracts).
@@ -166,6 +172,32 @@ test.describe('/dashboard/rentals', () => {
 
 			// The Cancelled tab count increments (0 → 1).
 			await expect(page.getByRole('button', { name: /Cancelled.*1/ })).toBeVisible();
+		} finally {
+			await deleteContractsForRequester(pubkey);
+		}
+	});
+
+	test('action: Abort hides the inline cancel confirm and keeps the contract', async ({ page, testAccount }) => {
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		try {
+			const contractId = await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'requested',
+				paymentStatus: 'pending',
+			});
+
+			await page.goto('/dashboard/rentals');
+			const card = page.locator(`a[href="/dashboard/rentals/${contractId}"]`);
+			await expect(card).toBeVisible();
+
+			// Arm the inline confirm, then abort it.
+			await card.getByRole('button', { name: 'Cancel' }).click();
+			await card.getByRole('button', { name: 'Abort' }).click();
+
+			// Confirm/Abort disappear; the plain Cancel button returns and the
+			// contract is unchanged (still cancellable).
+			await expect(card.getByRole('button', { name: 'Confirm' })).toHaveCount(0);
+			await expect(card.getByRole('button', { name: 'Cancel' })).toBeVisible();
 		} finally {
 			await deleteContractsForRequester(pubkey);
 		}

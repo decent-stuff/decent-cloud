@@ -177,8 +177,6 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 		const contractId = firstContractId;
 
 		await page.goto(`/dashboard/rentals/${contractId}`);
-		// Auto-accept the confirm() dialog that handleCancelContract triggers.
-		page.on('dialog', (d) => d.accept());
 
 		const cancelBtn = page.getByRole('button', { name: 'Cancel', exact: true }).first();
 		await expect(cancelBtn).toBeVisible({ timeout: 10000 });
@@ -189,7 +187,9 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 				resp.url().includes(`/api/v1/contracts/${contractId}/cancel`),
 			{ timeout: 15000 },
 		);
+		// Two-step inline confirm: first Cancel arms, then Confirm fires the PUT.
 		await cancelBtn.click();
+		await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 		await putCancel;
 
 		// After refresh, the contract is terminal: Cancel disappears, Renew appears.
@@ -213,7 +213,6 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 		await page.goto('/dashboard/rentals');
 		const card = page.locator(`a[href="/dashboard/rentals/${contractId}"]`);
 		await expect(card).toBeVisible({ timeout: 15000 });
-		page.on('dialog', (d) => d.accept());
 
 		const cancelBtn = card.getByRole('button', { name: 'Cancel', exact: true });
 		await expect(cancelBtn).toBeVisible();
@@ -224,7 +223,9 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 				resp.url().includes(`/api/v1/contracts/${contractId}/cancel`),
 			{ timeout: 15000 },
 		);
+		// Two-step inline confirm: first Cancel arms, then Confirm fires the PUT.
 		await cancelBtn.click();
+		await card.getByRole('button', { name: 'Confirm', exact: true }).click();
 		await putCancel;
 
 		// Terminal contract: Renew appears, Cancel gone (on this card). The Renew

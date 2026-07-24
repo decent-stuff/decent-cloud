@@ -40,6 +40,12 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let cancellingContractId = $state<string | null>(null);
+	// Inline two-step cancel confirm: the first Cancel click only arms the
+	// action (sets pendingCancelContractId); the real PUT /cancel fires from
+	// confirmCancel() after the user clicks the inline Confirm button. Mirrors
+	// the offerings delete pattern (commit 1077dd33) — native confirm() blocks
+	// headless e2e and is poor on mobile.
+	let pendingCancelContractId = $state<string | null>(null);
 	let downloadingInvoiceContractId = $state<string | null>(null);
 	let copiedCommand = $state<string | null>(null);
 	let isAuthenticated = $state(false);
@@ -349,17 +355,19 @@
 		);
 	}
 
-	async function handleCancelContract(
-		contractId: string,
-		contractStatus: string,
-	) {
-		if (!isCancellable(contractStatus)) {
-			return;
-		}
+	// First click of Cancel only arms the inline confirm — no native dialog,
+	// no API call. The real cancellation runs in confirmCancel().
+	function requestCancelContract(contractId: string, contractStatus: string) {
+		if (!isCancellable(contractStatus)) return;
+		pendingCancelContractId = contractId;
+	}
 
-		if (!confirm("Are you sure you want to cancel this rental request?")) {
-			return;
-		}
+	function cancelCancelContract() {
+		pendingCancelContractId = null;
+	}
+
+	async function confirmCancelContract(contractId: string, contractStatus: string) {
+		if (!isCancellable(contractStatus)) return;
 
 		try {
 			cancellingContractId = contractId;
@@ -400,6 +408,7 @@
 			console.error("Error cancelling rental request:", e);
 		} finally {
 			cancellingContractId = null;
+			pendingCancelContractId = null;
 		}
 	}
 
@@ -714,20 +723,47 @@
 										&#10003; Key rotated
 									</span>
 								{/if}
-								<!-- Cancel button for cancelable contracts -->
-								{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
+							<!-- Cancel button for cancelable contracts (inline two-step confirm) -->
+							{#if isCancellable(contract.status) && cancellingContractId !== contract.contract_id}
+								{#if pendingCancelContractId === contract.contract_id}
+									<span class="text-xs text-neutral-400">Cancel?</span>
 									<button
 										onclick={(e) => {
 											e.preventDefault();
 											e.stopPropagation();
-											handleCancelContract(contract.contract_id, contract.status);
+											confirmCancelContract(contract.contract_id, contract.status);
 										}}
-										class="{buildDashboardCtaClass('rentals-contract-action-secondary')} bg-red-600/80 hover:bg-red-700"
+										class="{buildDashboardCtaClass('rentals-contract-action-secondary')} bg-red-600/90 hover:bg-red-700"
+										title="Confirm cancel this rental request"
+									>
+										Confirm
+									</button>
+									<button
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											cancelCancelContract();
+										}}
+										class="{buildDashboardCtaClass('rentals-contract-action-secondary')} bg-surface-elevated text-neutral-400 hover:text-white"
+										title="Abort cancel"
+									>
+										Abort
+									</button>
+								{:else}
+									<button
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											requestCancelContract(contract.contract_id, contract.status);
+										}}
+										disabled={pendingCancelContractId !== null}
+										class="{buildDashboardCtaClass('rentals-contract-action-secondary')} bg-red-600/80 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
 										title="Cancel this rental request"
 									>
 										Cancel
 									</button>
 								{/if}
+							{/if}
 								<!-- Download Invoice button for paid contracts -->
 								<!-- Show for: payment succeeded/refunded OR contract progressed past payment (active/provisioned/provisioning/accepted) -->
 								{#if (contract.payment_status === "succeeded" || contract.payment_status === "refunded" || ["active", "provisioned", "provisioning", "accepted"].includes(contract.status.toLowerCase())) && downloadingInvoiceContractId !== contract.contract_id}
