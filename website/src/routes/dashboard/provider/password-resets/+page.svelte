@@ -3,6 +3,7 @@
 	import AuthRequiredCard from '$lib/components/AuthRequiredCard.svelte';
 	import {
 		getPendingPasswordResets,
+		API_BASE_URL,
 		hexEncode,
 		type Contract
 	} from '$lib/services/api';
@@ -11,8 +12,6 @@
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { truncateContractHash, formatRelativeTime } from '$lib/utils/contract-format';
 	import { buildPasswordResetEventsUrl, parsePasswordResetEvent } from '$lib/utils/contract-sse';
-
-	const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 	type SigningIdentity = {
 		identity: Ed25519KeyIdentity;

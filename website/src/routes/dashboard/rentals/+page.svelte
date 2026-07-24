@@ -9,6 +9,7 @@
 		downloadContractInvoice,
 		getOffering,
 		fetchIcpPrice,
+		API_BASE_URL,
 		type Contract,
 		hexEncode,
 	} from "$lib/services/api";
@@ -31,8 +32,6 @@
 	import { RotationStateTracker } from "$lib/utils/rotation-state";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
-
-	const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 	let contracts = $state<Contract[]>([]);
 	let offeringNames = $state<Map<number, string>>(new Map());
