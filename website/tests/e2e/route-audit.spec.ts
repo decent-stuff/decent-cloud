@@ -66,14 +66,6 @@ const ALL_FINDINGS: Finding[] = [];
 const KNOWN_BROKEN = new Map<string, string>([
 	// Discovered by the audit run. Each entry flips the route to expected-failure
 	// so the committed suite is green; the defects remain listed in the report.
-	[
-		'/dashboard/reputation/[identifier]',
-		'console 401 on GET /users/{pk}/activity (api-user-activity.ts:40) — endpoint requires auth but page calls it unsigned; activity silently null',
-	],
-	[
-		'/dashboard/user/[identifier]',
-		'console 401 on GET /users/{pk}/activity (api-user-activity.ts:40) — endpoint requires auth but page calls it unsigned; activity silently null',
-	],
 ]);
 
 // ---------------------------------------------------------------------------

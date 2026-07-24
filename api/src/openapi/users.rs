@@ -122,6 +122,47 @@ impl UsersApi {
         }
     }
 
+    /// Get public user profile
+    ///
+    /// Returns a NON-sensitive activity summary for any user (offerings provided,
+    /// plus rental counts/status/timestamps). No authentication required — this is
+    /// what the public reputation and user-profile pages render. Payment amounts,
+    /// SSH keys, gateway info, and other private contract fields are stripped.
+    #[oai(
+        path = "/users/:pubkey/public-profile",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_public_user_profile(
+        &self,
+        db: Data<&Arc<Database>>,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<crate::database::users::PublicUserActivity>> {
+        let pubkey_bytes = match hex::decode(&pubkey.0) {
+            Ok(pk) => pk,
+            Err(_) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Invalid pubkey format".to_string()),
+                })
+            }
+        };
+
+        match db.get_public_user_activity(&pubkey_bytes).await {
+            Ok(activity) => Json(ApiResponse {
+                success: true,
+                data: Some(activity),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
     /// Save an offering to watchlist
     ///
     /// Add an offering to the authenticated user's personal watchlist.

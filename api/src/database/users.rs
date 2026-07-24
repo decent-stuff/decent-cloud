@@ -127,6 +127,62 @@ pub struct UserActivity {
     pub rentals_as_provider: Vec<crate::database::contracts::Contract>,
 }
 
+/// Non-sensitive contract summary for PUBLIC user-profile views.
+///
+/// Derived from `Contract` but strips everything security-sensitive: SSH keys,
+/// gateway config, contact info, payment processor IDs, tax/billing details,
+/// and payment amounts. Only the fields the public reputation/user pages render
+/// (status, timestamps, duration, parties, offering) are kept.
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct PublicContractSummary {
+    #[ts(type = "string")]
+    pub contract_id: String,
+    #[ts(type = "string")]
+    pub offering_id: String,
+    pub status: String,
+    #[ts(type = "number")]
+    pub created_at_ns: i64,
+    #[ts(type = "number | undefined")]
+    pub duration_hours: Option<i64>,
+    #[ts(type = "number | undefined")]
+    pub status_updated_at_ns: Option<i64>,
+    #[ts(type = "number | undefined")]
+    pub provisioning_completed_at_ns: Option<i64>,
+    #[ts(type = "string")]
+    pub provider_pubkey: String,
+    #[ts(type = "string")]
+    pub requester_pubkey: String,
+}
+
+impl From<crate::database::contracts::Contract> for PublicContractSummary {
+    fn from(c: crate::database::contracts::Contract) -> Self {
+        Self {
+            contract_id: c.contract_id,
+            offering_id: c.offering_id,
+            status: c.status,
+            created_at_ns: c.created_at_ns,
+            duration_hours: c.duration_hours,
+            status_updated_at_ns: c.status_updated_at_ns,
+            provisioning_completed_at_ns: c.provisioning_completed_at_ns,
+            provider_pubkey: c.provider_pubkey,
+            requester_pubkey: c.requester_pubkey,
+        }
+    }
+}
+
+/// Public user activity for the reputation / user-profile pages.
+///
+/// `offerings_provided` is already public via the marketplace, so it is returned
+/// in full. Rentals are reduced to `PublicContractSummary` (no sensitive fields).
+#[derive(Debug, Serialize, Deserialize, TS, Object)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct PublicUserActivity {
+    pub offerings_provided: Vec<crate::database::offerings::Offering>,
+    pub rentals_as_requester: Vec<PublicContractSummary>,
+    pub rentals_as_provider: Vec<PublicContractSummary>,
+}
+
 impl Database {
     // User registrations (blockchain-based, keyed by pubkey)
     pub(crate) async fn insert_user_registrations(
@@ -228,6 +284,27 @@ impl Database {
             offerings_provided,
             rentals_as_requester,
             rentals_as_provider,
+        })
+    }
+
+    /// Get PUBLIC user activity by pubkey — same data shape as `get_user_activity`
+    /// but with all security-sensitive contract fields stripped (SSH keys, gateway
+    /// config, contact info, payment processor IDs, tax/billing, payment amounts).
+    /// Used by the unauthenticated reputation / user-profile endpoints.
+    pub async fn get_public_user_activity(&self, pubkey: &[u8]) -> Result<PublicUserActivity> {
+        let activity = self.get_user_activity(pubkey).await?;
+        Ok(PublicUserActivity {
+            offerings_provided: activity.offerings_provided,
+            rentals_as_requester: activity
+                .rentals_as_requester
+                .into_iter()
+                .map(PublicContractSummary::from)
+                .collect(),
+            rentals_as_provider: activity
+                .rentals_as_provider
+                .into_iter()
+                .map(PublicContractSummary::from)
+                .collect(),
         })
     }
 

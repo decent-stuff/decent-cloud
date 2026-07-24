@@ -3,8 +3,8 @@
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
 	import {
-		getUserActivity,
-		type UserActivity,
+		getPublicUserActivity,
+		type PublicUserActivity,
 	} from "$lib/services/api-user-activity";
 	import { formatContractDate } from "$lib/utils/contract-format";
 	import { truncatePubkey, isPubkeyHex } from "$lib/utils/identity";
@@ -17,7 +17,7 @@
 	// Username (set if identifier was a username or fetched from account)
 	let username = $state<string | null>(null);
 
-	let activity = $state<UserActivity | null>(null);
+	let activity = $state<PublicUserActivity | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isNotFound = $state(false);
@@ -79,8 +79,8 @@
 
 			pubkey = resolvedPubkey;
 
-			// Step 2: Fetch user activity
-			activity = await getUserActivity(pubkey);
+			// Step 2: Fetch user activity (public, non-sensitive profile)
+			activity = await getPublicUserActivity(pubkey);
 		} catch (e) {
 			const errorMessage =
 				e instanceof Error ? e.message : "Failed to load user activity";

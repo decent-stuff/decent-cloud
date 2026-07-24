@@ -2,8 +2,8 @@
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 	import {
-		getUserActivity,
-		type UserActivity,
+		getPublicUserActivity,
+		type PublicUserActivity,
 	} from "$lib/services/api-user-activity";
 	import {
 		getReputation,
@@ -46,7 +46,7 @@
 
 	let pubkey = $state<string>("");
 	let username = $state<string | null>(null);
-	let activity = $state<UserActivity | null>(null);
+	let activity = $state<PublicUserActivity | null>(null);
 	let reputation = $state<ReputationInfo | null>(null);
 	let balance = $state<number>(0);
 	let transfers = $state<TokenTransfer[]>([]);
@@ -221,7 +221,7 @@
 				responseMetricsData,
 				healthSummaryData,
 			] = await Promise.all([
-				getUserActivity(pubkey).catch(() => null),
+				getPublicUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
 				getAccountBalance(pubkey).catch(() => 0),
 				getAccountTransfers(pubkey, 100).catch(() => []),
@@ -684,9 +684,6 @@
 											{truncatePubkey(contract.provider_pubkey)}
 										</a>
 									</p>
-									<p class="text-sm text-neutral-500">
-										Amount: {formatBalance(contract.payment_amount_e9s, contract.currency)} {contract.currency.toUpperCase()}
-									</p>
 								</div>
 								<span class="badge badge-primary">{contract.status}</span>
 							</div>
@@ -728,16 +725,13 @@
 											href="/dashboard/reputation/{contract.requester_pubkey}"
 											class="text-primary-400 hover:text-primary-300"
 										>
-											{truncatePubkey(contract.requester_pubkey)}
-										</a>
-									</p>
-									<p class="text-sm text-neutral-500">
-										Amount: {formatBalance(contract.payment_amount_e9s, contract.currency)} {contract.currency.toUpperCase()}
-									</p>
-								</div>
-								<span class="badge badge-neutral">{contract.status}</span>
+										{truncatePubkey(contract.requester_pubkey)}
+									</a>
+								</p>
 							</div>
-							<p class="text-sm text-neutral-500">Created: {formatContractDate(contract.created_at_ns)}</p>
+							<span class="badge badge-neutral">{contract.status}</span>
+						</div>
+						<p class="text-sm text-neutral-500">Created: {formatContractDate(contract.created_at_ns)}</p>
 							{#if contract.duration_hours}
 								<p class="text-sm text-neutral-500">Planned: {contract.duration_hours}h</p>
 							{/if}
