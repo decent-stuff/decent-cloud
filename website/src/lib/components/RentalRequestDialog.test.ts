@@ -70,98 +70,30 @@ describe('RentalRequestDialog price calculation', () => {
 	});
 });
 
-describe('RentalRequestDialog payment method default', () => {
-	// This test verifies the expected default payment method behavior
-	// For fiat currencies (USD, EUR, etc.) that Stripe supports, default should be "stripe"
-	// For crypto-only currencies, default should be "icpay"
+describe('RentalRequestDialog payment method', () => {
+	// Stripe is the sole paid rail. For every paid currency the dialog uses
+	// Stripe (credit card); self-rental stays free regardless of currency.
 
-	it('should default to stripe for USD currency (fiat - Stripe supported)', () => {
+	it('should use stripe for USD currency (fiat - Stripe supported)', () => {
 		const currency = 'USD';
 		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		// Default payment method should be stripe when Stripe is available
-		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
 
 		expect(isStripeAvailable).toBe(true);
-		expect(defaultPaymentMethod).toBe('stripe');
 	});
 
-	it('should default to stripe for EUR currency (fiat - Stripe supported)', () => {
+	it('should use stripe for EUR currency (fiat - Stripe supported)', () => {
 		const currency = 'EUR';
 		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		// Default payment method should be stripe when Stripe is available
-		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
 
 		expect(isStripeAvailable).toBe(true);
-		expect(defaultPaymentMethod).toBe('stripe');
 	});
 
-	it('should default to stripe for other fiat currencies (GBP, CAD, etc.)', () => {
+	it('should use stripe for other fiat currencies (GBP, CAD, etc.)', () => {
 		const fiatCurrencies = ['GBP', 'CAD', 'AUD', 'JPY', 'CHF'];
-		
+
 		for (const currency of fiatCurrencies) {
-			const isStripeAvailable = isStripeSupportedCurrency(currency);
-			const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
-			
-			expect(isStripeAvailable).toBe(true);
-			expect(defaultPaymentMethod).toBe('stripe');
+			expect(isStripeSupportedCurrency(currency)).toBe(true);
 		}
-	});
-
-	it('should default to icpay for ICP (crypto-only currency)', () => {
-		const currency = 'ICP';
-		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		// Default payment method should be icpay when Stripe is NOT available
-		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
-
-		expect(isStripeAvailable).toBe(false);
-		expect(defaultPaymentMethod).toBe('icpay');
-	});
-
-	it('should default to icpay for BTC (cryptocurrency)', () => {
-		const currency = 'BTC';
-		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		// Default payment method should be icpay when Stripe is NOT available
-		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
-
-		expect(isStripeAvailable).toBe(false);
-		expect(defaultPaymentMethod).toBe('icpay');
-	});
-
-	it('should default to icpay for ETH (cryptocurrency)', () => {
-		const currency = 'ETH';
-		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		// Default payment method should be icpay when Stripe is NOT available
-		const defaultPaymentMethod = isStripeAvailable ? 'stripe' : 'icpay';
-
-		expect(isStripeAvailable).toBe(false);
-		expect(defaultPaymentMethod).toBe('icpay');
-	});
-});
-
-describe('RentalRequestDialog payment method availability', () => {
-	it('should disable ICPay for fiat currencies (USD)', () => {
-		const currency = 'USD';
-		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		const isIcpayAvailable = !isStripeAvailable;
-		expect(isIcpayAvailable).toBe(false);
-	});
-
-	it('should disable ICPay for EUR', () => {
-		const currency = 'EUR';
-		const isIcpayAvailable = !isStripeSupportedCurrency(currency);
-		expect(isIcpayAvailable).toBe(false);
-	});
-
-	it('should enable ICPay for crypto currencies (ICP)', () => {
-		const currency = 'ICP';
-		const isIcpayAvailable = !isStripeSupportedCurrency(currency);
-		expect(isIcpayAvailable).toBe(true);
-	});
-
-	it('should disable Stripe for crypto currencies (ICP)', () => {
-		const currency = 'ICP';
-		const isStripeAvailable = isStripeSupportedCurrency(currency);
-		expect(isStripeAvailable).toBe(false);
 	});
 });
 

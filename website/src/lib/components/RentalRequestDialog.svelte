@@ -2,7 +2,6 @@
 	import type { Offering } from "$lib/services/api";
 	import {
 		createRentalRequest,
-		updateIcpayTransactionId,
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
@@ -12,13 +11,7 @@
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import { loadStripe, type Stripe } from "@stripe/stripe-js";
-	import { onMount, onDestroy } from "svelte";
-	import { isStripeSupportedCurrency } from "$lib/utils/stripe-currencies";
-	import {
-		getIcpay,
-		getWalletSelect,
-		isIcpayConfigured,
-	} from "$lib/utils/icpay";
+	import { onMount } from "svelte";
 	import type { AccountExternalKey } from "$lib/types/generated/AccountExternalKey";
 	import { generateSshKeyPair, downloadPrivateKey } from "$lib/utils/ssh-keygen";
 
@@ -110,7 +103,6 @@
 		}
 	});
 	let loading = $state(false);
-	let processingPayment = $state(false);
 	let error = $state<string | null>(null);
 	let sshKeyError = $state<string | null>(null);
 	let saveKeyToProfile = $state(false);
@@ -146,21 +138,8 @@
 		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
 	);
 
-	// Stripe is available for fiat currencies (USD, EUR, etc.)
-	let isStripeAvailable = $derived(
-		offering ? isStripeSupportedCurrency(offering.currency) : false,
-	);
-
-	// ICPay is only available for non-fiat (crypto) currencies
-	let isIcpayAvailable = $derived(!isStripeAvailable);
-
-	// Default: Stripe for fiat, ICPay for crypto. Reactive to offering changes.
-	let paymentMethod = $state<"icpay" | "stripe">("stripe");
-	$effect(() => {
-		if (offering) {
-			paymentMethod = isStripeSupportedCurrency(offering.currency) ? "stripe" : "icpay";
-		}
-	});
+	// Stripe is the only paid rail (self-rental stays free).
+	let paymentMethod = $state<"stripe">("stripe");
 
 	// Self-rental: user renting their own offering (no payment needed)
 	let isSelfRental = $derived(() => {
@@ -170,8 +149,8 @@
 		return bytesToHex(active.publicKeyBytes) === offering.pubkey;
 	});
 
-	// Payment is required unless it's a self-rental
-	let paymentRequired = $derived(!isSelfRental() && (paymentMethod === "icpay" || paymentMethod === "stripe"));
+	// Payment is required unless it's a self-rental (Stripe is the only paid path)
+	let paymentRequired = $derived(!isSelfRental());
 
 	// Subscription offering helpers
 	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
@@ -184,25 +163,11 @@
 		return `Every ${days} days`;
 	});
 	let stripe: Stripe | null = null;
-	let walletConnected = $state(false);
-	let pendingContractId = $state<string | null>(null);
-	let icpayEventUnsubscribe: (() => void) | null = null;
 
 	onMount(async () => {
 		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
 		if (publishableKey) {
 			stripe = await loadStripe(publishableKey);
-		}
-
-		// Set up ICPay event listeners
-		if (isIcpayConfigured()) {
-			const icpay = getIcpay();
-			if (icpay) {
-				icpayEventUnsubscribe = icpay.on(
-					"icpay-sdk-transaction-completed",
-					handleIcpaySuccess,
-				);
-			}
 		}
 
 		// Fetch user's saved SSH keys from profile
@@ -225,64 +190,11 @@
 		unsubscribe();
 	});
 
-	onDestroy(() => {
-		if (icpayEventUnsubscribe) {
-			icpayEventUnsubscribe();
-		}
-	});
-
 	function calculatePrice(): string {
 		if (!offering) return "0.00";
 		const hours = durationHours ?? 720;
 		const price = (offering.monthly_price * hours) / 720;
 		return price.toFixed(2);
-	}
-
-	async function connectWallet() {
-		try {
-			const walletSelect = getWalletSelect();
-			// For now, we'll try to connect with Internet Identity
-			// In the future, this could show a wallet selection dialog
-			await walletSelect.connect("ii");
-			walletConnected = true;
-			error = null;
-		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to connect wallet";
-			console.error("Wallet connection error:", e);
-		}
-	}
-
-	async function handleIcpaySuccess(detail: any) {
-		if (!pendingContractId) {
-			console.warn("ICPay payment completed but no pending contract ID");
-			return;
-		}
-
-		processingPayment = false;
-		loading = false;
-
-		// Record the transaction ID in the backend for audit trail
-		const transactionId = detail?.transactionId || detail?.id || detail?.txId;
-		if (transactionId) {
-			try {
-				const signingIdentityInfo = await authStore.getSigningIdentity();
-				if (signingIdentityInfo) {
-					const signed = await signRequest(
-						signingIdentityInfo.identity as Ed25519KeyIdentity,
-						"PUT",
-						`/api/v1/contracts/${pendingContractId}/icpay-transaction`,
-						{ transaction_id: transactionId }
-					);
-					await updateIcpayTransactionId(pendingContractId, transactionId, signed.headers);
-				}
-			} catch (e) {
-				// Log but don't fail - payment succeeded, just audit trail update failed
-				console.warn("Failed to record ICPay transaction ID:", e);
-			}
-		}
-
-		await maybeSaveKeyToProfile();
-		onSuccess(pendingContractId);
 	}
 
 	async function maybeSaveKeyToProfile() {
@@ -317,18 +229,7 @@
 			return;
 		}
 
-		if (paymentMethod === "icpay" && !isIcpayConfigured()) {
-			error = "ICPay is not configured. Please contact support.";
-			return;
-		}
-
-		if (paymentMethod === "icpay" && !walletConnected) {
-			error = "Please connect your wallet first";
-			return;
-		}
-
 		loading = true;
-		processingPayment = false;
 		error = null;
 
 		try {
@@ -352,42 +253,8 @@
 
 			const response = await createRentalRequest(params, signed.headers);
 
-			// If ICPay payment, process crypto payment
-			if (paymentMethod === "icpay") {
-				const icpay = getIcpay();
-				if (!icpay) {
-					error = "Failed to initialize ICPay SDK";
-					loading = false;
-					return;
-				}
-
-				processingPayment = true;
-				pendingContractId = response.contractId;
-
-				try {
-					const usdAmount = parseFloat(calculatePrice());
-					// Event listener will handle completion via handleIcpaySuccess
-					await icpay.createPaymentUsd({
-						usdAmount,
-						tokenShortcode: "ic_icp",
-						metadata: { contractId: response.contractId },
-					});
-					// Don't set processingPayment = false here; let the event handler do it
-				} catch (icpayError) {
-					error =
-						icpayError instanceof Error
-							? icpayError.message
-							: "ICPay payment failed";
-					console.error("ICPay payment error:", icpayError);
-					loading = false;
-					processingPayment = false;
-					pendingContractId = null;
-					return;
-				}
-			}
-
-			// If Stripe payment, redirect to Checkout
-			if (paymentMethod === "stripe" && response.checkoutUrl) {
+			// Stripe: redirect to Checkout
+			if (response.checkoutUrl) {
 				// Persist SSH key save intent in localStorage so the rentals page
 				// can complete the save after returning from Stripe Checkout.
 				if (saveKeyToProfile && isCustomKey && !sshKeyValidation && sshKey.trim()) {
@@ -397,12 +264,7 @@
 				return;
 			}
 
-			// For ICPay, success is handled via event listener
-			if (paymentMethod === "icpay") {
-				return;
-			}
-
-			// Fallback for other payment methods
+			// Self-rental / no-checkout path
 			await maybeSaveKeyToProfile();
 			onSuccess(response.contractId);
 		} catch (e) {
@@ -413,7 +275,6 @@
 			console.error("Rental request error:", e);
 		} finally {
 			loading = false;
-			processingPayment = false;
 		}
 	}
 </script>
@@ -667,129 +528,44 @@
 					</div>
 				{/if}
 
-				<!-- Payment Method -->
-				<fieldset>
-					<legend class="block text-sm font-medium text-white mb-2">
-						Payment Method
-					</legend>
-					<div class="grid grid-cols-2 gap-3">
-						<button
-							type="button"
-							onclick={() =>
-								isIcpayAvailable && (paymentMethod = "icpay")}
-							disabled={!isIcpayAvailable}
-							class="px-4 py-3  font-semibold transition-all border-2 {paymentMethod ===
-							'icpay'
-								? 'bg-primary-500/20 border-primary-500 text-white'
-								: isIcpayAvailable
-									? 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'
-									: 'bg-surface-elevated border-neutral-800 text-neutral-700 cursor-not-allowed'}"
-							title={!isIcpayAvailable
-								? `Crypto payment is not available for ${offering?.currency} currency`
-								: ""}
-						>
-							Crypto (ICPay)
-						</button>
-						<button
-							type="button"
-							onclick={() =>
-								isStripeAvailable && (paymentMethod = "stripe")}
-							disabled={!isStripeAvailable}
-							class="px-4 py-3  font-semibold transition-all border-2 {paymentMethod ===
-							'stripe'
-								? 'bg-primary-500/20 border-primary-500 text-white'
-								: isStripeAvailable
-									? 'bg-surface-elevated border-neutral-800 text-neutral-500 hover:border-white/40'
-									: 'bg-surface-elevated border-neutral-800 text-neutral-700 cursor-not-allowed'}"
-							title={!isStripeAvailable
-								? `Credit card payment is not available for ${offering?.currency} currency`
-								: ""}
-						>
-							Credit Card
-						</button>
-					</div>
-					{#if !isStripeAvailable}
-						<p class="text-xs text-yellow-400/80 mt-2">
-							Credit card payment is not available for {offering?.currency} currency
-						</p>
-					{:else if !isIcpayAvailable}
-						<p class="text-xs text-yellow-400/80 mt-2">
-							Crypto payment is not available for {offering?.currency} currency
-						</p>
+			<!-- Payment Info -->
+			{#if isSelfRental()}
+				<div
+					class="bg-green-500/10  p-4 border border-green-500/30"
+				>
+					<h3 class="text-sm font-semibold text-green-400 mb-2">
+						No Payment Required
+					</h3>
+					<p class="text-sm text-neutral-500">
+						You own this offering. The rental will be created
+						at no cost.
+					</p>
+				</div>
+			{:else}
+				<div
+					class="bg-surface-elevated  p-4 border border-neutral-800"
+				>
+					<h3 class="text-sm font-semibold text-neutral-400 mb-2">
+						Credit Card Payment via Stripe
+					</h3>
+					<p class="text-sm text-neutral-500">
+						You will be redirected to Stripe's secure checkout
+						page to complete your payment. Tax will be
+						calculated automatically based on your location.
+					</p>
+					{#if import.meta.env.DEV}
+						<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300 space-y-1">
+							<p class="font-semibold">Test mode — sample card numbers:</p>
+							<p>4242 4242 4242 4242 — succeeds immediately, no authentication</p>
+							<p>4000 0025 0000 3155 — requires 3D Secure 2 authentication</p>
+							<p>4000 0000 0000 9995 — declined: insufficient_funds</p>
+							<p>4000 0000 0000 0002 — declined: generic</p>
+							<p>4000 0000 0000 0069 — declined: expired card</p>
+							<p>4000 0000 0000 0127 — declined: incorrect CVC</p>
+						</div>
 					{/if}
-				</fieldset>
-
-				<!-- ICPay Payment Section -->
-				{#if paymentMethod === "icpay"}
-					<div
-						class="bg-surface-elevated  p-4 border border-neutral-800"
-					>
-						<h3 class="text-sm font-semibold text-neutral-400 mb-2">
-							Crypto Payment via ICPay
-						</h3>
-						<p class="text-sm text-neutral-500 mb-3">
-							Connect your wallet (Internet Identity, Plug, etc.)
-							to complete the payment with ICP or other supported
-							tokens.
-						</p>
-						{#if !walletConnected}
-							<button
-								type="button"
-								onclick={connectWallet}
-								class="w-full px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white  font-semibold transition-colors"
-							>
-								Connect Wallet
-							</button>
-						{:else}
-							<div class="flex items-center gap-2 text-green-400">
-								<span class="w-2 h-2 bg-green-400 rounded-full"
-								></span>
-								<span class="text-sm font-medium"
-									>Wallet Connected</span
-								>
-							</div>
-						{/if}
-					</div>
-				{/if}
-
-				<!-- Payment Info -->
-				{#if isSelfRental()}
-					<div
-						class="bg-green-500/10  p-4 border border-green-500/30"
-					>
-						<h3 class="text-sm font-semibold text-green-400 mb-2">
-							No Payment Required
-						</h3>
-						<p class="text-sm text-neutral-500">
-							You own this offering. The rental will be created
-							at no cost.
-						</p>
-					</div>
-				{:else if paymentMethod === "stripe"}
-					<div
-						class="bg-surface-elevated  p-4 border border-neutral-800"
-					>
-						<h3 class="text-sm font-semibold text-neutral-400 mb-2">
-							Credit Card Payment via Stripe
-						</h3>
-						<p class="text-sm text-neutral-500">
-							You will be redirected to Stripe's secure checkout
-							page to complete your payment. Tax will be
-							calculated automatically based on your location.
-						</p>
-						{#if import.meta.env.DEV}
-							<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300 space-y-1">
-								<p class="font-semibold">Test mode — sample card numbers:</p>
-								<p>4242 4242 4242 4242 — succeeds immediately, no authentication</p>
-								<p>4000 0025 0000 3155 — requires 3D Secure 2 authentication</p>
-								<p>4000 0000 0000 9995 — declined: insufficient_funds</p>
-								<p>4000 0000 0000 0002 — declined: generic</p>
-								<p>4000 0000 0000 0069 — declined: expired card</p>
-								<p>4000 0000 0000 0127 — declined: incorrect CVC</p>
-							</div>
-						{/if}
-					</div>
-				{/if}
+				</div>
+			{/if}
 
 				<!-- SSH Key (Required) - positioned after payment for better UX -->
 				<div>
@@ -1026,14 +802,7 @@
 					disabled={loading || (generatedPrivateKey !== null && !privateKeyDownloaded)}
 					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 				>
-					{#if processingPayment}
-						<span class="flex items-center justify-center gap-2">
-							<span
-								class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
-							></span>
-							Processing payment...
-						</span>
-					{:else if loading}
+					{#if loading}
 						<span class="flex items-center justify-center gap-2">
 							<span
 								class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
