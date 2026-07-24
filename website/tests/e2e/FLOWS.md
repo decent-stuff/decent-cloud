@@ -1,0 +1,225 @@
+# E2E Test Flow Catalog
+
+This file is the **single source of truth** mapping every user-facing flow in
+Decent Cloud to its Playwright E2E coverage. Keep it in sync with the specs
+under `tests/e2e/` — when you add a flow or a test, update this file (see
+[Keeping this file current](#keeping-this-file-current)).
+
+## How to use this file
+
+- Each row maps one user **flow** to the spec + test name that covers it.
+- **Status**
+  - ✅ covered — a dedicated test asserts this flow end-to-end.
+  - ⚠️ partial — only an entry-point / render / error branch is asserted; the
+    full happy path is not exercised (often because it needs external services,
+    complex seeding, or a provider/admin account the fixture can't provide).
+  - ❌ gap — no test covers this flow.
+- **Tags** column lists the flow's tags. `@smoke` marks a critical-path test
+  included in the fast dev-loop tier (`npm run test:e2e:fast:smoke`, <30s).
+- **Spec / Test** — the file under `tests/e2e/` and the `test(...)` title. A
+  flow may map to several tests; only the most representative is listed (search
+  the spec for the full set).
+- Spec paths are relative to `tests/e2e/` (e.g. `signin-flow.spec.ts`).
+
+### Tag legend
+
+| Tag | Meaning |
+|-----|---------|
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <30s, ~15 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
+| `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
+| `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
+| `@provider` | Provider dashboard: become provider, create/edit offering, status/stock/visibility, requests, earnings, agent pools, SLA. |
+| `@account` | Account: profile, devices/security, notifications, saved offerings, cloud accounts, subscription. |
+| `@billing` | Billing: invoices, transfers, billing settings, payment flows. |
+| `@admin` | Admin dashboard + access control. |
+
+### Running a category / tag
+
+```bash
+cd website
+npm run test:e2e:fast:smoke                 # ~15 critical-path tests, <30s (dev loop)
+npm run test:e2e:fast -- --grep @rental     # every flow in a category
+npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
+```
+
+---
+
+## Flow Index
+
+Status legend: ✅ covered · ⚠️ partial · ❌ gap
+
+### 1. Public (anonymous)
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Landing page (`/`) renders | ✅ | `@smoke` `@marketplace` | `anonymous-browsing.spec.ts` | `@smoke landing page (/) renders title, hero, and marketplace stats` |
+| Marketplace browse renders | ✅ | `@smoke` `@marketplace` | `anonymous-browsing.spec.ts` | `@smoke should allow anonymous user to view marketplace` |
+| Marketplace search (DSL) | ✅ | `@marketplace` | `search-dsl.spec.ts` | `should filter offerings by GPU type checkbox` (+6 more) |
+| Marketplace sort | ✅ | `@marketplace` | `marketplace-sort.spec.ts` | `desktop keeps the pill UI and exposes the <select> as an a11y alternative (#439)` |
+| Marketplace default-hide / empty state | ✅ | `@marketplace` | `marketplace-empty-state.spec.ts` · `anonymous-browsing.spec.ts` | `offers a reveal action when all offerings are hidden by default` · `should hide demo offerings by default on marketplace` |
+| Offering detail renders | ✅ | `@marketplace` | `rentable-offering-fixture.spec.ts` · `offline-provider-warning.spec.ts` | `seeded self_provisioned offering shows an enabled Rent Resource button` |
+| Offering detail SLA card | ✅ | `@marketplace` | `offering-sla-empty-state.spec.ts` | `shows friendly empty state instead of empty gray bars...` |
+| Offline-provider warning | ✅ | `@marketplace` | `offline-provider-warning.spec.ts` | `should disable Rent button and explain why when provider is offline` |
+| Validators page | ✅ | `@marketplace` | `validators.spec.ts` | `renders the three stat cards with their unique labels` |
+| Pricing (agents) | ✅ | `@marketplace` | `agents-pricing.spec.ts` · `agents.spec.ts` | `renders the single pricing tier with a price point and CTAs` |
+| Reputation search | ✅ | `@marketplace` | `reputation.spec.ts` | `renders the Reputation heading and search box` |
+| Reputation detail | ✅ | `@marketplace` | `reputation-detail.spec.ts` | `renders the reputation profile for a known account` |
+| Public user profile | ✅ | `@marketplace` | `user.spec.ts` · `profile-page.spec.ts` | `renders the User Info header and "User Not Found" card for an unknown name` |
+| Provider public page | ✅ | `@marketplace` | `providers.spec.ts` | `renders "Provider Not Found" card for an unknown identifier` |
+| Compare offerings | ⚠️ | `@smoke` `@marketplace` | `compare-share.spec.ts` | `@smoke copies canonical comparison URL and shows success feedback` — share-URL only; full multi-offering compare view not asserted |
+| 404 / error page | ✅ | `@marketplace` | `error-page.spec.ts` | `404 renders branded error page with navigation, not blank screen` |
+
+### 2. Auth
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Register (full flow) | ✅ | `@smoke` `@auth` | `registration-flow.spec.ts` | `@smoke should complete full registration flow with seed phrase` |
+| Sign in with valid credentials | ✅ | `@smoke` `@auth` | `signin-flow.spec.ts` | `@smoke should sign in successfully with valid credentials` |
+| Sign in: reject invalid seed | ✅ | `@auth` | `signin-flow.spec.ts` | `should reject invalid seed phrase` |
+| Sign out | ✅ | `@smoke` `@auth` | `signin-flow.spec.ts` | `@smoke should sign out successfully` |
+| Session persists after refresh | ✅ | `@auth` | `signin-flow.spec.ts` | `should maintain session after page refresh` |
+| Recover account | ✅ | `@auth` | `recovery-flow.spec.ts` | `should complete recovery flow with valid token` |
+| Verify email | ⚠️ | `@auth` | `verify-email.spec.ts` | `shows a missing-token error...` — error branches only; success-verify needs a real token |
+| Redirect / returnUrl | ✅ | `@auth` | `signin-flow.spec.ts` · `registration-flow.spec.ts` | `should redirect to returnUrl after successful sign-in` |
+| Login ↔ register CTA | ✅ | `@auth` | `login-registration-cta.spec.ts` | `Create account link jumps directly to seed backup (generate mode)` |
+| First-login onboarding modal | ✅ | `@smoke` `@auth` | `first-login-onboarding.spec.ts` | `@smoke guides a new user through all onboarding steps once` |
+
+### 3. Tenant Dashboard
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Dashboard overview loads | ✅ | `@smoke` `@account` | `dashboard-overview.spec.ts` | `@smoke dashboard loads all sections via the single combined /provider/dashboard call` |
+| Dashboard banner stack | ✅ | `@account` | `dashboard-banners.spec.ts` | `seed-phrase + unverified-email user sees BOTH banners simultaneously` |
+| Role-based content gating | ✅ | `@account` | `dashboard-role-gating.spec.ts` | `new user does not see provider trust metrics or red flags` |
+| Sidebar navigation | ✅ | `@smoke` `@account` | `anonymous-browsing.spec.ts` | `@smoke should show sidebar for anonymous users with all navigation items` |
+| Browse marketplace (authed) | ✅ | `@smoke` `@marketplace` | (see Public — marketplace browse) | — |
+| Rent an offering (dialog → contract) | ⚠️ | `@rental` | `rent-flow.spec.ts` | `rent an offering → contract appears on the rentals list with a Cancel button` — covered in the **full suite** only; excluded from smoke (6s + complex seeding) |
+| View rentals list | ✅ | `@smoke` `@rental` | `rentals.spec.ts` | `@smoke empty state: fresh user sees onboarding steps and marketplace CTAs` |
+| Rentals: populated state / tabs / search | ✅ | `@rental` | `rentals.spec.ts` | `populated state: shows contract cards with status tabs and counts` |
+| Cancel a rental | ✅ | `@smoke` `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `@smoke action: Cancel a requested contract moves it to Cancelled tab` |
+| Rental detail deep link | ✅ | `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `deep link: detail page at /dashboard/rentals/[id] loads` |
+| Post-rental welcome banner | ✅ | `@rental` | `post-rental-welcome.spec.ts` | `shows the welcome banner when arriving with ?welcome=true` |
+| Payment flows (Stripe / ICPay UI) | ⚠️ | `@billing` `@rental` | `payment-flows.spec.ts` | `Stripe payment UI - should show credit card option for supported currencies` — UI option rendering only; real checkout cannot complete in-harness |
+| Checkout cancel/success pages | ✅ | `@billing` | `checkout.spec.ts` | `renders the cancelled-payment page without a contract_id` |
+| Save / unsave offerings | ✅ | `@account` `@marketplace` | `offering-detail-save.spec.ts` · `saved-offerings.spec.ts` | `bookmark toggle on offering detail page saves in a single click` |
+| Edit profile | ✅ | `@smoke` `@account` | `profile-page.spec.ts` · `account-profile-edit.spec.ts` | `@smoke profile edit persists after save and reload` |
+| Manage devices / security | ⚠️ | `@account` | `account-page.spec.ts` | `account page: open Add Device modal` — modal open/cancel + device-name edit; actual add-device submit not asserted |
+| Account overview / settings nav | ✅ | `@account` | `account-page.spec.ts` | `account page: overview renders correctly via direct URL` |
+| Account error recovery | ✅ | `@account` | `account.spec.ts` | `shows error card with Retry and Logout when account fetch fails (#6)` |
+| Subscription / plan | ✅ | `@account` | `account-subscription.spec.ts` | `renders current free plan plus the upgrade catalog with paid tiers` |
+| Billing settings (address/VAT) | ✅ | `@billing` `@account` | `billing-settings.spec.ts` | `billing settings: save billing address` (+spending alerts) |
+| Invoices | ✅ | `@billing` | `invoices.spec.ts` | `populated state: shows invoice table with one row per invoiceable contract` |
+| Transfers | ✅ | `@billing` | `transfers.spec.ts` | `populated state: shows sent and received transfers with direction icons` |
+| Notifications (bell + channels) | ✅ | `@account` | `notification-bell.spec.ts` · `account-notifications.spec.ts` | `badge displays the correct unread count from the DB` |
+| Cloud accounts | ⚠️ | `@account` | `cloud.spec.ts` | `"Add Account" modal exposes the Hetzner + Proxmox provider options` — modal render + empty state; real cloud connect not asserted |
+| Keyboard shortcut (focus search) | ✅ | `@smoke` `@marketplace` | `keyboard-shortcuts.spec.ts` | `@smoke / focuses marketplace search input` |
+
+### 4. Provider Dashboard
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Become provider / setup wizard | ⚠️ | `@smoke` `@provider` | `become-provider.spec.ts` · `dashboard-overview.spec.ts` | `@smoke renders step 1, advances to step 2, and links Hetzner onboarding` — wizard render + Get Started CTA; full onboarding submit not asserted |
+| Create offering (full submit) | ⚠️ | `@provider` | `become-provider.spec.ts` | wizard stops before the create submit (commented out — would create a real row). CSV template download covered in `offerings-template.spec.ts`. |
+| Edit offering | ✅ | `@provider` | `offering-edit.spec.ts` | `submit persists the change and redirects to the offerings list` |
+| Offering status badge (a11y) | ✅ | `@provider` | `offering-status-badge.spec.ts` | `tooltip becomes visible when the badge button receives focus (#15)` |
+| Manage visibility | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `visibility menu lists all states with descriptions and persists selection` |
+| Manage stock status | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `stock menu lists all states with descriptions and persists selection` |
+| View requests (non-provider gate) | ✅ | `@provider` | `provider-requests-auth.spec.ts` | `shows the provider-setup-required banner for a non-provider account` |
+| Accept / reject a request | ❌ | `@provider` | — | UI batch-action buttons are only asserted absent for anonymous users (`provider-batch-actions.spec.ts`); accept/reject as an authenticated provider is covered by API integration tests, not E2E. |
+| Auto-accept toggle | ❌ | `@provider` | — | No test. |
+| Provider sub-pages render | ✅ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/* renders heading ... and its empty state` (analytics, feedback, password-resets, reseller, sla, ssh-key-rotations) |
+| Agent pools | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/agents renders heading and the "New Pool" action` — render only; pool create/manage not asserted |
+| Earnings | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/earnings renders heading and revenue overview panel` — panel render only |
+| SLA metrics | ✅ | `@smoke` `@provider` | `provider-response-metrics.spec.ts` · `offering-sla-empty-state.spec.ts` | `@smoke GET /providers/:pubkey/response-metrics returns contract request SLA metrics` |
+| Notification settings | ✅ | `@provider` | `notification-settings.spec.ts` | `notification settings: section, channels, save button, tier limits, and usage grid render correctly` |
+| Password resets (provider view) | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/password-resets renders heading ... and its empty state` — empty-state render only |
+
+### 5. Admin
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Admin dashboard renders (admin) | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show admin features when user is admin` |
+| Access control: anonymous denied | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show access denied for anonymous users` |
+| Access control: non-admin denied | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show access denied for non-admin users` |
+| Admin sidebar link gating | ✅ | `@admin` | `admin-dashboard.spec.ts` | `should show Admin link in sidebar for admin users` |
+| Failed-email error visibility | ✅ | `@admin` | `admin-dashboard.spec.ts` | `failed-email error is fully visible, not truncated (#11)` |
+| Admin actions (send email, manage accounts) | ❌ | `@admin` | — | No test exercises mutating admin actions from the UI. |
+
+### Cross-cutting
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| Route audit (every public + authed route) | ✅ | — | `route-audit.spec.ts` | parametrized per route — catches 4xx/5xx, console errors, missing headings |
+| Chatwoot identity / support-access API | ✅ | — | `chatwoot-api.spec.ts` | `GET /chatwoot/identity returns identity hash for authenticated user` |
+
+---
+
+## Smoke tier (`@smoke`)
+
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~17 tests,
+**<30s** against the warm stack). Selection rules:
+
+- **Critical path only** — sign in/out, register, browse, dashboard, rent/cancel
+  lifecycle entry, provider create, profile edit, keyboard shortcut, auth modal.
+- **Fast** — each test <5s. Exclude anything that drives a slow multi-step flow
+  or needs `networkidle`.
+- **Low seed** — exclude tests that need complex DB seeding (e.g. the real
+  rent-via-dialog flow in `rent-flow.spec.ts`). Prefer empty-state / render /
+  single-row-seed tests.
+- **Reliable** — no flaky parallel-DB races; deterministic SSR waits.
+
+Current smoke membership (run `npx playwright test --list --grep @smoke`):
+
+| # | Flow | Spec:Test |
+|---|------|-----------|
+| 1 | Landing renders | `anonymous-browsing.spec.ts` › `@smoke landing page (/) renders...` |
+| 2 | Marketplace browse | `anonymous-browsing.spec.ts` › `@smoke ...view marketplace` |
+| 3 | Auth modal on protected action | `anonymous-browsing.spec.ts` › `@smoke ...auth modal...rent resource` |
+| 4 | Sidebar navigation | `anonymous-browsing.spec.ts` › `@smoke ...sidebar...navigation items` |
+| 5 | Provider SLA metrics (API) | `provider-response-metrics.spec.ts` › `@smoke ...response-metrics returns contract request SLA metrics` |
+| 6 | Provider SLA metrics (invalid pubkey) | `provider-response-metrics.spec.ts` › `@smoke ...error for invalid pubkey...` |
+| 7 | Registration completes | `registration-flow.spec.ts` › `@smoke should complete full registration flow...` |
+| 8 | Provider create wizard | `become-provider.spec.ts` › `@smoke renders step 1, advances to step 2...` |
+| 9 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
+| 10 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
+| 11 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
+| 12 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
+| 13 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
+| 14 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
+| 15 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
+| 16 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
+| 17 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
+
+> **Coverage note.** 13 of the 14 critical paths are covered. The remaining
+> path — *rent an offering (dialog → real contract)* — is intentionally **not**
+> in smoke: its only coverage (`rent-flow.spec.ts`) is >5s and needs complex DB
+> seeding, violating the smoke selection rules. It is fully covered by the full
+> suite (`npm run test:e2e:fast`).
+
+## Keeping this file current
+
+This is a **living document**. When you change the suite:
+
+1. **Added a test?** Find the flow it covers in the index. If the flow exists,
+   update its Status/Spec/Test row. If it's a new flow, add a row under the
+   right category and pick the appropriate tags.
+2. **Added a flow with no test?** Add the row with Status ❌ and file a GitHub
+   issue so the gap is tracked.
+3. **Tagged something `@smoke`?** It must satisfy the smoke selection rules
+   above (critical, <5s, low-seed, reliable). Add it to the smoke membership
+   table and confirm `npm run test:e2e:fast:smoke` still finishes <30s.
+4. **Removed/renamed a test?** Update every row that referenced it; re-check
+   the flow's Status (it may drop from ✅ to ❌).
+5. **Re-validate periodically** with:
+   ```bash
+   npx playwright test --list --grep @smoke   # confirm smoke membership
+   npm run test:e2e:fast:smoke                # confirm <30s + green
+   ```
+
+### Adding a category tag
+
+Tags live in test titles (e.g. `test('@smoke ...')`) and are matched with
+Playwright's `--grep`. The category tags (`@auth`, `@marketplace`, …) in this
+file are documentation-only labels for the index — they are not required in
+test titles. Only `@smoke` is matched at runtime.
