@@ -7,7 +7,7 @@ for the full analysis). That doc is research-only; THIS plan implements its **Ph
 build sequence against real code, then continues with a fresh functional/visual issue sweep
 and e2e coverage.
 
-**STATUS: IN PROGRESS**
+**STATUS: Phase 1A+1B+1A.5 COMPLETE — Phase 1C IN PROGRESS**
 
 ## Why this exists
 The user brief: "If there are documented (pre-existing) issues, fix them ALL first." The
@@ -67,15 +67,54 @@ of first-party code. Verify with `cargo nextest run -p api` + the warm-stack e2e
 - **RED:** boot with `ENVIRONMENT=prod` + no `STRIPE_SECRET_KEY` must refuse to start; refund with no Stripe client must `Err`.
 - **GREEN:** `serve_command()` startup validation: if `ENVIRONMENT=prod` and either Stripe secret unset → `Err` (fail-fast). `issue_audited_refund`: no client → `Err("cannot refund: STRIPE_SECRET_KEY not configured")` instead of `Ok(None)`.
 
+## Phase 1A.5 — test-infra DRY + dev-cycle — COMPLETE (commit `51131bfd`)
+- Replaced 49-entry hardcoded `include_str!` array + `migration_hash()` with `sqlx::migrate!()`.
+- +37 / −290 lines. All migration tests + 123 contracts::tests pass (047/048/049 CHECKs confirmed).
+- Dev cycle: targeted nextest runs are already 1-11s (the goal). Full suite (~2537 tests) needs
+  a wall-clock budget, not per-invocation.
+
 ## Phase 1B — fresh functional/visual audit (subagents, no mocks)
 Dispatch read-mostly subagents against the warm stack (web:59010, api:59011) via `scripts/browser.js`:
 - **Audit-1:** every `/dashboard/*` + `/account/*` route — console errors, dead links, spinners, AI-slop/stubs, broken forms.
 - **Audit-2:** marketplace + rental detail + public pages (landing, login, providers) — flows a new + returning user hits.
 Findings logged to `docs/OPEN_ISSUES.md`; each fix is TDD RED→GREEN→commit.
 
-## Phase 1C — e2e coverage for money-safety + new flows
-- e2e/integration tests proving the new guards (A1–A4) hold through the real API.
-- Close any high-value coverage gap found by the audits.
+### Phase 1B — COMPLETE (7 commits, `02affbf7`–`6b4d36e2`)
+| Commit | Fix | Impact |
+|--------|-----|--------|
+| `02affbf7` | Cluster A: SSE env var `VITE_API_BASE_URL` → import `API_BASE_URL` from `api.ts` | 2 routes: live contract-status SSE + live password-reset SSE |
+| `f40e35eb` | B1: `getContractUsage` signed for correct path | contract usage 401 → 200 |
+| `d5a2e019` | SSE auth double-prefix bug (discovered) | ALL SSE handlers: `/api/v1/api/v1/...` → correct path |
+| `ab460a6e` | clippy fixup for auth.rs | clean build |
+| `e7519ee4` | B2: pending-password-reset `AgentAuthenticatedUser` → `ProviderOrAgentAuth` | provider self-service 401 → 200 |
+| `6b4d36e2` | B3+B4: new `GET /users/:pk/public-profile` (no auth) + `PublicContractSummary` | reputation/user pages 401 → 200; no sensitive data leak |
+
+**Result:** 43/43 routes PASS, 0 findings. `KNOWN_BROKEN` map empty. Vitest 866 passed. `npm run check` 0 errors.
+
+Also: `7da934bc` — saved-offerings spec serial mode (parallel DB cleanup race fix).
+
+## Phase 1C — radically improve e2e harness + UX optimization
+
+### Goal
+1. **Flow catalog** (`tests/e2e/FLOWS.md`) — single source of truth mapping ALL user flows → tests + coverage status.
+2. **Expanded smoke tier** — `@smoke` tags on ~15 critical-path tests, runnable in <30s.
+3. **Coverage gap closure** — provider accept/reject contracts, password reset interactions, agent management.
+4. **UX optimization** — reduce clicks, keyboard shortcuts, simplify flows (with e2e tests codifying the optimized flows).
+5. **Speed** — smoke tier in seconds for dev loop; full suite acceptable for CI.
+
+### Coverage gaps identified (preliminary)
+| Gap | Priority | Notes |
+|-----|----------|-------|
+| Provider accept/reject contract requests | HIGH | Only anonymous test exists; no authenticated accept/reject flow |
+| Password reset interactions | MEDIUM | Page loads (fixed in 1B) but no interaction test |
+| Provider agent pool management | LOW | Only heading smoke test |
+| Full rent→accept→provision cycle | MEDIUM | Only up to `requested` (Stripe can't complete in harness) |
+
+### Current harness state
+- 56 spec files, 256 tests, 3.7 min with 4 workers.
+- Well-structured fixtures: `test-account` (fast-auth via `addInitScript`), `seed-helpers` (DB-direct), `auth-helpers`, `api-base`, `stripe-mock` (external boundary only).
+- Vitest (866 tests) = pure-logic unit tests, NOT UI verification — correctly placed, no migration needed.
+- No TUI/desktop app exists — surfaces are Web (SvelteKit) + CLI (`cli/`).
 
 ## Method
 PoC-first (repo/AGENTS.md) → RED → GREEN → keep test → commit each unit. No mocks in prod.
@@ -84,3 +123,28 @@ Commit each unit when done. Run `cargo nextest run -p api` + warm-stack e2e afte
 
 ## Session commit log
 _(updated as units land)_
+
+### Phase 1A — money-safety holes closed (TDD, all GREEN)
+| Commit | Item | Risk closed |
+|--------|------|-------------|
+| `220c2a82` | A1: R10 payment_status allow-list + CHECK migration 047 | R10 |
+| `e6b5441e` | A2: R1 gate provisioning on payment_status, migration 048 | R1 |
+| `45d40d82` | A3: R2/R3 refund+release integrity, migration 049 | R2/R3 |
+| `6b3ad47e` | A4: R5 no silent refund marking + prod Stripe requirement | R5 |
+| `41841fc8` | follow-up: stats test setups consistent with 048 CHECK | — |
+| `46edc93c` | R9: dispute-lost refund subtracts released funds | R9 |
+
+495 money-safety tests + 530 contract-touching tests PASS, 0 regressions. `.sqlx` cache
+regenerated + committed. Remaining research-doc risks (R4/R6/R7/R8) are ICPay/webhook/timing
+items needing product decisions — parked in `cost-safe-billing.md`.
+
+**Out-of-Phase-1A bugs found (for later):** `timeouts.rs:414 mark_provisioning_failed` refunds
+full `payment_amount_e9s` (safe today, fragile); ICPay "succeeded immediately" timing (R2.9);
+test-helper `insert_contract_request` hardcodes `payment_amount_e9s=1000` + ambiguous 6th arg.
+
+## Phase 1A.5 — test-infra DRY + dev-cycle (planned)
+- `test_helpers.rs:529-726` migration list is a 49-entry hardcoded `include_str!` array → every
+  new migration must be hand-added or tests SILENTLY skip it. Replace with `sqlx::migrate!`
+  (auto-discovers + orders `.sql` files) — eliminates the footgun + DRYs.
+- Dev cycle: targeted nextest runs are already 1-11s (the goal). Full suite (~2537 tests) needs
+  a wall-clock budget, not per-invocation. Document the targeted-loop workflow.
