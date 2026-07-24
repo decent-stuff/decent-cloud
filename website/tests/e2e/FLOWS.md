@@ -25,7 +25,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 | Tag | Meaning |
 |-----|---------|
-| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <30s, ~15 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <30s, ~23 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
@@ -67,7 +67,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Reputation detail | ✅ | `@marketplace` | `reputation-detail.spec.ts` | `renders the reputation profile for a known account` |
 | Public user profile | ✅ | `@marketplace` | `user.spec.ts` · `profile-page.spec.ts` | `redirects to the reputation page preserving the identifier` |
 | Provider public page | ✅ | `@marketplace` | `providers.spec.ts` | `renders "Provider Not Found" card for an unknown identifier` |
-| Compare offerings | ✅ | `@smoke` `@marketplace` | `compare-share.spec.ts` | `@smoke renders the side-by-side comparison table for two seeded offerings` |
+| Compare offerings | ✅ | `@smoke` `@marketplace` | `compare-share.spec.ts` | `@smoke copies canonical comparison URL and shows success feedback` (share URL @smoke) · `renders the side-by-side comparison table for two seeded offerings` (full view — full suite only; seeds 2 offerings, violates smoke low-seed rule) |
 | 404 / error page | ✅ | `@marketplace` | `error-page.spec.ts` | `404 renders branded error page with navigation, not blank screen` |
 
 ### 2. Auth
@@ -157,7 +157,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~24 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~23 tests,
 **<30s** against the warm stack). Selection rules:
 
 - **Critical path only** — sign in/out, register, browse, dashboard, rent/cancel
@@ -185,18 +185,17 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 10 | Command palette trigger | `command-palette-trigger.spec.ts` › `@smoke sidebar shows a clickable command-palette trigger on desktop` |
 | 11 | Command palette provider actions | `command-palette-trigger.spec.ts` › `@smoke authenticated palette lists provider actions...` |
 | 12 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
-| 13 | Compare full multi-offering view | `compare-share.spec.ts` › `@smoke renders the side-by-side comparison table for two seeded offerings` |
-| 14 | Add device submit | `account-add-device.spec.ts` › `@smoke links a generated device key and raises the device count from 1 to 2` |
-| 15 | Offering detail breadcrumb | `offering-detail-save.spec.ts` › `@smoke breadcrumb root crumb matches its destination` |
-| 16 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
-| 17 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
-| 18 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
-| 19 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
-| 20 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
-| 21 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
-| 22 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
-| 23 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 24 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
+| 13 | Add device submit | `account-add-device.spec.ts` › `@smoke links a generated device key and raises the device count from 1 to 2` |
+| 14 | Offering detail breadcrumb | `offering-detail-save.spec.ts` › `@smoke breadcrumb root crumb matches its destination` |
+| 15 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
+| 16 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
+| 17 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
+| 18 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
+| 19 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
+| 20 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
+| 21 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
+| 22 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
+| 23 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**

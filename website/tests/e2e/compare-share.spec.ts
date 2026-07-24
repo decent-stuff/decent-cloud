@@ -34,7 +34,7 @@ test.describe('Marketplace compare sharing', () => {
  * avoided (offline/hidden — OPEN_ISSUES H6) in favour of self-contained rows.
  */
 test.describe('Marketplace compare full view', () => {
-	test('@smoke renders the side-by-side comparison table for two seeded offerings', async ({ page }) => {
+	test('renders the side-by-side comparison table for two seeded offerings', async ({ page }) => {
 		const a = await seedRentableOffering({ name: 'E2E Compare Alpha' });
 		const b = await seedRentableOffering({ name: 'E2E Compare Beta' });
 		try {
