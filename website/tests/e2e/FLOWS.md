@@ -104,7 +104,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Checkout cancel/success pages | ✅ | `@billing` | `checkout.spec.ts` | `renders the cancelled-payment page without a contract_id` |
 | Save / unsave offerings | ✅ | `@account` `@marketplace` | `offering-detail-save.spec.ts` · `saved-offerings.spec.ts` | `bookmark toggle on offering detail page saves in a single click` |
 | Edit profile | ✅ | `@smoke` `@account` | `profile-page.spec.ts` · `account-profile-edit.spec.ts` | `@smoke profile edit persists after save and reload` |
-| Manage devices / security | ⚠️ | `@account` | `account-page.spec.ts` | `account page: open Add Device modal` — modal open/cancel + device-name edit; actual add-device submit not asserted |
+| Manage devices / security | ✅ | `@smoke` `@account` | `account-add-device.spec.ts` · `account-page.spec.ts` | `@smoke links a generated device key and raises the device count from 1 to 2` |
 | Account overview / settings nav | ✅ | `@account` | `account-page.spec.ts` | `account page: overview renders correctly via direct URL` |
 | Account error recovery | ✅ | `@account` | `account.spec.ts` | `shows error card with Retry and Logout when account fetch fails (#6)` |
 | Subscription / plan | ✅ | `@account` | `account-subscription.spec.ts` | `renders current free plan plus the upgrade catalog with paid tiers` |
