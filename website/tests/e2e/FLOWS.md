@@ -126,8 +126,8 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Manage visibility | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `visibility menu lists all states with descriptions and persists selection` |
 | Manage stock status | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `stock menu lists all states with descriptions and persists selection` |
 | View requests (non-provider gate) | ✅ | `@provider` | `provider-requests-auth.spec.ts` | `shows the provider-setup-required banner for a non-provider account` |
-| Accept / reject a request | ❌ | `@provider` | — | UI batch-action buttons are only asserted absent for anonymous users (`provider-batch-actions.spec.ts`); accept/reject as an authenticated provider is covered by API integration tests, not E2E. |
-| Auto-accept toggle | ❌ | `@provider` | — | No test. |
+| Accept / reject a request | ✅ | `@provider` | `provider-accept-reject.spec.ts` | `accept a contract request removes it from pending` (+reject, render, auto-accept toggle) — authenticated provider seeds contracts where it is the provider, then accepts/rejects via signed POST .../respond |
+| Auto-accept toggle | ✅ | `@provider` | `provider-accept-reject.spec.ts` | `auto-accept toggle can be enabled` — flips the provider_profiles.auto_accept_rentals toggle and asserts the enabled state + banner |
 | Provider sub-pages render | ✅ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/* renders heading ... and its empty state` (analytics, feedback, password-resets, reseller, sla, ssh-key-rotations) |
 | Agent pools | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/agents renders heading and the "New Pool" action` — render only; pool create/manage not asserted |
 | Earnings | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/earnings renders heading and revenue overview panel` — panel render only |
