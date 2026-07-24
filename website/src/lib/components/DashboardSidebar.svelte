@@ -20,7 +20,12 @@
 	import ThemeToggle from './ThemeToggle.svelte';
 	import UnreadBadge from './UnreadBadge.svelte';
 
-	let { isOpen = $bindable(false), isAuthenticated = false } = $props();
+	let { isOpen = $bindable(false), isAuthenticated = false, openPalette = () => {} } = $props();
+
+	// Platform-aware shortcut hint for the command-palette trigger: ⌘ on
+	// Apple platforms, Ctrl everywhere else. The trigger advertises the
+	// Cmd/Ctrl+K shortcut so the palette is discoverable without guessing.
+	const modKey = browser && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 	let currentPath = $state('');
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -248,6 +253,26 @@
 		<a href="/" class="text-base font-bold text-white hover:text-primary-400 transition-colors tracking-tight">
 			Decent Cloud
 		</a>
+	</div>
+
+	<!-- Command palette trigger: the only visible affordance for Cmd/Ctrl+K
+	     on desktop. Mirrors the mobile header's search button so the palette
+	     is discoverable without knowing the keyboard shortcut. -->
+	<div class="px-3 pt-3">
+		<button
+			type="button"
+			onclick={() => { openPalette(); closeSidebar(); }}
+			class="nav-item w-full justify-between group"
+			aria-label="Open command palette"
+		>
+			<span class="flex items-center">
+				<Icon name="search" size={20} />
+				<span class="text-sm text-neutral-400 group-hover:text-white transition-colors">Search</span>
+			</span>
+			<kbd class="text-[10px] font-mono text-neutral-500 border border-neutral-700 rounded px-1.5 py-0.5 leading-none">
+				{modKey} K
+			</kbd>
+		</button>
 	</div>
 
 	<!-- Navigation -->

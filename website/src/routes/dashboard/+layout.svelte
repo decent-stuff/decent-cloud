@@ -102,7 +102,7 @@
 	<CommandPalette bind:this={commandPalette} />
 
 	<!-- Sidebar -->
-	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} />
+	<DashboardSidebar bind:isOpen={isSidebarOpen} {isAuthenticated} openPalette={() => commandPalette?.openPalette()} />
 
 	<!-- Mobile header -->
 	<header class="fixed top-0 left-0 right-0 h-14 bg-surface border-b border-neutral-800/80 flex items-center px-4 md:hidden z-30">

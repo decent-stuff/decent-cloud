@@ -256,7 +256,13 @@
 			tabindex="-1"
 			class="bg-surface border border-neutral-700 rounded-lg w-full max-w-xl shadow-2xl overflow-hidden"
 			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
+			onkeydown={(e) => {
+				// Let the palette's own navigation keys (handled by the
+				// <svelte:window onkeydown> above) bubble up; stop everything
+				// else so typing a query here can't trigger page-level shortcuts.
+				const handled = ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'];
+				if (!handled.includes(e.key)) e.stopPropagation();
+			}}
 		>
 			<!-- Search input -->
 			<div class="flex items-center border-b border-neutral-700">
