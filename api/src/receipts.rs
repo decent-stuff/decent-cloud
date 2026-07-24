@@ -294,26 +294,37 @@ pub async fn send_contract_accepted_notification(db: &Database, contract_id: &[u
     };
 
     // Insert in-app notification for the requester
-    if let Ok(requester_pubkey) = hex::decode(&contract.requester_pubkey) {
-        if let Err(e) = db
-            .insert_user_notification(
-                &requester_pubkey,
-                "contract_status",
-                "Rental Request Accepted",
-                &format!(
-                    "Your rental request {}... has been accepted. Provisioning will begin shortly.",
-                    &contract_hex[..16]
-                ),
-                Some(&contract_hex),
-                None,
-                None,
-            )
-            .await
-        {
+    match hex::decode(&contract.requester_pubkey) {
+        Ok(requester_pubkey) => {
+            if let Err(e) = db
+                .insert_user_notification(
+                    &requester_pubkey,
+                    "contract_status",
+                    "Rental Request Accepted",
+                    &format!(
+                        "Your rental request {}... has been accepted. Provisioning will begin shortly.",
+                        &contract_hex[..16]
+                    ),
+                    Some(&contract_hex),
+                    None,
+                    None,
+                )
+                .await
+            {
+                tracing::warn!(
+                    "Failed to insert in-app notification for accepted contract {}: {}",
+                    contract_hex,
+                    e
+                );
+            }
+        }
+        Err(e) => {
+            let truncated: String = contract.requester_pubkey.chars().take(64).collect();
             tracing::warn!(
-                "Failed to insert in-app notification for accepted contract {}: {}",
+                "Failed to decode requester pubkey hex for contract {}; in-app accepted notification dropped: {}. Bad value (truncated): {:?}",
                 contract_hex,
-                e
+                e,
+                truncated
             );
         }
     }
@@ -415,28 +426,39 @@ pub async fn send_contract_rejected_notification(
     };
 
     // Insert in-app notification for the requester
-    if let Ok(requester_pubkey) = hex::decode(&contract.requester_pubkey) {
-        let reason_text = reject_memo.unwrap_or("No reason provided");
-        if let Err(e) = db
-            .insert_user_notification(
-                &requester_pubkey,
-                "contract_status",
-                "Rental Request Rejected",
-                &format!(
-                    "Your rental request {}... was rejected. Reason: {}. A refund has been initiated.",
-                    &contract_hex[..16],
-                    reason_text
-                ),
-                Some(&contract_hex),
-                None,
-                None,
-            )
-            .await
-        {
+    match hex::decode(&contract.requester_pubkey) {
+        Ok(requester_pubkey) => {
+            let reason_text = reject_memo.unwrap_or("No reason provided");
+            if let Err(e) = db
+                .insert_user_notification(
+                    &requester_pubkey,
+                    "contract_status",
+                    "Rental Request Rejected",
+                    &format!(
+                        "Your rental request {}... was rejected. Reason: {}. A refund has been initiated.",
+                        &contract_hex[..16],
+                        reason_text
+                    ),
+                    Some(&contract_hex),
+                    None,
+                    None,
+                )
+                .await
+            {
+                tracing::warn!(
+                    "Failed to insert in-app notification for rejected contract {}: {}",
+                    contract_hex,
+                    e
+                );
+            }
+        }
+        Err(e) => {
+            let truncated: String = contract.requester_pubkey.chars().take(64).collect();
             tracing::warn!(
-                "Failed to insert in-app notification for rejected contract {}: {}",
+                "Failed to decode requester pubkey hex for contract {}; in-app rejected/refund notification dropped: {}. Bad value (truncated): {:?}",
                 contract_hex,
-                e
+                e,
+                truncated
             );
         }
     }
