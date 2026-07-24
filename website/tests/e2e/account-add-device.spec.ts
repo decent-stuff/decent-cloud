@@ -53,7 +53,7 @@ test.describe('Add Device submit flow (/dashboard/account/security)', () => {
 
 			// The success step only renders after the signed addAccountKey POST
 			// resolves and the account reloads — its heading IS the "key linked"
-			// signal (no networkidle needed).
+			// signal (no network-settle wait needed).
 			await expect(page.getByRole('heading', { name: 'Device Added!' })).toBeVisible({ timeout: 20000 });
 
 			// Close the modal to reveal the updated device list.

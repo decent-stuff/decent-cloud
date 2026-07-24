@@ -157,7 +157,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~17 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~24 tests,
 **<30s** against the warm stack). Selection rules:
 
 - **Critical path only** — sign in/out, register, browse, dashboard, rent/cancel
@@ -177,19 +177,26 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 2 | Marketplace browse | `anonymous-browsing.spec.ts` › `@smoke ...view marketplace` |
 | 3 | Auth modal on protected action | `anonymous-browsing.spec.ts` › `@smoke ...auth modal...rent resource` |
 | 4 | Sidebar navigation | `anonymous-browsing.spec.ts` › `@smoke ...sidebar...navigation items` |
-| 5 | Provider SLA metrics (API) | `provider-response-metrics.spec.ts` › `@smoke ...response-metrics returns contract request SLA metrics` |
-| 6 | Provider SLA metrics (invalid pubkey) | `provider-response-metrics.spec.ts` › `@smoke ...error for invalid pubkey...` |
-| 7 | Registration completes | `registration-flow.spec.ts` › `@smoke should complete full registration flow...` |
-| 8 | Provider create wizard | `become-provider.spec.ts` › `@smoke renders step 1, advances to step 2...` |
-| 9 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
-| 10 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
-| 11 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
-| 12 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
-| 13 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
-| 14 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
-| 15 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
-| 16 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 17 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
+| 5 | User profile redirect | `user.spec.ts` › `@smoke redirects to the reputation page...` |
+| 6 | Provider SLA metrics (API) | `provider-response-metrics.spec.ts` › `@smoke ...response-metrics returns contract request SLA metrics` |
+| 7 | Provider SLA metrics (invalid pubkey) | `provider-response-metrics.spec.ts` › `@smoke ...error for invalid pubkey...` |
+| 8 | Registration completes | `registration-flow.spec.ts` › `@smoke should complete full registration flow...` |
+| 9 | Provider create wizard (render) | `become-provider.spec.ts` › `@smoke renders step 1, advances to step 2...` |
+| 10 | Command palette trigger | `command-palette-trigger.spec.ts` › `@smoke sidebar shows a clickable command-palette trigger on desktop` |
+| 11 | Command palette provider actions | `command-palette-trigger.spec.ts` › `@smoke authenticated palette lists provider actions...` |
+| 12 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
+| 13 | Compare full multi-offering view | `compare-share.spec.ts` › `@smoke renders the side-by-side comparison table for two seeded offerings` |
+| 14 | Add device submit | `account-add-device.spec.ts` › `@smoke links a generated device key and raises the device count from 1 to 2` |
+| 15 | Offering detail breadcrumb | `offering-detail-save.spec.ts` › `@smoke breadcrumb root crumb matches its destination` |
+| 16 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
+| 17 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
+| 18 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
+| 19 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
+| 20 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
+| 21 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
+| 22 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
+| 23 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
+| 24 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
