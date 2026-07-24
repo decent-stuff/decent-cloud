@@ -467,7 +467,9 @@
 						<div class="text-2xl font-semibold text-white">
 							{healthSummary.uptimePercent.toFixed(1)}%
 						</div>
-						{#if healthSummary.uptimePercent >= 99}
+						{#if healthSummary.totalChecks === 0}
+							<div class="badge badge-neutral mt-2">No health checks yet</div>
+						{:else if healthSummary.uptimePercent >= 99}
 							<div class="badge badge-success mt-2">Excellent</div>
 						{:else if healthSummary.uptimePercent >= 95}
 							<div class="badge badge-success mt-2">Good</div>

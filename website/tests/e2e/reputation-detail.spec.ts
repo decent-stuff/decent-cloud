@@ -51,6 +51,31 @@ anonymousTest.describe('/dashboard/reputation/[identifier] (anonymous)', () => {
 		}
 	});
 
+	anonymousTest('shows a neutral uptime badge when the provider has no health checks', async ({ page }) => {
+		// A fresh account has never been monitored, so the health summary
+		// returns totalChecks=0 with uptimePercent=0.0. Previously that
+		// fell through the percentage ladder into the red "Poor" badge —
+		// unfairly penalising every new/unmonitored provider on the report
+		// renters use to evaluate trust.
+		const { username, seedPhrase } = await seedAccountDirect();
+		const pubkey = pubkeyHexFromSeed(seedPhrase);
+		try {
+			await page.goto(`/dashboard/reputation/${username}`);
+
+			const main = page.locator('main');
+
+			// The Provider Health card must render.
+			await expect(main.getByText('Provider Health (Last 30 Days)')).toBeVisible({ timeout: 10000 });
+
+			// The Uptime cell must show a NEUTRAL badge — never the red
+			// "Poor" badge that the percentage ladder produced.
+			await expect(main.getByText('No health checks yet')).toBeVisible();
+			await expect(main.getByText('Poor')).toHaveCount(0);
+		} finally {
+			await deleteAccountByUsername(username);
+		}
+	});
+
 	anonymousTest('renders the "No Account Data" state for an unknown identifier', async ({ page }) => {
 		await page.goto('/dashboard/reputation/nonexistent-user-zzz');
 
