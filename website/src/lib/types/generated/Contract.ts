@@ -16,7 +16,7 @@ stripe_checkout_session_id: string | null,
 /**
  * Stripe PaymentIntent ID (pi_*) - read from session.payment_intent at checkout completion.
  */
-stripe_payment_intent_id: string | null, stripe_customer_id: string | null, icpay_transaction_id: string | null, payment_status: string, currency: string, refund_amount_e9s: number | undefined, stripe_refund_id: string | null, refund_created_at_ns: number | undefined, status_updated_at_ns: number | undefined, icpay_payment_id: string | null, icpay_refund_id: string | null, total_released_e9s: number | undefined, last_release_at_ns: number | undefined, tax_amount_e9s: number | undefined, tax_rate_percent: number | undefined, tax_type: string | null, tax_jurisdiction: string | null, customer_tax_id: string | null, reverse_charge: boolean | null, 
+stripe_payment_intent_id: string | null, stripe_customer_id: string | null, payment_status: string, currency: string, refund_amount_e9s: number | undefined, stripe_refund_id: string | null, refund_created_at_ns: number | undefined, status_updated_at_ns: number | undefined, tax_amount_e9s: number | undefined, tax_rate_percent: number | undefined, tax_type: string | null, tax_jurisdiction: string | null, customer_tax_id: string | null, reverse_charge: boolean | null, 
 /**
  * Buyer address for B2B invoices
  */
