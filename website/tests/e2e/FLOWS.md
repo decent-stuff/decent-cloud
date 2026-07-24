@@ -67,7 +67,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Reputation detail | ✅ | `@marketplace` | `reputation-detail.spec.ts` | `renders the reputation profile for a known account` |
 | Public user profile | ✅ | `@marketplace` | `user.spec.ts` · `profile-page.spec.ts` | `redirects to the reputation page preserving the identifier` |
 | Provider public page | ✅ | `@marketplace` | `providers.spec.ts` | `renders "Provider Not Found" card for an unknown identifier` |
-| Compare offerings | ⚠️ | `@smoke` `@marketplace` | `compare-share.spec.ts` | `@smoke copies canonical comparison URL and shows success feedback` — share-URL only; full multi-offering compare view not asserted |
+| Compare offerings | ✅ | `@smoke` `@marketplace` | `compare-share.spec.ts` | `@smoke renders the side-by-side comparison table for two seeded offerings` |
 | 404 / error page | ✅ | `@marketplace` | `error-page.spec.ts` | `404 renders branded error page with navigation, not blank screen` |
 
 ### 2. Auth
