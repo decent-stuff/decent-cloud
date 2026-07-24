@@ -15,7 +15,7 @@ import {
  * renders when the `welcome` query param is present AND a contract loaded.
  *
  * We seed a contract directly for the test user — a full rental requires real
- * payment (ICPay/Stripe) and is out of scope for the e2e harness — then
+ * payment (Stripe) and is out of scope for the e2e harness — then
  * navigate to its detail page to exercise the banner logic against the real UI.
  *
  * The separate "checkout success redirect" path is NOT covered here: it would

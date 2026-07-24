@@ -37,18 +37,18 @@ INSERT INTO provider_offerings (
 (
     '$PROVIDER_PUBKEY',
     'e2e-compute-001', 'E2E Compute Low', 'E2E test offering - compute low price', NULL,
-    'ICP', 25.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
+    'usd', 25.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
     'AMD', 1, 2, '3.5 GHz', 'EPYC 7763', 'DDR4', '4 GB', 1, '50 GB',
     0, '1 Gbps', 1000, 'USA', 'New York', 40.7128, -74.0060,
-    'cPanel', 720, 8760, 'ICP', 'E2E Test', 'Ubuntu 22.04', 1700000000000000000
+    'cPanel', 720, 8760, 'usd', 'E2E Test', 'Ubuntu 22.04', 1700000000000000000
 ),
 (
     '$PROVIDER_PUBKEY',
     'e2e-compute-002', 'E2E Compute High', 'E2E test offering - compute high price', NULL,
-    'ICP', 75.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
+    'usd', 75.0, 0.0, 'public', 'compute', 'KVM', 'monthly', 'in_stock',
     'Intel', 1, 4, '4.0 GHz', 'Xeon E-2388G', 'DDR4', '8 GB', 1, '100 GB',
     0, '1 Gbps', 2000, 'Germany', 'Frankfurt', 50.1109, 8.6821,
-    'Plesk', 720, 8760, 'ICP', 'E2E Test', 'Ubuntu 22.04', 1700000000000000000
+    'Plesk', 720, 8760, 'usd', 'E2E Test', 'Ubuntu 22.04', 1700000000000000000
 );
 
 -- GPU offerings
@@ -65,20 +65,20 @@ INSERT INTO provider_offerings (
 (
     '$PROVIDER_PUBKEY',
     'e2e-gpu-001', 'E2E GPU Mid', 'E2E test offering - gpu mid price', NULL,
-    'ICP', 100.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
+    'usd', 100.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
     'AMD', 1, 16, '3.7 GHz', 'Ryzen 9 7950X', 'DDR5', '64 GB', 1, '1 TB',
     0, '10 Gbps', 10000, 'USA', 'San Francisco', 37.7749, -122.4194,
     'NVIDIA RTX 4090', 1, 24, 168, 8760,
-    'ICP', 'E2E Test', 'Ubuntu 22.04 LTS', 1700000000000000000
+    'usd', 'E2E Test', 'Ubuntu 22.04 LTS', 1700000000000000000
 ),
 (
     '$PROVIDER_PUBKEY',
     'e2e-gpu-002', 'E2E GPU High', 'E2E test offering - gpu high price', NULL,
-    'ICP', 500.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
+    'usd', 500.0, 0.0, 'public', 'gpu', 'Bare Metal', 'monthly', 'in_stock',
     'AMD', 2, 64, '2.9 GHz', 'EPYC 7763', 'DDR4', '512 GB', 2, '4 TB',
     1, '25 Gbps', NULL, 'Japan', 'Tokyo', 35.6762, 139.6503,
     'NVIDIA A100', 4, 320, 720, 8760,
-    'ICP', 'E2E Test', 'Ubuntu 22.04 LTS', 1700000000000000000
+    'usd', 'E2E Test', 'Ubuntu 22.04 LTS', 1700000000000000000
 );
 
 -- Storage offerings
@@ -94,20 +94,20 @@ INSERT INTO provider_offerings (
 (
     '$PROVIDER_PUBKEY',
     'e2e-storage-001', 'E2E Storage Low', 'E2E test offering - storage low price', NULL,
-    'ICP', 10.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
+    'usd', 10.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
     4, '4 TB', NULL, NULL, 0, '1 Gbps', 500,
     'USA', 'Dallas', 32.7767, -96.7970,
     'S3-Compatible API', 720, 8760,
-    'ICP', 'E2E Test', 1700000000000000000
+    'usd', 'E2E Test', 1700000000000000000
 ),
 (
     '$PROVIDER_PUBKEY',
     'e2e-storage-002', 'E2E Storage Mid', 'E2E test offering - storage mid price', NULL,
-    'ICP', 50.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
+    'usd', 50.0, 0.0, 'public', 'storage', 'monthly', 'in_stock',
     NULL, NULL, 2, '2 TB', 0, '10 Gbps', 2000,
     'Netherlands', 'Amsterdam', 52.3676, 4.9041,
     'Block Storage API', 720, 8760,
-    'ICP', 'E2E Test', 1700000000000000000
+    'usd', 'E2E Test', 1700000000000000000
 );
 
 -- Network offerings
@@ -122,18 +122,18 @@ INSERT INTO provider_offerings (
 (
     '$PROVIDER_PUBKEY',
     'e2e-network-001', 'E2E Network Low', 'E2E test offering - network low price', NULL,
-    'ICP', 15.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
+    'usd', 15.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
     0, '10 Gbps', 5000, 'USA', 'Seattle', 47.6062, -122.3321,
     'REST API', 720, 8760,
-    'ICP', 'E2E Test', 1700000000000000000
+    'usd', 'E2E Test', 1700000000000000000
 ),
 (
     '$PROVIDER_PUBKEY',
     'e2e-network-002', 'E2E Network High', 'E2E test offering - network high price', NULL,
-    'ICP', 80.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
+    'usd', 80.0, 0.0, 'public', 'network', 'monthly', 'in_stock',
     1, '10 Gbps', NULL, 'Japan', 'Tokyo', 35.6762, 139.6503,
     NULL, 720, 8760,
-    'ICP', 'E2E Test', 1700000000000000000
+    'usd', 'E2E Test', 1700000000000000000
 );
 EOF
 

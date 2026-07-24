@@ -279,7 +279,7 @@ export async function seedContract(seed: ContractSeed): Promise<string> {
 			'${seed.status}',
 			${createdAt},
 			'${currency}',
-			'icpay',
+			'test',
 			'${paymentStatus}'
 		)
 	`);

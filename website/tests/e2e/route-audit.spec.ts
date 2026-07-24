@@ -619,7 +619,7 @@ authTest.describe('route-audit (authenticated)', () => {
 		const ownOfferingId = await seedOffering(pubkey, {
 			name: 'E2E Audit Own Offering',
 			offeringSource: 'self_provisioned',
-			currency: 'ICP',
+			currency: 'usd',
 		});
 
 		// (b) Marketplace side: a third-party self_provisioned offering so the
