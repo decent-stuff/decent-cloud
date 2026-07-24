@@ -337,7 +337,7 @@
 <div class="space-y-6 max-w-5xl">
 	<Breadcrumb items={[
 		isAuthenticated
-			? { label: 'Dashboard', href: '/dashboard/rentals' }
+			? { label: 'My Rentals', href: '/dashboard/rentals' }
 			: { label: 'Home', href: '/' },
 		{ label: 'Marketplace', href: '/dashboard/marketplace' },
 		{ label: offering?.offer_name ?? '…' },

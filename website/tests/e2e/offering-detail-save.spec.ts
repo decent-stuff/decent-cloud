@@ -58,4 +58,16 @@ test.describe('Offering detail save flow', () => {
 			await deleteSavedOfferingsForUser(pubkey);
 		}
 	});
+
+	test('@smoke breadcrumb root crumb matches its destination', async ({ page }) => {
+		// The breadcrumb root on the offering detail page links to
+		// /dashboard/rentals but was labeled "Dashboard" — a mismatch. The
+		// label must read "My Rentals" so it matches where it goes.
+		await page.goto(`/dashboard/marketplace/${offeringId}`);
+
+		const breadcrumb = page.getByRole('main').locator('nav[aria-label="Breadcrumb"]');
+		const rootCrumb = breadcrumb.getByRole('link', { name: 'My Rentals' });
+		await expect(rootCrumb).toBeVisible({ timeout: 10000 });
+		await expect(rootCrumb).toHaveAttribute('href', '/dashboard/rentals');
+	});
 });
