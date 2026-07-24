@@ -45,6 +45,11 @@
 	let editingRelationship = $state<Record<string, boolean>>({});
 	let editCommissionInputs = $state<Record<string, number>>({});
 	let deletingRelationship = $state<Record<string, boolean>>({});
+	// Inline two-step delete confirm (commit 1077dd33 pattern): native confirm()
+	// blocks headless e2e and is poor on mobile. The first Delete click only
+	// arms the action (pendingDeletePubkey); the real DELETE fires from
+	// confirmDeleteRelationship() after the user clicks the inline Confirm.
+	let pendingDeletePubkey = $state<string | null>(null);
 
 	// Order fulfillment
 	let orderStatusFilter = $state<string>('pending');
@@ -258,14 +263,20 @@
 		}
 	}
 
-	async function handleDeleteRelationship(relationship: ResellerRelationship) {
+	// First Delete click only arms the inline confirm — no native dialog, no
+	// API call. The real deletion runs in confirmDeleteRelationship().
+	function requestDeleteRelationship(relationship: ResellerRelationship) {
+		pendingDeletePubkey = relationship.external_provider_pubkey;
+	}
+
+	function cancelDeleteRelationship() {
+		pendingDeletePubkey = null;
+	}
+
+	async function confirmDeleteRelationship(relationship: ResellerRelationship) {
 		const activeIdentity = signingIdentityInfo;
 		if (!activeIdentity) {
 			error = "Missing signing identity";
-			return;
-		}
-
-		if (!confirm(`Are you sure you want to stop reselling for this provider?`)) {
 			return;
 		}
 
@@ -287,6 +298,7 @@
 			error = e instanceof Error ? e.message : "Failed to delete relationship";
 		} finally {
 			deletingRelationship = { ...deletingRelationship, [relationship.external_provider_pubkey]: false };
+			pendingDeletePubkey = null;
 		}
 	}
 

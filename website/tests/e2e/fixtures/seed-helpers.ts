@@ -15,6 +15,8 @@ import { Ed25519KeyIdentity } from '@dfinity/identity';
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from 'bip39';
 import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
+import { ed25519ph } from '@noble/curves/ed25519';
+import { API_BASE_URL } from './api-base';
 
 const execFileAsync = promisify(execFile);
 
@@ -58,6 +60,89 @@ export function pubkeyHexFromSeed(seedPhrase: string): string {
 	const identity = Ed25519KeyIdentity.fromSecretKey(keyMaterial.slice(0, 32));
 	const raw = new Uint8Array(identity.getPublicKey().rawKey);
 	return Array.from(raw).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Derive the Ed25519 identity from a BIP39 seed phrase, mirroring the website's
+ * `identityFromSeed` (`$lib/utils/identity.ts`) exactly: HMAC-SHA512 keyed with
+ * 'ed25519 seed' over `mnemonicToSeedSync(seed, '')`, first 32 bytes as the
+ * Ed25519 secret seed. Use this to build a signing identity in Node that the API
+ * accepts as the account's real key (the key whose pubkey is stored in
+ * account_public_keys by `seedAccountDirect`).
+ */
+export function identityFromSeedPhrase(seedPhrase: string): Ed25519KeyIdentity {
+	if (!validateMnemonic(seedPhrase)) throw new Error('Invalid seed phrase');
+	const seedBuffer = mnemonicToSeedSync(seedPhrase, '');
+	const keyMaterial = hmac(sha512, 'ed25519 seed', new Uint8Array(seedBuffer));
+	return Ed25519KeyIdentity.fromSecretKey(keyMaterial.slice(0, 32));
+}
+
+/** Lowercase hex of a Uint8Array. */
+function bytesToHex(bytes: Uint8Array): string {
+	return Array.from(bytes)
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+}
+
+const ED25519_SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
+
+/**
+ * Sign an API request the same way `auth-api.ts:signRequest` does for the
+ * website: message = timestamp + nonce + method + path(without query) + body,
+ * signed with Ed25519ph (SHA-512 prehash) under the 'decent-cloud' context,
+ * using the identity's 32-byte secret seed. Returns the X-* headers and the
+ * serialized body to send with a `fetch`/`request` call.
+ *
+ * Use this (not the src `admin-api.ts` helpers, which depend on the browser-side
+ * API_BASE_URL resolution) when a Node spec needs to make real signed API calls.
+ */
+export function signApiRequest(
+	identity: Ed25519KeyIdentity,
+	method: string,
+	path: string,
+	bodyData?: unknown,
+): { headers: Record<string, string>; body: string } {
+	const publicKeyBytes = new Uint8Array(identity.getPublicKey().rawKey);
+	const secretSeed = new Uint8Array(identity.getKeyPair().secretKey).slice(0, 32);
+	const nonce = crypto.randomUUID();
+	const timestampNs = (BigInt(Date.now()) * 1_000_000n).toString();
+	let body: string;
+	if (typeof bodyData === 'string') body = bodyData;
+	else if (bodyData) body = JSON.stringify(bodyData);
+	else body = '';
+	const pathWithoutQuery = path.split('?')[0];
+	const message = new TextEncoder().encode(timestampNs + nonce + method + pathWithoutQuery + body);
+	const signature = ed25519ph.sign(message, secretSeed, { context: ED25519_SIGN_CONTEXT });
+	return {
+		headers: {
+			'X-Public-Key': bytesToHex(publicKeyBytes),
+			'X-Signature': bytesToHex(signature),
+			'X-Timestamp': timestampNs,
+			'X-Nonce': nonce,
+			'Content-Type': 'application/json',
+		},
+		body,
+	};
+}
+
+/**
+ * Make a real signed API call from a Node spec. Resolves the API base from the
+ * same `api-base.ts` rules (PLAYWRIGHT_API_URL → baseURL port+1 → 59011) so it
+ * hits the same stack the browser is driving. Returns the raw Response.
+ */
+export async function signedApiCall(
+	identity: Ed25519KeyIdentity,
+	method: string,
+	path: string,
+	bodyData?: unknown,
+	apiBaseUrl = API_BASE_URL,
+): Promise<Response> {
+	const { headers, body } = signApiRequest(identity, method, path, bodyData);
+	return fetch(`${apiBaseUrl}${path}`, {
+		method,
+		headers,
+		body: method === 'GET' || method === 'HEAD' ? undefined : body,
+	});
 }
 
 /** Current time in nanoseconds since epoch. */
@@ -248,6 +333,63 @@ export async function deleteContractsForRequester(requesterPubkeyHex: string): P
 /** Delete transfers where account is sender or receiver. */
 export async function deleteTransfersForAccount(account: string): Promise<void> {
 	await sql(`DELETE FROM token_transfers WHERE from_account = '${account.replace(/'/g, "''")}' OR to_account = '${account.replace(/'/g, "''")}'`);
+}
+
+/**
+ * Delete contracts where the account is the PROVIDER (cleanup for provider-side
+ * seeding, e.g. provider-earnings populated state). Mirror of
+ * `deleteContractsForRequester` keyed on `provider_pubkey` instead.
+ *
+ * Same NO-ACTION FK child tables must be cleared first or the DELETE fails.
+ */
+export async function deleteContractsByProvider(providerPubkeyHex: string): Promise<void> {
+	await sql(`
+		DELETE FROM contract_events
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM contract_usage_events
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM contract_usage
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM contract_health_checks
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM invoices
+			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM contract_sign_requests WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex');
+	`);
+}
+
+/**
+ * Delete agent pools and the auto-created provider_registrations row for a
+ * provider pubkey (cleanup for the agent-pool create flow).
+ *
+ * `create_agent_pool` auto-creates the `provider_registrations` FK row
+ * (agent_pools.rs:~205, `INSERT ... ON CONFLICT DO NOTHING`), which is NOT
+ * cascaded by account teardown (pubkey is bytea, not an accounts FK). So both
+ * must be removed explicitly. offerings/delegations referencing a pool are
+ * detached first to avoid blocking the pool delete with a NO-ACTION FK.
+ */
+export async function deleteAgentPoolsByProvider(providerPubkeyHex: string): Promise<void> {
+	await sql(`
+		UPDATE provider_offerings SET agent_pool_id = NULL
+			WHERE agent_pool_id IN (SELECT pool_id FROM agent_pools WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM provider_agent_delegations
+			WHERE pool_id IN (SELECT pool_id FROM agent_pools WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex'));
+		DELETE FROM agent_pools WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex');
+		DELETE FROM provider_registrations WHERE pubkey = decode('${providerPubkeyHex}', 'hex');
+	`);
+}
+
+/**
+ * Delete the provider profile (+ onboarding tracking) for a pubkey. Used to
+ * clean up the become-provider onboarding submit flow, whose signed PUT upserts
+ * into provider_profiles (support_hours, channels, regions, payment_methods…).
+ * provider_profiles_contacts cascades on the profile delete.
+ */
+export async function deleteProviderProfileByPubkey(providerPubkeyHex: string): Promise<void> {
+	await sql(`
+		DELETE FROM provider_onboarding WHERE provider_pubkey = decode('${providerPubkeyHex}', 'hex');
+		DELETE FROM provider_profiles WHERE pubkey = decode('${providerPubkeyHex}', 'hex');
+	`);
 }
 
 /** Remove all saved offerings for a user (cleanup helper shared by specs). */
