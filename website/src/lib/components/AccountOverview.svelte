@@ -16,6 +16,10 @@
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let removingKeyId = $state<string | null>(null);
 	let removeError = $state<string | null>(null);
+	// Inline two-step remove (commit 1077dd33 pattern): the first click on a
+	// device's Remove button only sets pendingRemoveId, revealing an inline
+	// Confirm/Cancel pair for that device; the real removal runs in confirmRemove.
+	let pendingRemoveId = $state<string | null>(null);
 	let showAddDeviceModal = $state(false);
 
 	authStore.currentIdentity.subscribe((value) => {
@@ -93,16 +97,19 @@
 		}
 	}
 
-	async function handleRemoveKey(keyId: string, deviceName: string) {
+	function requestRemove(keyId: string) {
+		pendingRemoveId = keyId;
+	}
+
+	function cancelRemove() {
+		pendingRemoveId = null;
+	}
+
+	async function confirmRemove(keyId: string) {
 		if (!currentIdentity?.identity) {
 			removeError = "No signing identity";
 			return;
 		}
-
-		const confirmed = confirm(
-			`Remove "${deviceName}" from your account?\n\nThis device will no longer be able to access your account.`,
-		);
-		if (!confirmed) return;
 
 		removingKeyId = keyId;
 		removeError = null;
@@ -119,6 +126,7 @@
 				err instanceof Error ? err.message : "Failed to remove key";
 		} finally {
 			removingKeyId = null;
+			pendingRemoveId = null;
 		}
 	}
 
@@ -278,17 +286,40 @@
 									>Disabled</span
 								>
 							{/if}
-							{#if canRemoveKey(key)}
+						{#if canRemoveKey(key)}
+							{#if pendingRemoveId === key.id}
+								<span class="text-xs text-neutral-400"
+									>Remove?</span
+								>
 								<button
 									type="button"
-									onclick={() => handleRemoveKey(key.id, getDeviceName(key))}
+									onclick={() => confirmRemove(key.id)}
 									disabled={removingKeyId === key.id}
-									class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs rounded transition-colors disabled:opacity-50"
+									class="px-2 py-1 bg-red-600/40 hover:bg-red-600/60 text-red-300 text-xs rounded transition-colors disabled:opacity-50"
+									title="Confirm removal"
+								>
+									{removingKeyId === key.id ? "..." : "Confirm"}
+								</button>
+								<button
+									type="button"
+									onclick={cancelRemove}
+									disabled={removingKeyId === key.id}
+									class="px-2 py-1 bg-surface-elevated hover:bg-surface-elevated text-neutral-400 text-xs rounded transition-colors disabled:opacity-50"
+								>
+									Cancel
+								</button>
+							{:else}
+								<button
+									type="button"
+									onclick={() => requestRemove(key.id)}
+									disabled={removingKeyId === key.id || pendingRemoveId !== null}
+									class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
 									title="Remove this device"
 								>
 									{removingKeyId === key.id ? "..." : "Remove"}
 								</button>
 							{/if}
+						{/if}
 						</div>
 					</div>
 				{/each}
