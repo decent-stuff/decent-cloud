@@ -46,6 +46,7 @@
 	let productTypes = $state<ProductType[]>([]);
 	let duplicatingId = $state<number | null>(null);
 	let deletingId = $state<number | null>(null);
+	let pendingDeleteId = $state<number | null>(null);
 	let allowlistOffering = $state<Offering | null>(null);
 	let bulkEditMode = $state(false);
 	let bulkPrices = $state<Record<number, string>>({});
@@ -169,14 +170,26 @@
 		}
 	}
 
-	async function handleDelete(offering: Offering, event: Event) {
+	async function requestDelete(offering: Offering, event: Event) {
 		event.stopPropagation();
 		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes || offering.id === undefined) {
 			error = 'Authentication or offering data missing';
 			return;
 		}
+		// First click reveals the inline confirm; the actual delete runs in
+		// confirmDelete() after the user clicks Confirm.
+		pendingDeleteId = offering.id;
+	}
 
-		if (!confirm(`Delete offering '${offering.offer_name}'? This cannot be undone.`)) {
+	function cancelDelete(event: Event) {
+		event.stopPropagation();
+		pendingDeleteId = null;
+	}
+
+	async function confirmDelete(offering: Offering, event: Event) {
+		event.stopPropagation();
+		if (!currentIdentity?.identity || !currentIdentity?.publicKeyBytes || offering.id === undefined) {
+			error = 'Authentication or offering data missing';
 			return;
 		}
 
@@ -198,6 +211,7 @@
 			console.error('Error deleting offering:', e);
 		} finally {
 			deletingId = null;
+			pendingDeleteId = null;
 		}
 	}
 
@@ -885,11 +899,14 @@
 									Duplicate
 								{/if}
 							</button>
+						{#if pendingDeleteId === offering.id}
+							<span class="text-xs text-neutral-400">Delete?</span>
 							<button
-								onclick={(e) => handleDelete(offering, e)}
+								type="button"
+								onclick={(e) => confirmDelete(offering, e)}
 								disabled={deletingId === offering.id}
 								class="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-								title="Delete this offering"
+								title="Confirm delete"
 							>
 								{#if deletingId === offering.id}
 									<svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
@@ -898,12 +915,31 @@
 									</svg>
 									Deleting...
 								{:else}
-									<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-									</svg>
-									Delete
+									Confirm
 								{/if}
 							</button>
+							<button
+								type="button"
+								onclick={cancelDelete}
+								disabled={deletingId === offering.id}
+								class="text-xs text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
+								title="Cancel delete"
+							>
+								Cancel
+							</button>
+						{:else}
+							<button
+								onclick={(e) => requestDelete(offering, e)}
+								disabled={deletingId === offering.id || pendingDeleteId !== null}
+								class="text-xs text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+								title="Delete this offering"
+							>
+								<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+								</svg>
+								Delete
+							</button>
+						{/if}
 						</div>
 					</div>
 				</div>
