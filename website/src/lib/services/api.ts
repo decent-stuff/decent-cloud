@@ -1356,17 +1356,12 @@ export interface Contract {
 	payment_method: string;
 	stripe_payment_intent_id?: string;
 	stripe_customer_id?: string;
-	icpay_transaction_id?: string;
-	icpay_payment_id?: string;
 	payment_status: string;
 	currency: string;
 	refund_amount_e9s?: number;
 	stripe_refund_id?: string;
-	icpay_refund_id?: string;
 	refund_created_at_ns?: number;
 	status_updated_at_ns?: number;
-	total_released_e9s?: number;
-	last_release_at_ns?: number;
 	// Tax/invoicing fields
 	tax_amount_e9s?: number;
 	tax_rate_percent?: number;
@@ -1457,34 +1452,6 @@ export async function createRentalRequest(
 	}
 
 	return payload.data;
-}
-
-/**
- * Update ICPay transaction ID for a contract after payment completes
- */
-export async function updateIcpayTransactionId(
-	contractId: string,
-	transactionId: string,
-	headers: SignedRequestHeaders
-): Promise<void> {
-	const url = `${API_BASE_URL}/api/v1/contracts/${contractId}/icpay-transaction`;
-
-	const response = await fetch(url, {
-		method: 'PUT',
-		headers,
-		body: JSON.stringify({ transaction_id: transactionId })
-	});
-
-	if (!response.ok) {
-		const errorMsg = await getErrorMessage(response, 'Failed to update ICPay transaction ID');
-		throw new Error(errorMsg);
-	}
-
-	const payload = (await response.json()) as ApiResponse<string>;
-
-	if (!payload.success) {
-		throw new Error(payload.error ?? 'Failed to update ICPay transaction ID');
-	}
 }
 
 export async function getUserContracts(headers: SignedRequestHeaders, pubkeyHex?: string): Promise<Contract[]> {
