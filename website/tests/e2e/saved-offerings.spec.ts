@@ -54,6 +54,7 @@ async function seedSavedOffering(requesterPubkeyHex: string, offeringId: string)
 }
 
 test.describe('/dashboard/saved', () => {
+	test.describe.configure({ mode: 'serial' });
 	test('empty state: fresh user sees empty message and Browse Marketplace CTA', async ({ page }) => {
 		await page.goto('/dashboard/saved');
 		await waitForAuthReady(page);
