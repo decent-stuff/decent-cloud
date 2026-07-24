@@ -395,6 +395,7 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
         ))?;
 
     // Run Typst CLI - set cache dir if not already set (for package downloads)
+    const TYPST_TIMEOUT_SECS: u64 = 30;
     let mut cmd = tokio::process::Command::new("typst");
     if std::env::var("XDG_CACHE_HOME").is_err() {
         cmd.env("XDG_CACHE_HOME", temp_dir.path());
@@ -405,10 +406,15 @@ async fn generate_invoice_pdf(db: &Database, invoice: &Invoice) -> Result<Vec<u8
         .arg(&template_path)
         .arg(&output_path);
 
-    let output = cmd
-        .output()
-        .await
-        .context("Failed to execute typst command")?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(TYPST_TIMEOUT_SECS),
+        cmd.output(),
+    )
+    .await
+    .context(format!(
+        "Typst compilation timed out after {TYPST_TIMEOUT_SECS}s"
+    ))?
+    .context("Failed to execute typst command")?;
 
     if !output.status.success() {
         let exit_code = output.status.code().unwrap_or(-1);
