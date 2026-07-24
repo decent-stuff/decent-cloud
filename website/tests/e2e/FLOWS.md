@@ -130,7 +130,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Auto-accept toggle | ✅ | `@provider` | `provider-accept-reject.spec.ts` | `auto-accept toggle can be enabled` — flips the provider_profiles.auto_accept_rentals toggle and asserts the enabled state + banner |
 | Provider sub-pages render | ✅ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/* renders heading ... and its empty state` (analytics, feedback, password-resets, reseller, sla, ssh-key-rotations) |
 | Agent pools | ✅ | `@provider` | `agent-pool-create.spec.ts` · `provider-pages-smoke.spec.ts` | `creates an agent pool and lists it in the pool table` |
-| Earnings | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/earnings renders heading and revenue overview panel` — panel render only |
+| Earnings | ✅ | `@provider` | `provider-earnings.spec.ts` · `provider-pages-smoke.spec.ts` | `shows the summed revenue, contract count, and contract rows for seeded provider contracts` |
 | SLA metrics | ✅ | `@smoke` `@provider` | `provider-response-metrics.spec.ts` · `offering-sla-empty-state.spec.ts` | `@smoke GET /providers/:pubkey/response-metrics returns contract request SLA metrics` |
 | Notification settings | ✅ | `@provider` | `notification-settings.spec.ts` | `notification settings: section, channels, save button, tier limits, and usage grid render correctly` |
 | Password resets (provider view) | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/password-resets renders heading ... and its empty state` — empty-state render only |
