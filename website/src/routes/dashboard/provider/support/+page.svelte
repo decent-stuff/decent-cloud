@@ -204,7 +204,6 @@
 		"Credit Card (Stripe)",
 		"PayPal",
 		"Bank Transfer",
-		"ICP (Internet Computer)",
 	];
 	const refundPolicyOptions = [
 		"30-day money-back guarantee",

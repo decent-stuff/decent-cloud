@@ -10,7 +10,6 @@
 	import { bytesToHex } from "$lib/utils/identity";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
-	import { loadStripe, type Stripe } from "@stripe/stripe-js";
 	import { onMount } from "svelte";
 	import type { AccountExternalKey } from "$lib/types/generated/AccountExternalKey";
 	import { generateSshKeyPair, downloadPrivateKey } from "$lib/utils/ssh-keygen";
@@ -162,14 +161,8 @@
 		if (days <= 366) return "Yearly";
 		return `Every ${days} days`;
 	});
-	let stripe: Stripe | null = null;
 
 	onMount(async () => {
-		const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-		if (publishableKey) {
-			stripe = await loadStripe(publishableKey);
-		}
-
 		// Fetch user's saved SSH keys from profile
 		const unsubscribe = authStore.activeIdentity.subscribe(async (identity) => {
 			if (identity?.account?.username) {

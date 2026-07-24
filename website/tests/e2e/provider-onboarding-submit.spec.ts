@@ -29,7 +29,7 @@ test.describe('Become-provider onboarding submit (/dashboard/provider/support)',
 	const SUPPORT_HOURS = '24/7';
 	const CHANNEL = 'Email';
 	const REGION = 'Europe';
-	const PAYMENT = 'ICP (Internet Computer)';
+	const PAYMENT = 'PayPal';
 
 	test('submitting the Help Center form persists onboarding data across reload', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
