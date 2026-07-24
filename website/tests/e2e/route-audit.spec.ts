@@ -71,12 +71,8 @@ const KNOWN_BROKEN = new Map<string, string>([
 		'console 404 (SSE uses wrong env var VITE_API_BASE_URL in +page.svelte:15) + console 401 on GET /providers/{pk}/contracts/pending-password-reset (api.ts:1587)',
 	],
 	[
-		'/dashboard/rentals',
-		'console 404 on SSE GET /users/{pk}/contract-events (wrong env var VITE_API_BASE_URL in +page.svelte:35 → relative URL, no /api proxy)',
-	],
-	[
-		'/dashboard/rentals/[contract_id]',
-		'console 401 on GET /contracts/{id}/usage (getContractUsage api.ts:1801) — unsigned/auth-rejected request; page falls back to "no usage data"',
+		'/dashboard/provider/password-resets',
+		'console 404 (SSE uses wrong env var VITE_API_BASE_URL in +page.svelte:15) + console 401 on GET /providers/{pk}/contracts/pending-password-reset (api.ts:1587)',
 	],
 	[
 		'/dashboard/reputation/[identifier]',

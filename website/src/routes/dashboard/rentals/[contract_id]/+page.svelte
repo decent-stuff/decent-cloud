@@ -359,7 +359,17 @@
 			// Refresh usage data
 			if (contract) {
 				try {
-					usage = await getContractUsage(contractId, headers);
+					// Sign specifically for the usage endpoint path — the request
+					// signature covers the URL path, so reusing headers signed for a
+					// different endpoint (e.g. /users/.../contracts) fails with 401.
+					const usageHeaders = (
+						await signRequest(
+							signingIdentityInfo.identity as any,
+							"GET",
+							`/api/v1/contracts/${contractId}/usage`,
+						)
+					).headers;
+					usage = await getContractUsage(contractId, usageHeaders);
 				} catch (e) {
 					debugLog("No usage data for contract:", e);
 				}
@@ -401,9 +411,19 @@
 			if (!contract) {
 				error = "Contract not found";
 			} else {
-				// Try to fetch usage data (may not exist for all contracts)
+				// Try to fetch usage data (may not exist for all contracts).
+				// Sign specifically for the usage endpoint path — the request
+				// signature covers the URL path, so reusing headers signed for a
+				// different endpoint (e.g. /users/.../contracts) fails with 401.
 				try {
-					usage = await getContractUsage(contractId, headers);
+					const usageHeaders = (
+						await signRequest(
+							signingIdentityInfo.identity as any,
+							"GET",
+							`/api/v1/contracts/${contractId}/usage`,
+						)
+					).headers;
+					usage = await getContractUsage(contractId, usageHeaders);
 				} catch (e) {
 					// Usage not available is not an error
 					debugLog("No usage data for contract:", e);
