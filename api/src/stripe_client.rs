@@ -9,6 +9,11 @@ use stripe::{
     Subscription, SubscriptionId, UpdateSubscription,
 };
 
+/// Base URL for the raw Stripe REST API. The official `stripe::Client` used
+/// elsewhere in this file owns its own base URL; only `create_usage_record`
+/// bypasses it with a raw reqwest call, so the base is centralized here.
+const STRIPE_API_BASE: &str = "https://api.stripe.com";
+
 /// Stripe API client wrapper for payment processing
 pub struct StripeClient {
     client: Client,
@@ -582,7 +587,7 @@ impl StripeClient {
         }
 
         let url = format!(
-            "https://api.stripe.com/v1/subscription_items/{}/usage_records",
+            "{STRIPE_API_BASE}/v1/subscription_items/{}/usage_records",
             subscription_item_id
         );
 
