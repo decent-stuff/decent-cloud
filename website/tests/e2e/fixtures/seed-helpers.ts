@@ -416,6 +416,14 @@ export interface OfferingSeedOverrides {
 	 * to make the offering always online (compute_provider_online_status treats
 	 * self_provisioned as always-online, bypassing pool/agent requirements). */
 	offeringSource?: string;
+	/** post_provision_script (a.k.a. "setup recipe"). When set, the marketplace
+	 * OfferingStatusBadge exposes a tooltip ("Has setup recipe") and the row
+	 * matches the recipes filter. Default unset (no recipe). */
+	postProvisionScript?: string;
+	/** is_subscription flag + interval. When true, the badge exposes a
+	 * "Subscription" tooltip. Default false (not a subscription). */
+	isSubscription?: boolean;
+	subscriptionIntervalDays?: number;
 }
 
 /**
@@ -436,18 +444,22 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 	const createdAt = nowNs().toString();
 	const sourceCol = overrides?.offeringSource ? ', offering_source' : '';
 	const sourceVal = overrides?.offeringSource ? `, '${overrides.offeringSource.replace(/'/g, "''")}'` : '';
+	const recipeCol = overrides?.postProvisionScript ? ', post_provision_script' : '';
+	const recipeVal = overrides?.postProvisionScript ? `, '${overrides.postProvisionScript.replace(/'/g, "''")}'` : '';
+	const subCol = overrides?.isSubscription ? ', is_subscription, subscription_interval_days' : '';
+	const subVal = overrides?.isSubscription ? `, true, ${overrides.subscriptionIntervalDays ?? 30}` : '';
 	const result = await sql(`
 		INSERT INTO provider_offerings (
 			pubkey, offering_id, offer_name, currency, monthly_price,
 			visibility, product_type, billing_interval, stock_status,
-			datacenter_country, datacenter_city, created_at_ns${sourceCol}
+			datacenter_country, datacenter_city, created_at_ns${sourceCol}${recipeCol}${subCol}
 		) VALUES (
 			decode('${pubkeyHex}', 'hex'),
 			'${offeringId}',
 			'${name}',
 			'${currency}', 25.0,
 			'${visibility}', 'compute', 'monthly', '${stockStatus}',
-			'US', 'New York', ${createdAt}${sourceVal}
+			'US', 'New York', ${createdAt}${sourceVal}${recipeVal}${subVal}
 		)
 		RETURNING id
 	`);

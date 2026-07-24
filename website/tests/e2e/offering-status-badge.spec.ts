@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/test-account';
+import { seedRentableOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the OfferingStatusBadge component's keyboard a11y.
@@ -9,32 +10,46 @@ import { test, expect } from '@playwright/test';
  * Has warnings). The fix adds onfocus/onblur handlers, aria-describedby
  * pointing at the tooltip, and Escape-to-close.
  *
- * The badge is rendered on the marketplace page for every offering that
- * carries trust/subscription/recipe/warnings metadata. We load the
- * marketplace with demo + offline offerings visible (per search-dsl.spec.ts
- * pattern) so there's at least one badge with a tooltip to test against.
+ * The badge + its "More details" button render only when an offering carries
+ * trust/subscription/recipe/warnings metadata (OfferingStatusBadge.svelte
+ * `hasTooltip`). This spec seeds its OWN offering WITH a setup recipe so the
+ * badge is guaranteed to appear — it must NOT rely on ambient demo/seed data,
+ * which is wiped whenever the dev DB is reset.
  */
 
-const MARKETPLACE_URL = '/dashboard/marketplace?demo=1&offline=1';
+test.describe.configure({ mode: 'serial' });
 
 test.describe('OfferingStatusBadge keyboard a11y', () => {
-	test.beforeEach(async ({ page }) => {
-		await page.goto(MARKETPLACE_URL);
-		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
-		await expect(page.locator('tbody tr[id^="offering-"]').first()).toBeVisible({ timeout: 15000 });
+	let providerPubkeyHex: string;
+	let offeringName: string;
+
+	test.beforeAll(async () => {
+		// self_provisioned → always online (no agent pool needed); a recipe makes
+		// hasTooltip true so the "More details" button renders.
+		const seeded = await seedRentableOffering({
+			name: `E2E Badge Recipe ${Date.now()}`,
+			postProvisionScript: '#!/bin/bash\necho setup-complete'
+		});
+		providerPubkeyHex = seeded.providerPubkeyHex;
+		offeringName = seeded.offeringName;
+	});
+
+	test.afterAll(async () => {
+		if (providerPubkeyHex) await deleteOfferingsByProvider(providerPubkeyHex);
 	});
 
 	test('tooltip becomes visible when the badge button receives focus (#15)', async ({ page }) => {
-		// Find a badge button that exposes a tooltip (it has aria-label="More details"
-		// and is only rendered when there's additional info to show).
-		const badgeButton = page.getByRole('button', { name: 'More details' }).first();
-		await expect(badgeButton).toBeVisible();
+		await page.goto('/dashboard/marketplace?offline=1');
+		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
-		// Before focus, the tooltip node may or may not be in the DOM (Svelte
-		// renders it conditionally on showTooltip). Either way it should not be
-		// visible to a screen-reader-by-sight user.
-		// Focus the badge button via keyboard-equivalent action (Playwright .focus()
-		// dispatches the same focus event a real Tab would).
+		// Scope to the seeded row so we test the badge that is guaranteed to exist.
+		const row = page.locator('tbody tr', { hasText: offeringName }).first();
+		await expect(row).toBeVisible({ timeout: 15000 });
+
+		// The "More details" button is only rendered when hasTooltip is true
+		// (our seeded offering has a setup recipe).
+		const badgeButton = row.getByRole('button', { name: 'More details' });
+		await expect(badgeButton).toBeVisible();
 		await badgeButton.focus();
 
 		// The tooltip must become visible. It carries role="tooltip".
@@ -50,7 +65,11 @@ test.describe('OfferingStatusBadge keyboard a11y', () => {
 	});
 
 	test('Escape closes the tooltip while the badge retains focus (#15)', async ({ page }) => {
-		const badgeButton = page.getByRole('button', { name: 'More details' }).first();
+		await page.goto('/dashboard/marketplace?offline=1');
+		const row = page.locator('tbody tr', { hasText: offeringName }).first();
+		await expect(row).toBeVisible({ timeout: 15000 });
+
+		const badgeButton = row.getByRole('button', { name: 'More details' });
 		await badgeButton.focus();
 		const tooltip = page.getByRole('tooltip').first();
 		await expect(tooltip).toBeVisible({ timeout: 2000 });
