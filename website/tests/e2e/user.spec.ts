@@ -3,34 +3,32 @@ import { test, expect } from '@playwright/test';
 /**
  * E2E coverage for /dashboard/user/[identifier].
  *
- * Anonymous-OK user-activity route. When the identifier resolves to
- * no known user, the page renders a unique "User Not Found" card —
- * a stable structural state we assert without seeding.
+ * This route is a legacy subset of the richer reputation page and had ZERO
+ * inbound links anywhere in the app. It now redirects (307) to
+ * /dashboard/reputation/[identifier], which resolves both username and
+ * pubkey identifiers itself — so the same identifier is forwarded.
  */
 
-test.describe('/dashboard/user/[identifier]', () => {
-	test('renders the User Info header and "User Not Found" card for an unknown name', async ({ page }) => {
-		// Random username unlikely to collide with seeded accounts
-		const unknown = 'no-such-user-9f8e7d6c5b4a';
-		await page.goto(`/dashboard/user/${unknown}`);
+test.describe('/dashboard/user/[identifier] redirect', () => {
+	test('@smoke redirects to the reputation page preserving the identifier', async ({ page }) => {
+		// Unknown identifier — previously rendered a "User Not Found" card.
+		// Now it must redirect to the reputation route and land there.
+		const identifier = 'no-such-user-9f8e7d6c5b4a';
+		await page.goto(`/dashboard/user/${identifier}`);
 
-		// Page heading is always rendered, even on the error branch
-		await expect(page.getByRole('heading', { name: 'User Info', exact: true })).toBeVisible();
-
-		// The unique error card with the echoed identifier
-		await expect(page.getByRole('heading', { name: 'User Not Found' })).toBeVisible();
-		await expect(page.getByText(/was not found in the system/i)).toBeVisible();
-
-		// Recovery link back to marketplace (unique to this branch)
-		await expect(page.getByRole('link', { name: /Back to Marketplace/i })).toBeVisible();
+		await expect(page).toHaveURL(`/dashboard/reputation/${identifier}`);
+		// The reputation page renders its own not-found heading for the
+		// unknown identifier, proving the redirect reached a real page.
+		await expect(page.getByRole('heading', { name: 'No Account Data' })).toBeVisible({
+			timeout: 10000,
+		});
 	});
 
-	test('explains the possible reasons for not finding a user', async ({ page }) => {
-		// The Not Found card lists three explanations; assert the unique copy.
-		await page.goto('/dashboard/user/unknown-identifier');
+	test('redirects a pubkey-shaped identifier to the reputation page', async ({ page }) => {
+		// A 64-char hex pubkey must be forwarded unchanged.
+		const pubkey = '0'.repeat(64);
+		await page.goto(`/dashboard/user/${pubkey}`);
 
-		await expect(page.getByText(/hasn't created any offerings or contracts/i)).toBeVisible();
-		await expect(page.getByText('The username or pubkey is incorrect')).toBeVisible();
-		await expect(page.getByText('The user is new to the platform')).toBeVisible();
+		await expect(page).toHaveURL(`/dashboard/reputation/${pubkey}`);
 	});
 });
