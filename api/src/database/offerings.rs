@@ -17,6 +17,7 @@ pub struct Offering {
     #[oai(skip_serializing_if_is_none)]
     pub id: Option<i64>,
     #[ts(type = "string")]
+    #[oai(default)]
     pub pubkey: String,
     pub offering_id: String,
     pub offer_name: String,
