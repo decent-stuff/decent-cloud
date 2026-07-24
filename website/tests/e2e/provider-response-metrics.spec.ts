@@ -38,6 +38,7 @@ test.describe('Provider Contract Request Response Metrics', () => {
 		expect(response.status()).toBe(200);
 		const data = await response.json();
 		expect(data.success).toBe(false);
-		expect(data.error).toContain('Invalid pubkey format');
+		expect(data.error).toContain('Invalid pubkey hex');
+		expect(data.error).toContain('invalid-pubkey');
 	});
 });
