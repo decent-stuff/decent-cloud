@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-07-23. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-07-24. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -35,6 +35,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title |
 |---|-------|
+| 441 | Boot gate asymmetry: `require_stripe_in_prod` exists but no `require_icpay_in_prod` |
 | 426 | Test: out-of-order Stripe webhook delivery (dispute.created before checkout.session.completed) |
 | 425 | Audit existing Provisioning → Cancelled failure paths and migrate to ProvisioningFailed |
 | 420 | ICPay: implement automated payouts when ICRC-1 transfer API ships |
@@ -43,6 +44,8 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title | Filed by |
 |---|-------|----------|
+| 442 | Subscription Pro/Enterprise cards advertise "14-day free trial" but CTA is only "Contact Sales" | 2026-07-24 UX audit |
+| 443 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
 | 436 | Seed-phrase sign-in hidden behind extra click when no Google OAuth configured | 2026-07-20 UX audit |
 
 > **#436 implementation note (2026-07-21):** The issue's suggested gate
@@ -58,6 +61,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title |
 |---|-------|
+| 444 | Tech debt: split large source files (>2000 lines) into logical modules |
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
 | 382 | dc-agent: remove `try_trigger_hetzner_provisioning` backward-compat alias |
 | 373 | DRY refactor: `extract_contract_id()` shared across 3 provisioners |
@@ -68,6 +72,30 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-07-24 session (fresh sweep: robustness + UX + coverage + create-bug)
+
+Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,coverage-and-ux-flow}.md`) → triaged, shipped high-confidence fixes via TDD, parked product decisions as #441-#444.
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| Missing reqwest timeouts across money/identity/provisioning | Robustness | Shipped in `6cc6199c`: shared `http_client()` helper (30s timeout) in new `api/src/http_util.rs`; replaced ALL bare `Client::new()` in stripe/icpay/oauth/cloudflare/invoices/llm/chatwoot/embeddings/price-cache/vies/telegram/sms + 12 api-cli sites + `api_cli/client.rs`; `.timeout(120s)` on both dc-agent upgrade builders. |
+| Silent hex-decode in receipts (refund + accept notifications) | Robustness | Shipped in `c66bd3f9`: `receipts.rs:297/418` `if let Ok`=hex::decode → `match` + `tracing::warn!` (contract id, parse error, bad value). |
+| typst subprocess no timeout | Robustness | Shipped in `5ad502a5`: `invoices.rs` typst `.output()` wrapped in `tokio::time::timeout(30s)`. |
+| Silent dispute-hex fallthrough | Robustness | Shipped in `707f0d97`: `webhooks.rs:779` → `match` + warn. |
+| Hardcoded Stripe URL | DRY | Shipped in `f4357348`: `const STRIPE_API_BASE`. |
+| Dead `network_metrics` module | Tech debt | Shipped in `4b472e73`: deleted unreferenced module (`load_ledger_metrics`). |
+| Inconsistent hex::decode path boilerplate (~40 sites) | DRY | Shipped in `164bbdb4`: shared `decode_hex_path`/`decode_pubkey` in `openapi/common.rs`; unified terse→detailed error msgs. |
+| Reputation "Poor" badge for zero health checks | UX | Shipped in `6df2155e`: neutral "No health checks yet" badge when `totalChecks===0`. Same class as #435. |
+| Stale `© 2025` footer | UX | Shipped in `4b6659c0`: dynamic `{new Date().getFullYear()}`. |
+| Breadcrumb "Dashboard" → /dashboard/rentals mismatch | UX | Shipped in `757bd79b`: relabeled "My Rentals". |
+| Orphaned `/dashboard/user/[id]` route | UX | Shipped in `4292bdc9`: 307 redirect to reputation page (matches marketplace pattern). |
+| Command palette had zero provider actions | UX | Shipped in `165b6720`: Create Offering/My Offerings/Agent Pools/Billing Settings gated on auth. |
+| ALL native `confirm()` dialogs (6 dashboard + 5 components) | UX + e2e | Shipped across `1077dd33`,`fa82ec0e`,`41491746`,`b4ad6b61`,`d6acdf94`,`938d6c83`,`24924b51`,`d6425c10`,`d2bd52c3`,`8e348415`,`dc8ee2f3`: every native `confirm()` → inline two-step (request/confirm/cancel + pendingId). `rg "confirm\(" website/src` = 0 live calls. Unblocks headless e2e + mobile UX + consistency. |
+| Create-offering 400 on every UI create (#440) | Bug (critical) | Shipped in `ebebff02`: poem-openapi ignores `#[serde(default)]`; applied `#[oai(default)]` to `Offering.pubkey` so missing field deserializes, then handler overwrites from URL path. |
+| E2E coverage: 7 documented gaps closed | Coverage | add-device `@smoke` (`0730350e`), compare `@smoke` (`18b4a35b`), agent-pool (`f7b38826`), earnings (`dc84a706`), onboarding (`5f2ca8d4`), admin mutations ❌→✅ (`157ec457`), create-offering (`ebebff02`). New seed-helpers: `deleteContractsByProvider`, `deleteAgentPoolsByProvider`, `deleteProviderProfileByPubkey`, `signedApiCall`, `identityFromSeedPhrase`. |
+| Stale test assertion (unified pubkey error msg) | Test | Shipped in `54c1e54d`: `provider-response-metrics.spec` asserted old terse msg; updated to `toContain('Invalid pubkey hex')` + echoed bad value. |
+| Full suite baseline | — | See final verification at session end (this doc updated before final run). |
 
 ### 2026-07-23 session (money-safety hardening + route audit + UX review)
 
@@ -181,5 +209,5 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | Finding | Status |
 |---------|--------|
-| No `?` keyboard-shortcut help overlay | **Nice-to-have** — `/` (search) and Cmd/Ctrl+K (palette) are now discoverable after command palette fix. A dedicated help overlay remains a UX enhancement. |
+| No `?` keyboard-shortcut help overlay | **RESOLVED (2026-07-23; stale entry corrected 2026-07-24)** — `KeyboardHelpOverlay.svelte` exists and is covered by 3 tests in `keyboard-shortcuts.spec.ts` (`? opens help overlay listing all shortcuts` is `@smoke`). This row was stale; corrected. |
 | Dashboard shows provider-monitoring stats to brand-new renters | **Design judgment** — fresh renters see "Infrastructure Uptime", "Contracts Monitored", "Red Flags Detected" cards. Non-Providers may find this confusing. Needs product input on conditional rendering. |

@@ -65,5 +65,47 @@ Update `FLOWS.md` status rows. Keep smoke <30s.
 
 Update `docs/OPEN_ISSUES.md`, `website/AGENTS.md`, this plan, `FLOWS.md`. Final full-suite green.
 
+**Status:** All doc updates done. Final full-suite verification pending (this run).
+
 ## Session commit log
-_(updated as units land)_
+
+### Phase 1 — Audits (read-only subagents)
+- `docs/audits/2026-07-24-fresh-ux-audit.md` — 5 net-new (1 MED, 4 LOW), 0 critical.
+- `docs/audits/2026-07-24-code-robustness.md` — reqwest timeouts (highest leverage), silent errors, typst timeout, DRY hex::decode, dead code, big-file splits (deferred).
+- `docs/audits/2026-07-24-coverage-and-ux-flow.md` — 7 closeable gaps + command-palette provider actions + native-confirm() blocker.
+
+### Phase 2 — Backend robustness (7 commits)
+- `6cc6199c` feat(api): shared `http_client()` w/ 30s timeout; replace all `Client::new()`.
+- `c66bd3f9` fix(api): surface silent hex-decode errors in receipt notifications.
+- `5ad502a5` fix(api): wrap typst PDF compile in `tokio::time::timeout(30s)`.
+- `707f0d97` fix(api): warn on malformed dispute metadata hex.
+- `f4357348` refactor(api): `STRIPE_API_BASE` const.
+- `4b472e73` refactor(api): remove dead `network_metrics` module.
+- `164bbdb4` refactor(api): DRY pubkey/contract-id path decoding into shared helper.
+
+### Phase 2 — Frontend UX (6 commits)
+- `6df2155e` fix(ux): neutral reputation badge when zero health checks.
+- `4b6659c0` fix(ux): dynamic footer copyright year.
+- `757bd79b` fix(ux): relabel breadcrumb root "My Rentals".
+- `4292bdc9` fix(ux): redirect orphaned /dashboard/user route to reputation.
+- `165b6720` feat(ux): command palette provider actions.
+- `1077dd33` fix(ux): inline two-step delete for offerings.
+
+### Phase 3 — Coverage + native-confirm sweep (Wave B + components)
+- `fa82ec0e` `41491746` `b4ad6b61` `d6acdf94` `938d6c83` — inline two-step confirms: rentals list/detail, agent pool, reseller, provider requests.
+- `24924b51` `d6425c10` `d2bd52c3` `8e348415` `dc8ee2f3` — inline two-step confirms: Contacts/Socials/ExternalKeys editors, AccountOverview device, OfferingsEditor replace.
+- `0730350e` `18b4a35b` `f7b38826` `dc84a706` `5f2ca8d4` `157ec457` — close 6 coverage gaps (add-device @smoke, compare @smoke, agent-pool, earnings, onboarding, admin-mutations ❌→✅).
+- `ebebff02` fix(api): allow offering create without pubkey in body (#440, `#[oai(default)]`).
+- `cd36eb02` docs(e2e): refresh smoke membership table (24 tests).
+- `54c1e54d` test(api): assert unified invalid-pubkey error message.
+- `431d92aa` `de94a168` docs(e2e): create-offering blocker pinning (pre-fix).
+
+### Phase 4 — Docs + GH
+- GH #440 closed (create-offering bug). Parked issues filed: #441 (require_icpay_in_prod), #442 (subscription trial/CTA), #443 (auto-suggest price), #444 (big-file splits).
+- `docs/OPEN_ISSUES.md`, `website/tests/e2e/FLOWS.md` updated (create-offering → ✅; 0 live `confirm()`; smoke 24 tests).
+
+## Parked (filed as GH issues, need product decisions / large refactors)
+- #441 boot-gate asymmetry (require_icpay_in_prod).
+- #442 subscription trial/CTA mismatch.
+- #443 auto-suggest monthly price.
+- #444 large-file splits (>2k lines, risky).
