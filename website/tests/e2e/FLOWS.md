@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~15 critical-path tests, <30s (dev loop)
+npm run test:e2e:fast:smoke                 # ~23 critical-path tests, <30s (dev loop)
 npm run test:e2e:fast -- --grep @rental     # every flow in a category
 npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
 ```
@@ -100,7 +100,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Cancel a rental | ✅ | `@smoke` `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `@smoke action: Cancel a requested contract moves it to Cancelled tab` |
 | Rental detail deep link | ✅ | `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `deep link: detail page at /dashboard/rentals/[id] loads` |
 | Post-rental welcome banner | ✅ | `@rental` | `post-rental-welcome.spec.ts` | `shows the welcome banner when arriving with ?welcome=true` |
-| Payment flows (Stripe UI) | ⚠️ | `@billing` `@rental` | `payment-flows.spec.ts` | `Stripe payment UI - renders the credit card (Stripe) section for supported currencies` — UI rendering only; real checkout cannot complete in-harness |
+| Payment flows (Stripe-only) | ⚠️ | `@billing` `@rental` | `payment-flows.spec.ts` | `Stripe payment UI - renders the credit card (Stripe) section for supported currencies` — UI rendering only; real checkout cannot complete in-harness. ICPay rail retired 2026-07-24 (Stripe is the sole rail). |
 | Checkout cancel/success pages | ✅ | `@billing` | `checkout.spec.ts` | `renders the cancelled-payment page without a contract_id` |
 | Save / unsave offerings | ✅ | `@account` `@marketplace` | `offering-detail-save.spec.ts` · `saved-offerings.spec.ts` | `bookmark toggle on offering detail page saves in a single click` |
 | Edit profile | ✅ | `@smoke` `@account` | `profile-page.spec.ts` · `account-profile-edit.spec.ts` | `@smoke profile edit persists after save and reload` |

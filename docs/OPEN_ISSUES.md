@@ -35,17 +35,19 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title |
 |---|-------|
-| 441 | Boot gate asymmetry: `require_stripe_in_prod` exists but no `require_icpay_in_prod` |
 | 426 | Test: out-of-order Stripe webhook delivery (dispute.created before checkout.session.completed) |
 | 425 | Audit existing Provisioning → Cancelled failure paths and migrate to ProvisioningFailed |
-| 420 | ICPay: implement automated payouts when ICRC-1 transfer API ships |
+
+> **#443** (boot-gate asymmetry: no `require_icpay_in_prod`) and **#420** (ICPay automated payouts)
+> closed **2026-07-24 — moot**: the ICPay rail was fully retired (Stripe is the sole rail). See
+> "Recently closed" below.
 
 ## Deferred — UX
 
 | # | Title | Filed by |
 |---|-------|----------|
-| 442 | Subscription Pro/Enterprise cards advertise "14-day free trial" but CTA is only "Contact Sales" | 2026-07-24 UX audit |
-| 443 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
+| 441 | Subscription page: trial/CTA mismatch (Pro/Enterprise advertise "14-day free trial" but CTA is only "Contact Sales") | 2026-07-24 UX audit |
+| 442 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
 | 436 | Seed-phrase sign-in hidden behind extra click when no Google OAuth configured | 2026-07-20 UX audit |
 
 > **#436 implementation note (2026-07-21):** The issue's suggested gate
@@ -72,6 +74,19 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-07-24 session (ICPay retirement + test stabilization)
+
+ICPay (the ICP cryptocurrency payment rail) fully retired — **Stripe is the sole rail** — then a
+stabilization pass fixed the flakes exposed by the required DB reset (the migration 049 CHECK edit
+changed its checksum). GH **#443** (boot-gate `require_icpay_in_prod`) closed as moot; **#420**
+(ICPay payouts) moot. Final baseline: full e2e **299 passed, 0 failed, 2 workers, ~6.6m**; smoke
+**23 tests, ~29s**.
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| ICPay payment rail fully retired — Stripe is the sole rail | Backend + frontend + config | Backend (`PaymentMethod` enum ICPay variant, `icpay_client`, escrow release/payout subsystem, webhook, endpoint, schema columns + `payment_releases` table, migration 049 CHECK rewrite), frontend (`RentalRequestDialog` Stripe-only, ICPay SDK pkgs removed, admin payout subsystem, env/compose/secrets), config all removed. `payment_method` default → `'test'` (Test absorbs auto-succeed). Commits: `fb4328be` `a773bdd6` `0b564bf9` `02ed7c2a` `1215b077` `1fc1d87f` `5c165eee` `2b18e4c7` `e9b7e0f3` `f0f44c8e` `5a228a63`. Dead `loadStripe` client + stale 'ICP (Internet Computer)' onboarding label also removed (`e7d7b3e4`). |
+| Test stabilization (post DB-reset) | Test / reliability | `offering-status-badge` spec made self-seeding — was ambient-data-dependent, broke on DB reset (`469f48b6`); route-audit hardened against transient SvelteKit navigation fetch races (`b473e14c`); local e2e default workers 4→2 for reliability under persistent harness CPU load (`f1b9f088`). |
 
 ### 2026-07-24 session (fresh sweep: robustness + UX + coverage + create-bug)
 
@@ -191,7 +206,7 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 
 | ID | Finding | Status |
 |----|---------|--------|
-| H2 | Transfers page has no Send/Receive UI | **Feature gap** — P2P send needs IC canister integration (product decision, not a bug). Balance card already explains rentals are per-transaction at checkout. Related: #433 (closed, small-fix), #420 (ICPay deferred). |
+| H2 | Transfers page has no Send/Receive UI | **Feature gap** — P2P send needs IC canister integration (product decision, not a bug). Balance card already explains rentals are per-transaction at checkout. Related: #433 (closed, small-fix), #420 (closed 2026-07-24 — ICPay rail retired). |
 | M5 | Billing VAT country EU-only | **Known limitation** — global country list needs server-side VAT rule changes. Low priority pre-launch. |
 | L1 | Security page: seed-login device is 'Unnamed Device' | **Minor UX** — consider prompting device name on first login. |
 

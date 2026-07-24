@@ -105,7 +105,52 @@ Update `docs/OPEN_ISSUES.md`, `website/AGENTS.md`, this plan, `FLOWS.md`. Final 
 - `docs/OPEN_ISSUES.md`, `website/tests/e2e/FLOWS.md` updated (create-offering → ✅; 0 live `confirm()`; smoke 24 tests).
 
 ## Parked (filed as GH issues, need product decisions / large refactors)
-- #441 boot-gate asymmetry (require_icpay_in_prod).
-- #442 subscription trial/CTA mismatch.
-- #443 auto-suggest monthly price.
+- #441 subscription trial/CTA mismatch.
+- #442 auto-suggest monthly price.
 - #444 large-file splits (>2k lines, risky).
+
+> **#443** (boot-gate `require_icpay_in_prod`) closed 2026-07-24 — moot (ICPay retired). The
+> Phase 4 summary above had the #441/#442/#443 numbers swapped; corrected here. See Phase 6.
+
+## Phase 5 — ICPay retirement
+
+**Directive:** "icpay needs to be fully retired." The ICPay (ICP cryptocurrency) payment rail was
+removed end-to-end; **Stripe is the sole rail**.
+
+- **Decisions:** Stripe-only. The `Test` payment method absorbs the auto-succeed path
+  (`rental.rs:155` `"icpay"`→`"test"`). **Option A** — delete the entire ICPay escrow release/payout
+  subsystem (`payment_release_service.rs`, `payment_releases` table, `total_released_e9s` /
+  `last_release_at_ns`, release DB methods, admin `payment-releases` + `payouts` endpoints).
+  Simplify `calculate_net_refund_e9s` to gross-prorated (no released-funds subtraction). D2 rentable
+  ICP-currency test offerings → `'usd'`. Migration 049 CHECK rewritten to `refund <= payment`.
+  Migrations edited **in place** (repo convention).
+- **Subagents:** planner (file-by-file plan) → backend (4 commits) → frontend (7 commits).
+- **Backend gates green:** `clippy --tests` + `nextest` clean.
+- **Commits:** `fb4328be` `a773bdd6` `0b564bf9` `02ed7c2a` `1215b077` `1fc1d87f` `5c165eee`
+  `2b18e4c7` `e9b7e0f3` `f0f44c8e` `5a228a63`.
+- **KEY LEARNING:** `sqlx::migrate!` embeds migrations at **compile time** — migration edits need a
+  binary rebuild to take effect; a stale binary silently runs the OLD migrations.
+- **KEY LEARNING:** poem-openapi uses its own type system; `#[serde(default)]` is ignored — use
+  `#[oai(default)]` for optional-but-non-`Option<T>` body fields (same root cause as the #440
+  create-offering fix `ebebff02`).
+
+## Phase 6 — Stabilization + cleanup (post-DB-reset)
+
+The Phase 5 migration-049 CHECK edit changed a migration checksum, forcing the required DB reset.
+The reset exposed flakes that had been masked by ambient seed data:
+
+- `offering-status-badge` spec depended on demo/trust seed data → broke on reset; **made
+  self-seeding** via `seedOffering` `postProvisionScript` override (`469f48b6`).
+- Route-audit hardened against transient `Failed to fetch` SvelteKit navigation races under
+  parallel load (`b473e14c`).
+- Diagnosed persistent e2e flakiness = the opencode harness process itself consuming ~1 CPU core
+  baseline → reduced **local e2e default workers 4→2** for reliability under persistent harness
+  load (`f1b9f088`).
+- Removed dead `loadStripe` client (assigned-but-never-read — Stripe uses the server-side
+  `checkoutUrl` redirect) + stale 'ICP (Internet Computer)' onboarding label (`e7d7b3e4`).
+
+**Final:** full e2e suite **299 passed, 0 failed** (2 workers, ~6.6m); smoke **23 tests, ~29s**.
+
+**GH housekeeping:** #443 (boot-gate `require_icpay_in_prod`) closed as moot; #441 (subscription
+trial/CTA) re-opened, correcting a mistaken earlier close. (`docs/OPEN_ISSUES.md` holds the verified
+#441/#442/#443/#444 mapping — an earlier session summary had the numbers swapped.)
