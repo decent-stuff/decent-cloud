@@ -27,6 +27,10 @@
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let successMessage = $state<string | null>(null);
+	// Inline two-step delete (commit 1077dd33 pattern): the first click on a
+	// row's Delete button only sets pendingDeleteId, revealing an inline
+	// Confirm/Cancel pair for that row; the real delete runs in confirmDelete.
+	let pendingDeleteId = $state<number | null>(null);
 
 	onMount(() => {
 		loadContacts();
@@ -91,9 +95,15 @@
 		}
 	}
 
-	async function handleDelete(id: number, type: string) {
-		if (!confirm(`Delete ${type} contact?`)) return;
+	function requestDelete(id: number) {
+		pendingDeleteId = id;
+	}
 
+	function cancelDelete() {
+		pendingDeleteId = null;
+	}
+
+	async function confirmDelete(id: number, type: string) {
 		error = null;
 		successMessage = null;
 
@@ -119,6 +129,8 @@
 		} catch (err: unknown) {
 			error =
 				err instanceof Error ? err.message : "Failed to delete contact";
+		} finally {
+			pendingDeleteId = null;
 		}
 	}
 </script>
@@ -150,13 +162,33 @@
 						</span>
 					{/if}
 				</div>
-				<button
-					onclick={() =>
-						handleDelete(contact.id, contact.contactType)}
-					class="text-red-400 hover:text-red-300 transition-colors"
-				>
-					Delete
-				</button>
+			<div class="flex items-center gap-3">
+				{#if pendingDeleteId === contact.id}
+					<span class="text-xs text-neutral-400">Delete?</span>
+					<button
+						type="button"
+						onclick={() => confirmDelete(contact.id, contact.contactType)}
+						class="text-xs text-red-400 hover:text-red-300 transition-colors"
+					>
+						Confirm
+					</button>
+					<button
+						type="button"
+						onclick={cancelDelete}
+						class="text-xs text-neutral-400 hover:text-white transition-colors"
+					>
+						Cancel
+					</button>
+				{:else}
+					<button
+						onclick={() => requestDelete(contact.id)}
+						disabled={pendingDeleteId !== null}
+						class="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+					>
+						Delete
+					</button>
+				{/if}
+			</div>
 			</div>
 		{/each}
 	</div>
