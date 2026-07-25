@@ -703,3 +703,36 @@ export async function cleanupRentableWithResource(seed: RentableWithResourceSeed
 		DELETE FROM accounts WHERE id = decode('${seed.providerAccountIdHex}', 'hex');
 	`);
 }
+
+/**
+ * Seed a `cloud_accounts` row owned by `accountHex` (the testAccount's bytea
+ * account id) and return its UUID id. Mirrors the INSERT shape
+ * `seedRentableWithResource` uses, but under a GIVEN account_id so the row
+ * shows up on THAT user's `/dashboard/cloud/accounts` page (the list endpoint
+ * filters by the caller's account_id).
+ *
+ * Use this to assert the populated cloud-accounts list + the disconnect flow
+ * without real Hetzner/Proxmox credentials. `backendType` defaults to
+ * 'hetzner'; `credentials_encrypted` is a placeholder (the list page never
+ * decrypts it). Cleanup is `deleteCloudAccountsForAccount(accountHex)`.
+ */
+export async function seedCloudAccount(
+	accountHex: string,
+	opts?: { name?: string; backendType?: string },
+): Promise<string> {
+	const name = (opts?.name ?? `E2E Cloud Acct ${randomHex(4)}`).replace(/'/g, "''");
+	const backendType = opts?.backendType ?? 'hetzner';
+	const raw = await sql(`
+		INSERT INTO cloud_accounts (account_id, backend_type, name, credentials_encrypted)
+		VALUES (decode('${accountHex}', 'hex'), '${backendType}', '${name}', 'e2e-placeholder-encrypted')
+		RETURNING id
+	`);
+	const uuid = raw.split('\n').map((l) => l.trim()).find((l) => /[0-9a-f]{8}-[0-9a-f]{4}/.test(l));
+	if (!uuid) throw new Error(`seedCloudAccount did not RETURN a uuid; got: ${raw}`);
+	return uuid;
+}
+
+/** Remove all cloud_accounts for an account id (cleanup). Cascades cloud_resources. */
+export async function deleteCloudAccountsForAccount(accountHex: string): Promise<void> {
+	await sql(`DELETE FROM cloud_accounts WHERE account_id = decode('${accountHex}', 'hex')`);
+}
