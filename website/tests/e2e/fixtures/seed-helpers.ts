@@ -441,6 +441,23 @@ export async function deleteProviderProfileByPubkey(providerPubkeyHex: string): 
 	`);
 }
 
+/**
+ * Flip `email_verified = true` on the accounts row that owns the given public
+ * key. Mirrors the post-verify state of `Database::verify_email_token`
+ * (`api/src/database/accounts.rs:285`) without requiring a verification token,
+ * so specs that need a verified user for realistic dashboard rendering (e.g.
+ * route-audit, rent-flow) can set it up in one SQL round-trip.
+ */
+export async function verifyAccountEmail(pubkeyHex: string): Promise<void> {
+	await sql(`
+		UPDATE accounts SET email_verified = true
+		WHERE id = (
+			SELECT account_id FROM account_public_keys
+			WHERE public_key = decode('${pubkeyHex}', 'hex')
+		)
+	`);
+}
+
 /** Remove all saved offerings for a user (cleanup helper shared by specs). */
 export async function deleteSavedOfferingsForUser(userPubkeyHex: string): Promise<void> {
 	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${userPubkeyHex}', 'hex')`);

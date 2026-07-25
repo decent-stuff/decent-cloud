@@ -240,3 +240,16 @@ export async function waitForApiResponse(
 		{ timeout: 10000 },
 	);
 }
+
+/**
+ * Assert that no native browser dialog (alert/confirm/prompt) fires on `page`.
+ *
+ * Specs that replaced a native `confirm()` with the inline two-step pattern
+ * (contact/device/ext-key/social delete, offerings editor replace, …) install
+ * this guard so a regression that re-introduces `confirm()` fails loudly
+ * instead of being silently auto-dismissed by Playwright. The dialog type is
+ * compared to the literal `'never'` so ANY dialog type trips the assertion.
+ */
+export function assertNoNativeDialog(page: Page): void {
+	page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+}

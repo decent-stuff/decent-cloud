@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/test-account';
-import { sql } from './fixtures/seed-helpers';
+import { assertNoNativeDialog } from './fixtures/auth-helpers';
+import { sql, accountIdHex } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the social-account delete flow (inline two-step confirm).
@@ -14,16 +15,6 @@ import { sql } from './fixtures/seed-helpers';
  * testAccount pubkey, so tests must not run in parallel.
  */
 test.describe.configure({ mode: 'serial' });
-
-/** Resolve the bytea account id (hex) for a username. */
-async function accountIdHex(username: string): Promise<string> {
-	const row = await sql(
-		`SELECT encode(id, 'hex') FROM accounts WHERE username = '${username.replace(/'/g, "''")}'`,
-	);
-	const hex = row.split('\n').map((l) => l.trim()).find((l) => /^[0-9a-f]+$/.test(l));
-	if (!hex) throw new Error(`no account id for username ${username}`);
-	return hex;
-}
 
 /** Seed one social account; returns its numeric id. */
 async function seedSocial(accountHex: string, username: string): Promise<string> {
@@ -49,7 +40,7 @@ test.describe('Social delete (inline two-step confirm)', () => {
 		const id = await seedSocial(accountHex, handle);
 		try {
 			// A native dialog must never appear — fail loudly if it does.
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/account/profile');
 			const row = page.locator('div.bg-surface-elevated.flex', { hasText: handle });
@@ -79,7 +70,7 @@ test.describe('Social delete (inline two-step confirm)', () => {
 		const handle = `e2e-keep-${Date.now()}`;
 		const id = await seedSocial(accountHex, handle);
 		try {
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/account/profile');
 			const row = page.locator('div.bg-surface-elevated.flex', { hasText: handle });

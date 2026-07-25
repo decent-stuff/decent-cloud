@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/test-account';
 import type { Page } from '@playwright/test';
+import { assertNoNativeDialog } from './fixtures/auth-helpers';
 import { pubkeyHexFromSeed, seedOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
 
 /**
@@ -38,7 +39,7 @@ test.describe('Offerings editor replace guard (inline two-step confirm)', () => 
 		await seedOffering(pubkey, { name: 'E2E Replace Guard' });
 		try {
 			// A native dialog must never appear — fail loudly if it does.
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/offerings');
 			// Provider has >=1 offering, so "Edit Offerings" opens the editor dialog.
@@ -72,7 +73,7 @@ test.describe('Offerings editor replace guard (inline two-step confirm)', () => 
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		await seedOffering(pubkey, { name: 'E2E Replace Keep' });
 		try {
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/offerings');
 			await page.getByRole('button', { name: 'Edit Offerings' }).click();

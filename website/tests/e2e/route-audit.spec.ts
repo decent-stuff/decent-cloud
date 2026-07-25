@@ -39,6 +39,7 @@ import {
 	seedContract,
 	deleteOfferingsByProvider,
 	deleteContractsForRequester,
+	verifyAccountEmail,
 	sql,
 } from './fixtures/seed-helpers';
 
@@ -611,13 +612,7 @@ authTest.describe('route-audit (authenticated)', () => {
 
 		// Realistic: verified email so rental/account pages don't show a
 		// spurious "unverified" banner that could mask other findings.
-		await sql(`
-			UPDATE accounts SET email_verified = true
-			WHERE id = (
-				SELECT account_id FROM account_public_keys
-				WHERE public_key = decode('${pubkey}', 'hex')
-			)
-		`);
+		await verifyAccountEmail(pubkey);
 
 		// (a) Provider side: an offering OWNED by the fixture account, so the
 		// offerings list + edit page render the populated (not empty) branch.

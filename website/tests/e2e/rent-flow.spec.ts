@@ -5,6 +5,7 @@ import {
 	deleteContractsForRequester,
 	seedRentableWithResource,
 	cleanupRentableWithResource,
+	verifyAccountEmail,
 	sql,
 	type RentableWithResourceSeed,
 } from './fixtures/seed-helpers';
@@ -66,13 +67,7 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 		// Rentals are rejected unless the requester's email is verified
 		// (API guard in contracts.rs). seedAccountDirect creates the testAccount
 		// with email_verified=false, so verify it DB-side as test-account setup.
-		await sql(`
-			UPDATE accounts SET email_verified = true
-			WHERE id = (
-				SELECT account_id FROM account_public_keys
-				WHERE public_key = decode('${requesterPubkey}', 'hex')
-			)
-		`);
+		await verifyAccountEmail(requesterPubkey);
 		seed = await seedRentableWithResource({ name: 'E2E Rent Flow Offering' });
 	});
 

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/test-account';
-import { sql, randomHex } from './fixtures/seed-helpers';
+import { assertNoNativeDialog } from './fixtures/auth-helpers';
+import { sql, randomHex, accountIdHex } from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the device-key remove flow (inline two-step confirm).
@@ -19,16 +20,6 @@ import { sql, randomHex } from './fixtures/seed-helpers';
  * pubkey, so tests must not run in parallel.
  */
 test.describe.configure({ mode: 'serial' });
-
-/** Resolve the bytea account id (hex) for a username. */
-async function accountIdHex(username: string): Promise<string> {
-	const row = await sql(
-		`SELECT encode(id, 'hex') FROM accounts WHERE username = '${username.replace(/'/g, "''")}'`,
-	);
-	const hex = row.split('\n').map((l) => l.trim()).find((l) => /^[0-9a-f]+$/.test(l));
-	if (!hex) throw new Error(`no account id for username ${username}`);
-	return hex;
-}
 
 /** Seed a second active key with a device name; returns its 16-byte hex id. */
 async function seedDevice(accountHex: string, deviceName: string): Promise<string> {
@@ -58,7 +49,7 @@ test.describe('Device remove (inline two-step confirm)', () => {
 		const keyIdHex = await seedDevice(accountHex, deviceName);
 		try {
 			// A native dialog must never appear — fail loudly if it does.
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/account/security');
 			const row = page.locator('div.flex.items-center.justify-between.p-3', { hasText: deviceName });
@@ -88,7 +79,7 @@ test.describe('Device remove (inline two-step confirm)', () => {
 		const deviceName = `E2E-KEEP-${Date.now()}`;
 		const keyIdHex = await seedDevice(accountHex, deviceName);
 		try {
-			page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
+			assertNoNativeDialog(page);
 
 			await page.goto('/dashboard/account/security');
 			const row = page.locator('div.flex.items-center.justify-between.p-3', { hasText: deviceName });
