@@ -13,6 +13,7 @@ pub mod notifications;
 pub mod offerings;
 pub mod offering_csv;
 pub mod pools;
+pub mod provider_stats;
 pub mod providers;
 pub mod resellers;
 pub mod signature;
@@ -40,6 +41,7 @@ pub use notifications::NotificationsApi;
 pub use offering_csv::OfferingCsvApi;
 pub use offerings::OfferingsApi;
 pub use pools::PoolsApi;
+pub use provider_stats::ProviderStatsApi;
 pub use providers::{contract_status_events, password_reset_events, ProvidersApi};
 pub use resellers::ResellersApi;
 pub use sla::SlaApi;
@@ -83,6 +85,7 @@ pub fn create_combined_api() -> impl OpenApi {
             SlaApi,
             AllowlistApi,
             OfferingCsvApi,
+            ProviderStatsApi,
         ),
     )
 }
