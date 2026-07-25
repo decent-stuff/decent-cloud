@@ -46,24 +46,28 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title | Filed by |
 |---|-------|----------|
-| 441 | Subscription page: trial/CTA mismatch (Pro/Enterprise advertise "14-day free trial" but CTA is only "Contact Sales") | 2026-07-24 UX audit |
 | 442 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
-| 436 | Seed-phrase sign-in hidden behind extra click when no Google OAuth configured | 2026-07-20 UX audit |
 
-> **#436 implementation note (2026-07-21):** The issue's suggested gate
-> (`!import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID`) does not apply — that Vite env
-> var does not exist. Google OAuth is gated **server-side** via the Rust env var
-> `GOOGLE_OAUTH_CLIENT_ID` (`api/src/main.rs:1024`, conditionally registers the
-> route at `:1334`). The frontend has no signal. Three implementation paths
-> documented in [issue comment 5035263075](https://github.com/decent-stuff/decent-cloud/issues/436#issuecomment-5035263075):
-> (1) capability endpoint [recommended], (2) runtime HEAD probe, (3) build-time
-> Vite var. Product call.
+> **#441 (RESOLVED 2026-07-25, `b1158bff`):** trial/CTA mismatch fixed — copy now honestly reflects
+> the CTA via `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans
+> (Pro/Enterprise) no longer advertise a trial. Test in `account-subscription.spec.ts` (`@smoke`).
+>
+> **#436 (RESOLVED 2026-07-25, `3fa993a4` + `ea29b0a3`):** seed-phrase sign-in default fixed via the
+> recommended capability-endpoint path. New public `GET /api/v1/auth/capabilities` →
+> `{google_oauth: bool}`; the frontend defaults to the credential (seed-phrase) form when OAuth is
+> off (no extra click). Server env (`GOOGLE_OAUTH_CLIENT_ID`) is the single source of truth. The
+> success-screen auto-redirect bonus was **deferred** (small follow-up issue filed).
 
 ## Deferred — Tech debt / low-value
 
 | # | Title |
 |---|-------|
 | 444 | Tech debt: split large source files (>2000 lines) into logical modules |
+
+> **#444 progress (2026-07-25):** first safe extraction shipped — `PoolsApi` pulled out of
+> `providers.rs` (−957 lines, zero behavior change, `74fb9248`). Decomposition roadmap for the
+> remaining files at `docs/plans/2026-07-25-large-file-splits-444.md` (`c4c68e09`). GH #444 stays
+> **open** (partial; ongoing).
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
 | 382 | dc-agent: remove `try_trigger_hetzner_provisioning` backward-compat alias |
 | 373 | DRY refactor: `extract_contract_id()` shared across 3 provisioners |
@@ -74,6 +78,36 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-07-25 session (fresh sweep: robustness + UX + coverage + #444 split)
+
+Six-wave sweep (baseline `56df84e6` → `64e46ef4`). GH **#441** and **#436** closed as completed;
+net-new UX **#5** (offering-edit ownership) filed and fixed; a robustness/DRY pass; one safe #444
+split; and e2e coverage + harness improvements. Final: svelte-check 0/0, vitest 847, clippy clean
+(3 known baseline warnings, 0 new), cargo `--lib` 1011/0, smoke 27 @ ~33s, full e2e 300/3 (1 known
+parallel flake + 2 **pre-existing** recovery-flow failures unrelated to this session — filed).
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| #441 subscription trial/CTA mismatch | UX | `b1158bff`: honest copy via `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans no longer advertise a trial. `@smoke` test. |
+| #436 seed-phrase sign-in hidden behind extra click | UX | `3fa993a4` + `ea29b0a3`: new public `GET /api/v1/auth/capabilities` (`{google_oauth: bool}`); frontend defaults to credential form when OAuth off. Server env = single source of truth. (Success-screen auto-redirect bonus deferred — follow-up issue filed.) |
+| #5 (net-new) offering-edit ownership | UX/security | `43ffae8e` + `958ebff1`: `/dashboard/offerings/[id]/edit` redirects non-owners to the view-only route; narrowed identity used in the guard. |
+| ICPay-cleanup cluster | Backend + seed + UX | Reject non-Stripe currency at offering create/update `79c83657`; migrate ICP offerings/contracts → USD `058a36e6`; remove stale ICP labels + dead ICP price feed `83605227`; remove dead ICP price feed backend `05c27f01`. |
+| http timeouts (money/identity/provisioning) | Robustness | `execute_command` setup helper 300s `40d217f8`; cli provider commands `70b6c4ac`; dc-agent manual provisioner webhook `5da340a4`. |
+| STRIPE_API_BASE DRY | DRY | `85afbd8c`: `pub const STRIPE_API_BASE` in `stripe_client.rs`, 5 hardcoded URLs removed; contracts test fixtures finished `40d22a0c`. |
+| Silent errors logged, dead code removed | Robustness | Log-don't-swallow in dc-agent doctor/proxmox/chatwoot init `f55750d5`; dead `build_auth_headers` + `post_provision` shim removed `11fc0d2c`. |
+| Hex decoding DRY + detailed errors | DRY | `d1cce292`: 18 user-input sites → `decode_pubkey`/`decode_hex_path` helpers in `openapi/common.rs`; terse "Invalid format" → detailed (names field + problem). 22 deliberate DB-sourced non-fit sites documented in `docs/audits/2026-07-25-code-robustness.md`. |
+| #444 first safe split | Tech debt | `74fb9248`: `PoolsApi` extracted from `providers.rs` (−957 lines, zero behavior change). Roadmap `c4c68e09`. #444 stays open (ongoing). |
+| E2E coverage + harness | Coverage | verify-email success path `c8815db4`; cloud-accounts populated + disconnect `54fa508a`; Stripe `checkout.session.completed` money path `0604f360`; self-contained search-dsl `e5911dd4`; helpers promoted `92058c24`; 7 delete specs parametrized `67f84f7f`; route-audit settle-on-fetch `e0726927`; 5 fast smokes `f4893141`. |
+| Smoke fast-loop tuning | Test | `64e46ef4`: demoted 5 slow non-critical specs from `@smoke` → 27 tests @ ~33s (was 32 @ ~51s); kept the authed dashboard, anonymous landing/error, verify-email, sign-in, and #441 money-path. |
+
+**Still open / deferred (deliberate):**
+- **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
+- **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
+- **#436 success-screen auto-redirect bonus** — skipped; small follow-up issue filed.
+- **`scripts/browser.js --seed`** onboarding-flag tooling note — minor test helper, documented in-repo.
+- **22 deliberate hex non-fit sites** — documented in `docs/audits/2026-07-25-code-robustness.md`.
+- **2 pre-existing `recovery-flow` e2e failures** — recovery code unchanged this session; frontend `SeedPhraseStep` Continue→`onComplete` never reaches the Processing state with the fake-token tests. Filed as a GH issue (not a session regression).
 
 ### 2026-07-24 session (ICPay retirement + test stabilization)
 

@@ -411,3 +411,32 @@ ssh root@proxmox-host dc-agent doctor --no-test-provision
   flows → test coverage status. Update when adding tests or closing coverage gaps.
 - DNS propagation can delay Let's Encrypt visibility after record creation.
 - First wildcard cert issuance on a new host often requires checking `journalctl -u caddy` if Cloudflare config is wrong.
+
+## Conventions established 2026-07-25
+
+Lean, normative patterns future agents MUST follow. (Source: fresh-sweep session
+`56df84e6`→`64e46ef4`; details/rationale in `docs/OPEN_ISSUES.md` and the audit docs.)
+
+- **Auth capability endpoint:** auth-method availability is exposed by the public
+  `GET /api/v1/auth/capabilities` (`{google_oauth: bool}`). The frontend defaults to the
+  credential (seed-phrase) sign-in form when OAuth is off. **Server env is the single source of
+  truth** — never probe Vite/build-time vars or hardcode auth availability client-side.
+- **HTTP timeouts — never bare `reqwest::Client::new()`:** use the crate's shared `http_client()`:
+  api → `http_util::http_client`; cli → `cli/src/utils/http.rs::http_client`; dc-agent provisioners
+  use `Client::builder().timeout(...)`. The shared `execute_command` setup helper defaults to a 300s
+  timeout (`dc-agent/src/setup/mod.rs`).
+- **Stripe URL:** single source is `pub const STRIPE_API_BASE` in `api/src/stripe_client.rs`. Never
+  hardcode `https://api.stripe.com` (or a `api.stripe.com` literal) anywhere.
+- **Hex decoding:** use `decode_pubkey` / `decode_hex_path` in `api/src/openapi/common.rs` for all
+  path/query/body hex. Emit **detailed** errors (name the field + the problem, echo the bad value) —
+  never terse "Invalid format". (22 deliberate non-fit sites — DB-sourced decode with internal-error
+  + tracing patterns — are documented in `docs/audits/2026-07-25-code-robustness.md`.)
+- **Offering currency:** only Stripe-supported currencies (`usd`/`eur`/`gbp`/`jpy`/`cad`) via
+  `is_stripe_supported_currency`. ICP is fully retired as a payment rail and an offering currency.
+- **OpenAPI multi-file:** large handler groups are split into separate `utoipa`/`poem-openapi` types
+  (e.g. `PoolsApi` in `api/src/openapi/pools.rs`) and registered via the combined-API tuple in
+  `openapi.rs`. See `docs/plans/2026-07-25-large-file-splits-444.md` for the split roadmap.
+- **E2E test discipline:** tests self-seed their data (no reliance on ambient demo data); promote
+  repeated setup into `tests/e2e/fixtures/seed-helpers.ts` / `auth-helpers.ts`; parametrize repeated
+  flows; keep `@smoke` to fast (<5s), zero/low-seed, reliable specs only (run
+  `npm run test:e2e:fast:smoke`, must stay <35s).

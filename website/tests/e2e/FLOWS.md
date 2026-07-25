@@ -25,7 +25,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 | Tag | Meaning |
 |-----|---------|
-| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~28 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~27 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~28 critical-path tests, <35s (dev loop)
+npm run test:e2e:fast:smoke                 # ~27 critical-path tests, <35s (dev loop)
 npm run test:e2e:fast -- --grep @rental     # every flow in a category
 npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
 ```
@@ -81,6 +81,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Session persists after refresh | ✅ | `@auth` | `signin-flow.spec.ts` | `should maintain session after page refresh` |
 | Recover account | ✅ | `@auth` | `recovery-flow.spec.ts` | `should complete recovery flow with valid token` |
 | Verify email | ✅ | `@auth` | `verify-email.spec.ts` | `success: a valid DB-seeded token verifies the email and shows the success state` — success + both error branches; the token is seeded DB-side (no external email service) |
+| Auth capability + login default (#436) | ✅ | `@smoke` `@auth` | `auth-capabilities.spec.ts` | `capability endpoint reports google_oauth=false on the e2e stack` · `login page defaults to the seed-phrase form when OAuth is off (no extra click)` — the public `GET /api/v1/auth/capabilities` endpoint drives the frontend default; server env is the single source of truth |
 | Redirect / returnUrl | ✅ | `@auth` | `signin-flow.spec.ts` · `registration-flow.spec.ts` | `should redirect to returnUrl after successful sign-in` |
 | Login ↔ register CTA | ✅ | `@auth` | `login-registration-cta.spec.ts` | `Create account link jumps directly to seed backup (generate mode)` |
 | First-login onboarding modal | ✅ | `@smoke` `@auth` | `first-login-onboarding.spec.ts` | `@smoke guides a new user through all onboarding steps once` |
@@ -108,6 +109,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Account overview / settings nav | ✅ | `@account` | `account-page.spec.ts` | `account page: overview renders correctly via direct URL` |
 | Account error recovery | ✅ | `@account` | `account.spec.ts` | `shows error card with Retry and Logout when account fetch fails (#6)` |
 | Subscription / plan | ✅ | `@account` | `account-subscription.spec.ts` | `renders current free plan plus the upgrade catalog with paid tiers` |
+| Subscription trial copy honesty (#441) | ✅ | `@smoke` `@account` | `account-subscription.spec.ts` | `@smoke does not advertise a trial on contact-sales-only plans (#441)` — copy gated on `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans no longer claim a trial |
 | Billing settings (address/VAT) | ✅ | `@billing` `@account` | `billing-settings.spec.ts` | `billing settings: save billing address` (+spending alerts) |
 | Invoices | ✅ | `@billing` | `invoices.spec.ts` | `populated state: shows invoice table with one row per invoiceable contract` |
 | Transfers | ✅ | `@billing` | `transfers.spec.ts` | `populated state: shows sent and received transfers with direction icons` |
@@ -122,6 +124,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Become provider / setup wizard | ✅ | `@smoke` `@provider` | `provider-onboarding-submit.spec.ts` · `become-provider.spec.ts` | `submitting the Help Center form persists onboarding data across reload` (full submit) · `@smoke renders step 1, advances to step 2, and links Hetzner onboarding` (wizard render) |
 | Create offering (full submit) | ✅ | `@provider` | `offering-create.spec.ts` | `submitting the wizard with no Hetzner account persists a manual offering` — real signed POST (no `pubkey` in body). Was blocked by #440 (backend `Offering.pubkey` rejected missing field); fixed in `ebebff02` via `#[oai(default)]` (handler overwrites from URL path). CSV template download covered in `offerings-template.spec.ts`. |
 | Edit offering | ✅ | `@provider` | `offering-edit.spec.ts` | `submit persists the change and redirects to the offerings list` |
+| Offering edit: ownership guard (#5) | ✅ | `@smoke` `@provider` | `offering-edit-ownership.spec.ts` | `@smoke blocks a non-owner from the editable form (no Save button)` — `/dashboard/offerings/[id]/edit` redirects non-owners to the view-only route |
 | Offering status badge (a11y) | ✅ | `@provider` | `offering-status-badge.spec.ts` | `tooltip becomes visible when the badge button receives focus (#15)` |
 | Manage visibility | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `visibility menu lists all states with descriptions and persists selection` |
 | Manage stock status | ✅ | `@provider` | `offerings-status-menus.spec.ts` | `stock menu lists all states with descriptions and persists selection` |
@@ -157,11 +160,13 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~28 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~27 tests,
 **<35s** against the warm stack). Selection rules:
 
-- **Critical path only** — sign in/out, register, browse, dashboard, rent/cancel
-  lifecycle entry, provider create, profile edit, keyboard shortcut, auth modal.
+- **Critical path only** — landing/anonymous browse, dashboard overview, sign-in,
+  verify-email, onboarding, provider create + SLA, subscription trial honesty,
+  keyboard shortcuts, auth modal. (Full registration, sign-out, profile edit,
+  add-device, and rent/cancel actions are full-suite-only — too slow for the loop.)
 - **Fast** — each test <5s. Exclude anything that drives a slow multi-step flow
   or needs `networkidle`.
 - **Low seed** — exclude tests that need complex DB seeding (e.g. the real
@@ -180,33 +185,36 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 5 | User profile redirect | `user.spec.ts` › `@smoke redirects to the reputation page...` |
 | 6 | Provider SLA metrics (API) | `provider-response-metrics.spec.ts` › `@smoke ...response-metrics returns contract request SLA metrics` |
 | 7 | Provider SLA metrics (invalid pubkey) | `provider-response-metrics.spec.ts` › `@smoke ...error for invalid pubkey...` |
-| 8 | Registration completes | `registration-flow.spec.ts` › `@smoke should complete full registration flow...` |
-| 9 | Provider create wizard (render) | `become-provider.spec.ts` › `@smoke renders step 1, advances to step 2...` |
-| 10 | Command palette trigger | `command-palette-trigger.spec.ts` › `@smoke sidebar shows a clickable command-palette trigger on desktop` |
-| 11 | Command palette provider actions | `command-palette-trigger.spec.ts` › `@smoke authenticated palette lists provider actions...` |
-| 12 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
-| 13 | Add device submit | `account-add-device.spec.ts` › `@smoke links a generated device key and raises the device count from 1 to 2` |
-| 14 | Offering detail breadcrumb | `offering-detail-save.spec.ts` › `@smoke breadcrumb root crumb matches its destination` |
-| 15 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
-| 16 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
-| 17 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
-| 18 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
-| 19 | Edit profile | `profile-page.spec.ts` › `@smoke profile edit persists...` |
-| 20 | Rentals list | `rentals.spec.ts` › `@smoke empty state...` |
-| 21 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
+| 8 | Provider create wizard (render) | `become-provider.spec.ts` › `@smoke renders step 1, advances to step 2...` |
+| 9 | Command palette trigger | `command-palette-trigger.spec.ts` › `@smoke sidebar shows a clickable command-palette trigger on desktop` |
+| 10 | Command palette provider actions | `command-palette-trigger.spec.ts` › `@smoke authenticated palette lists provider actions...` |
+| 11 | Compare share URL | `compare-share.spec.ts` › `@smoke copies canonical comparison URL...` |
+| 12 | Offering detail breadcrumb | `offering-detail-save.spec.ts` › `@smoke breadcrumb root crumb matches its destination` |
+| 13 | Offering edit: ownership guard (#5) | `offering-edit-ownership.spec.ts` › `@smoke blocks a non-owner from the editable form (no Save button)` |
+| 14 | Dashboard overview loads | `dashboard-overview.spec.ts` › `@smoke dashboard loads all sections...` |
+| 15 | First-login onboarding | `first-login-onboarding.spec.ts` › `@smoke guides a new user...` |
+| 16 | Keyboard search shortcut | `keyboard-shortcuts.spec.ts` › `@smoke / focuses marketplace search input` |
+| 17 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
+| 18 | Rentals list (empty state) | `rentals.spec.ts` › `@smoke empty state...` |
+| 19 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
+| 20 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
+| 21 | Subscription trial copy honesty (#441) | `account-subscription.spec.ts` › `@smoke does not advertise a trial on contact-sales-only plans (#441)` |
 | 22 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 23 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
-| 24 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
-| 25 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
-| 26 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
-| 27 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
-| 28 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
+| 23 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint reports google_oauth=false on the e2e stack @smoke` |
+| 24 | Login default seed-phrase form (#436) | `auth-capabilities.spec.ts` › `login page defaults to the seed-phrase form when OAuth is off (no extra click) @smoke` |
+| 25 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
+| 26 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
+| 27 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
 > in smoke: its only coverage (`rent-flow.spec.ts`) is >5s and needs complex DB
 > seeding, violating the smoke selection rules. It is fully covered by the full
 > suite (`npm run test:e2e:fast`).
+>
+> **2026-07-25 tuning.** 5 slow non-critical specs were demoted from `@smoke`
+> (full registration, sign-out, add-device, profile-edit, rentals cancel-action)
+> to bring the loop from ~51s/32 back to ~33s/27. They remain full-suite tests.
 
 ## Keeping this file current
 
