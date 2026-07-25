@@ -15,7 +15,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
     complex seeding, or a provider/admin account the fixture can't provide).
   - ❌ gap — no test covers this flow.
 - **Tags** column lists the flow's tags. `@smoke` marks a critical-path test
-  included in the fast dev-loop tier (`npm run test:e2e:fast:smoke`, <30s).
+  included in the fast dev-loop tier (`npm run test:e2e:fast:smoke`, <35s).
 - **Spec / Test** — the file under `tests/e2e/` and the `test(...)` title. A
   flow may map to several tests; only the most representative is listed (search
   the spec for the full set).
@@ -25,7 +25,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 | Tag | Meaning |
 |-----|---------|
-| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <30s, ~23 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~28 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~23 critical-path tests, <30s (dev loop)
+npm run test:e2e:fast:smoke                 # ~28 critical-path tests, <35s (dev loop)
 npm run test:e2e:fast -- --grep @rental     # every flow in a category
 npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
 ```
@@ -80,7 +80,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Sign out | ✅ | `@smoke` `@auth` | `signin-flow.spec.ts` | `@smoke should sign out successfully` |
 | Session persists after refresh | ✅ | `@auth` | `signin-flow.spec.ts` | `should maintain session after page refresh` |
 | Recover account | ✅ | `@auth` | `recovery-flow.spec.ts` | `should complete recovery flow with valid token` |
-| Verify email | ⚠️ | `@auth` | `verify-email.spec.ts` | `shows a missing-token error...` — error branches only; success-verify needs a real token |
+| Verify email | ✅ | `@auth` | `verify-email.spec.ts` | `success: a valid DB-seeded token verifies the email and shows the success state` — success + both error branches; the token is seeded DB-side (no external email service) |
 | Redirect / returnUrl | ✅ | `@auth` | `signin-flow.spec.ts` · `registration-flow.spec.ts` | `should redirect to returnUrl after successful sign-in` |
 | Login ↔ register CTA | ✅ | `@auth` | `login-registration-cta.spec.ts` | `Create account link jumps directly to seed backup (generate mode)` |
 | First-login onboarding modal | ✅ | `@smoke` `@auth` | `first-login-onboarding.spec.ts` | `@smoke guides a new user through all onboarding steps once` |
@@ -100,7 +100,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Cancel a rental | ✅ | `@smoke` `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `@smoke action: Cancel a requested contract moves it to Cancelled tab` |
 | Rental detail deep link | ✅ | `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `deep link: detail page at /dashboard/rentals/[id] loads` |
 | Post-rental welcome banner | ✅ | `@rental` | `post-rental-welcome.spec.ts` | `shows the welcome banner when arriving with ?welcome=true` |
-| Payment flows (Stripe-only) | ⚠️ | `@billing` `@rental` | `payment-flows.spec.ts` | `Stripe payment UI - renders the credit card (Stripe) section for supported currencies` — UI rendering only; real checkout cannot complete in-harness. ICPay rail retired 2026-07-24 (Stripe is the sole rail). |
+| Payment flows (Stripe-only) | ✅ | `@billing` `@rental` | `payment-flows.spec.ts` | `checkout.session.completed webhook flips payment_status to succeeded (the money path)` — UI rendering + the backend money path (signed webhook → payment_status flip + Stripe id recording) via STRIPE_WEBHOOK_SECRET on the warm stack. The hosted Stripe Checkout redirect itself stays out-of-harness (cross-origin); the webhook test closes the backend half. ICPay rail retired 2026-07-24. |
 | Checkout cancel/success pages | ✅ | `@billing` | `checkout.spec.ts` | `renders the cancelled-payment page without a contract_id` |
 | Save / unsave offerings | ✅ | `@account` `@marketplace` | `offering-detail-save.spec.ts` · `saved-offerings.spec.ts` | `bookmark toggle on offering detail page saves in a single click` |
 | Edit profile | ✅ | `@smoke` `@account` | `profile-page.spec.ts` · `account-profile-edit.spec.ts` | `@smoke profile edit persists after save and reload` |
@@ -112,7 +112,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Invoices | ✅ | `@billing` | `invoices.spec.ts` | `populated state: shows invoice table with one row per invoiceable contract` |
 | Transfers | ✅ | `@billing` | `transfers.spec.ts` | `populated state: shows sent and received transfers with direction icons` |
 | Notifications (bell + channels) | ✅ | `@account` | `notification-bell.spec.ts` · `account-notifications.spec.ts` | `badge displays the correct unread count from the DB` |
-| Cloud accounts | ⚠️ | `@account` | `cloud.spec.ts` | `"Add Account" modal exposes the Hetzner + Proxmox provider options` — modal render + empty state; real cloud connect not asserted |
+| Cloud accounts | ✅ | `@account` | `cloud.spec.ts` | `populated state: a DB-seeded cloud account renders in the list` + `disconnect: the modal delete flow removes the cloud account` — empty state, Add-Account modal, populated list render, AND the modal-based signed-DELETE disconnect. No real Hetzner/Proxmox connection (cloud_accounts is a plain DB row seeded under the testAccount). |
 | Keyboard shortcut (focus search) | ✅ | `@smoke` `@marketplace` | `keyboard-shortcuts.spec.ts` | `@smoke / focuses marketplace search input` |
 
 ### 4. Provider Dashboard
@@ -157,8 +157,8 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~23 tests,
-**<30s** against the warm stack). Selection rules:
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~28 tests,
+**<35s** against the warm stack). Selection rules:
 
 - **Critical path only** — sign in/out, register, browse, dashboard, rent/cancel
   lifecycle entry, provider create, profile edit, keyboard shortcut, auth modal.
@@ -196,6 +196,11 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 21 | Cancel a rental | `rentals.spec.ts` › `@smoke action: Cancel a requested contract...` |
 | 22 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
 | 23 | Sign out | `signin-flow.spec.ts` › `@smoke should sign out successfully` |
+| 24 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
+| 25 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
+| 26 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
+| 27 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
+| 28 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
@@ -214,13 +219,13 @@ This is a **living document**. When you change the suite:
    issue so the gap is tracked.
 3. **Tagged something `@smoke`?** It must satisfy the smoke selection rules
    above (critical, <5s, low-seed, reliable). Add it to the smoke membership
-   table and confirm `npm run test:e2e:fast:smoke` still finishes <30s.
+   table and confirm `npm run test:e2e:fast:smoke` still finishes <35s.
 4. **Removed/renamed a test?** Update every row that referenced it; re-check
    the flow's Status (it may drop from ✅ to ❌).
 5. **Re-validate periodically** with:
    ```bash
    npx playwright test --list --grep @smoke   # confirm smoke membership
-   npm run test:e2e:fast:smoke                # confirm <30s + green
+   npm run test:e2e:fast:smoke                # confirm <35s + green
    ```
 
 ### Adding a category tag
