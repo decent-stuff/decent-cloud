@@ -152,6 +152,7 @@ start_stack() {
         "SQLX_OFFLINE=true" \
         "CANISTER_ID=${CANISTER_ID:-$DEFAULT_CANISTER_ID}" \
         "RATE_LIMIT_ENABLED=false" \
+        "STRIPE_WEBHOOK_SECRET=whsec_test_secret" \
         "$API_BINARY" serve
       _wait_for "local API" "http://localhost:$API_PORT/api/v1/health" 60 || return 1
     fi

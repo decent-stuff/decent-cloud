@@ -62,7 +62,7 @@ export default defineConfig({
 		? [
 			{
 				command:
-					`bash -lc 'set -a; [ -f ./.env.local ] && . ./.env.local; set +a; CARGO_BIN="$(command -v cargo || true)"; [ -z "$CARGO_BIN" ] && CARGO_BIN="/usr/local/cargo/bin/cargo"; DATABASE_URL="${databaseUrl}" API_SERVER_PORT=59011 CANISTER_ID="${canisterId}" FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true RATE_LIMIT_ENABLED=false "$CARGO_BIN" run --bin api-server -- serve'`,
+					`bash -lc 'set -a; [ -f ./.env.local ] && . ./.env.local; set +a; CARGO_BIN="$(command -v cargo || true)"; [ -z "$CARGO_BIN" ] && CARGO_BIN="/usr/local/cargo/bin/cargo"; DATABASE_URL="${databaseUrl}" API_SERVER_PORT=59011 CANISTER_ID="${canisterId}" FRONTEND_URL=http://localhost:59010 SQLX_OFFLINE=true RATE_LIMIT_ENABLED=false STRIPE_WEBHOOK_SECRET=whsec_test_secret "$CARGO_BIN" run --bin api-server -- serve'`,
 				cwd: '../api',
 				url: apiURL,
 				// Reuse a warm server if one is already responding. CI gets a fresh

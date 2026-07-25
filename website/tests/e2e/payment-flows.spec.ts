@@ -1,6 +1,13 @@
 import { test, expect } from './fixtures/test-account';
 import { setupConsoleLogging } from './fixtures/auth-helpers';
-import { seedRentableOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
+import {
+	seedRentableOffering,
+	deleteOfferingsByProvider,
+	pubkeyHexFromSeed,
+	seedContract,
+	deleteContractsForRequester,
+	sql,
+} from './fixtures/seed-helpers';
 import { API_BASE_URL } from './fixtures/api-base';
 import { createHmac } from 'crypto';
 
@@ -12,82 +19,69 @@ import { createHmac } from 'crypto';
  *   (or PLAYWRIGHT_API_URL / PLAYWRIGHT_BASE_URL overrides).
  * - A rentable offering is seeded per-suite via seedRentableOffering() (a
  *   self_provisioned public offering, always-online, non-example).
+ * - STRIPE_WEBHOOK_SECRET=whsec_test_secret is set on the api-server
+ *   (injected by `scripts/dev-server.sh --e2e`) so the webhook handler can
+ *   verify the test-signed payload.
  *
  * Test Coverage:
  * - Stripe payment-method option visibility for supported currencies
  * - Stripe Checkout redirect UI rendering after Credit Card selection
+ * - Stripe `checkout.session.completed` webhook → contract activation (the
+ *   money path: signature verification → update_checkout_session_payment →
+ *   payment_status flip). No real Stripe Checkout round-trip required.
  */
 
-/** API base URL for direct backend calls (webhook sim, contract fetch).
- *  Derived per-stack from PLAYWRIGHT_BASE_URL (api port = web port + 1) or
- *  PLAYWRIGHT_API_URL — see fixtures/api-base.ts. */
-
 /**
- * Helper: Get contract details via API
- */
-async function getContract(page: import('@playwright/test').Page, contractId: string): Promise<any> {
-	const response = await page.request.get(`${API_BASE_URL}/api/v1/contracts/${contractId}`);
-	const result = await response.json();
-	return result.data;
-}
-
-/**
- * Helper: Simulate Stripe webhook event
- * Creates properly signed webhook payload matching real Stripe webhook structure
+ * Simulate a real Stripe `checkout.session.completed` webhook: build the event
+ * payload matching the backend's `StripeCheckoutSession` shape (webhooks.rs:24),
+ * sign it the SAME way Stripe does (`t=<ts>,v1=HMAC-SHA256(secret, "<ts>.<body>")`
+ * over the RAW body string), and POST it to the webhook endpoint.
  *
- * Structure based on: https://docs.stripe.com/webhooks/stripe-events
- * This matches the actual webhook format Stripe sends in production
+ * The backend reads the raw body bytes for signature verification
+ * (webhooks.rs:168), so `body` MUST be sent verbatim — Playwright's
+ * `request.post({ data: <string> })` sends the string as-is, and we sign that
+ * exact string. The signature scheme is identical to the existing helper; the
+ * fix is emitting the event type the backend ACTS on (`checkout.session.completed`
+ * with `metadata.contract_id`) instead of the ignored `payment_intent.succeeded`.
  */
-async function simulateStripeWebhook(
+async function simulateCheckoutSessionCompletedWebhook(
 	page: import('@playwright/test').Page,
-	eventType: string,
-	paymentIntentId: string,
-	webhookSecret: string = 'whsec_test_secret'
-): Promise<void> {
-	// Create event matching real Stripe webhook structure
-	// Based on actual webhook payload from Stripe docs
+	opts: {
+		contractId: string;
+		sessionId?: string;
+		paymentIntentId?: string;
+		webhookSecret?: string;
+	},
+): Promise<import('@playwright/test').APIResponse> {
+	const webhookSecret = opts.webhookSecret ?? 'whsec_test_secret';
+	const sessionId = opts.sessionId ?? `cs_test_${Date.now()}`;
 	const event = {
 		id: `evt_test_${Date.now()}`,
-		object: 'event',  // Real webhooks have this
-		api_version: '2023-10-16',  // Current Stripe API version
+		object: 'event',
+		api_version: '2023-10-16',
 		created: Math.floor(Date.now() / 1000),
-		type: eventType,
+		type: 'checkout.session.completed',
 		data: {
 			object: {
-				id: paymentIntentId,
-				object: 'payment_intent',
-				amount: 2000,
-				amount_capturable: 0,
-				amount_received: 2000,
-				currency: 'usd',
-				status: eventType === 'payment_intent.succeeded' ? 'succeeded' : 'failed',
-				livemode: false,
-				metadata: {},
-				payment_method_types: ['card']
-			}
+				id: sessionId,
+				object: 'checkout.session',
+				payment_intent: opts.paymentIntentId ?? `pi_test_${Date.now()}`,
+				metadata: { contract_id: opts.contractId },
+				total_details: { amount_tax: null },
+				customer_details: { tax_ids: null },
+			},
 		},
 		livemode: false,
 		pending_webhooks: 1,
-		request: {
-			id: null,
-			idempotency_key: null
-		}
 	};
-
 	const payload = JSON.stringify(event);
 	const timestamp = Math.floor(Date.now() / 1000);
 	const signedPayload = `${timestamp}.${payload}`;
+	const signature = createHmac('sha256', webhookSecret).update(signedPayload).digest('hex');
 
-	// Create HMAC signature (same algorithm Stripe uses)
-	const signature = createHmac('sha256', webhookSecret)
-		.update(signedPayload)
-		.digest('hex');
-
-	await page.request.post(`${API_BASE_URL}/api/v1/webhooks/stripe`, {
+	return page.request.post(`${API_BASE_URL}/api/v1/webhooks/stripe`, {
 		data: payload,
-		headers: {
-			'stripe-signature': `t=${timestamp},v1=${signature}`
-		}
+		headers: { 'stripe-signature': `t=${timestamp},v1=${signature}` },
 	});
 }
 
@@ -166,27 +160,66 @@ test.describe('Payment Flows', () => {
 		await expect(page.locator('button:has-text("Pay now")')).toBeVisible();
 	});
 
-	/**
-	 * Stripe Payment Success/Failure Flow Tests
-	 *
-	 * Not in the automated e2e suite: completing a Stripe payment requires the
-	 * hosted Stripe Checkout page (an external, cross-origin redirect), which
-	 * Playwright cannot drive in-process. The redirect handoff + webhook-driven
-	 * contract activation are covered instead via:
-	 *
-	 * 1. **Manual Testing** (development)
-	 *    - Start API and website servers (warm stack: 59010/59011).
-	 *    - Marketplace → click "Rent" on a USD offering → Credit Card → "Pay now".
-	 *    - Test cards: 4242 4242 4242 4242 (success), 4000 0000 0000 0002 (declined),
-	 *      more at https://stripe.com/docs/testing#cards
-	 *
-	 * 2. **Stripe CLI** (webhook verification)
-	 *    stripe listen --forward-to http://localhost:59011/api/v1/webhooks/stripe
-	 *    stripe trigger payment_intent.succeeded
-	 *
-	 * 3. **Backend webhook logic** — simulateStripeWebhook / getContract above
-	 *    sign payloads and POST to the real webhook endpoints, exercising the
-	 *    backend's signature verification + contract-state transitions once
-	 *    wired into a flow that has created a real contract id.
-	 */
+	// Serial mode: the webhook test seeds + deletes a contract for the shared
+	// testAccount pubkey; it must not race a sibling doing the same.
+	test.describe.configure({ mode: 'serial' });
+
+	test('checkout.session.completed webhook flips payment_status to succeeded (the money path)', async ({
+		page,
+		testAccount,
+	}) => {
+		// This closes the Payment-flows ⚠️ in FLOWS.md: the BACKEND half of the
+		// payment path (webhook signature verification → update_checkout_session_payment
+		// → payment_status flip) needs no Stripe Checkout round-trip. We seed a
+		// contract at the post-rental pre-payment state (requested + payment
+		// pending), POST a real signed checkout.session.completed webhook whose
+		// metadata links to that contract, and assert the backend activates it.
+		const requesterPubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		const contractId = await seedContract({
+			requesterPubkeyHex: requesterPubkey,
+			status: 'requested',
+			paymentStatus: 'pending',
+		});
+		try {
+			// Pre-condition: the seeded contract is pending (not yet paid).
+			const before = await sql(
+				`SELECT payment_status FROM contract_sign_requests WHERE contract_id = decode('${contractId}', 'hex')`,
+			);
+			expect(before.trim()).toBe('pending');
+
+			// POST the signed webhook. The backend verifies the HMAC-SHA256
+			// signature over "<ts>.<raw body>", extracts metadata.contract_id,
+			// hex-decodes it, and calls update_checkout_session_payment.
+			const sessionId = `cs_test_${Date.now()}`;
+			const paymentIntentId = `pi_test_${Date.now()}`;
+			const resp = await simulateCheckoutSessionCompletedWebhook(page, {
+				contractId,
+				sessionId,
+				paymentIntentId,
+			});
+
+			// The webhook MUST return 200 (Stripe uses 2xx to stop retrying). A
+			// 401 would mean the signature failed; a 400 would mean a malformed
+			// payload; a 500 would mean the DB update broke.
+			expect(resp.status(), `webhook HTTP status: ${resp.status()}`).toBe(200);
+
+			// Post-condition: the real handler flipped payment_status AND recorded
+			// the Stripe session + payment-intent ids on the contract row — these
+			// are the fields downstream refund/dispute lookups key on.
+			// psql --no-align emits columns pipe-separated on one line.
+			const row = await sql(`
+				SELECT payment_status,
+				       stripe_checkout_session_id,
+				       stripe_payment_intent_id
+				FROM contract_sign_requests
+				WHERE contract_id = decode('${contractId}', 'hex')
+			`);
+			const [payStatus, csId, piId] = row.split('|').map((l) => l.trim());
+			expect(payStatus).toBe('succeeded');
+			expect(csId).toBe(sessionId);
+			expect(piId).toBe(paymentIntentId);
+		} finally {
+			await deleteContractsForRequester(requesterPubkey);
+		}
+	});
 });
