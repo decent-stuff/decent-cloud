@@ -79,7 +79,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Sign in: reject invalid seed | ✅ | `@auth` | `signin-flow.spec.ts` | `should reject invalid seed phrase` |
 | Sign out | ✅ | `@smoke` `@auth` | `signin-flow.spec.ts` | `@smoke should sign out successfully` |
 | Session persists after refresh | ✅ | `@auth` | `signin-flow.spec.ts` | `should maintain session after page refresh` |
-| Recover account | ✅ | `@auth` | `recovery-flow.spec.ts` | `should complete recovery flow with valid token` |
+| Recover account | ✅ | `@auth` | `recovery-flow.spec.ts` | `should complete recovery flow with token and surface API error for a fake token` — covers the full Continue → onComplete → handleSeedComplete → completeRecovery wiring plus the API-error surfacing path; the recover page uses `bg-danger/10` for its error div (distinct from the SeedPhraseStep's `bg-red-500/20` component-local errors) |
 | Verify email | ✅ | `@auth` | `verify-email.spec.ts` | `success: a valid DB-seeded token verifies the email and shows the success state` — success + both error branches; the token is seeded DB-side (no external email service) |
 | Auth capability + login default (#436) | ✅ | `@smoke` `@auth` | `auth-capabilities.spec.ts` | `capability endpoint reports google_oauth=false on the e2e stack` · `login page defaults to the seed-phrase form when OAuth is off (no extra click)` — the public `GET /api/v1/auth/capabilities` endpoint drives the frontend default; server env is the single source of truth |
 | Redirect / returnUrl | ✅ | `@auth` | `signin-flow.spec.ts` · `registration-flow.spec.ts` | `should redirect to returnUrl after successful sign-in` |

@@ -150,8 +150,11 @@ test.describe('Recovery Flow', () => {
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 	});
 
-	test('should complete recovery flow with valid token', async ({ page }) => {
-		// Navigate with token
+	test('should complete recovery flow with token and surface API error for a fake token', async ({ page }) => {
+		// Navigate with token. The token is intentionally fake — the test
+		// verifies the Continue → onComplete → handleSeedComplete → completeRecovery
+		// wiring fires and the backend's rejection is surfaced to the user
+		// (proving the flow does NOT dead-end at the SeedPhraseStep Continue).
 		await page.goto('/recover?token=test-recovery-token-123');
 
 		// Wait for seed phrase step - auto-generates when token is provided
@@ -160,20 +163,31 @@ test.describe('Recovery Flow', () => {
 		// Seed phrase is auto-generated (no mode choice when token provided)
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
-		// Check the confirmation checkbox
+		// Check the confirmation checkbox. The Continue button is disabled
+		// (via `disabled={!seedBackedUp}`) until the bind:checked propagates;
+		// Playwright's click() actionability wait handles hydration timing.
 		await page.check('input[type="checkbox"]');
 
-		// Click Continue
-		await page.click('button:has-text("Continue")');
+		// Click Continue and wait for the recovery completion API call. The
+		// waitForResponse proves the Continue click reached the backend — i.e.
+		// onComplete fired. The fake token ("test-recovery-token-123") is not
+		// valid hex, so the API returns success:false with a hex-decode error.
+		await Promise.all([
+			page.waitForResponse(
+				(r) => r.url().includes('/api/v1/accounts/recovery/complete'),
+				{ timeout: 10000 },
+			),
+			page.click('button:has-text("Continue")'),
+		]);
 
-		// Should show processing or error (since token is invalid)
-		// We expect an error because the token is fake
-		const errorOrProcessing = page.locator('text=Processing').or(
-			page.locator('text=Recovery completion failed').or(
-				page.locator('text=Invalid token')
-			)
-		);
-		await expect(errorOrProcessing.first()).toBeVisible({ timeout: 10000 });
+		// handleSeedComplete catches the API error and surfaces it in the
+		// recover page's error div (class `bg-danger/10` — distinct from the
+		// SeedPhraseStep's inline `bg-red-500/20`, which is for component-local
+		// validation only). Asserting the recover page's error div proves the
+		// flow transitioned generate-seed → processing → generate-seed with
+		// error, refuting the #446 hypothesis that handleSeedComplete was
+		// never invoked.
+		await expect(page.locator('.bg-danger\\/10')).toBeVisible({ timeout: 10000 });
 	});
 
 	test('should show error message when completing recovery with invalid token', async ({ page }) => {
@@ -186,19 +200,28 @@ test.describe('Recovery Flow', () => {
 		// Seed phrase is auto-generated (no mode choice when token provided)
 		await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
 
-		// Complete the flow
+		// Check the confirmation checkbox and click Continue. The Continue
+		// button is disabled until the checkbox binding propagates; Playwright's
+		// actionability wait handles hydration timing.
 		await page.check('input[type="checkbox"]');
-		await page.click('button:has-text("Continue")');
 
-		// Should show error message
-		const errorMessage = page.locator('.bg-red-500\\/20').or(
-			page.locator('text=Recovery completion failed').or(
-				page.locator('text=Invalid token').or(
-					page.locator('text=error')
-				)
-			)
-		);
-		await expect(errorMessage.first()).toBeVisible({ timeout: 10000 });
+		// Wait for the API call (proves the click reached the backend) and
+		// assert the backend's hex-decode error surfaces visibly. The recover
+		// page uses class `bg-danger/10` for its error div, NOT the
+		// SeedPhraseStep's `bg-red-500/20` (component-local validation only).
+		await Promise.all([
+			page.waitForResponse(
+				(r) => r.url().includes('/api/v1/accounts/recovery/complete'),
+				{ timeout: 10000 },
+			),
+			page.click('button:has-text("Continue")'),
+		]);
+
+		await expect(page.locator('.bg-danger\\/10')).toBeVisible({ timeout: 10000 });
+		// Confirm the error specifically references the invalid token (the API
+		// returns "Invalid recovery token hex: ..." — proves the rejection came
+		// from the backend, not a frontend validation guard).
+		await expect(page.getByText(/Invalid recovery token/i)).toBeVisible();
 	});
 
 	test('should navigate back to login from /recover page', async ({ page }) => {
