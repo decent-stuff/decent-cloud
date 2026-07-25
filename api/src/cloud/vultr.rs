@@ -18,7 +18,6 @@ use crate::cloud::types::{
 };
 
 const VULTR_API_BASE: &str = "https://api.vultr.com/v2";
-const REQUEST_TIMEOUT_SECS: u64 = 30;
 const IP_ASSIGNMENT_TIMEOUT_SECS: u64 = 120;
 
 pub struct VultrBackend {
@@ -33,7 +32,9 @@ pub struct VultrBackend {
 impl VultrBackend {
     pub fn new(api_key: String) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(
+                crate::http_util::HTTP_TIMEOUT_SECS,
+            ))
             .build()
             .context("Failed to create HTTP client")?;
 

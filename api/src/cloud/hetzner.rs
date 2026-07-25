@@ -18,7 +18,6 @@ use crate::cloud::types::{
 };
 
 const HETZNER_API_BASE: &str = "https://api.hetzner.cloud/v1";
-const REQUEST_TIMEOUT_SECS: u64 = 30;
 
 pub struct HetznerBackend {
     client: Client,
@@ -28,7 +27,9 @@ pub struct HetznerBackend {
 impl HetznerBackend {
     pub fn new(token: String) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(
+                crate::http_util::HTTP_TIMEOUT_SECS,
+            ))
             .build()
             .context("Failed to create HTTP client")?;
 

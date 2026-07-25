@@ -15,8 +15,6 @@ use crate::cloud::types::{
     ServerType,
 };
 
-const REQUEST_TIMEOUT_SECS: u64 = 30;
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProxmoxConfig {
     pub url: String,
@@ -32,7 +30,9 @@ pub struct ProxmoxApiBackend {
 impl ProxmoxApiBackend {
     pub fn new(config: ProxmoxConfig) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(
+                crate::http_util::HTTP_TIMEOUT_SECS,
+            ))
             .danger_accept_invalid_certs(false)
             .build()
             .context("Failed to create HTTP client")?;
