@@ -214,6 +214,55 @@ export function randomHex(bytes: number): string {
 	return buf.toString('hex');
 }
 
+/**
+ * Resolve the 16-byte bytea account id (lowercase hex) for a username. Used by
+ * specs that need to seed child rows keyed on accounts.id (contacts, devices,
+ * external keys, socials, email-verification tokens, cloud accounts, …).
+ */
+export async function accountIdHex(username: string): Promise<string> {
+	const row = await sql(
+		`SELECT encode(id, 'hex') FROM accounts WHERE username = '${username.replace(/'/g, "''")}'`,
+	);
+	const hex = row.split('\n').map((l) => l.trim()).find((l) => /^[0-9a-f]+$/.test(l));
+	if (!hex) throw new Error(`no account id for username ${username}`);
+	return hex;
+}
+
+/**
+ * Seed an `email_verification_tokens` row directly and return the hex token to
+ * use in the `/verify-email?token=<hex>` URL.
+ *
+ * Mirrors `Database::create_email_verification_token`
+ * (`api/src/database/accounts.rs:200`): the `token` column is BYTEA (any size;
+ * production uses a 16-byte UUID v4), and `created_at`/`expires_at` are BIGINT
+ * nanoseconds. Default expiry is 24h, matching production. `used_at` is left
+ * NULL so the row is consumable by the verify handler.
+ *
+ * The verify handler hex-decodes the URL `token` param and looks the row up by
+ * exact bytes, so the hex we return is the same hex that goes into the URL.
+ */
+export async function seedEmailVerificationToken(
+	accountHex: string,
+	email: string,
+	opts?: { expiresInSeconds?: number },
+): Promise<string> {
+	const tokenHex = randomHex(16);
+	const now = nowNs();
+	const expiresInNs = BigInt((opts?.expiresInSeconds ?? 86_400) * 1_000_000_000);
+	const expiresAt = now + expiresInNs;
+	await sql(`
+		INSERT INTO email_verification_tokens (token, account_id, email, created_at, expires_at)
+		VALUES (
+			decode('${tokenHex}', 'hex'),
+			decode('${accountHex}', 'hex'),
+			'${email.replace(/'/g, "''")}',
+			${now},
+			${expiresAt}
+		)
+	`);
+	return tokenHex;
+}
+
 /** Build the SQL VALUES clause for one contract seed row. See seedContract(). */
 export interface ContractSeed {
 	/** 32-byte hex ed25519 pubkey of the requester (test user). */
