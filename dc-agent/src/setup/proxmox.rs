@@ -428,9 +428,10 @@ impl ProxmoxSetup {
     }
 
     async fn verify_api_token(&self, token_id: &str, token_secret: &str) -> Result<()> {
-        let client = reqwest::Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()?;
+        // 30s matches the budget every other dc-agent HTTP client applies
+        // (api_client.rs, provisioner/{proxmox,digitalocean,manual}.rs). Without
+        // it, a hung Proxmox API would block setup indefinitely.
+        let client = build_verify_client(std::time::Duration::from_secs(30))?;
 
         let url = "https://127.0.0.1:8006/api2/json/version";
         let auth_header = format!("PVEAPIToken={}={}", token_id, token_secret);
@@ -448,6 +449,22 @@ impl ProxmoxSetup {
 
         Ok(())
     }
+}
+
+/// Build the `reqwest::Client` used to verify a freshly-minted Proxmox API
+/// token against the local PVE web UI.
+///
+/// `danger_accept_invalid_certs(true)` is required because the local Proxmox
+/// web UI ships a self-signed cert by default. `timeout` enforces a bounded
+/// request — without it, a hung PVE endpoint would block setup indefinitely.
+/// The caller passes the project-standard 30s budget in production; tests pass
+/// a shorter budget so the unit test stays fast.
+fn build_verify_client(timeout: std::time::Duration) -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(timeout)
+        .build()
+        .context("Failed to build Proxmox token-verify HTTP client")
 }
 
 /// Result of successful setup.
@@ -686,5 +703,50 @@ mod tests {
         let config = result.generate_config("https://api.example.com", "pubkey123", None);
         assert!(config.contains("# agent_secret_key"));
         assert!(config.contains("Run setup with --identity to auto-configure"));
+    }
+
+    /// Proves the `.timeout(...)` on the verify-client builder actually
+    /// terminates a request when the peer hangs. The production client uses
+    /// a 30s budget (see `verify_api_token`); this test uses 1s against a
+    /// hung local server to keep the assertion fast while exercising the same
+    /// builder code path. A regression that drops `.timeout(...)` from the
+    /// chain would let the inner request outlive the 5s outer guard and fail
+    /// this test loudly.
+    #[tokio::test]
+    async fn build_verify_client_enforces_request_timeout() {
+        // Hung TCP server: accepts the connection but never writes an HTTP
+        // response, so reqwest's request-level timeout is the only thing that
+        // can terminate the call (connect_timeout never gets a chance to fire).
+        // The accepted sockets are held in `held` for the life of the task so
+        // the kernel does not close them prematurely (which would surface as a
+        // "connection reset", not a timeout).
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind hung-server listener");
+        let port = listener.local_addr().expect("local_addr").port();
+        tokio::spawn(async move {
+            let mut held = Vec::new();
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => held.push(stream),
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let client = build_verify_client(std::time::Duration::from_secs(1))
+            .expect("verify-client builder must succeed");
+        let send = client
+            .get(format!("http://127.0.0.1:{port}/api2/json/version"))
+            .header("Authorization", "PVEAPIToken=root@pam!dc-agent=secret")
+            .send();
+        let outcome = tokio::time::timeout(std::time::Duration::from_secs(5), send)
+            .await
+            .expect("request must terminate within 5s; .timeout() missing from builder?");
+        assert!(outcome.is_err(), "hung-server request must error");
+        assert!(
+            outcome.unwrap_err().is_timeout(),
+            "error must be timeout-class"
+        );
     }
 }
