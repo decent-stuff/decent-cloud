@@ -2,6 +2,7 @@ use super::common::{
     AdminAccountDeletionSummary, AdminAddRecoveryKeyRequest, AdminDisableKeyRequest,
     AdminSendTestEmailRequest, AdminSetAccountEmailRequest,
     AdminSetAdminStatusRequest, AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
+    decode_hex_path, decode_pubkey,
 };
 use crate::{
     auth::AdminAuthenticatedUser,
@@ -81,13 +82,13 @@ impl AdminApi {
         };
 
         // Decode key ID
-        let key_id_bytes = match hex::decode(&key_id.0) {
+        let key_id_bytes = match decode_hex_path(&key_id.0, "key id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid key ID format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -203,13 +204,13 @@ impl AdminApi {
         };
 
         // Decode public key
-        let public_key = match hex::decode(&req.public_key) {
+        let public_key = match decode_pubkey(&req.public_key) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid public key format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -331,13 +332,13 @@ impl AdminApi {
         email_id: Path<String>,
     ) -> Json<ApiResponse<String>> {
         // Decode email ID
-        let email_id_bytes = match hex::decode(&email_id.0) {
+        let email_id_bytes = match decode_hex_path(&email_id.0, "email id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid email ID format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -371,13 +372,13 @@ impl AdminApi {
         _admin: AdminAuthenticatedUser,
         email_id: Path<String>,
     ) -> Json<ApiResponse<String>> {
-        let email_id_bytes = match hex::decode(&email_id.0) {
+        let email_id_bytes = match decode_hex_path(&email_id.0, "email id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid email ID format".to_string()),
+                    error: Some(e),
                 })
             }
         };

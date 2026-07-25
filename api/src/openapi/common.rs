@@ -885,6 +885,28 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_hex_path_valid() {
+        let result = decode_hex_path("deadbeef", "contract id");
+        assert_eq!(result.unwrap(), vec![0xde, 0xad, 0xbe, 0xef]);
+    }
+
+    #[test]
+    fn test_decode_hex_path_invalid_hex_is_detailed() {
+        let result = decode_hex_path("zz", "key id");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Invalid key id hex"), "Got: {err}");
+        assert!(err.contains("zz"), "error should include the value: {err}");
+    }
+
+    #[test]
+    fn test_decode_hex_path_accepts_non_32byte_length() {
+        // Unlike decode_pubkey, the generic helper must NOT enforce a 32-byte length.
+        let result = decode_hex_path("ab", "token");
+        assert_eq!(result.unwrap(), vec![0xab]);
+    }
+
+    #[test]
     fn test_check_authorization_matching() {
         let pubkey = vec![1u8; 32];
         let user = ApiAuthenticatedUser {

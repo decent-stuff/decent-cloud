@@ -1,4 +1,4 @@
-use super::common::{ApiResponse, MarkReadRequest, UnreadCountResponse, UserNotificationResponse};
+use super::common::{decode_pubkey, ApiResponse, MarkReadRequest, UnreadCountResponse, UserNotificationResponse};
 use super::providers::BandwidthHistoryResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
@@ -62,7 +62,7 @@ pub struct ApiTokenSummary {
 /// Decode pubkey hex and verify it matches the authenticated user.
 /// Returns an error string on failure.
 fn decode_and_verify_pubkey(pubkey_hex: &str, auth_pubkey: &[u8]) -> Result<Vec<u8>, String> {
-    let pubkey_bytes = hex::decode(pubkey_hex).map_err(|_| "Invalid pubkey format".to_string())?;
+    let pubkey_bytes = decode_pubkey(pubkey_hex)?;
     if auth_pubkey != pubkey_bytes.as_slice() {
         return Err("Unauthorized: can only access your own data".to_string());
     }
@@ -88,13 +88,13 @@ impl UsersApi {
         auth: ApiAuthenticatedUser,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::users::UserActivity>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -138,13 +138,13 @@ impl UsersApi {
         db: Data<&Arc<Database>>,
         pubkey: Path<String>,
     ) -> Json<ApiResponse<crate::database::users::PublicUserActivity>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -335,13 +335,13 @@ impl UsersApi {
         pubkey: Path<String>,
         contract_id: Path<String>,
     ) -> Json<ApiResponse<Vec<BandwidthHistoryResponse>>> {
-        let pubkey_bytes = match hex::decode(&pubkey.0) {
+        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid pubkey format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -891,6 +891,43 @@ mod tests {
         let json = serde_json::to_value(&resp).unwrap();
         assert_eq!(json["success"], false);
         assert_eq!(json["error"], "Invalid pubkey format");
+    }
+
+    // ── decode_and_verify_pubkey: detailed error messages (#446 DRY migration) ─
+
+    #[test]
+    fn test_decode_and_verify_pubkey_matching_returns_bytes() {
+        let pk = vec![0x09u8; 32];
+        let hex = hex::encode(&pk);
+        let out = super::decode_and_verify_pubkey(&hex, &pk);
+        assert_eq!(out.as_ref().unwrap(), &pk);
+    }
+
+    #[test]
+    fn test_decode_and_verify_pubkey_invalid_hex_is_detailed() {
+        // Non-hex input must surface the offending value (was a terse "Invalid pubkey format").
+        let err = super::decode_and_verify_pubkey("not-hex!", &[0u8; 32]).unwrap_err();
+        assert!(
+            err.contains("Invalid pubkey hex"),
+            "expected detailed hex error, got: {err}"
+        );
+        assert!(err.contains("not-hex!"), "error should name the bad value: {err}");
+    }
+
+    #[test]
+    fn test_decode_and_verify_pubkey_wrong_length_is_detailed() {
+        // Valid hex but only 2 bytes: decode_pubkey flags the length explicitly.
+        let err = super::decode_and_verify_pubkey("abcd", &[0u8; 32]).unwrap_err();
+        assert!(err.contains("32 bytes"), "expected length error, got: {err}");
+    }
+
+    #[test]
+    fn test_decode_and_verify_pubkey_mismatch_is_unauthorized() {
+        // Valid 32-byte pubkey that does not match the auth pubkey stays unauthorized.
+        let pk = vec![0x01u8; 32];
+        let other = vec![0x02u8; 32];
+        let err = super::decode_and_verify_pubkey(&hex::encode(&pk), &other).unwrap_err();
+        assert!(err.contains("Unauthorized"), "expected unauthorized, got: {err}");
     }
 
     // ── get_user_contract_bandwidth ownership verification ───────────────────

@@ -2205,7 +2205,7 @@ impl ProvidersApi {
     ) -> poem_openapi::payload::PlainText<String> {
         let pubkey_bytes = match decode_pubkey(&pubkey.0) {
             Ok(pk) => pk,
-            Err(_) => return poem_openapi::payload::PlainText("Invalid pubkey format".to_string()),
+            Err(e) => return poem_openapi::payload::PlainText(e),
         };
 
         if check_authorization(&pubkey_bytes, &auth).is_err() {
@@ -3848,12 +3848,12 @@ impl ProvidersApi {
             };
 
             // Look up contract
-            let contract_id_bytes = match hex::decode(contract_id) {
+            let contract_id_bytes = match decode_hex_path(contract_id, "contract id") {
                 Ok(bytes) => bytes,
-                Err(_) => {
+                Err(msg) => {
                     unknown.push(ReconcileUnknownInstance {
                         external_id: instance.external_id.clone(),
-                        message: format!("Invalid contract ID format: {}", contract_id),
+                        message: msg,
                     });
                     continue;
                 }

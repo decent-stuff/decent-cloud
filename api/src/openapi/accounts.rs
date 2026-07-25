@@ -1,6 +1,7 @@
 use super::common::{
     AddAccountContactRequest, AddAccountExternalKeyRequest, AddAccountKeyRequest,
-    AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest, RegisterAccountRequest,
+    AddAccountSocialRequest, ApiResponse, ApiTags, CompleteRecoveryRequest,
+    decode_hex_path, decode_pubkey, RegisterAccountRequest,
     RequestRecoveryRequest, TotpCodeRequest, TotpEnableRequest, TotpEnableResponse,
     TotpSetupResponse, TotpStatusResponse, UpdateAccountEmailRequest, UpdateAccountProfileRequest,
     UpdateDeviceNameRequest, VerifyEmailRequest,
@@ -65,30 +66,16 @@ impl AccountsApi {
         }
 
         // Decode public key
-        let public_key = match hex::decode(&body_data.public_key) {
+        let public_key = match decode_pubkey(&body_data.public_key) {
             Ok(pk) => pk,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!(
-                        "Invalid public key hex: {} (value: {})",
-                        e, &body_data.public_key
-                    )),
+                    error: Some(e),
                 })
             }
         };
-
-        if public_key.len() != 32 {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(format!(
-                    "Public key must be 32 bytes, got {} bytes",
-                    public_key.len()
-                )),
-            });
-        }
 
         // Verify public key from body matches header
         if body_data.public_key != public_key_header.0 {
@@ -338,30 +325,16 @@ impl AccountsApi {
         db: Data<&Arc<Database>>,
         #[oai(name = "publicKey")] public_key: Query<String>,
     ) -> Json<ApiResponse<crate::database::accounts::AccountWithKeys>> {
-        let public_key_bytes = match hex::decode(&public_key.0) {
+        let public_key_bytes = match decode_pubkey(&public_key.0) {
             Ok(pk) => pk,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!(
-                        "Invalid public key hex: {} (value: {})",
-                        e, &public_key.0
-                    )),
+                    error: Some(e),
                 })
             }
         };
-
-        if public_key_bytes.len() != 32 {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(format!(
-                    "Public key must be 32 bytes, got {} bytes",
-                    public_key_bytes.len()
-                )),
-            });
-        }
 
         match db
             .get_account_with_keys_by_public_key(&public_key_bytes)
@@ -446,24 +419,16 @@ impl AccountsApi {
         }
 
         // Decode new public key
-        let new_public_key = match hex::decode(&req.new_public_key) {
+        let new_public_key = match decode_pubkey(&req.new_public_key) {
             Ok(pk) => pk,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid new public key format".to_string()),
+                    error: Some(e),
                 })
             }
         };
-
-        if new_public_key.len() != 32 {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Public key must be 32 bytes".to_string()),
-            });
-        }
 
         // Add new key
         match db.add_account_key(&account.id, &new_public_key).await {
@@ -523,13 +488,13 @@ impl AccountsApi {
         };
 
         // Decode key ID
-        let key_id_bytes = match hex::decode(&key_id.0) {
+        let key_id_bytes = match decode_hex_path(&key_id.0, "key id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid key ID format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -662,13 +627,13 @@ impl AccountsApi {
         };
 
         // Decode key ID
-        let key_id_bytes = match hex::decode(&key_id.0) {
+        let key_id_bytes = match decode_hex_path(&key_id.0, "key id") {
             Ok(id) => id,
-            Err(_) => {
+            Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some("Invalid key ID format".to_string()),
+                    error: Some(e),
                 })
             }
         };
@@ -1776,39 +1741,28 @@ impl AccountsApi {
         req: Json<CompleteRecoveryRequest>,
     ) -> Json<ApiResponse<String>> {
         // Decode token
-        let token = match hex::decode(&req.token) {
+        let token = match decode_hex_path(&req.token, "recovery token") {
             Ok(t) => t,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid token format: {}", e)),
+                    error: Some(e),
                 })
             }
         };
 
         // Decode public key
-        let public_key = match hex::decode(&req.public_key) {
+        let public_key = match decode_pubkey(&req.public_key) {
             Ok(pk) => pk,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid public key format: {}", e)),
+                    error: Some(e),
                 })
             }
         };
-
-        if public_key.len() != 32 {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(format!(
-                    "Public key must be 32 bytes, got {} bytes",
-                    public_key.len()
-                )),
-            });
-        }
 
         // Complete recovery
         match db.complete_recovery(&token, &public_key).await {
@@ -1840,18 +1794,14 @@ impl AccountsApi {
         req: Json<VerifyEmailRequest>,
     ) -> Json<ApiResponse<String>> {
         // Decode token
-        let token = match hex::decode(&req.token) {
+        let token = match decode_hex_path(&req.token, "email verification token") {
             Ok(t) => t,
             Err(e) => {
-                tracing::warn!(
-                    "Email verification failed: invalid hex format (len={}): {}",
-                    req.token.len(),
-                    e
-                );
+                tracing::warn!("Email verification failed: {e}");
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid token format: {}", e)),
+                    error: Some(e),
                 });
             }
         };

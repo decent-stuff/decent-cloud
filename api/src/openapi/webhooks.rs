@@ -1,6 +1,7 @@
 use crate::chatwoot::ChatwootClient;
 use crate::database::Database;
 use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
+use crate::openapi::common::decode_hex_path;
 use crate::support_bot::handler::handle_customer_message;
 use anyhow::{Context, Result};
 use email_utils::EmailService;
@@ -244,13 +245,11 @@ pub async fn stripe_webhook(
                     )
                 })?;
 
-            let contract_id_bytes = hex::decode(contract_id_hex).map_err(|e| {
-                tracing::error!("Invalid contract_id hex: {:#}", e);
-                PoemError::from_string(
-                    format!("Invalid contract_id: {}", e),
-                    poem::http::StatusCode::BAD_REQUEST,
-                )
-            })?;
+            let contract_id_bytes = decode_hex_path(contract_id_hex, "contract_id")
+                .map_err(|e| {
+                    tracing::error!("{e}");
+                    PoemError::from_string(e, poem::http::StatusCode::BAD_REQUEST)
+                })?;
 
             // Extract tax information
             let tax_amount_cents = session.total_details.as_ref().and_then(|td| td.amount_tax);
