@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod admin;
+pub mod allowlist;
 pub mod agents;
 pub mod agents_waitlist;
 pub mod auth;
@@ -26,6 +27,7 @@ pub mod webhooks;
 
 pub use accounts::AccountsApi;
 pub use admin::AdminApi;
+pub use allowlist::AllowlistApi;
 pub use agents::AgentsApi;
 pub use agents_waitlist::AgentsWaitlistApi;
 pub use auth::AuthApi;
@@ -77,6 +79,7 @@ pub fn create_combined_api() -> impl OpenApi {
             PoolsApi,
             NotificationsApi,
             SlaApi,
+            AllowlistApi,
         ),
     )
 }
