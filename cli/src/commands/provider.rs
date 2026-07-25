@@ -183,7 +183,7 @@ async fn pool_suggest_offerings(
 
     let (_, timestamp, signature) = sign_api_request(dcc_id, "GET", &path, None)?;
 
-    let client = reqwest::Client::new();
+    let client = crate::utils::http_client();
     let url = format!("{}{}", api_url, path);
 
     let response = client
@@ -254,7 +254,7 @@ async fn pool_generate_offerings(
 
     let (_, timestamp, signature) = sign_api_request(dcc_id, "POST", &path, Some(&body))?;
 
-    let client = reqwest::Client::new();
+    let client = crate::utils::http_client();
     let url = format!("{}{}", api_url, path);
 
     let response = client
