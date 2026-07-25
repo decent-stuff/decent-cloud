@@ -3,7 +3,7 @@
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
 	import { browser } from "$app/environment";
-	import { searchOfferings, fetchIcpPrice, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, fetchRecommendedOfferings, type Offering, type TrendingOffering, type NewProvider, type RecommendedOffering } from "$lib/services/api";
+	import { searchOfferings, getSavedOfferingIds, saveOffering, unsaveOffering, hexEncode, fetchTrendingOfferings, fetchNewProviders, fetchRecommendedOfferings, type Offering, type TrendingOffering, type NewProvider, type RecommendedOffering } from "$lib/services/api";
 	import { toggleSavedId } from "$lib/services/saved-offerings";
 	import RentalRequestDialog from "$lib/components/RentalRequestDialog.svelte";
 	import AuthPromptModal from "$lib/components/AuthPromptModal.svelte";
@@ -22,7 +22,6 @@
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let icpPriceUsd = $state<number | null>(null);
 	let searchQuery = $state("");
 	let selectedOffering = $state<Offering | null>(null);
 	let successMessage = $state<string | null>(null);
@@ -429,9 +428,9 @@
 			localStorage.setItem(FIRST_TIME_HINT_KEY, String(hintVisits + 1));
 		}
 		readFiltersFromUrl($page.url);
-		const fetches: Promise<unknown>[] = [fetchOfferings(), fetchIcpPrice()];
+		const fetches: Promise<unknown>[] = [fetchOfferings()];
 		if (isAuthenticated) fetches.push(loadSavedIds().catch((err) => console.error('Failed to load saved offerings:', err)));
-		[, icpPriceUsd] = await Promise.all(fetches) as [unknown, number | null];
+		await Promise.all(fetches);
 		// Load trending independently — failure must not block the main marketplace
 		fetchTrendingOfferings(6).then(t => { trendingOfferings = t; }).catch(err => console.error('Failed to load trending offerings:', err));
 		fetchNewProviders(6).then(p => { newProviders = p; }).catch(err => console.error('Failed to load new providers:', err));
@@ -627,18 +626,6 @@
 		return "On request";
 	}
 
-	function formatUsdEquivalent(offering: Offering): string | null {
-		if (!icpPriceUsd || !offering.monthly_price) return null;
-		const currency = offering.currency?.toUpperCase();
-		if (currency !== "ICP") return null;
-		let price = offering.monthly_price;
-		if (offering.reseller_commission_percent) {
-			price += price * (offering.reseller_commission_percent / 100);
-		}
-		const usd = price * icpPriceUsd;
-		return `≈ $${usd.toFixed(2)}/mo`;
-	}
-
 	function hasReseller(offering: Offering): boolean {
 		return !!(
 			offering.reseller_name && offering.reseller_commission_percent
@@ -739,10 +726,10 @@
 			chips.push({ label: `City: ${selectedCity}`, remove: () => { selectedCity = ""; syncFiltersToUrl(); } });
 		}
 		if (minPrice !== null) {
-			chips.push({ label: `Min price: ${minPrice} ICP`, remove: () => { minPrice = null; handleFilterChange(); } });
+			chips.push({ label: `Min price: $${minPrice}`, remove: () => { minPrice = null; handleFilterChange(); } });
 		}
 		if (maxPrice !== null) {
-			chips.push({ label: `Max price: ${maxPrice} ICP`, remove: () => { maxPrice = null; handleFilterChange(); } });
+			chips.push({ label: `Max price: $${maxPrice}`, remove: () => { maxPrice = null; handleFilterChange(); } });
 		}
 		if (minCores !== null) {
 			chips.push({ label: `Min cores: ${minCores}`, remove: () => { minCores = null; syncFiltersToUrl(); } });
@@ -1454,12 +1441,9 @@
 									<td class="py-3 pr-4 text-neutral-300"
 										>{formatLocation(offering)}</td
 									>
-									<td class="py-3 pr-4">
-										<div class="font-medium text-white">{formatPrice(offering)}</div>
-										{#if formatUsdEquivalent(offering)}
-											<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
-										{/if}
-									</td>
+								<td class="py-3 pr-4">
+									<div class="font-medium text-white">{formatPrice(offering)}</div>
+								</td>
 									<td class="py-3 pr-4 text-right">
 										{#if offering.reliability_score !== undefined && offering.reliability_score !== null}
 											<span class="text-xs font-medium {offering.reliability_score >= 80 ? 'text-emerald-400' : offering.reliability_score >= 60 ? 'text-yellow-400' : 'text-red-400'}" title="Reliability score: uptime, contract completion rate, and SLA compliance combined">
@@ -1778,15 +1762,12 @@
 							</div>
 							<div class="flex items-center justify-between">
 								<div>
-									<div class="text-white font-medium">
-										{formatPrice(offering)}
-									</div>
-									{#if formatUsdEquivalent(offering)}
-										<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
-									{/if}
-									<div class="text-xs text-neutral-500">
-										{formatLocation(offering)}
-									</div>
+								<div class="text-white font-medium">
+									{formatPrice(offering)}
+								</div>
+								<div class="text-xs text-neutral-500">
+									{formatLocation(offering)}
+								</div>
 								</div>
 								{#if hasReseller(offering)}
 									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>

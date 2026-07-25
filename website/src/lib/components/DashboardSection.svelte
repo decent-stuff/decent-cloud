@@ -1,8 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
-	import { fetchIcpPrice } from '$lib/services/api';
 
 	interface Props {
 		dashboardData: {
@@ -18,18 +16,12 @@
 	}
 
 	let { dashboardData, error = null }: Props = $props();
-	let icpPriceUsd = $state<number | null>(null);
-
-	onMount(async () => {
-		icpPriceUsd = await fetchIcpPrice();
-	});
 
 	const stats: {
 		label: string;
 		key: keyof Props['dashboardData'];
 		icon: IconName;
 		format?: (v: number) => string;
-		usdHint?: (v: number, price: number | null) => string | null;
 	}[] = [
 		{ label: 'Total Providers', key: 'totalProviders', icon: 'server' },
 		{ label: 'Active Providers', key: 'activeProviders', icon: 'activity' },
@@ -38,12 +30,11 @@
 		{ label: 'Active Validators', key: 'activeValidators', icon: 'shield' },
 		{ label: 'Total Transfers', key: 'totalTransfers', icon: 'arrow-right' },
 		{
-			label: 'Total Volume (ICP)',
+			// Volume is aggregated from contract payments, all now in USD via Stripe.
+			label: 'Total Volume (USD)',
 			key: 'totalVolumeE9s',
 			icon: 'star',
 			format: (v) => Math.floor(v / 1_000_000_000).toLocaleString(),
-			usdHint: (v, price) =>
-				price ? `≈ $${Math.floor((v / 1_000_000_000) * price).toLocaleString()}` : null,
 		}
 	];
 </script>
@@ -82,12 +73,6 @@
 					<div class="metric-value mb-1">
 						{stat.format ? stat.format(dashboardData[stat.key]) : dashboardData[stat.key].toLocaleString()}
 					</div>
-					{#if stat.usdHint}
-						{@const hint = stat.usdHint(dashboardData[stat.key], icpPriceUsd)}
-						{#if hint}
-							<div class="text-[10px] text-neutral-500 mb-1">{hint}</div>
-						{/if}
-					{/if}
 					<div class="text-[10px] uppercase tracking-label text-neutral-500">
 						{stat.label}
 					</div>

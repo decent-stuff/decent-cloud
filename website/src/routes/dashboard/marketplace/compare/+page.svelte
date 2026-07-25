@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getOffering, fetchIcpPrice, type Offering } from '$lib/services/api';
+	import { getOffering, type Offering } from '$lib/services/api';
 	import { removeFromComparison } from '$lib/utils/compare';
 	import {
 		buildComparePath,
@@ -24,7 +24,6 @@
 	let offerings = $state<Offering[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let icpPriceUsd = $state<number | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
 	let showAuthModal = $state(false);
 	let successMessage = $state<string | null>(null);
@@ -44,10 +43,7 @@
 			goto(canonicalPath, { replaceState: true, noScroll: true, keepFocus: true });
 		}
 		try {
-			[offerings, icpPriceUsd] = await Promise.all([
-				Promise.all(offeringIds.map((id) => getOffering(id))),
-				fetchIcpPrice()
-			]);
+			offerings = await Promise.all(offeringIds.map((id) => getOffering(id)));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load offerings';
 		} finally {
@@ -103,13 +99,6 @@
 		}
 		if (o.monthly_price) return `${o.monthly_price.toFixed(2)} ${o.currency}`;
 		return 'On request';
-	}
-
-	function formatUsdEquivalent(o: Offering): string | null {
-		if (!icpPriceUsd || !o.monthly_price || o.currency?.toUpperCase() !== 'ICP') return null;
-		let price = o.monthly_price;
-		if (o.reseller_commission_percent) price += price * (o.reseller_commission_percent / 100);
-		return `≈ $${(price * icpPriceUsd).toFixed(2)}/mo`;
 	}
 
 	function formatBilling(o: Offering): string {
@@ -283,19 +272,16 @@
 					</tr>
 					<tr class="border-b border-neutral-800/50 hover:bg-surface-elevated transition-colors">
 						<td class="px-4 py-3 text-neutral-500">Monthly price</td>
-						{#each offerings as offering}
-							<td class="px-4 py-3">
-								<span class="font-medium {winners.price === offering.id ? 'text-emerald-400' : 'text-white'}">
-									{formatPrice(offering)}
-								</span>
-								{#if formatUsdEquivalent(offering)}
-									<span class="text-xs text-neutral-500 ml-1">{formatUsdEquivalent(offering)}</span>
-								{/if}
-								{#if winners.price === offering.id}
-									<span class="ml-1 text-emerald-400 text-xs font-bold" title="Best price">✓</span>
-								{/if}
-							</td>
-						{/each}
+					{#each offerings as offering}
+						<td class="px-4 py-3">
+							<span class="font-medium {winners.price === offering.id ? 'text-emerald-400' : 'text-white'}">
+								{formatPrice(offering)}
+							</span>
+							{#if winners.price === offering.id}
+								<span class="ml-1 text-emerald-400 text-xs font-bold" title="Best price">✓</span>
+							{/if}
+						</td>
+					{/each}
 					</tr>
 					<tr class="border-b border-neutral-800/50 hover:bg-surface-elevated transition-colors">
 						<td class="px-4 py-3 text-neutral-500">Billing</td>

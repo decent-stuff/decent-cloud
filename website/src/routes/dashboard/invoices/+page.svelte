@@ -143,7 +143,7 @@
 				<div class="bg-surface-elevated border border-neutral-800 p-6">
 					<h3 class="text-sm font-semibold text-neutral-300 uppercase tracking-wide mb-3">How billing works</h3>
 					<ol class="space-y-2 text-sm text-neutral-400 list-none">
-						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">1.</span> You pay upfront when renting (ICP or card)</li>
+						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">1.</span> You pay upfront when renting (by card)</li>
 						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">2.</span> Invoice is generated immediately after payment</li>
 						<li class="flex items-start gap-2"><span class="text-primary-400 font-mono text-xs mt-0.5">3.</span> Download anytime from this page</li>
 					</ol>
@@ -172,7 +172,7 @@
 						<span>What payment methods are accepted?</span>
 						<span class="text-neutral-600 group-open:rotate-180 transition-transform">&#9660;</span>
 					</summary>
-					<p class="px-4 pb-4 text-sm text-neutral-500">ICP tokens and credit/debit cards via Stripe.</p>
+					<p class="px-4 pb-4 text-sm text-neutral-500">Credit and debit cards via Stripe.</p>
 				</details>
 				<details class="group">
 					<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm text-neutral-400 hover:text-white transition-colors select-none">

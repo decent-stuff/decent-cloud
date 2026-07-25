@@ -46,6 +46,12 @@ test.describe('/dashboard/rentals', () => {
 		await expect(page.getByRole('link', { name: /Browse GPU Servers/ })).toBeVisible();
 		await expect(page.getByRole('link', { name: /Find Budget VMs/ })).toBeVisible();
 		await expect(page.getByRole('link', { name: /Explore Marketplace/ })).toBeVisible();
+
+		// ICPay is fully retired — Stripe is the sole payment rail, so the empty
+		// state must NOT advertise "ICP" as a payment option. Scoped to the
+		// onboarding steps region to avoid false positives from unrelated text.
+		const onboarding = page.locator('.bg-surface-elevated').filter({ hasText: 'Rent' });
+		await expect(onboarding).not.toContainText('ICP');
 	});
 
 	test('populated state: shows contract cards with status tabs and counts', async ({ page, testAccount }) => {

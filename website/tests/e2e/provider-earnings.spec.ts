@@ -78,11 +78,12 @@ test.describe('Provider earnings populated state (/dashboard/provider/earnings)'
 		// Revenue Overview panel renders (data-loaded signal).
 		await expect(page.getByRole('heading', { name: 'Revenue Overview' })).toBeVisible({ timeout: 15000 });
 
-		// Gross Revenue sums the two seeded 1-ICP contracts → "2.00 ICP".
-		// Scope to the Gross Revenue card so the assertion is unambiguous (Net
-		// Earnings echoes the same number on this page).
+		// Gross Revenue sums the two seeded 1-USD contracts → "2.00 USD".
+		// ICPay is retired; the page must show the contract's real currency (USD),
+		// never a hardcoded "ICP" label. Scope to the Gross Revenue card so the
+		// assertion is unambiguous (Net Earnings echoes the same number).
 		const grossCard = page.locator('div.bg-surface-elevated').filter({ hasText: 'Gross Revenue' });
-		await expect(grossCard).toContainText('2.00 ICP', { timeout: 15000 });
+		await expect(grossCard).toContainText('2.00 USD', { timeout: 15000 });
 
 		// Total Contracts reflects the two seeded provider contracts (>= 2 to stay
 		// robust to any counting nuance in get_provider_stats).
@@ -94,5 +95,8 @@ test.describe('Provider earnings populated state (/dashboard/provider/earnings)'
 		// "No contracts yet" empty state).
 		await expect(page.getByRole('heading', { name: 'Contract Earnings' })).toBeVisible();
 		await expect(page.getByText('No contracts yet')).toBeHidden();
+
+		// No stale ICP currency labels anywhere on the earnings page.
+		await expect(page.locator('body')).not.toContainText('ICP');
 	});
 });

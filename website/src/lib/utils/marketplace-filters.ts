@@ -28,18 +28,6 @@ export function filterDemoOfferings<T extends OfferingExample>(
 }
 
 /**
- * Formats an ICP amount as a USD equivalent monthly price string.
- * Returns null if either argument is null/undefined (no rate available or no price).
- */
-export function formatUsdPrice(
-	icpAmount: number | null | undefined,
-	icpUsdRate: number | null | undefined
-): string | null {
-	if (icpAmount == null || icpUsdRate == null) return null;
-	return `≈ $${(icpAmount * icpUsdRate).toFixed(2)}/mo`;
-}
-
-/**
  * Returns true when an offering is paused (stock_status !== 'in_stock').
  * Treats null/undefined stock_status as not paused.
  */

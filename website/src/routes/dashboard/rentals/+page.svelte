@@ -8,7 +8,6 @@
 		cancelRentalRequest,
 		downloadContractInvoice,
 		getOffering,
-		fetchIcpPrice,
 		API_BASE_URL,
 		type Contract,
 		hexEncode,
@@ -51,7 +50,6 @@
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
-	let icpPriceUsd = $state<number | null>(null);
 	let pendingGuidanceDismissed = $state(
 		typeof sessionStorage !== 'undefined' && sessionStorage.getItem('pending_guidance_dismissed') === '1'
 	);
@@ -291,7 +289,6 @@
 			);
 			contracts = loaded;
 			await fetchOfferingNames(loaded);
-			icpPriceUsd = await fetchIcpPrice();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load rentals";
 			console.error("Error loading rentals:", e);
@@ -534,7 +531,7 @@
 				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
 					<div class="text-2xl mb-2">💳</div>
 					<div class="text-xs font-bold text-neutral-300 mb-1">2. Rent &amp; Pay</div>
-					<div class="text-xs text-neutral-500">Pay with ICP or card</div>
+					<div class="text-xs text-neutral-500">Pay by card</div>
 				</div>
 				<div class="text-neutral-600 text-xl shrink-0">→</div>
 				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
@@ -621,12 +618,9 @@
 						<p class="text-xl font-bold text-primary-400">0.00</p>
 					{:else}
 						{#each [...spendingStats.spentByCurrency.entries()] as [currency, amount]}
-							<p class="text-xl font-bold text-primary-400">
-								{amount.toFixed(2)} {currency}
-								{#if currency === 'ICP' && icpPriceUsd && amount > 0}
-									<span class="text-neutral-600 text-xs ml-1">&#x2248; ${(amount * icpPriceUsd).toFixed(2)}</span>
-								{/if}
-							</p>
+						<p class="text-xl font-bold text-primary-400">
+							{amount.toFixed(2)} {currency}
+						</p>
 						{/each}
 					{/if}
 				</div>

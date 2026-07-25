@@ -1,36 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatUsdPrice, filterInStock, isOfferingPaused, filterDemoOfferings, filterOfflineOfferings } from './marketplace-filters';;
-
-// ---------- formatUsdPrice ----------
-describe('formatUsdPrice', () => {
-	it('formats ICP amount and rate as USD monthly string', () => {
-		expect(formatUsdPrice(10, 5)).toBe('≈ $50.00/mo');
-	});
-
-	it('formats zero ICP amount as $0.00/mo', () => {
-		expect(formatUsdPrice(0, 5)).toBe('≈ $0.00/mo');
-	});
-
-	it('returns null when icpAmount is null', () => {
-		expect(formatUsdPrice(null, 5)).toBeNull();
-	});
-
-	it('returns null when icpAmount is undefined', () => {
-		expect(formatUsdPrice(undefined, 5)).toBeNull();
-	});
-
-	it('returns null when icpUsdRate is null (no rate available)', () => {
-		expect(formatUsdPrice(10, null)).toBeNull();
-	});
-
-	it('returns null when icpUsdRate is undefined', () => {
-		expect(formatUsdPrice(10, undefined)).toBeNull();
-	});
-
-	it('rounds to two decimal places', () => {
-		expect(formatUsdPrice(1, 3.333)).toBe('≈ $3.33/mo');
-	});
-});
+import { filterInStock, isOfferingPaused, filterDemoOfferings, filterOfflineOfferings } from './marketplace-filters';;
 
 // ---------- isOfferingPaused ----------
 describe('isOfferingPaused', () => {

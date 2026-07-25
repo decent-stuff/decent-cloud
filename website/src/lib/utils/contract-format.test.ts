@@ -11,8 +11,8 @@ describe('contract formatting helpers', () => {
 		expect(formatContractDate(undefined)).toBe('N/A');
 	});
 
-	it('formats e9s amounts to ICP string', () => {
-		expect(formatContractPrice(123_000_000_000, "ICP")).toBe('123.00 ICP');
+	it('formats e9s amounts to a currency string', () => {
+		expect(formatContractPrice(123_000_000_000, "USD")).toBe('123.00 USD');
 	});
 
 	it('truncates hashes preserving start and end', () => {

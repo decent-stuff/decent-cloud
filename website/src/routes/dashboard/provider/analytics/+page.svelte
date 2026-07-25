@@ -201,7 +201,7 @@
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6 border-l-2 border-l-emerald-500/50">
 						<p class="text-neutral-500 text-sm">Revenue</p>
-						<p class="text-3xl font-bold text-emerald-400 mt-1">{formatRevenue(totalRevenue30d)} ICP</p>
+						<p class="text-3xl font-bold text-emerald-400 mt-1">{formatRevenue(totalRevenue30d)} USD</p>
 						<p class="text-neutral-600 text-xs mt-1">From rentals this month</p>
 					</div>
 				</div>
@@ -246,7 +246,7 @@
 									<th
 										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
 										onclick={() => toggleSort('revenue30dE9s')}
-									>Revenue 30d (ICP){sortIndicator('revenue30dE9s')}</th>
+									>Revenue 30d (USD){sortIndicator('revenue30dE9s')}</th>
 								</tr>
 							</thead>
 							<tbody>

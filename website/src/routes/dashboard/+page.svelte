@@ -70,10 +70,10 @@
 
 		for (const c of rentals) {
 			const createdMs = (c.created_at_ns ?? 0) / 1_000_000;
-			const amountIcp = (c.payment_amount_e9s ?? 0) / 1e9;
+			const amount = (c.payment_amount_e9s ?? 0) / 1e9;
 
-			if (createdMs >= thisMonthStart) thisMonth += amountIcp;
-			else if (createdMs >= lastMonthStart && createdMs < lastMonthEnd) lastMonth += amountIcp;
+			if (createdMs >= thisMonthStart) thisMonth += amount;
+			else if (createdMs >= lastMonthStart && createdMs < lastMonthEnd) lastMonth += amount;
 
 			if (c.status === 'active' || c.status === 'provisioned') activeContracts.push(c);
 		}
@@ -87,8 +87,8 @@
 		let projected = 0;
 		for (const c of activeContracts) {
 			if (!c.end_timestamp_ns || !c.duration_hours || !c.payment_amount_e9s) continue;
-			const totalIcp = c.payment_amount_e9s / 1e9;
-			const dailyRate = totalIcp / (c.duration_hours / 24);
+			const totalAmount = c.payment_amount_e9s / 1e9;
+			const dailyRate = totalAmount / (c.duration_hours / 24);
 			projected += dailyRate * daysLeftInMonth;
 		}
 
@@ -399,10 +399,10 @@
 					<Icon name="download" size={20} class="text-neutral-600" />
 					<span class="metric-label mb-0">Total Spent</span>
 				</div>
-				<p class="metric-value text-base">
-					{((activity?.rentals_as_requester ?? []).reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
-				</p>
-				<p class="metric-subtext">ICP lifetime</p>
+			<p class="metric-value text-base">
+				{((activity?.rentals_as_requester ?? []).reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+			</p>
+			<p class="metric-subtext">USD lifetime</p>
 			</div>
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
@@ -441,7 +441,7 @@
 							<span class="metric-label mb-0 text-xs">This Month</span>
 						</div>
 						<p class="text-lg font-bold text-white">{spendingInsights.thisMonth.toFixed(2)}</p>
-						<p class="metric-subtext">ICP</p>
+						<p class="metric-subtext">USD</p>
 					</div>
 					<div class="metric-card">
 						<div class="flex items-center gap-2 mb-2">
@@ -449,7 +449,7 @@
 							<span class="metric-label mb-0 text-xs">Last Month</span>
 						</div>
 						<p class="text-lg font-bold text-white">{spendingInsights.lastMonth.toFixed(2)}</p>
-						<p class="metric-subtext">ICP</p>
+						<p class="metric-subtext">USD</p>
 					</div>
 					<div class="metric-card">
 						<div class="flex items-center gap-2 mb-2">
@@ -487,9 +487,9 @@
 										<p class="text-sm text-neutral-300 font-mono truncate">{contract.offering_id}</p>
 										<p class="text-xs text-neutral-600 font-mono">{contract.contract_id.slice(0, 12)}…</p>
 									</div>
-									<span class="text-sm font-mono text-primary-400 ml-3">
-										{(contract.payment_amount_e9s / 1e9).toFixed(2)} ICP
-									</span>
+								<span class="text-sm font-mono text-primary-400 ml-3">
+									{(contract.payment_amount_e9s / 1e9).toFixed(2)} {contract.currency ?? 'USD'}
+								</span>
 								</a>
 							{/each}
 						</div>
@@ -521,10 +521,10 @@
 					<Icon name="check" size={20} class="text-success" />
 					<span class="metric-label mb-0">Earnings</span>
 				</div>
-				<p class="metric-value text-base">
-					{((activity?.rentals_as_provider ?? []).filter(c => c.status === 'active' || c.status === 'provisioned').reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
-				</p>
-				<p class="metric-subtext">ICP active</p>
+			<p class="metric-value text-base">
+				{((activity?.rentals_as_provider ?? []).filter(c => c.status === 'active' || c.status === 'provisioned').reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+			</p>
+			<p class="metric-subtext">USD active</p>
 			</div>
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
@@ -953,7 +953,7 @@
 									<div class="text-sm text-neutral-300 truncate font-mono">{contract.contract_id.slice(0, 16)}...</div>
 								</div>
 								<div class="flex items-center gap-3 ml-3">
-									<span class="text-sm font-mono text-emerald-400">{formatContractPrice(contract.payment_amount_e9s, 'ICP')}</span>
+									<span class="text-sm font-mono text-emerald-400">{formatContractPrice(contract.payment_amount_e9s, contract.currency ?? 'USD')}</span>
 									<span class="px-2 py-0.5 text-xs font-medium rounded-full
 										{contract.status === 'active' || contract.status === 'provisioned' ? 'bg-emerald-500/20 text-emerald-400' :
 										contract.status === 'cancelled' || contract.status === 'rejected' ? 'bg-red-500/20 text-red-400' :

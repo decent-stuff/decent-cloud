@@ -42,6 +42,13 @@ test.describe('/dashboard/invoices', () => {
 
 		// Marketplace CTA
 		await expect(page.getByRole('link', { name: /Browse Marketplace/ })).toBeVisible();
+
+		// ICPay is fully retired — Stripe is the sole payment rail. The whole
+		// invoices explainer (FAQ + billing-steps copy) must NOT mention "ICP"
+		// as a payment method. Expand the payment-methods FAQ first so its body
+		// text is in the DOM, then assert no ICP anywhere on the page.
+		await page.getByText('What payment methods are accepted?').click();
+		await expect(page.locator('body')).not.toContainText('ICP');
 	});
 
 	test('populated state: shows invoice table with one row per invoiceable contract', async ({ page, testAccount }) => {

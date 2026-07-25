@@ -10,7 +10,6 @@
 		getProviderHealthSummary,
 		getProviderFeedbackStats,
 		getProviderContacts,
-		fetchIcpPrice,
 		type ProviderProfile,
 		type ProviderTrustMetrics,
 		type ProviderHealthSummary,
@@ -37,7 +36,6 @@
 	let providerSlaSummary = $state<ProviderSlaSummary | null>(null);
 	let feedbackStats = $state<ProviderFeedbackStats | null>(null);
 	let contacts = $state<ProviderContact[]>([]);
-	let icpPriceUsd = $state<number | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
@@ -68,7 +66,7 @@
 			}
 			pubkey = resolved;
 
-			const [profileData, offeringsData, trustData, healthData, providerSlaData, feedbackData, contactsData, icp] = await Promise.all([
+			const [profileData, offeringsData, trustData, healthData, providerSlaData, feedbackData, contactsData] = await Promise.all([
 				getProviderProfile(pubkey).catch(() => null),
 				getProviderOfferings(pubkey).catch(() => []),
 				getProviderTrustMetrics(pubkey).catch(() => null),
@@ -76,7 +74,6 @@
 				getProviderSlaSummary(pubkey, 30).catch(() => null),
 				getProviderFeedbackStats(pubkey).catch(() => null),
 				getProviderContacts(pubkey).catch(() => []),
-				fetchIcpPrice()
 			]);
 
 			profile = profileData;
@@ -86,7 +83,6 @@
 			providerSlaSummary = providerSlaData;
 			feedbackStats = feedbackData;
 			contacts = contactsData;
-			icpPriceUsd = icp;
 
 			if (!profile && offerings.length === 0 && !trustMetrics) {
 				error = `No provider data found for: ${identifier}`;
@@ -128,14 +124,6 @@
 		}
 		if (o.monthly_price) return `${o.monthly_price.toFixed(2)} ${o.currency}`;
 		return 'On request';
-	}
-
-	function formatUsdEquivalent(o: Offering): string | null {
-		if (!icpPriceUsd || !o.monthly_price) return null;
-		if (o.currency?.toUpperCase() !== 'ICP') return null;
-		let price = o.monthly_price;
-		if (o.reseller_commission_percent) price += price * (o.reseller_commission_percent / 100);
-		return `≈ $${(price * icpPriceUsd).toFixed(2)}/mo`;
 	}
 
 	function formatSpecs(o: Offering): string {
@@ -561,9 +549,6 @@
 							<div class="flex items-center justify-between mt-auto pt-2 border-t border-neutral-800/60">
 								<div>
 									<div class="font-semibold text-white text-sm">{formatPrice(offering)}</div>
-									{#if formatUsdEquivalent(offering)}
-										<div class="text-xs text-neutral-500">{formatUsdEquivalent(offering)}</div>
-									{/if}
 								</div>
 
 								{#if offering.offering_source === 'seeded' && offering.external_checkout_url}

@@ -222,7 +222,7 @@ export interface ContractSeed {
 	status: string;
 	/** Payment status: 'pending' | 'succeeded' | 'failed' | 'refunded'. Default 'succeeded'. */
 	paymentStatus?: string;
-	/** Currency code. Default 'ICP'. */
+	/** Currency code. Default 'USD'. */
 	currency?: string;
 	/** Payment amount in e9s (10^-9 of a token). Default 1 ICP = 1_000_000_000. */
 	paymentAmountE9s?: number | string;
@@ -244,7 +244,7 @@ export interface ContractSeed {
 export async function seedContract(seed: ContractSeed): Promise<string> {
 	const contractId = randomHex(32);
 	const providerPubkey = seed.providerPubkeyHex ?? randomHex(32);
-	const currency = seed.currency ?? 'ICP';
+	const currency = seed.currency ?? 'USD';
 	const paymentAmount = seed.paymentAmountE9s ?? 1_000_000_000;
 	const durationHours = seed.durationHours ?? 1;
 	const offeringId = seed.offeringId ?? 'compute-001';
@@ -407,9 +407,9 @@ export interface OfferingSeedOverrides {
 	stockStatus?: string;
 	/** Optional name override. Default 'Test Offering'. */
 	name?: string;
-	/** Currency code for the offering's price. Default 'ICP'. Use 'USD' (or
-	 * other fiat) to enable the Stripe Credit Card payment path — the rental
-	 * dialog disables card payment for non-fiat currencies like ICP. */
+	/** Currency code for the offering's price. Default 'USD'. Stripe is the
+	 * sole payment rail, so offerings should be priced in a Stripe-supported
+	 * currency; the rental dialog's Stripe (Credit Card) path requires fiat. */
 	currency?: string;
 	/** offering_source column. Default unset (NULL → treated as a normal provider
 	 * offering, which is offline without an agent pool). Set 'self_provisioned'
@@ -439,7 +439,7 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 	const offeringId = overrides?.offeringId ?? `test-${Date.now()}`;
 	const visibility = overrides?.visibility ?? 'public';
 	const stockStatus = overrides?.stockStatus ?? 'in_stock';
-	const currency = overrides?.currency ?? 'ICP';
+	const currency = overrides?.currency ?? 'USD';
 	const name = (overrides?.name ?? 'Test Offering').replace(/'/g, "''");
 	const createdAt = nowNs().toString();
 	const sourceCol = overrides?.offeringSource ? ', offering_source' : '';

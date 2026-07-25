@@ -86,11 +86,12 @@
 	}
 
 	function exportContractsToCsv() {
-		const headers = ['contract_id', 'offering_id', 'status', 'amount_icp', 'duration_hours', 'created_at'];
+		const headers = ['contract_id', 'offering_id', 'status', 'currency', 'amount', 'duration_hours', 'created_at'];
 		const rows = sortedContracts.map((c) => [
 			c.contract_id,
 			c.offering_id ?? '',
 			c.status,
+			c.currency ?? 'USD',
 			((c.payment_amount_e9s ?? 0) / 1e9).toFixed(4),
 			c.duration_hours ?? '',
 			c.created_at_ns ? new Date(c.created_at_ns / 1_000_000).toISOString() : ''
@@ -234,19 +235,19 @@
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Gross Revenue</p>
 						<p class="text-3xl font-bold text-primary-400 mt-1">
-							{formatRevenue(stats.total_revenue_e9s)} ICP
+							{formatRevenue(stats.total_revenue_e9s)} USD
 						</p>
 						<p class="text-neutral-600 text-xs mt-1">Total paid by tenants</p>
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Platform Fee</p>
-						<p class="text-3xl font-bold text-neutral-400 mt-1">0 ICP</p>
+						<p class="text-3xl font-bold text-neutral-400 mt-1">0 USD</p>
 						<p class="text-neutral-600 text-xs mt-1">No fee on marketplace contracts</p>
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6 border-l-2 border-l-emerald-500/50">
 						<p class="text-neutral-500 text-sm">Net Earnings</p>
 						<p class="text-3xl font-bold text-emerald-400 mt-1">
-							{formatRevenue(stats.total_revenue_e9s)} ICP
+							{formatRevenue(stats.total_revenue_e9s)} USD
 						</p>
 						<p class="text-neutral-600 text-xs mt-1">Your take-home amount</p>
 					</div>
@@ -256,7 +257,7 @@
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Token Balance</p>
 						<p class="text-3xl font-bold text-white mt-1">
-							{formatBalance(tokenBalance)} ICP
+							{formatBalance(tokenBalance)}
 						</p>
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
@@ -303,12 +304,12 @@
 										class="text-left text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
 										onclick={() => toggleSort('status')}
 									>Status{sortIndicator('status')}</th>
-									<th
-										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
-										onclick={() => toggleSort('payment_amount_e9s')}
-									>Gross (ICP){sortIndicator('payment_amount_e9s')}</th>
-									<th class="text-right text-neutral-500 font-medium px-4 py-3">Platform Fee</th>
-									<th class="text-right text-neutral-500 font-medium px-4 py-3">Net (ICP)</th>
+								<th
+									class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
+									onclick={() => toggleSort('payment_amount_e9s')}
+								>Gross{sortIndicator('payment_amount_e9s')}</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Platform Fee</th>
+								<th class="text-right text-neutral-500 font-medium px-4 py-3">Net</th>
 									<th
 										class="text-right text-neutral-500 font-medium px-4 py-3 cursor-pointer select-none hover:text-neutral-300"
 										onclick={() => toggleSort('duration_hours')}
@@ -331,15 +332,15 @@
 												{contract.status}
 											</span>
 										</td>
-										<td class="px-4 py-3 text-right text-neutral-300 font-mono">
-											{(contract.payment_amount_e9s / 1e9).toFixed(4)}
-										</td>
-										<td class="px-4 py-3 text-right text-neutral-500 font-mono text-xs">
-											0.0000
-										</td>
-										<td class="px-4 py-3 text-right text-emerald-400 font-mono">
-											{(contract.payment_amount_e9s / 1e9).toFixed(4)}
-										</td>
+									<td class="px-4 py-3 text-right text-neutral-300 font-mono">
+										{(contract.payment_amount_e9s / 1e9).toFixed(4)} {contract.currency ?? 'USD'}
+									</td>
+									<td class="px-4 py-3 text-right text-neutral-500 font-mono text-xs">
+										0.0000
+									</td>
+									<td class="px-4 py-3 text-right text-emerald-400 font-mono">
+										{(contract.payment_amount_e9s / 1e9).toFixed(4)} {contract.currency ?? 'USD'}
+									</td>
 										<td class="px-4 py-3 text-right text-neutral-400">
 											{contract.duration_hours != null ? `${contract.duration_hours}h` : '—'}
 										</td>
@@ -421,7 +422,7 @@
 									<th class="text-right text-neutral-500 font-medium px-4 py-3">Active</th>
 									<th class="text-right text-neutral-500 font-medium px-4 py-3">Cancelled</th>
 									<th class="text-right text-neutral-500 font-medium px-4 py-3">Expired</th>
-									<th class="text-right text-neutral-500 font-medium px-4 py-3">Revenue (ICP)</th>
+									<th class="text-right text-neutral-500 font-medium px-4 py-3">Revenue (USD)</th>
 								</tr>
 							</thead>
 							<tbody>

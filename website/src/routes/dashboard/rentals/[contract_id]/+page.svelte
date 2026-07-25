@@ -1837,7 +1837,7 @@
 							<div class="flex items-center gap-3">
 								<div class="text-sm text-white">+{ext.extension_hours}h extended</div>
 								{#if ext.extension_payment_e9s > 0}
-									<div class="text-xs text-neutral-400">{(ext.extension_payment_e9s / 1e9).toFixed(4)} ICP</div>
+									<div class="text-xs text-neutral-400">{(ext.extension_payment_e9s / 1e9).toFixed(4)} {contract?.currency ?? 'USD'}</div>
 								{/if}
 							</div>
 							<div class="text-xs text-neutral-500">{new Date(ext.created_at_ns / 1_000_000).toLocaleString()}</div>

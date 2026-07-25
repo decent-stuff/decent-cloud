@@ -7,7 +7,6 @@
 		getOfferingSlaSummary,
 		reviewRecipe,
 		searchOfferings,
-		fetchIcpPrice,
 		getProviderTrustMetrics,
 		getProviderProfile,
 		getSavedOfferingIds,
@@ -49,7 +48,6 @@
 	let showAuthModal = $state(false);
 	let successMessage = $state<string | null>(null);
 	let copyLinkFeedback = $state(false);
-	let icpPriceUsd = $state<number | null>(null);
 	let savedIds = $state(new Set<number>());
 	let trustWarningDismissed = $state(false);
 	let similarOfferings = $state<Offering[]>([]);
@@ -65,7 +63,7 @@
 
 	onMount(async () => {
 		try {
-			[offering, icpPriceUsd] = await Promise.all([getOffering(offeringId), fetchIcpPrice()]);
+			offering = await getOffering(offeringId);
 			if (offering) {
 				recordView(offeringId);
 				// Fire-and-forget: log a view on the backend for analytics (errors are non-fatal)
@@ -205,17 +203,9 @@
 		return 'On request';
 	}
 
-	function formatUsdEquivalent(o: Offering): string | null {
-		if (!icpPriceUsd || !o.monthly_price) return null;
-		if (o.currency?.toUpperCase() !== 'ICP') return null;
-		let price = o.monthly_price;
-		if (o.reseller_commission_percent) price += price * (o.reseller_commission_percent / 100);
-		return `≈ $${(price * icpPriceUsd).toFixed(2)}/mo`;
-	}
-
-	function formatSimilarPrice(o: Offering): { primary: string; usdEquivalent: string | null } {
+	function formatSimilarPrice(o: Offering): string {
 		if (!o.monthly_price) {
-			return { primary: 'On request', usdEquivalent: null };
+			return 'On request';
 		}
 		let price = o.monthly_price;
 		if (o.reseller_commission_percent) {
@@ -223,13 +213,9 @@
 		}
 		const currency = o.currency?.toUpperCase();
 		if (currency === 'USD') {
-			return { primary: `$${price.toFixed(2)}`, usdEquivalent: null };
+			return `$${price.toFixed(2)}`;
 		}
-		if (currency === 'ICP' && icpPriceUsd && icpPriceUsd > 0) {
-			const usdAmount = price * icpPriceUsd;
-			return { primary: `${price.toFixed(2)} ICP`, usdEquivalent: `≈ $${usdAmount.toFixed(2)}/mo` };
-		}
-		return { primary: `${price.toFixed(2)} ${o.currency}`, usdEquivalent: null };
+		return `${price.toFixed(2)} ${o.currency}`;
 	}
 
 	function formatBilling(o: Offering): string {
@@ -573,12 +559,9 @@
 		<div class="card p-6 border border-neutral-800">
 			<div class="flex items-baseline justify-between">
 				<div>
-					<span class="text-3xl font-bold text-white">{formatPrice(offering)}</span>
-					<span class="text-neutral-500 text-sm ml-2">/ month</span>
-					{#if formatUsdEquivalent(offering)}
-						<span class="text-neutral-500 text-sm ml-2">{formatUsdEquivalent(offering)}</span>
-					{/if}
-				</div>
+				<span class="text-3xl font-bold text-white">{formatPrice(offering)}</span>
+				<span class="text-neutral-500 text-sm ml-2">/ month</span>
+			</div>
 				{#if offering.setup_fee > 0}
 					<div class="text-neutral-400 text-sm">
 						+ {offering.setup_fee.toFixed(2)} {offering.currency} setup
@@ -606,13 +589,10 @@
 							</button>
 						{/each}
 					</div>
-					<div class="flex items-baseline gap-2">
-						<span class="text-2xl font-bold text-white">{estimatedCost.toFixed(4)}</span>
-						<span class="text-neutral-400 text-sm">{offering.currency}</span>
-						{#if icpPriceUsd && offering.currency?.toUpperCase() === 'ICP'}
-							<span class="text-neutral-500 text-xs">≈ ${(estimatedCost * icpPriceUsd).toFixed(2)} USD</span>
-						{/if}
-					</div>
+				<div class="flex items-baseline gap-2">
+					<span class="text-2xl font-bold text-white">{estimatedCost.toFixed(4)}</span>
+					<span class="text-neutral-400 text-sm">{offering.currency}</span>
+				</div>
 					<p class="text-neutral-600 text-xs">Based on {offering.monthly_price!.toFixed(4)} {offering.currency}/mo rate</p>
 				</div>
 			{/if}
@@ -903,21 +883,18 @@
 		<div class="mt-8">
 			<h3 class="text-sm font-semibold text-neutral-400 uppercase tracking-wide mb-3">Similar Offerings</h3>
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-				{#each similarOfferings as o}
-					{@const price = formatSimilarPrice(o)}
-					<a href="/dashboard/marketplace/{o.id}" class="card p-4 border border-neutral-800 hover:border-neutral-600 transition-colors block">
-						<div class="flex items-center justify-between gap-2">
-							<span class="text-white font-medium text-sm truncate">{o.offer_name}</span>
-							<span class="text-primary-400 text-sm font-semibold whitespace-nowrap">{price.primary}/mo</span>
-						</div>
-						<div class="flex items-center justify-between mt-1">
-							<span class="text-neutral-500 text-xs">{o.product_type}{o.datacenter_country ? ` · ${o.datacenter_country}` : ''}</span>
-							{#if price.usdEquivalent}
-								<span class="text-neutral-500 text-xs">{price.usdEquivalent}</span>
-							{/if}
-						</div>
-					</a>
-				{/each}
+			{#each similarOfferings as o}
+				{@const price = formatSimilarPrice(o)}
+				<a href="/dashboard/marketplace/{o.id}" class="card p-4 border border-neutral-800 hover:border-neutral-600 transition-colors block">
+					<div class="flex items-center justify-between gap-2">
+						<span class="text-white font-medium text-sm truncate">{o.offer_name}</span>
+						<span class="text-primary-400 text-sm font-semibold whitespace-nowrap">{price}/mo</span>
+					</div>
+					<div class="flex items-center justify-between mt-1">
+						<span class="text-neutral-500 text-xs">{o.product_type}{o.datacenter_country ? ` · ${o.datacenter_country}` : ''}</span>
+					</div>
+				</a>
+			{/each}
 			</div>
 		</div>
 	{/if}
