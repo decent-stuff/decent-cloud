@@ -35,8 +35,13 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title |
 |---|-------|
-| 426 | Test: out-of-order Stripe webhook delivery (dispute.created before checkout.session.completed) |
+| 447 | Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion (filed 2026-07-25 from #426 scope decision) |
 | 425 | Audit existing Provisioning → Cancelled failure paths and migrate to ProvisioningFailed |
+
+> **#426 (RESOLVED 2026-07-25, `8ab75838`):** investigated real behavior — orphan disputes (delivered
+> before `checkout.session.completed`) stayed orphaned permanently. Shipped a minimal money-safe
+> reconciliation (`relink_orphan_disputes_for_payment_intent`, idempotent, no money-column writes).
+> The scoped-out retroactive pause/refund replay filed as **#447**.
 
 > **#443** (boot-gate asymmetry: no `require_icpay_in_prod`) and **#420** (ICPay automated payouts)
 > closed **2026-07-24 — moot**: the ICPay rail was fully retired (Stripe is the sole rail). See
@@ -70,10 +75,11 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 |---|-------|
 | 444 | Tech debt: split large source files (>2000 lines) into logical modules |
 
-> **#444 progress (2026-07-25):** first safe extraction shipped — `PoolsApi` pulled out of
-> `providers.rs` (−957 lines, zero behavior change, `74fb9248`). Decomposition roadmap for the
-> remaining files at `docs/plans/2026-07-25-large-file-splits-444.md` (`c4c68e09`). GH #444 stays
-> **open** (partial; ongoing).
+> **#444 progress (2026-07-25):** three safe extractions shipped — `PoolsApi` (`74fb9248`, −957),
+> `NotificationsApi` (`b4259194`, −282), `SlaApi` (`ae97cd8f`, −169). providers.rs 6739→**5331**
+> (−1408). Live OpenAPI spec verified byte-identical after each. Decomposition roadmap for the
+> remaining files at `docs/plans/2026-07-25-large-file-splits-444.md`. GH #444 stays **open**
+> (partial; ongoing — 3 more providers.rs clusters + accounts.rs + offerings.rs + api-cli.rs).
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
 | 382 | dc-agent: remove `try_trigger_hetzner_provisioning` backward-compat alias |
 | 373 | DRY refactor: `extract_contract_id()` shared across 3 provisioners |
@@ -84,6 +90,37 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-07-25 session (GH issue sweep — #442 / #426 / #444)
+
+Sweep of all open GH issues with parallel subagents. The 3 credential-free items shipped;
+**the entire Decent-Agents cluster is blocked** (see blocker note at the foot of this section).
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| #442 create-offering price auto-suggest | UX (decided) | `c14cb939`: pre-fill `#monthly-price` with `cost × 1.15` (15% markup) when Hetzner cost known; provider-overridable via a `monthlyPriceTouched` flag (never clobbers a typed value); hint copy "suggested at 15% markup, adjust as needed". Pure `suggestMonthlyPrice(cost)` helper + `DEFAULT_MARKUP` const in `offering-wizard.ts` (10 unit tests); 2 e2e (pre-fill + override-reaches-API). Issue **closed**. |
+| #426 out-of-order Stripe webhook (dispute before checkout) | Backend + test | `8ab75838`: **investigated real behavior first** — `checkout.session.completed` sets the PI but never touched `contract_disputes`; an orphan dispute (all lookups fail) stayed orphaned **permanently**. Shipped outcome (a): minimal money-safe `relink_orphan_disputes_for_payment_intent` (one idempotent UPDATE backfilling `contract_id`, `WHERE contract_id IS NULL` ⇒ replay-safe, touches NO money/status column ⇒ cannot double-refund). Wired best-effort into checkout completion. New DB test `test_orphan_dispute_relinks_on_late_checkout_completion` (proven to FAIL on a no-op then PASS). Issue **closed**. Scoped-out retroactive pause/refund replay filed as **#447** (money-path, separate concern). |
+| #444 large-file splits (3rd + 4th) | Tech debt | `b4259194` **NotificationsApi** (5 handlers, providers.rs −282) + `ae97cd8f` **SlaApi** (3 handlers + moved `default_sla_days`, −169). Live OpenAPI spec verified byte-identical (189 paths / 227 method+path combos) via rebuilt second-instance diff. providers.rs now 6739→**5331** (−1408 across PoolsApi+NotificationsApi+SlaApi). Tuple arity 12/16. #444 stays **open** (3 more providers.rs clusters + accounts.rs + offerings.rs + api-cli.rs per roadmap). |
+
+**Decent-Agents cluster — BLOCKED on credentials + unbuilt infrastructure (per AGENTS.md mandatory
+workflow, STOP + report; not mocked/stubbed).** `scripts/dc-secrets list shared/env` shows only
+`TELEGRAM_ADMIN_CHAT_ID` + `PIPELINE_BOT_TOKEN`. Missing: Anthropic API key (#427/#429), Stripe
+secret key (#418/#415), Google OAuth client ID + GitHub App credentials (#418). The product infra
+also does not exist yet — grep found only the Stripe webhook receiver; there is **no GitHub App
+webhook receiver** (so #431's "extend the verifier for two secrets" has nothing to extend), and
+no agent-dispatch / metering / proxy subsystem. These are greenfield epics needing creds +
+architectural decisions before one-pass production work can begin:
+
+| # | Title | Blocker |
+|---|-------|---------|
+| 418 | beta onboarding (invite + first-run demo) | Needs Stripe + Google OAuth + GitHub App creds + email/magic-link; the whole onboarding flow is greenfield. |
+| 427 | Anthropic API key proxy/sidecar | Needs Anthropic API key + an isolation-model/architecture decision (host-side reverse proxy vs API-side metering sidecar). |
+| 415 | subscription billing + active-hour/token caps | Depends on #427 (dispatch enforcement) + Stripe creds. Meter-table scaffold alone can't be PoC'd end-to-end. |
+| 416 | usage metering + customer dashboard | Depends on #415 meters. |
+| 429 | Anthropic key exfiltration mitigation | Depends on #427 + the agent container infra. |
+| 431 | GitHub App webhook secret rotation | Blocked: no GitHub App webhook verifier exists yet (depends on #418). |
+| 430 | CODEOWNERS / branch-protection deadlock UX | Depends on #418 onboarding flow. |
+| 432 | per-identity observability + incident runbook | Depends on the agent infra (#413) + Anthropic creds. |
 
 ### 2026-07-25 session (robustness tail + CLI e2e harness + #445/#446 closure)
 
