@@ -139,7 +139,9 @@ const ERROR_LABELS = [
 // ---------------------------------------------------------------------------
 interface AuditOptions {
 	authed?: boolean;
-	/** Minimum ms to let client-rendered data settle after content appears. */
+	/** Max ms to wait for in-flight `/api/v1/` requests to settle after content
+	 * appears. The settle ONLY fires when a client API request is actually
+	 * pending — routes whose content is fully SSR'd pay nothing. */
 	settleMs?: number;
 }
 
@@ -177,9 +179,15 @@ async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Pro
 	page.on('console', onConsole);
 	page.on('pageerror', onPageError);
 
+	// Track in-flight /api/v1/ requests so the settle after content-ready only
+	// fires when a client fetch is actually pending (replaces the previous
+	// blanket 700ms timeout that fired on every route).
+	const apiTracker = trackPendingApiRequests(page);
+
 	const detach = () => {
 		page.off('console', onConsole);
 		page.off('pageerror', onPageError);
+		apiTracker.detach();
 	};
 
 	try {
@@ -239,8 +247,9 @@ async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Pro
 			return findings;
 		}
 
-		// 4. Settle for client-side fetch + hydration.
-		await page.waitForTimeout(opts.settleMs ?? 700);
+		// 4. Settle ONLY if a client `/api/v1/` fetch is still in flight; routes
+		// whose content is fully SSR'd pay nothing (was a blanket 700ms sleep).
+		await settleForPendingApi(page, apiTracker, opts.settleMs ?? 2000);
 
 		// 5. Error-page markers (covers SSR 200-with-error-page too).
 		findings.push(...(await checkErrorPage(page, route)));
@@ -294,6 +303,53 @@ async function waitForBodyContent(page: Page, timeout = 10000): Promise<boolean>
 		return true;
 	} catch {
 		return false;
+	}
+}
+
+/**
+ * Tracker for in-flight `/api/v1/` requests on a page. Install before
+ * navigating so the request/response listeners see every client fetch the
+ * route triggers; `count()` reports how many are still pending; `detach()`
+ * removes the listeners. Used by `settleForPendingApi` to replace the previous
+ * blanket 700ms timeout — routes whose content is fully SSR'd (no client
+ * fetch) pay zero settle, while routes that fire a client fetch wait just long
+ * enough for it to resolve (bounded).
+ */
+interface ApiRequestTracker {
+	count: () => number;
+	detach: () => void;
+}
+
+function trackPendingApiRequests(page: Page): ApiRequestTracker {
+	let pending = 0;
+	const onRequest = (req: import('@playwright/test').Request) => {
+		if (req.url().includes('/api/v1/')) pending++;
+	};
+	const onResponse = (resp: import('@playwright/test').Response) => {
+		if (resp.url().includes('/api/v1/')) pending = Math.max(0, pending - 1);
+	};
+	page.on('request', onRequest);
+	page.on('response', onResponse);
+	return {
+		count: () => pending,
+		detach: () => {
+			page.off('request', onRequest);
+			page.off('response', onResponse);
+		},
+	};
+}
+
+/**
+ * Wait for in-flight `/api/v1/` requests to drain, bounded by `timeout`. Fast
+ * path: if nothing is pending, returns immediately (no sleep). The
+ * `checkStuckLoading` 3s grace further down the pipeline catches the
+ * "never resolved" tail, so this bound can stay tight.
+ */
+async function settleForPendingApi(page: Page, tracker: ApiRequestTracker, timeout = 2000): Promise<void> {
+	if (tracker.count() === 0) return; // fast path: no client API fetch in flight
+	const deadline = Date.now() + timeout;
+	while (tracker.count() > 0 && Date.now() < deadline) {
+		await page.waitForTimeout(50);
 	}
 }
 
