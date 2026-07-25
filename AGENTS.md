@@ -440,3 +440,16 @@ Lean, normative patterns future agents MUST follow. (Source: fresh-sweep session
   repeated setup into `tests/e2e/fixtures/seed-helpers.ts` / `auth-helpers.ts`; parametrize repeated
   flows; keep `@smoke` to fast (<5s), zero/low-seed, reliable specs only (run
   `npm run test:e2e:fast:smoke`, must stay <35s).
+- **Signed-request auth — single source:** request signing (CLI → API, api-cli → API) lives in
+  `common/src/api_auth.rs` (`sign_request` + `build_signed_message`). The API verifier
+  (`api/src/auth.rs::verify_request_signature`) and ALL clients (`api/src/bin/api_cli/client.rs`,
+  `cli/src/commands/provider.rs`) delegate to it. Never hand-roll the signed message, header names
+  (`X-Public-Key`/`X-Signature`/`X-Timestamp`/`X-Nonce`), timestamp unit (nanoseconds), or nonce
+  (UUID v4) — use the shared module. Drift between any of these silently breaks every signed call.
+- **CLI e2e harness:** `cli/tests/cli_flows.rs` drives the real `dc` binary (distinct from the
+  single-command `cli_smoke.rs`). Three tiers: **offline** (default, deterministic, isolated HOME
+  via tempfile — keygen/ledger/account-listings/subcommand-help), **warm-stack** (auto-run when
+  localhost:59011 is up via a 400ms TCP probe, skip-with-pass otherwise — asserts NO 401 +
+  meaningful response), **IC-mainnet** (`#[ignore]`, run via `--run-ignored only`). Warm-stack CLI
+  tests use the unregistered-identity error path ("Pool not found") since pools need a provider
+  registered in the central API DB via the website — that path is stable + still proves auth.

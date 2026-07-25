@@ -56,7 +56,8 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > recommended capability-endpoint path. New public `GET /api/v1/auth/capabilities` →
 > `{google_oauth: bool}`; the frontend defaults to the credential (seed-phrase) form when OAuth is
 > off (no extra click). Server env (`GOOGLE_OAUTH_CLIENT_ID`) is the single source of truth. The
-> success-screen auto-redirect bonus was **deferred** (filed as **#445**).
+> success-screen auto-redirect bonus was **deferred** (filed as **#445**) — **RESOLVED** later the
+> same day (`3b501c62`, see "Recently closed" above).
 
 ## Deferred — Tech debt / low-value
 
@@ -78,6 +79,29 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-07-25 session (robustness tail + CLI e2e harness + #445/#446 closure)
+
+Continuation sweep (baseline `6f6548c8` → `dba28955`/`d11c718d`, 17 commits). Closed the two open
+in-scope GH issues (#445, #446); finished the robustness tail + hex-decode migration flagged by the
+2026-07-25 audits; built a flow-level e2e harness for the `dc` CLI (and fixed two real bugs it
+uncovered); closed the e2e harness tail (C1-C3). Live UX audit: **no net-new issues** (drove the
+real site across public + authed surfaces).
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| #446 recovery-flow e2e "Continue never reaches Processing" | Test (BUG label) | `9b168add`: root cause was STALE TEST ASSERTIONS, not a frontend dead-end — tests expected `.bg-red-500/20` + "Invalid token" but the recover page surfaces API errors in `.bg-danger/10` with "Invalid recovery token hex: …". Added `waitForResponse` + asserted the real error div; renamed the misleading test. Issue closed. |
+| #445 verify-email/recovery success → auto-redirect | UX (enhancement) | `3b501c62`: new shared `AutoRedirect.svelte` (4s countdown + `goto` + cleared interval); wired into verify-email + recover success states; 3 manual options always available (countdown copy + inline "Go now" + retained button). New tests drive the real app; also closes the recovery-success-path coverage gap. Issue closed. |
+| Robustness tail A1/A3/A4/A5/A6 | Robustness | `902cb032` proxmox verify_api_token 30s timeout (testable `build_verify_client`); `aed335bf` dedup `REQUEST_TIMEOUT_SECS` via `pub(crate) HTTP_TIMEOUT_SECS`; `8b706c45` `run_command_with_timeout` for 4 `upgrade.rs` commands (10s/30s); `df6002f9` gateway ssh 20s `tokio::time::timeout`; `dc0e9432` doctor `ss` failure → `[WARN]`. dc-agent 245/245. |
+| hex::decode migration tail (A2) | DRY | 5 USER-INPUT sites migrated to `decode_hex_path`/`decode_pubkey` (`41f3c6fa`, `98432fc4`, `4a8dbd7a`, `c247891d` + `accounts.rs`); detailed errors replace terse `Err(_)`. The remaining 10 are deliberate DB/Stripe-sourced non-fits (documented in `docs/audits/2026-07-25-code-robustness.md`). |
+| CLI provider pool commands 100% broken (auth drift) | Bug (critical) | `b48bdb9b` + `7fe544cd`: `cli/commands/provider.rs` had drifted 4 ways from the canonical signer (wrong header names `X-DC-*` vs `X-Public-Key`; millis vs nanos; no nonce; newline-joined vs byte-concat message). Extracted `common/src/api_auth.rs` as the SINGLE signing source (`sign_request` + `build_signed_message`); `api/auth.rs` verify + `api_cli/client.rs` + cli all delegate to it. Also fixed `tiers` omission in the pool-generate schema. |
+| CLI flow-level e2e harness | Coverage | `dba28955`: new `cli/tests/cli_flows.rs` (12 tests, 0.316s offline; warm-stack + IC-mainnet tiers). Covers keygen determinism/reimport-recovery/multilang/stdin, ledger-local, all-local listings, subcommand help, invalid-mnemonic rejection; warm-stack tests prove the auth fix against the real API (assert NO 401 + contains "Pool not found"). |
+| E2E harness tail C1-C3 | Coverage / UX | `02503591` C1 offering-edit beforeAll sharing (4 tests share seed); `2d82a6d5` C2 agent-pool rename PUT + detail render (new `agent-pool-edit.spec.ts`); `d11c718d` C3 become-provider `?step=N` deep-link (pure `wizard-logic.ts` + 19 unit tests, TDD). |
+
+**Still open / deferred (unchanged):**
+- **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
+- **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
+- **10 deliberate hex non-fit sites** — documented in `docs/audits/2026-07-25-code-robustness.md`.
 
 ### 2026-07-25 session (fresh sweep: robustness + UX + coverage + #444 split)
 
@@ -104,10 +128,10 @@ parallel flake + 2 **pre-existing** recovery-flow failures unrelated to this ses
 **Still open / deferred (deliberate):**
 - **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
 - **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
-- **#436 success-screen auto-redirect bonus** — skipped; filed as **#445**.
+- **#436 success-screen auto-redirect bonus** — skipped at the time; filed as **#445** (now **closed** in the continuation session).
 - **`scripts/browser.js --seed`** onboarding-flag tooling note — minor test helper, documented in-repo.
 - **22 deliberate hex non-fit sites** — documented in `docs/audits/2026-07-25-code-robustness.md`.
-- **2 pre-existing `recovery-flow` e2e failures** — recovery code unchanged this session; frontend `SeedPhraseStep` Continue→`onComplete` never reaches the Processing state with the fake-token tests. Filed as **#446** (not a session regression).
+- **2 pre-existing `recovery-flow` e2e failures** — filed as **#446** at the time; **RESOLVED** in the continuation session (`9b168add` — stale assertions, not a frontend bug).
 
 ### 2026-07-24 session (ICPay retirement + test stabilization)
 
@@ -252,7 +276,7 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 | `scripts/browser.js eval --seed <phrase>` throws "UtilityScript.evaluate" | **Minor tooling** — `authenticatePage` (browser.js:332-336) does an extra `goto`+`networkidle`+300ms after seed inject; a SvelteKit client-side redirect/WelcomeModal likely destroys the eval context. `snap`/`shot`/`errs`/`html`/`tour` all work with `--seed`; only `eval` is affected. For authed JS eval, use the e2e framework. |
 | `scripts/browser.js --seed` greedily consumes positional args | **Minor tooling** — `--seed <phrase> <url>` fails ("Got 14 words") because the parser consumes all subsequent non-flag args as seed words. Documented usage `snap <url> --seed "$SEED"` (seed last) works. One-line fix possible but it's a test helper, not product. |
 | Coverage gap: rent→pay→view→cancel happy path (UI-created contract, not DB-seeded) | **Known gap** — the primary tenant flow is only fragmented (cancel asserted on DB-seeded contracts). Payment-bound (Stripe); higher effort. Parked. |
-| Coverage gap: provider agent-pool mgmt `/dashboard/provider/agents/[pool_id]` | **Known gap** — pool create + detail/edit untested. Needs a populated provider fixture. Parked. |
+| Coverage gap: provider agent-pool mgmt `/dashboard/provider/agents/[pool_id]` | **PARTIALLY CLOSED (2026-07-25, `2d82a6d5` C2)** — pool create + rename PUT + detail-page render now covered in `agent-pool-edit.spec.ts`. Remaining gap: pool revoke/delete UI path (low priority). |
 
 ### Deferred product decisions (surfaced 2026-07-23 UX review)
 

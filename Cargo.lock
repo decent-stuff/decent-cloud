@@ -1081,6 +1081,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "uuid 1.18.1",
 ]
 
 [[package]]
