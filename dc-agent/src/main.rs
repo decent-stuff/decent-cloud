@@ -2703,8 +2703,20 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
     println!("  Auth mode: {}", auth_mode);
     println!();
 
-    // Try to create API client early (needed for gateway manager)
-    let api_client = ApiClient::new(&config.api).ok().map(std::sync::Arc::new);
+    // Try to create API client early (needed for gateway manager).
+    // Non-fatal: doctor should still run other checks, but a failure here
+    // almost always means auth misconfiguration that the operator must fix
+    // before the agent can do anything useful — log it loudly.
+    let api_client = match ApiClient::new(&config.api) {
+        Ok(c) => Some(std::sync::Arc::new(c)),
+        Err(e) => {
+            warn!(
+                "API client init failed — API-dependent checks will be skipped: {:#}",
+                e
+            );
+            None
+        }
+    };
 
     // Check provisioner configuration and verify setup
     let provisioner = create_provisioner_from_config(&config.provisioner)?;

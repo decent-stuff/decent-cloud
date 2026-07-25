@@ -673,16 +673,27 @@ impl ProxmoxProvisioner {
         let mut templates = Vec::new();
 
         for vm in vms {
-            // Check if VM is a template by looking at status
-            if let Ok(status) = self.get_vm_status(vm.vmid).await {
-                // Template VMs have specific naming convention (dc-*)
-                // and are in stopped state (templates can't be running)
-                if let Some(name) = vm.name {
-                    if name.starts_with("dc-") && status.status == "stopped" {
-                        // This might be a template - check if it's actually a template
-                        // by trying to get its config
-                        templates.push((vm.vmid, name));
+            // Check if VM is a template by looking at status. A failure here
+            // usually means the VM was deleted mid-scan or Proxmox returned a
+            // transient error; log it and keep scanning the rest.
+            match self.get_vm_status(vm.vmid).await {
+                Ok(status) => {
+                    // Template VMs have specific naming convention (dc-*)
+                    // and are in stopped state (templates can't be running)
+                    if let Some(name) = vm.name {
+                        if name.starts_with("dc-") && status.status == "stopped" {
+                            // This might be a template - check if it's actually a template
+                            // by trying to get its config
+                            templates.push((vm.vmid, name));
+                        }
                     }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        vmid = vm.vmid,
+                        error = ?e,
+                        "Failed to read VM status during template scan; skipping VM"
+                    );
                 }
             }
         }
@@ -834,48 +845,59 @@ impl Provisioner for ProxmoxProvisioner {
             template_vmid_for_log
         );
 
-        // Check if VM already exists (idempotency)
-        if let Ok(status) = self.get_vm_status(vmid).await {
-            tracing::info!(
-                "VM {} already exists (status: {}), returning existing instance",
-                vmid,
-                status.status
-            );
-            // If VM exists but is not running, start it
-            if status.status != "running" {
-                tracing::debug!("Starting existing VM {}", vmid);
-                let upid = self
-                    .start_vm(vmid)
+        // Check if VM already exists (idempotency). Proxmox returns an error
+        // for an unknown VMID, which is the normal fresh-provision path — log
+        // at debug so the swallow is visible without spamming every provision.
+        match self.get_vm_status(vmid).await {
+            Ok(status) => {
+                tracing::info!(
+                    "VM {} already exists (status: {}), returning existing instance",
+                    vmid,
+                    status.status
+                );
+                // If VM exists but is not running, start it
+                if status.status != "running" {
+                    tracing::debug!("Starting existing VM {}", vmid);
+                    let upid = self
+                        .start_vm(vmid)
+                        .await
+                        .context("Failed to start existing VM")?;
+                    self.wait_for_task(&upid)
+                        .await
+                        .context("Start task failed for existing VM")?;
+                }
+                // Get IP - propagate errors, don't swallow them
+                let (ipv4, ipv6) = self
+                    .get_vm_ip(vmid)
                     .await
-                    .context("Failed to start existing VM")?;
-                self.wait_for_task(&upid)
-                    .await
-                    .context("Start task failed for existing VM")?;
-            }
-            // Get IP - propagate errors, don't swallow them
-            let (ipv4, ipv6) = self
-                .get_vm_ip(vmid)
-                .await
-                .context("Failed to get IP for existing VM")?;
-            return Ok(Instance {
-                external_id: vmid.to_string(),
-                ip_address: ipv4,
-                ipv6_address: ipv6,
-                public_ip: None,
-                ssh_port: 22,
-                root_password: None,
-                additional_details: Some(serde_json::json!({
-                    "vmid": vmid,
-                    "node": self.config.node,
-                    "name": vm_name,
-                    "reused": true,
-                })),
+                    .context("Failed to get IP for existing VM")?;
+                return Ok(Instance {
+                    external_id: vmid.to_string(),
+                    ip_address: ipv4,
+                    ipv6_address: ipv6,
+                    public_ip: None,
+                    ssh_port: 22,
+                    root_password: None,
+                    additional_details: Some(serde_json::json!({
+                        "vmid": vmid,
+                        "node": self.config.node,
+                        "name": vm_name,
+                        "reused": true,
+                    })),
                 gateway_slug: None,
                 gateway_subdomain: None,
                 gateway_ssh_port: None,
                 gateway_port_range_start: None,
                 gateway_port_range_end: None,
             });
+            }
+            Err(e) => {
+                tracing::debug!(
+                    vmid,
+                    error = ?e,
+                    "No existing VM found (expected for fresh provisioning); will create new VM"
+                );
+            }
         }
 
         // Step 1: Clone template - check instance_config for template override

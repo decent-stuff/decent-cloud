@@ -831,11 +831,21 @@ async fn doctor_command() -> Result<(), std::io::Error> {
     check_env!("API_PUBLIC_URL", optional, "agent bot webhooks disabled");
 
     // Check Chatwoot connectivity
-    if let Ok(client) = chatwoot::ChatwootClient::from_env() {
-        print!("  Checking Chatwoot API connectivity... ");
-        // Try to list webhooks as a connectivity test
-        match client.fetch_help_center_articles("test").await {
-            Ok(_) | Err(_) => println!("[OK] reachable"),
+    match chatwoot::ChatwootClient::from_env() {
+        Ok(client) => {
+            print!("  Checking Chatwoot API connectivity... ");
+            // Try to list webhooks as a connectivity test
+            match client.fetch_help_center_articles("test").await {
+                Ok(_) | Err(_) => println!("[OK] reachable"),
+            }
+        }
+        Err(e) => {
+            // Non-fatal: Chatwoot is optional. Surface the cause so operators
+            // can tell missing-token apart from malformed config.
+            tracing::warn!(
+                "Chatwoot not configured or misconfigured — connectivity check skipped: {:#}",
+                e
+            );
         }
     }
 
@@ -857,24 +867,32 @@ async fn doctor_command() -> Result<(), std::io::Error> {
                 println!("[OK] configured (id={})", bot_id);
 
                 // Assign bot to all inboxes
-                if let Ok(client) = chatwoot::ChatwootClient::from_env() {
-                    match client.list_inboxes().await {
-                        Ok(inbox_ids) => {
-                            for inbox_id in inbox_ids {
-                                print!("  Assigning bot to inbox {}... ", inbox_id);
-                                match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
-                                    Ok(()) => println!("[OK]"),
-                                    Err(e) => {
-                                        println!("[ERROR] {:#}", e);
-                                        errors += 1;
+                match chatwoot::ChatwootClient::from_env() {
+                    Ok(client) => {
+                        match client.list_inboxes().await {
+                            Ok(inbox_ids) => {
+                                for inbox_id in inbox_ids {
+                                    print!("  Assigning bot to inbox {}... ", inbox_id);
+                                    match client.assign_agent_bot_to_inbox(inbox_id, bot_id).await {
+                                        Ok(()) => println!("[OK]"),
+                                        Err(e) => {
+                                            println!("[ERROR] {:#}", e);
+                                            errors += 1;
+                                        }
                                     }
                                 }
                             }
+                            Err(e) => {
+                                println!("  [ERROR] Failed to list inboxes: {:#}", e);
+                                errors += 1;
+                            }
                         }
-                        Err(e) => {
-                            println!("  [ERROR] Failed to list inboxes: {:#}", e);
-                            errors += 1;
-                        }
+                    }
+                    Err(e) => {
+                        // Non-fatal: Chatwoot is optional, but a failure here
+                        // after the bot was configured usually means malformed
+                        // env (token/URL) rather than a simple miss — log it.
+                        println!("  [WARN] Chatwoot client unavailable, skipping inbox assignment: {:#}", e);
                     }
                 }
             }
@@ -1201,27 +1219,37 @@ async fn serve_command() -> Result<(), std::io::Error> {
                     );
 
                     // Assign bot to all inboxes via Account API
-                    if let Ok(client) = chatwoot::ChatwootClient::from_env() {
-                        match client.list_inboxes().await {
-                            Ok(inbox_ids) => {
-                                for inbox_id in inbox_ids {
-                                    if let Err(e) =
-                                        client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
-                                    {
-                                        tracing::error!(
-                                            "Failed to assign agent bot to inbox {}: {:#}",
-                                            inbox_id,
-                                            e
-                                        );
+                    match chatwoot::ChatwootClient::from_env() {
+                        Ok(client) => {
+                            match client.list_inboxes().await {
+                                Ok(inbox_ids) => {
+                                    for inbox_id in inbox_ids {
+                                        if let Err(e) =
+                                            client.assign_agent_bot_to_inbox(inbox_id, bot_id).await
+                                        {
+                                            tracing::error!(
+                                                "Failed to assign agent bot to inbox {}: {:#}",
+                                                inbox_id,
+                                                e
+                                            );
+                                        }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to list inboxes: {:#}", e);
+                                Err(e) => {
+                                    tracing::error!("Failed to list inboxes: {:#}", e);
+                                }
                             }
                         }
-                    } else {
-                        tracing::warn!("CHATWOOT_API_TOKEN not set - cannot assign bot to inboxes");
+                        Err(e) => {
+                            // Non-fatal: Chatwoot is optional, but if we got
+                            // here the agent bot was just configured — surface
+                            // why the client couldn't be built (token vs URL vs
+                            // malformed value) instead of hard-coding the cause.
+                            tracing::warn!(
+                                "Chatwoot client unavailable - cannot assign bot to inboxes: {:#}",
+                                e
+                            );
+                        }
                     }
                 }
                 Err(e) => tracing::error!("Failed to configure Chatwoot agent bot: {:#}", e),
