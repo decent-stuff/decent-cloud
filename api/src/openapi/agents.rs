@@ -185,13 +185,13 @@ impl AgentsApi {
         };
 
         // Get provider pubkey from pool
-        let provider_pubkey = match hex::decode(&pool.provider_pubkey) {
+        let provider_pubkey = match decode_hex_path(&pool.provider_pubkey, "pool provider pubkey") {
             Ok(pk) => pk,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid provider pubkey in pool: {}", e)),
+                    error: Some(e),
                 })
             }
         };
