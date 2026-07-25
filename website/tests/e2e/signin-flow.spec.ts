@@ -101,7 +101,7 @@ test.describe('Sign-In Flow', () => {
 		await expect(page.locator('button:has-text("Logout")')).toBeVisible();
 	});
 
-	test('@smoke should sign out successfully', async ({ page, testAccountLoggedOut }) => {
+	test('should sign out successfully', async ({ page, testAccountLoggedOut }) => {
 		// Sign in first (shared helper)
 		await signIn(page, testAccountLoggedOut);
 

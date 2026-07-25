@@ -21,7 +21,7 @@ test.describe('Account Registration Flow', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('@smoke should complete full registration flow with seed phrase', async ({
+	test('should complete full registration flow with seed phrase', async ({
 		page,
 	}) => {
 		const username = generateTestUsername();

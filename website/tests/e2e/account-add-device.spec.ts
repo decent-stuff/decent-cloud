@@ -23,7 +23,7 @@ import { pubkeyHexFromSeed, sql } from './fixtures/seed-helpers';
 test.describe('Add Device submit flow (/dashboard/account/security)', () => {
 	test.describe.configure({ mode: 'serial' });
 
-	test('@smoke links a generated device key and raises the device count from 1 to 2', async ({ page, testAccount }) => {
+	test('links a generated device key and raises the device count from 1 to 2', async ({ page, testAccount }) => {
 		const originalPubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		const restoreSingleKey = async () => {
 			await sql(`

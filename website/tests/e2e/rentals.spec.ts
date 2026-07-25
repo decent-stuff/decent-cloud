@@ -145,7 +145,7 @@ test.describe('/dashboard/rentals', () => {
 		}
 	});
 
-	test('@smoke action: Cancel a requested contract moves it to Cancelled tab', async ({ page, testAccount }) => {
+	test('action: Cancel a requested contract moves it to Cancelled tab', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		try {
 			const contractId = await seedContract({
