@@ -14,6 +14,7 @@ pub mod pools;
 pub mod providers;
 pub mod resellers;
 pub mod signature;
+pub mod sla;
 pub mod stats;
 pub mod subscriptions;
 pub mod system;
@@ -37,6 +38,7 @@ pub use offerings::OfferingsApi;
 pub use pools::PoolsApi;
 pub use providers::{contract_status_events, password_reset_events, ProvidersApi};
 pub use resellers::ResellersApi;
+pub use sla::SlaApi;
 pub use stats::StatsApi;
 pub use subscriptions::SubscriptionsApi;
 pub use system::SystemApi;
@@ -74,6 +76,7 @@ pub fn create_combined_api() -> impl OpenApi {
             AgentsWaitlistApi,
             PoolsApi,
             NotificationsApi,
+            SlaApi,
         ),
     )
 }
