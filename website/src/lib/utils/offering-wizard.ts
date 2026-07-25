@@ -3,6 +3,23 @@
  * Each returns null on success or an error string on failure.
  */
 
+/**
+ * Default markup applied when auto-suggesting the monthly price from the
+ * Hetzner server cost (GH #442). Provider-overridable: the suggested value
+ * is a starting point, not a locked default — the input stays editable.
+ */
+export const DEFAULT_MARKUP = 1.15;
+
+/**
+ * Auto-suggest a monthly price from the Hetzner server cost: `cost × 1.15`,
+ * rounded to 2 decimals (cents). Returns `null` when the cost is missing or
+ * non-positive, so the caller can leave the field untouched in that case.
+ */
+export function suggestMonthlyPrice(cost: number | undefined | null): number | null {
+	if (cost === undefined || cost === null || cost <= 0) return null;
+	return Math.round(cost * DEFAULT_MARKUP * 100) / 100;
+}
+
 export interface Step2State {
 	selectedAccountId: string;
 	selectedServerType: { name: string } | null;

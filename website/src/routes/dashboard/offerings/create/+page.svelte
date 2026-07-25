@@ -20,7 +20,7 @@
 	import Icon from '$lib/components/Icons.svelte';
 	import OfferingPreviewCard from '$lib/components/OfferingPreviewCard.svelte';
 	import type { IdentityInfo } from '$lib/stores/auth';
-	import { validateStep1, validateStep2, validateStep3 } from '$lib/utils/offering-wizard';
+	import { validateStep1, validateStep2, validateStep3, suggestMonthlyPrice } from '$lib/utils/offering-wizard';
 	import { RECIPE_TEMPLATES } from '$lib/data/recipe-templates';
 	import { OFFERING_TEMPLATES } from '$lib/data/offering-templates';
 
@@ -49,6 +49,10 @@
 	let isDraft = $state(false);
 	let publishAt = $state('');
 	let monthlyPrice = $state<number | null>(null);
+	// Tracks whether the user has manually edited the monthly price. Once true,
+	// the auto-suggest (DEFAULT_MARKUP) never overwrites their value — the
+	// suggested price is a starting point, not a locked default (GH #442).
+	let monthlyPriceTouched = $state(false);
 	let currency = $state('USD');
 	let setupFee = $state(0);
 
@@ -90,6 +94,11 @@
 		offeringIdManuallyEdited = true;
 	}
 
+	/** Mark the monthly price as user-edited so the auto-suggest won't clobber it. */
+	function handleMonthlyPriceInput() {
+		monthlyPriceTouched = true;
+	}
+
 	function applyOfferingTemplate(key: string) {
 		if (selectedOfferingTemplate === key) {
 			selectedOfferingTemplate = '';
@@ -102,6 +111,9 @@
 		description = tpl.offeringDescription;
 		productType = tpl.productType;
 		monthlyPrice = tpl.monthlyPrice;
+		// A template-chosen price is an explicit value; don't let a later
+		// server-type selection clobber it with the auto-suggested markup.
+		monthlyPriceTouched = true;
 		visibility = tpl.visibility;
 		if (!offeringIdManuallyEdited) {
 			offeringId = slugify(tpl.offerName);
@@ -150,6 +162,13 @@
 	function handleServerTypeChange(e: Event) {
 		const name = (e.target as HTMLSelectElement).value;
 		selectedServerType = catalog?.serverTypes.find((s) => s.name === name) ?? null;
+		// Auto-suggest the monthly price at DEFAULT_MARKUP when a Hetzner server
+		// cost becomes known AND the user hasn't typed anything yet. Once the
+		// field is touched, the user's value wins (GH #442).
+		if (!monthlyPriceTouched) {
+			const suggested = suggestMonthlyPrice(selectedServerType?.priceMonthly);
+			if (suggested !== null) monthlyPrice = suggested;
+		}
 	}
 
 	function handleLocationChange(e: Event) {
@@ -732,6 +751,7 @@
 									id="monthly-price"
 									type="number"
 									bind:value={monthlyPrice}
+									oninput={handleMonthlyPriceInput}
 									min="0.01"
 									step="0.01"
 									placeholder="0.00"
@@ -739,7 +759,7 @@
 								/>
 								{#if selectedServerType?.priceMonthly}
 									<p class="text-neutral-500 text-xs mt-1">
-										Hetzner cost: ${selectedServerType.priceMonthly}/mo
+										Hetzner cost: ${selectedServerType.priceMonthly}/mo — suggested at 15% markup, adjust as needed.
 									</p>
 								{/if}
 							</div>
