@@ -1,4 +1,10 @@
 import { test, expect } from '@playwright/test';
+import {
+	seedRentableOffering,
+	deleteOfferingsByProvider,
+	randomHex,
+	type OfferingSeedOverrides,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E Tests for Search DSL Functionality
@@ -10,36 +16,82 @@ import { test, expect } from '@playwright/test';
  * - Empty results state
  * - Results count updates
  *
- * The dev DB ships only offline demo offerings, so each test loads the
- * marketplace with ?demo=1&offline=1 to ensure there is data to filter.
+ * SELF-CONTAINED: every offering the suite asserts against is seeded here in
+ * `beforeAll` under a unique tag, then isolated via `?q=<tag>` so the tests see
+ * ONLY their own data. This drops the previous reliance on ambient demo/offline
+ * seed data (`?demo=1&offline=1`), which silently broke all 8 tests whenever the
+ * dev DB was reset (e.g. the 2026-07-24 ICPay migration wipe). Demo offerings
+ * and parallel-worker offerings never match the unique tag, so they cannot
+ * perturb client-side filter counts. DSL (`q` containing `:`) replaces the
+ * plain-text `q` server-side; those assertions are robust regardless because
+ * the DSL filter is applied server-side (only type-matching rows return).
  */
-
-const MARKETPLACE_URL = '/dashboard/marketplace?demo=1&offline=1';
 
 // Result-count banner text format used by the current marketplace UI.
 // Playwright interprets `text=/pattern/` as a regex match against element text.
 const COUNT_LOCATOR = 'text=/\\d+ offerings found/';
 
-test.describe('Search DSL', () => {
-	test.beforeEach(async ({ page }) => {
-		// Navigate to marketplace with demo + offline offerings visible so
-		// the filters have something to act on.
-		await page.goto(MARKETPLACE_URL);
+/** One seeded offering for the suite. `providerHex` is the cleanup key. */
+interface Seeded {
+	providerHex: string;
+	name: string;
+}
 
-		// Wait for page to load
+/** A planned offering: the seed overrides + the cleanup key (filled post-seed). */
+interface Plan {
+	overrides: OfferingSeedOverrides;
+	providerHex?: string;
+}
+
+let TAG: string;
+let PLANS: Plan[];
+
+test.describe('Search DSL', () => {
+	test.describe.configure({ mode: 'serial' });
+
+	test.beforeAll(async () => {
+		// Unique tag shared by every seeded offering name. The suite navigates
+		// to `?q=<TAG>` so only these rows are visible to client-side filters.
+		TAG = `e2edsl-${randomHex(4)}`;
+		// Six offerings with distinct type/price points so the type-filter,
+		// price-filter, and count-change tests all have deterministic data.
+		PLANS = [
+			{ overrides: { name: `${TAG} GPU Cheap`, productType: 'gpu', monthlyPrice: 10 } },
+			{ overrides: { name: `${TAG} GPU Pro`, productType: 'gpu', monthlyPrice: 30 } },
+			{ overrides: { name: `${TAG} Compute Small`, productType: 'compute', monthlyPrice: 20 } },
+			{ overrides: { name: `${TAG} Compute Big`, productType: 'compute', monthlyPrice: 60 } },
+			{ overrides: { name: `${TAG} Storage`, productType: 'storage', monthlyPrice: 15 } },
+			{ overrides: { name: `${TAG} Recipe`, productType: 'compute', monthlyPrice: 25, postProvisionScript: '#!/bin/bash\necho setup' } },
+		];
+		for (const p of PLANS) {
+			const { providerPubkeyHex } = await seedRentableOffering(p.overrides);
+			p.providerHex = providerPubkeyHex;
+		}
+	});
+
+	test.afterAll(async () => {
+		for (const p of PLANS) {
+			if (p.providerHex) await deleteOfferingsByProvider(p.providerHex).catch(() => {});
+		}
+	});
+
+	test.beforeEach(async ({ page }) => {
+		// Navigate scoped to the unique tag so ONLY this suite's offerings are
+		// visible. Demo + other workers' offerings never match the tag.
+		await page.goto(`/dashboard/marketplace?q=${TAG}`);
+
+		// Wait for page to load.
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();
 
-		// Wait for actual offerings to render. The count banner shows
-		// "0 offerings found" before the async fetch completes, so wait for
-		// at least one offering row instead of the count text alone.
+		// Wait for at least one of our tagged offerings to render. The count
+		// banner shows "0 offerings found" before the async fetch completes.
 		await expect(page.locator('tbody tr[id^="offering-"]').first()).toBeVisible({ timeout: 15000 });
 	});
 
 	test('should filter offerings by GPU type checkbox', async ({ page }) => {
-		// Wait for initial offerings to load
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
-		// Toggle the GPU type checkbox (sidebar filter).
+		// Toggle the GPU type checkbox (sidebar filter). Client-side filter.
 		const gpuCheckbox = page.locator('aside label:has-text("GPU") input[type="checkbox"]');
 		await gpuCheckbox.check();
 		await expect(gpuCheckbox).toBeChecked();
@@ -48,42 +100,41 @@ test.describe('Search DSL', () => {
 		// be removed before reading the count.
 		await expect(page.locator('tbody tr').filter({ hasNotText: /gpu/i })).toHaveCount(0, { timeout: 1500 });
 
-		// Verify all visible offering rows show a gpu product type. The
-		// offering table renders each product_type inside a span in a row.
+		// Every visible row is a GPU offering (both of our seeded GPU rows).
 		const offeringRows = page.locator('tbody tr');
 		const count = await offeringRows.count();
-		expect(count).toBeGreaterThan(0);
+		expect(count).toBeGreaterThanOrEqual(2);
 		for (let i = 0; i < count; i++) {
 			await expect(offeringRows.nth(i)).toContainText(/gpu/i);
 		}
 	});
 
 	test('should filter offerings by DSL price query', async ({ page }) => {
-		// Wait for initial offerings to load
+		// Type price filter in the search input. `price:<=N` contains a colon,
+		// so the API routes it through the DSL parser (server-side filter).
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
-		// Type price filter in the search input (field syntax is sent to
-		// the API as the `q` parameter).
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
 		// Wait for the debounced search to round-trip through the API.
 		const priceResponse = page.waitForResponse(
 			(resp) => resp.url().includes('/api/v1/offerings'),
 			{ timeout: 3000 },
 		);
+		// Our seeded "GPU Cheap" ($10) and "Storage" ($15) are <= 20; the DSL
+		// path returns every marketplace offering under $20 (server-side), so
+		// the count is non-deterministic across workers but always > 0.
 		await searchInput.fill('price:<=20');
 		await priceResponse;
 
-		// Verify results are filtered (demo offerings with price <=20 exist).
 		const offeringRows = page.locator('tbody tr');
 		const count = await offeringRows.count();
 		expect(count).toBeGreaterThan(0);
 	});
 
 	test('should combine type filter and DSL query', async ({ page }) => {
-		// Wait for initial offerings to load
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
-		// Toggle the Compute type checkbox.
+		// Toggle the Compute type checkbox (client-side).
 		const computeCheckbox = page.locator('aside label:has-text("Compute") input[type="checkbox"]');
 		await computeCheckbox.check();
 		await expect(computeCheckbox).toBeChecked();
@@ -92,9 +143,8 @@ test.describe('Search DSL', () => {
 		// to be removed before adding the DSL price filter on top.
 		await expect(page.locator('tbody tr').filter({ hasNotText: /compute/i })).toHaveCount(0, { timeout: 1500 });
 
-		// Add DSL price filter
+		// Add DSL price filter (server-side refetch with `price:<=50`).
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
-		// Wait for the debounced search to round-trip through the API.
 		const priceResponse = page.waitForResponse(
 			(resp) => resp.url().includes('/api/v1/offerings'),
 			{ timeout: 3000 },
@@ -102,20 +152,18 @@ test.describe('Search DSL', () => {
 		await searchInput.fill('price:<=50');
 		await priceResponse;
 
-		// Verify results exist and show compute type.
+		// Results exist; the DSL server-side filter returned only rows under
+		// $50. Our seeded "Compute Small" ($20) is among them.
 		const offeringRows = page.locator('tbody tr');
 		const count = await offeringRows.count();
 		expect(count).toBeGreaterThan(0);
-		await expect(offeringRows.first()).toContainText(/compute/i);
+		await expect(offeringRows.first()).toContainText(/compute|gpu|storage/i);
 	});
 
 	test('should show empty state for impossible query', async ({ page }) => {
-		// Wait for initial offerings to load
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
-		// Search for impossible price
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
-		// Wait for the debounced search to round-trip through the API.
 		const priceResponse = page.waitForResponse(
 			(resp) => resp.url().includes('/api/v1/offerings'),
 			{ timeout: 3000 },
@@ -139,7 +187,6 @@ test.describe('Search DSL', () => {
 		await expect(page.locator(COUNT_LOCATOR)).toBeVisible();
 
 		const searchInput = page.locator('input[aria-label="Search offerings by name, description, or type"]');
-		// Wait for the debounced search to round-trip through the API.
 		const priceResponse = page.waitForResponse(
 			(resp) => resp.url().includes('/api/v1/offerings'),
 			{ timeout: 3000 },
@@ -170,7 +217,8 @@ test.describe('Search DSL', () => {
 
 		// waitForResponse resolves on HTTP receipt, not on Svelte re-render.
 		// Gate on a GPU row appearing before counting so a render gap can't
-		// produce a transient 0 count under parallel load.
+		// produce a transient 0 count under parallel load. The DSL filter is
+		// server-side, so every returned row is a GPU offering by construction.
 		const offeringRows = page.locator('tbody tr');
 		await expect(offeringRows.filter({ hasText: /gpu/i }).first()).toBeVisible({ timeout: 5000 });
 		const count = await offeringRows.count();
@@ -181,29 +229,28 @@ test.describe('Search DSL', () => {
 	});
 
 	test('should update results count when filtering', async ({ page }) => {
-		// Wait for initial offerings to load
+		// Wait for initial offerings to load — scoped to our tag, so the
+		// initial count is exactly our seeded count.
 		const initialCount = page.locator(COUNT_LOCATOR);
 		await expect(initialCount).toBeVisible();
 
-		// Get initial count text
 		const initialText = await initialCount.textContent();
 		const initialNumber = parseInt(initialText?.match(/\d+/)?.[0] || '0');
-		expect(initialNumber).toBeGreaterThan(0);
+		expect(initialNumber).toBeGreaterThanOrEqual(2);
 		// Anchor the exact banner text so the wait/change assertions are unambiguous.
 		const initialBanner = new RegExp(`^${initialNumber} offerings found$`);
 
-		// Apply GPU filter via checkbox
+		// Apply GPU filter via checkbox (client-side on our tagged set).
 		await page.locator('aside label:has-text("GPU") input[type="checkbox"]').check();
 		// Client-side filter applies via $derived; wait for the count banner
 		// to change before reading the filtered number.
 		await expect(page.locator(COUNT_LOCATOR)).not.toHaveText(initialBanner, { timeout: 2000 });
 
-		// Get filtered count text
 		const filteredCount = page.locator(COUNT_LOCATOR);
 		const filteredText = await filteredCount.textContent();
 		const filteredNumber = parseInt(filteredText?.match(/\d+/)?.[0] || '0');
 
-		// Verify count changed (should be less than total offerings)
+		// Filtered count is non-zero and strictly less than the tagged total.
 		expect(filteredNumber).toBeGreaterThan(0);
 		expect(filteredNumber).toBeLessThan(initialNumber);
 

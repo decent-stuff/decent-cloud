@@ -473,6 +473,12 @@ export interface OfferingSeedOverrides {
 	 * "Subscription" tooltip. Default false (not a subscription). */
 	isSubscription?: boolean;
 	subscriptionIntervalDays?: number;
+	/** product_type column. Default 'compute'. Set 'gpu' / 'storage' / 'network'
+	 * to exercise the marketplace type filter + the DSL `type:` field. */
+	productType?: string;
+	/** monthly_price column (fiat). Default 25.0. Set to known distinct values
+	 * so price-filter DSL assertions (`price:<=N`) are deterministic. */
+	monthlyPrice?: number;
 }
 
 /**
@@ -489,6 +495,8 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 	const visibility = overrides?.visibility ?? 'public';
 	const stockStatus = overrides?.stockStatus ?? 'in_stock';
 	const currency = overrides?.currency ?? 'USD';
+	const productType = overrides?.productType ?? 'compute';
+	const monthlyPrice = overrides?.monthlyPrice ?? 25.0;
 	const name = (overrides?.name ?? 'Test Offering').replace(/'/g, "''");
 	const createdAt = nowNs().toString();
 	const sourceCol = overrides?.offeringSource ? ', offering_source' : '';
@@ -506,8 +514,8 @@ export async function seedOffering(pubkeyHex: string, overrides?: OfferingSeedOv
 			decode('${pubkeyHex}', 'hex'),
 			'${offeringId}',
 			'${name}',
-			'${currency}', 25.0,
-			'${visibility}', 'compute', 'monthly', '${stockStatus}',
+			'${currency}', ${monthlyPrice},
+			'${visibility}', '${productType}', 'monthly', '${stockStatus}',
 			'US', 'New York', ${createdAt}${sourceVal}${recipeVal}${subVal}
 		)
 		RETURNING id
