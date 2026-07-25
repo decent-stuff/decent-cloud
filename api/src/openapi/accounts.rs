@@ -90,13 +90,13 @@ impl AccountsApi {
         }
 
         // Decode signature for later audit use
-        let signature_bytes = match hex::decode(&signature_header.0) {
+        let signature_bytes = match decode_hex_path(&signature_header.0, "signature") {
             Ok(sig) => sig,
             Err(e) => {
                 return Json(ApiResponse {
                     success: false,
                     data: None,
-                    error: Some(format!("Invalid signature hex: {}", e)),
+                    error: Some(e),
                 })
             }
         };
