@@ -5,6 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEST_DIR=$(mktemp -d)
 export DC_SECRETS_DIR="$TEST_DIR"
+# Sandboxes export SOPS_AGE_KEY_FILE; the test must start without an ambient key so
+# `init` generates a fresh bootstrap key (and the portable-key tests below control
+# their own key sources explicitly).
+unset SOPS_AGE_KEY SOPS_AGE_KEY_FILE
 DC_SECRETS="$SCRIPT_DIR/dc-secrets"
 
 pass=0; fail=0
@@ -25,7 +29,8 @@ assert_fail() {
     fi
 }
 
-cleanup() { rm -rf "$TEST_DIR"; }
+EXTRA_DIRS=()
+cleanup() { rm -rf "$TEST_DIR" "${EXTRA_DIRS[@]}"; }
 trap cleanup EXIT
 
 echo "--- init ---"
@@ -122,6 +127,47 @@ assert_fail "delete nonexistent key" delete shared/test NONEXISTENT
 assert_fail "import nonexistent file" import /nonexistent shared/x
 assert_fail "set bad format" set shared/x badformat
 assert_fail "unknown command" bogus
+
+echo "--- portable age key (resolution + export/import) ---"
+# age-key export prints the identity (an AGE-SECRET-KEY-1 line)
+"$DC_SECRETS" set shared/portable PORTABLE_KEY=portable_val
+exported=$("$DC_SECRETS" age-key export)
+assert_eq "age-key export is age identity" "true" "$(printf '%s\n' "$exported" | grep -q '^AGE-SECRET-KEY-1' && echo true || echo false)"
+
+# External-key resolution: SOPS_AGE_KEY_FILE points at a COPY of the identity
+# (models a host bind-mount into a fresh sandbox with no repo-local .age-identity).
+ext_dir=$(mktemp -d); EXTRA_DIRS+=("$ext_dir")
+cp "$TEST_DIR/.age-identity" "$ext_dir/age-identity"
+got=$(SOPS_AGE_KEY_FILE="$ext_dir/age-identity" "$DC_SECRETS" get shared/portable PORTABLE_KEY 2>/dev/null)
+assert_eq "decrypt via external SOPS_AGE_KEY_FILE" "portable_val" "$got"
+
+# Inline-key resolution: SOPS_AGE_KEY is the bare secret line (CI / secret-manager model)
+secret_line=$(printf '%s\n' "$exported" | grep '^AGE-SECRET-KEY-1')
+got=$(SOPS_AGE_KEY="$secret_line" "$DC_SECRETS" get shared/portable PORTABLE_KEY 2>/dev/null)
+assert_eq "decrypt via inline SOPS_AGE_KEY" "portable_val" "$got"
+
+# init adoption guard: when a key is resolvable via SOPS_AGE_KEY_FILE, init must NOT
+# generate a competing local identity (it adopts + writes .sops.yaml + returns 0).
+adopt_dir=$(mktemp -d); EXTRA_DIRS+=("$adopt_dir")
+SOPS_AGE_KEY_FILE="$ext_dir/age-identity" DC_SECRETS_DIR="$adopt_dir" "$DC_SECRETS" init >/dev/null 2>&1
+assert_eq "init adopts, no local identity generated" "false" "$([[ -f "$adopt_dir/.age-identity" ]] && echo true || echo false)"
+assert_eq "init adoption wrote .sops.yaml" "true" "$([[ -f "$adopt_dir/.sops.yaml" ]] && echo true || echo false)"
+
+# age-key import: seed a FRESH store's identity from a host key file, then prove the
+# imported key can decrypt secrets encrypted to the same key (the portability guarantee).
+fresh_dir=$(mktemp -d); EXTRA_DIRS+=("$fresh_dir")
+DC_SECRETS_DIR="$fresh_dir" "$DC_SECRETS" age-key import --from "$ext_dir/age-identity" >/dev/null 2>&1
+assert_eq "age-key import creates identity" "true" "$([[ -f "$fresh_dir/.age-identity" ]] && echo true || echo false)"
+mkdir -p "$fresh_dir/shared"
+cp "$TEST_DIR/shared/portable.yaml" "$fresh_dir/shared/portable.yaml"
+got=$(DC_SECRETS_DIR="$fresh_dir" "$DC_SECRETS" get shared/portable PORTABLE_KEY 2>/dev/null)
+assert_eq "imported key decrypts existing secrets" "portable_val" "$got"
+# import must refuse to overwrite an existing identity (orphaning risk)
+assert_fail "import refuses overwrite" age-key import --from "$ext_dir/age-identity"
+# import must reject non-age garbage
+junk_dir=$(mktemp -d); EXTRA_DIRS+=("$junk_dir")
+printf 'not-a-key\n' > "$junk_dir/bad"
+DC_SECRETS_DIR="$junk_dir" assert_fail "import rejects garbage" age-key import --from "$junk_dir/bad"
 
 echo "--- concurrent writes ---"
 for i in $(seq 1 10); do
