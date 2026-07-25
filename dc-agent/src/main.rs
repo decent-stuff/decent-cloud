@@ -5,7 +5,6 @@ use dc_agent::{
     config::{Config, ProvisionerConfig},
     gateway::GatewayManager,
     orphan_tracker::OrphanTracker,
-    post_provision::execute_post_provision_script,
     provisioner::{
         digitalocean::DigitalOceanProvisioner, docker::DockerProvisioner,
         manual::ManualProvisioner, proxmox::ProxmoxProvisioner, script::ScriptProvisioner,
@@ -14,6 +13,7 @@ use dc_agent::{
     registration::{default_agent_dir, generate_agent_keypair},
     setup::{detect_public_ip, GatewaySetup},
 };
+use dcc_common::ssh_exec::execute_post_provision_script;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -2331,7 +2331,7 @@ async fn reconcile_instances(
                                             24,
                                         );
 
-                                    match dc_agent::post_provision::reset_password_via_ssh(
+                                    match dcc_common::ssh_exec::reset_password_via_ssh(
                                         ip,
                                         ssh_port,
                                         "ubuntu",
@@ -2429,7 +2429,7 @@ async fn reconcile_instances(
                                 if let Some(ref ip) = instance.ip_address {
                                     let ssh_port = instance.gateway_ssh_port.unwrap_or(22);
 
-                                    match dc_agent::post_provision::inject_ssh_key_via_ssh(
+                                    match dcc_common::ssh_exec::inject_ssh_key_via_ssh(
                                         ip,
                                         ssh_port,
                                         "ubuntu",
@@ -3193,7 +3193,7 @@ async fn run_reset_password(
     contract_id: &str,
     password: Option<String>,
 ) -> Result<()> {
-    use dc_agent::post_provision::reset_password_via_ssh;
+    use dcc_common::ssh_exec::reset_password_via_ssh;
     use dc_agent::provisioner::proxmox::generate_secure_password;
 
     println!("dc-agent reset-password");

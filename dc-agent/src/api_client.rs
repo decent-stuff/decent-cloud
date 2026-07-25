@@ -230,6 +230,42 @@ impl Method {
     }
 }
 
+/// Build the `(timestamp, nonce, signature_hex)` auth triple for an API
+/// request signed with `identity`.
+///
+/// Centralizes the dc-agent request-signing convention (timestamp + nonce +
+/// method + path + body) so that both the `ApiClient::build_auth_headers`
+/// method (which has a full `ApiConfig`) and standalone setup-time helpers
+/// like `register_gateway` (which only have a raw `DccIdentity`) sign
+/// identically.
+fn build_signed_headers(
+    identity: &DccIdentity,
+    method: &str,
+    path: &str,
+    body: &[u8],
+) -> Result<(String, String, String)> {
+    let timestamp = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
+    let nonce = Uuid::new_v4();
+    let timestamp_str = timestamp.to_string();
+    let nonce_str = nonce.to_string();
+
+    let mut sign_message = Vec::new();
+    sign_message.extend_from_slice(timestamp_str.as_bytes());
+    sign_message.extend_from_slice(nonce_str.as_bytes());
+    sign_message.extend_from_slice(method.as_bytes());
+    sign_message.extend_from_slice(path.as_bytes());
+    sign_message.extend_from_slice(body);
+
+    let signature = identity
+        .sign(&sign_message)
+        .map_err(|e| anyhow::anyhow!("Failed to sign message: {}", e))?;
+    let signature_hex = hex::encode(signature.to_bytes());
+
+    Ok((timestamp_str, nonce_str, signature_hex))
+}
+
 impl ApiClient {
     pub fn new(config: &ApiConfig) -> Result<Self> {
         let (identity, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
@@ -291,27 +327,7 @@ impl ApiClient {
         path: &str,
         body: &[u8],
     ) -> Result<(String, String, String)> {
-        let timestamp = chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
-        let nonce = Uuid::new_v4();
-        let timestamp_str = timestamp.to_string();
-        let nonce_str = nonce.to_string();
-
-        let mut sign_message = Vec::new();
-        sign_message.extend_from_slice(timestamp_str.as_bytes());
-        sign_message.extend_from_slice(nonce_str.as_bytes());
-        sign_message.extend_from_slice(method.as_bytes());
-        sign_message.extend_from_slice(path.as_bytes());
-        sign_message.extend_from_slice(body);
-
-        let signature = self
-            .identity
-            .sign(&sign_message)
-            .map_err(|e| anyhow::anyhow!("Failed to sign message: {}", e))?;
-        let signature_hex = hex::encode(signature.to_bytes());
-
-        Ok((timestamp_str, nonce_str, signature_hex))
+        build_signed_headers(&self.identity, method, path, body)
     }
 
     /// Execute an HTTP request with authentication.
@@ -782,25 +798,9 @@ pub async fn register_gateway(
     let body = serde_json::json!({ "dcId": dc_id });
     let body_bytes = serde_json::to_vec(&body)?;
 
-    // Build auth headers (same signing as ApiClient::build_auth_headers)
-    let timestamp = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
-    let nonce = Uuid::new_v4();
-    let timestamp_str = timestamp.to_string();
-    let nonce_str = nonce.to_string();
-
-    let mut sign_message = Vec::new();
-    sign_message.extend_from_slice(timestamp_str.as_bytes());
-    sign_message.extend_from_slice(nonce_str.as_bytes());
-    sign_message.extend_from_slice(b"POST");
-    sign_message.extend_from_slice(path.as_bytes());
-    sign_message.extend_from_slice(&body_bytes);
-
-    let signature = identity
-        .sign(&sign_message)
-        .map_err(|e| anyhow::anyhow!("Failed to sign gateway register request: {}", e))?;
-    let signature_hex = hex::encode(signature.to_bytes());
+    // Build auth headers using the shared signing convention.
+    let (timestamp_str, nonce_str, signature_hex) =
+        build_signed_headers(&identity, "POST", path, &body_bytes)?;
 
     let url = format!("{}{}", api_endpoint, path);
     let response = client
