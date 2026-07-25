@@ -311,7 +311,7 @@ async fn test_get_example_offerings() {
         .find(|o| o.offering_id == "compute-001")
         .expect("Should have compute-001");
     assert_eq!(compute_offering.offer_name, "Basic VPS");
-    assert_eq!(compute_offering.currency, "ICP");
+    assert_eq!(compute_offering.currency, "USD");
     assert_eq!(compute_offering.product_type, "compute");
 
     // Verify it has required data
@@ -325,7 +325,7 @@ async fn test_get_example_offerings() {
         .find(|o| o.offering_id == "gpu-001")
         .expect("Should have gpu-001");
     assert_eq!(gpu_offering.offer_name, "AI Training - RTX 4090");
-    assert_eq!(gpu_offering.currency, "ICP");
+    assert_eq!(gpu_offering.currency, "USD");
     assert_eq!(gpu_offering.product_type, "gpu");
     assert!(gpu_offering.gpu_name.is_some());
     assert!(gpu_offering.gpu_count.is_some());
