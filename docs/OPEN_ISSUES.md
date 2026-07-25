@@ -56,7 +56,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > recommended capability-endpoint path. New public `GET /api/v1/auth/capabilities` →
 > `{google_oauth: bool}`; the frontend defaults to the credential (seed-phrase) form when OAuth is
 > off (no extra click). Server env (`GOOGLE_OAUTH_CLIENT_ID`) is the single source of truth. The
-> success-screen auto-redirect bonus was **deferred** (small follow-up issue filed).
+> success-screen auto-redirect bonus was **deferred** (filed as **#445**).
 
 ## Deferred — Tech debt / low-value
 
@@ -90,7 +90,7 @@ parallel flake + 2 **pre-existing** recovery-flow failures unrelated to this ses
 | Fix | Area | Resolution |
 |-----|------|------------|
 | #441 subscription trial/CTA mismatch | UX | `b1158bff`: honest copy via `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans no longer advertise a trial. `@smoke` test. |
-| #436 seed-phrase sign-in hidden behind extra click | UX | `3fa993a4` + `ea29b0a3`: new public `GET /api/v1/auth/capabilities` (`{google_oauth: bool}`); frontend defaults to credential form when OAuth off. Server env = single source of truth. (Success-screen auto-redirect bonus deferred — follow-up issue filed.) |
+| #436 seed-phrase sign-in hidden behind extra click | UX | `3fa993a4` + `ea29b0a3`: new public `GET /api/v1/auth/capabilities` (`{google_oauth: bool}`); frontend defaults to credential form when OAuth off. Server env = single source of truth. (Success-screen auto-redirect bonus deferred — filed as **#445**.) |
 | #5 (net-new) offering-edit ownership | UX/security | `43ffae8e` + `958ebff1`: `/dashboard/offerings/[id]/edit` redirects non-owners to the view-only route; narrowed identity used in the guard. |
 | ICPay-cleanup cluster | Backend + seed + UX | Reject non-Stripe currency at offering create/update `79c83657`; migrate ICP offerings/contracts → USD `058a36e6`; remove stale ICP labels + dead ICP price feed `83605227`; remove dead ICP price feed backend `05c27f01`. |
 | http timeouts (money/identity/provisioning) | Robustness | `execute_command` setup helper 300s `40d217f8`; cli provider commands `70b6c4ac`; dc-agent manual provisioner webhook `5da340a4`. |
@@ -104,10 +104,10 @@ parallel flake + 2 **pre-existing** recovery-flow failures unrelated to this ses
 **Still open / deferred (deliberate):**
 - **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
 - **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
-- **#436 success-screen auto-redirect bonus** — skipped; small follow-up issue filed.
+- **#436 success-screen auto-redirect bonus** — skipped; filed as **#445**.
 - **`scripts/browser.js --seed`** onboarding-flag tooling note — minor test helper, documented in-repo.
 - **22 deliberate hex non-fit sites** — documented in `docs/audits/2026-07-25-code-robustness.md`.
-- **2 pre-existing `recovery-flow` e2e failures** — recovery code unchanged this session; frontend `SeedPhraseStep` Continue→`onComplete` never reaches the Processing state with the fake-token tests. Filed as a GH issue (not a session regression).
+- **2 pre-existing `recovery-flow` e2e failures** — recovery code unchanged this session; frontend `SeedPhraseStep` Continue→`onComplete` never reaches the Processing state with the fake-token tests. Filed as **#446** (not a session regression).
 
 ### 2026-07-24 session (ICPay retirement + test stabilization)
 

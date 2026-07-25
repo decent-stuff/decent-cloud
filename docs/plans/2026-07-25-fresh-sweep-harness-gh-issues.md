@@ -123,7 +123,7 @@ Final verification (this wave):
 - Full e2e: **300 passed, 3 failed** — 1 known parallel-timing flake (`account-page:55` passes in
   isolation) + 2 **pre-existing** `recovery-flow` failures (recovery code unchanged this session;
   frontend `SeedPhraseStep` Continue→`onComplete` wiring never reaches the Processing state with the
-  fake-token tests). NOT a session regression; filed as a GH issue + documented in OPEN_ISSUES.md.
+  fake-token tests). NOT a session regression; filed as **#446** + documented in OPEN_ISSUES.md.
 
 ## Session commit log
 Baseline `56df84e6` → HEAD. 29 commits across the 6 waves:
@@ -184,5 +184,5 @@ settle-on-fetch). Smoke tuned to **27 tests @ ~33s** (fast dev loop).
 
 **Left open (deliberate):** #442 (create-offering price auto-suggest — product decision), #444
 (remaining large-file splits — roadmap filed), the #436 success-screen auto-redirect bonus (small
-follow-up issue filed), the `scripts/browser.js --seed` tooling note, and the 22 deliberate hex
+follow-up issue #445), the `scripts/browser.js --seed` tooling note, and the 22 deliberate hex
 non-fit sites (documented in the code-robustness audit).
