@@ -147,26 +147,19 @@ pub async fn handle_provider_command(
     Ok(())
 }
 
-/// Request signing for API authentication
+/// Sign an API request using the shared dcc_common signer. Returns
+/// `(timestamp_nanos, nonce, signature_hex)` — the values for the `X-Timestamp`,
+/// `X-Nonce`, and `X-Signature` headers. The caller already holds `pubkey_hex`
+/// for the `X-Public-Key` header.
 fn sign_api_request(
     dcc_id: &DccIdentity,
     method: &str,
     path: &str,
-    body: Option<&str>,
+    body: &[u8],
 ) -> Result<(String, String, String), Box<dyn std::error::Error>> {
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_millis()
-        .to_string();
-
-    // Build message to sign: method + path + timestamp + body
-    let body_str = body.unwrap_or("");
-    let message = format!("{}\n{}\n{}\n{}", method, path, timestamp, body_str);
-    let signature = dcc_id.sign(message.as_bytes())?;
-    let sig_hex = hex::encode(signature.to_bytes());
-    let pubkey_hex = hex::encode(dcc_id.to_bytes_verifying());
-
-    Ok((pubkey_hex, timestamp, sig_hex))
+    let signed = dcc_common::api_auth::sign_request(dcc_id, method, path, body)
+        .map_err(|e| format!("Failed to sign request: {e}"))?;
+    Ok((signed.timestamp, signed.nonce, signed.signature_hex))
 }
 
 /// Get offering suggestions for a pool
@@ -181,16 +174,17 @@ async fn pool_suggest_offerings(
         pubkey_hex, pool_id
     );
 
-    let (_, timestamp, signature) = sign_api_request(dcc_id, "GET", &path, None)?;
+    let (timestamp, nonce, signature) = sign_api_request(dcc_id, "GET", &path, &[])?;
 
     let client = crate::utils::http_client();
     let url = format!("{}{}", api_url, path);
 
     let response = client
         .get(&url)
-        .header("X-DC-Pubkey", &pubkey_hex)
-        .header("X-DC-Timestamp", &timestamp)
-        .header("X-DC-Signature", &signature)
+        .header(dcc_common::api_auth::HEADER_PUBLIC_KEY, &pubkey_hex)
+        .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+        .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
+        .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
         .send()
         .await?;
 
@@ -233,17 +227,20 @@ async fn pool_generate_offerings(
     let pricing: HashMap<String, serde_json::Value> = serde_json::from_str(&pricing_content)
         .map_err(|e| format!("Invalid JSON in pricing file: {}", e))?;
 
-    // Build request body
-    let mut request = serde_json::json!({
+    // API contract: `tiers` is a `Vec<String>` defaulting to empty (= generate
+    // all applicable tiers). Always send the array — poem-openapi's payload
+    // parser rejects a missing/null `tiers` field before serde runs.
+    let tier_vec: Vec<String> = match tiers {
+        Some(list) => list.split(',').map(|s| s.trim().to_string()).collect(),
+        None => Vec::new(),
+    };
+
+    let request = serde_json::json!({
         "pricing": pricing,
         "visibility": visibility,
-        "dryRun": dry_run
+        "dryRun": dry_run,
+        "tiers": tier_vec,
     });
-
-    if let Some(tier_list) = tiers {
-        let tier_vec: Vec<&str> = tier_list.split(',').map(|s| s.trim()).collect();
-        request["tiers"] = serde_json::json!(tier_vec);
-    }
 
     let body = serde_json::to_string(&request)?;
     let pubkey_hex = hex::encode(dcc_id.to_bytes_verifying());
@@ -252,16 +249,18 @@ async fn pool_generate_offerings(
         pubkey_hex, pool_id
     );
 
-    let (_, timestamp, signature) = sign_api_request(dcc_id, "POST", &path, Some(&body))?;
+    let (timestamp, nonce, signature) =
+        sign_api_request(dcc_id, "POST", &path, body.as_bytes())?;
 
     let client = crate::utils::http_client();
     let url = format!("{}{}", api_url, path);
 
     let response = client
         .post(&url)
-        .header("X-DC-Pubkey", &pubkey_hex)
-        .header("X-DC-Timestamp", &timestamp)
-        .header("X-DC-Signature", &signature)
+        .header(dcc_common::api_auth::HEADER_PUBLIC_KEY, &pubkey_hex)
+        .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+        .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
+        .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
         .header("Content-Type", "application/json")
         .body(body)
         .send()
