@@ -1186,6 +1186,17 @@ impl Database {
         if params.offer_name.trim().is_empty() {
             return Err(anyhow::anyhow!("offer_name is required"));
         }
+        // Currency MUST be Stripe-supported — Stripe is the sole payment rail,
+        // so a non-Stripe currency (e.g. retired "ICP") would break every
+        // checkout. Reject at the data boundary. See
+        // common::payment_method::is_stripe_supported_currency.
+        if !dcc_common::payment_method::is_stripe_supported_currency(&params.currency) {
+            return Err(anyhow::anyhow!(
+                "Currency '{}' is not supported. Stripe is the sole payment rail; \
+                 use a Stripe-supported currency (e.g. USD, EUR).",
+                params.currency
+            ));
+        }
         // Validate datacenter_country is a known ISO country code
         if !params.datacenter_country.is_empty()
             && !is_valid_country_code(&params.datacenter_country)
@@ -1443,6 +1454,14 @@ impl Database {
             return Err(anyhow::anyhow!(
                 "Invalid datacenter_country '{}': must be a valid ISO 3166-1 alpha-2 country code (e.g., US, DE, JP)",
                 params.datacenter_country
+            ));
+        }
+        // Currency MUST be Stripe-supported — see create_offering for rationale.
+        if !dcc_common::payment_method::is_stripe_supported_currency(&params.currency) {
+            return Err(anyhow::anyhow!(
+                "Currency '{}' is not supported. Stripe is the sole payment rail; \
+                 use a Stripe-supported currency (e.g. USD, EUR).",
+                params.currency
             ));
         }
 

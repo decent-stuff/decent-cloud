@@ -43,6 +43,30 @@ fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
     Ok(())
 }
 
+/// Validate that an offering's `currency` is one Stripe can actually settle in.
+///
+/// ICPay (the ICP cryptocurrency rail) is fully retired — Stripe is the sole
+/// payment rail. Every offering MUST be priced in a Stripe-supported currency
+/// so a rental checkout can always complete. This rejects retired/crypto
+/// currencies (e.g. `"ICP"`, `"BTC"`) at the boundary with a clear, actionable
+/// message rather than silently accepting them and surfacing as a broken
+/// checkout later.
+///
+/// Reuses the single source of truth in
+/// [`dcc_common::payment_method::is_stripe_supported_currency`].
+fn validate_offering_currency(currency: &str) -> Result<(), String> {
+    if dcc_common::payment_method::is_stripe_supported_currency(currency) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Currency '{}' is not supported. Stripe is the sole payment rail; \
+             use a Stripe-supported currency (e.g. USD, EUR). \
+             See https://stripe.com/docs/currencies",
+            currency
+        ))
+    }
+}
+
 fn default_sla_days() -> i64 {
     30
 }
@@ -1839,6 +1863,14 @@ impl ProvidersApi {
         params.id = None;
         params.pubkey = hex::encode(&pubkey_bytes);
 
+        if let Err(e) = validate_offering_currency(&params.currency) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
+
         if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
             return Json(ApiResponse {
                 success: false,
@@ -1912,6 +1944,14 @@ impl ProvidersApi {
 
         let mut params = offering.0;
         params.pubkey = hex::encode(&pubkey_bytes);
+
+        if let Err(e) = validate_offering_currency(&params.currency) {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e),
+            });
+        }
 
         if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
             return Json(ApiResponse {
@@ -6508,6 +6548,55 @@ mod tests {
             PROVIDERS_RS.contains("async fn get_provider_response_metrics"),
             "Providers API must keep get_provider_response_metrics handler"
         );
+    }
+
+    // ── validate_offering_currency ──────────────────────────────────────
+    //
+    // ICPay (the ICP cryptocurrency rail) is fully retired — Stripe is the sole
+    // payment rail. Offerings MUST be priced in a Stripe-supported currency so
+    // every checkout can actually settle. These tests pin the boundary: a
+    // non-Stripe currency (e.g. "ICP", "BTC") is rejected with a clear,
+    // actionable message rather than silently accepted and surfacing as a
+    // broken checkout later.
+
+    #[test]
+    fn test_validate_offering_currency_accepts_stripe_currencies() {
+        for cur in ["USD", "usd", "EUR", "eur", "GBP", "JPY", "CAD"] {
+            assert!(
+                super::validate_offering_currency(cur).is_ok(),
+                "Stripe-supported currency {cur:?} should be accepted"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_offering_currency_rejects_icp() {
+        let result = super::validate_offering_currency("ICP");
+        assert!(result.is_err(), "ICP is not a Stripe currency and must be rejected");
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("ICP") && msg.contains("Stripe"),
+            "error message must name ICP and Stripe; got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_validate_offering_currency_rejects_other_crypto_and_garbage() {
+        for cur in ["BTC", "ETH", "ckBTC", "DCT", "", "unknown"] {
+            assert!(
+                super::validate_offering_currency(cur).is_err(),
+                "non-Stripe currency {cur:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn test_validate_offering_currency_is_case_insensitive() {
+        // Stripe currency codes are matched case-insensitively (lowercased).
+        assert!(super::validate_offering_currency("UsD").is_ok());
+        assert!(super::validate_offering_currency("eUr").is_ok());
+        // Mixed-case ICP is still ICP and still rejected.
+        assert!(super::validate_offering_currency("iCp").is_err());
     }
 
     // ── validate_recipe_if_present ──────────────────────────────────────

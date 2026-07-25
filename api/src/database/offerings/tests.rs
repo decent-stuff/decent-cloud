@@ -822,6 +822,129 @@ async fn test_create_offering_missing_required_fields() {
     assert!(result.is_err());
 }
 
+/// Stripe is the sole payment rail, so create/update MUST reject offerings
+/// priced in a non-Stripe currency (e.g. retired "ICP"). These tests pin the
+/// data-boundary rejection so a CSV import or any future caller cannot seed
+/// un-checkoutable offerings.
+#[tokio::test]
+async fn test_create_offering_rejects_non_stripe_currency() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    let mut params = sample_offering_params(&pubkey, "ICP-create");
+    params.currency = "ICP".to_string();
+    let err = db
+        .create_offering(&pubkey, params)
+        .await
+        .expect_err("ICP offering must be rejected at create");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("ICP") && msg.contains("Stripe"),
+        "error must name ICP and Stripe; got: {msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_update_offering_rejects_non_stripe_currency() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    // First create a valid USD offering.
+    let db_id = db
+        .create_offering(&pubkey, sample_offering_params(&pubkey, "ICP-update"))
+        .await
+        .expect("USD offering must create");
+
+    // Then attempt to flip it to ICP — must be rejected.
+    let mut update = sample_offering_params(&pubkey, "ICP-update");
+    update.currency = "BTC".to_string();
+    let err = db
+        .update_offering(&pubkey, db_id, update)
+        .await
+        .expect_err("non-Stripe currency must be rejected at update");
+    assert!(
+        format!("{err:#}").contains("Stripe"),
+        "error must mention Stripe; got: {err:#}"
+    );
+}
+
+/// Minimal valid `Offering` params for currency-validation tests. Currency is
+/// USD (Stripe-supported) by default; callers override individual fields.
+fn sample_offering_params(pubkey: &[u8], offering_id: &str) -> Offering {
+    Offering {
+        id: None,
+        pubkey: hex::encode(pubkey),
+        offering_id: offering_id.to_string(),
+        offer_name: "Currency Test".to_string(),
+        description: None,
+        product_page_url: None,
+        currency: "USD".to_string(),
+        monthly_price: 10.0,
+        setup_fee: 0.0,
+        visibility: "public".to_string(),
+        product_type: "compute".to_string(),
+        virtualization_type: None,
+        billing_interval: "monthly".to_string(),
+        billing_unit: "month".to_string(),
+        pricing_model: None,
+        price_per_unit: None,
+        included_units: None,
+        overage_price_per_unit: None,
+        stripe_metered_price_id: None,
+        is_subscription: false,
+        subscription_interval_days: None,
+        stock_status: "in_stock".to_string(),
+        processor_brand: None,
+        processor_amount: None,
+        processor_cores: None,
+        processor_speed: None,
+        processor_name: None,
+        memory_error_correction: None,
+        memory_type: None,
+        memory_amount: None,
+        hdd_amount: None,
+        total_hdd_capacity: None,
+        ssd_amount: None,
+        total_ssd_capacity: None,
+        unmetered_bandwidth: false,
+        uplink_speed: None,
+        traffic: None,
+        datacenter_country: "US".to_string(),
+        datacenter_city: "Test".to_string(),
+        datacenter_latitude: None,
+        datacenter_longitude: None,
+        control_panel: None,
+        gpu_name: None,
+        gpu_count: None,
+        gpu_memory_gb: None,
+        min_contract_hours: None,
+        max_contract_hours: None,
+        payment_methods: None,
+        features: None,
+        operating_systems: None,
+        trust_score: None,
+        has_critical_flags: None,
+        reliability_score: None,
+        is_example: false,
+        is_draft: false,
+        offering_source: None,
+        external_checkout_url: None,
+        reseller_name: None,
+        reseller_commission_percent: None,
+        owner_username: None,
+        provisioner_type: None,
+        provisioner_config: None,
+        template_name: None,
+        agent_pool_id: None,
+        post_provision_script: None,
+        provider_online: None,
+        resolved_pool_id: None,
+        resolved_pool_name: None,
+        created_at_ns: None,
+        publish_at: None,
+    }
+}
+
 #[tokio::test]
 async fn test_update_offering_success() {
     let db = setup_test_db().await;
@@ -839,7 +962,7 @@ async fn test_update_offering_success() {
         offer_name: "Updated Server".to_string(),
         description: Some("Updated description".to_string()),
         product_page_url: None,
-        currency: "DER".to_string(),
+        currency: "EUR".to_string(),
         monthly_price: 199.99,
         setup_fee: 50.0,
         visibility: "private".to_string(),
@@ -917,7 +1040,7 @@ async fn test_update_offering_success() {
         .expect("Expected offering to exist after update");
     assert_eq!(offering.offer_name, "Updated Server");
     assert_eq!(offering.monthly_price, 199.99);
-    assert_eq!(offering.currency, "DER");
+    assert_eq!(offering.currency, "EUR");
     assert_eq!(offering.payment_methods, Some("ETH".to_string()));
     assert_eq!(offering.features, Some("Backup".to_string()));
     assert_eq!(offering.operating_systems, Some("Debian 12".to_string()));
@@ -1183,7 +1306,7 @@ async fn test_csv_import_success() {
 
     let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
 off-1,Test Server,Great server,https://example.com,USD,100.0,0.0,public,dedicated,,monthly,in_stock,Intel,2,8,3.5GHz,Xeon,ECC,DDR4,32GB,2,2TB,1,500GB,true,1Gbps,10000,US,New York,40.7128,-74.0060,cPanel,RTX 3090,1,720,BTC,SSD,Ubuntu
-off-2,Test Server 2,Another server,,DER,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
+off-2,Test Server 2,Another server,,EUR,200.0,50.0,public,vps,kvm,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,\"BTC,ETH\",\"SSD,NVMe\",\"Ubuntu,Debian\"";
 
     let (success_count, errors) = db
         .import_offerings_csv(&pubkey, csv_data, false)
@@ -1278,7 +1401,7 @@ async fn test_csv_import_upsert() {
 
     let csv_data = "offering_id,offer_name,description,product_page_url,currency,monthly_price,setup_fee,visibility,product_type,virtualization_type,billing_interval,stock_status,processor_brand,processor_amount,processor_cores,processor_speed,processor_name,memory_error_correction,memory_type,memory_amount,hdd_amount,total_hdd_capacity,ssd_amount,total_ssd_capacity,unmetered_bandwidth,uplink_speed,traffic,datacenter_country,datacenter_city,datacenter_latitude,datacenter_longitude,control_panel,gpu_name,min_contract_hours,max_contract_hours,payment_methods,features,operating_systems
 off-1,Updated Offer,Updated desc,,USD,200.0,10.0,public,dedicated,,monthly,out_of_stock,,,,,,,,,,,,,false,,,US,NYC,,,,,,,,,
-off-2,New Offer,New desc,,DER,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
+off-2,New Offer,New desc,,EUR,150.0,0.0,public,vps,,monthly,in_stock,,,,,,,,,,,,,false,,,DE,Berlin,,,,,,,,,";
 
     let (success_count, errors) = db
         .import_offerings_csv(&pubkey, csv_data, true)
@@ -1833,7 +1956,7 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         offer_name: "German Server".to_string(),
         description: None,
         product_page_url: None,
-        currency: "DER".to_string(),
+        currency: "EUR".to_string(),
         monthly_price: 99.99,
         setup_fee: 0.0,
         visibility: "public".to_string(),
@@ -1938,7 +2061,7 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         offer_name: "Server with Explicit Pool".to_string(),
         description: None,
         product_page_url: None,
-        currency: "DER".to_string(),
+        currency: "EUR".to_string(),
         monthly_price: 99.99,
         setup_fee: 0.0,
         visibility: "public".to_string(),
@@ -2040,7 +2163,7 @@ async fn test_get_provider_offerings_no_matching_pool() {
         offer_name: "Server without Pool".to_string(),
         description: None,
         product_page_url: None,
-        currency: "DER".to_string(),
+        currency: "EUR".to_string(),
         monthly_price: 99.99,
         setup_fee: 0.0,
         visibility: "public".to_string(),
