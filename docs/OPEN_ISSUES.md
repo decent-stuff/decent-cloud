@@ -48,6 +48,11 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 |---|-------|----------|
 | 442 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
 
+> **#442 DECISION (2026-07-25, from product):** default markup = **15%** (auto-suggest
+> `cost × 1.15`), **provider-overridable** — the input stays editable, the 15% is a starting point.
+> Decision recorded on the GH issue (comment `5078165010`). Now actionable — pre-fill
+> `#monthly-price` with `cost × 1.15` when Hetzner server cost is known, update hint copy.
+
 > **#441 (RESOLVED 2026-07-25, `b1158bff`):** trial/CTA mismatch fixed — copy now honestly reflects
 > the CTA via `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans
 > (Pro/Enterprise) no longer advertise a trial. Test in `account-subscription.spec.ts` (`@smoke`).
