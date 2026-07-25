@@ -73,27 +73,11 @@ impl SignedClient {
         path: &str,
         body: &[u8],
     ) -> Result<(String, String, String)> {
-        let timestamp = chrono::Utc::now()
-            .timestamp_nanos_opt()
-            .context("Failed to get timestamp")?
-            .to_string();
-        let nonce = uuid::Uuid::new_v4().to_string();
-
-        // Construct message: timestamp + nonce + method + path + body
-        let mut message = timestamp.as_bytes().to_vec();
-        message.extend_from_slice(nonce.as_bytes());
-        message.extend_from_slice(method.as_bytes());
-        message.extend_from_slice(path.as_bytes());
-        message.extend_from_slice(body);
-
-        // Sign using DccIdentity (Ed25519ph with context "decent-cloud")
-        let signature = self
-            .identity
-            .sign(&message)
+        // Delegates to the shared dcc_common signer so the api-cli and the
+        // api-server verifier use one message-layout implementation.
+        let signed = dcc_common::api_auth::sign_request(&self.identity, method, path, body)
             .map_err(|e| anyhow::anyhow!("Failed to sign request: {}", e))?;
-        let signature_hex = hex::encode(signature.to_bytes());
-
-        Ok((timestamp, nonce, signature_hex))
+        Ok((signed.timestamp, signed.nonce, signed.signature_hex))
     }
 
     /// Make a GET request

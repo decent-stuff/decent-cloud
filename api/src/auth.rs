@@ -206,11 +206,11 @@ pub fn verify_request_signature(
     })?;
 
     // Construct message: timestamp + nonce + method + path + body
-    let mut message = timestamp_str.as_bytes().to_vec();
-    message.extend_from_slice(nonce_str.as_bytes());
-    message.extend_from_slice(method.as_bytes());
-    message.extend_from_slice(path.as_bytes());
-    message.extend_from_slice(body);
+    // (single source of truth lives in dcc_common::api_auth so sign + verify
+    // can never drift — see the dc-CLI provider-auth regression that this fixed).
+    let message = dcc_common::api_auth::build_signed_message(
+        timestamp_str, nonce_str, method, path, body,
+    );
 
     // Verify signature. The verifying identity is cached per-pubkey (see
     // `cached_verifying_identity`); `verify_bytes` still runs every request.
