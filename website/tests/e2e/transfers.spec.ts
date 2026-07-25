@@ -26,7 +26,7 @@ test.describe('/dashboard/transfers', () => {
 	const transferRowLocator = (page: import('@playwright/test').Page) =>
 		page.locator('div.bg-surface-elevated.border.border-neutral-800.p-4.flex.items-center.gap-4');
 
-	test('empty state: fresh user sees 0 balance and empty transfer list', async ({ page }) => {
+	test('@smoke empty state: fresh user sees 0 balance and empty transfer list', async ({ page }) => {
 		await page.goto('/dashboard/transfers');
 		await waitForAuthReady(page);
 

@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Global error page', () => {
-	test('404 renders branded error page with navigation, not blank screen', async ({ page }) => {
+	test('@smoke 404 renders branded error page with navigation, not blank screen', async ({ page }) => {
 		await page.goto('/this-route-does-not-exist');
 
 		// Status code, label, and message are visible to a real user

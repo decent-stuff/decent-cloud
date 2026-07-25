@@ -14,7 +14,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('/checkout', () => {
 	test.describe('cancel page', () => {
-		test('renders the cancelled-payment page without a contract_id', async ({ page }) => {
+		test('@smoke renders the cancelled-payment page without a contract_id', async ({ page }) => {
 			await page.goto('/checkout/cancel');
 
 			await expect(page.getByRole('heading', { name: 'Payment Cancelled' })).toBeVisible();

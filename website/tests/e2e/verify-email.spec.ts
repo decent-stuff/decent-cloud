@@ -29,7 +29,7 @@ async function emailVerified(accountHex: string): Promise<string> {
 }
 
 test.describe('/verify-email route', () => {
-	test('shows a missing-token error when navigated to without a token', async ({ page }) => {
+	test('@smoke shows a missing-token error when navigated to without a token', async ({ page }) => {
 		await page.goto('/verify-email');
 
 		// The page must settle on the error state, not hang on the spinner.

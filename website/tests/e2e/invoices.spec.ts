@@ -24,7 +24,7 @@ test.describe('/dashboard/invoices', () => {
 	// causes test A's cleanup to nuke test B's seeded contracts.
 	test.describe.configure({ mode: 'serial' });
 
-	test('empty state: fresh user sees FAQ and marketplace CTA', async ({ page }) => {
+	test('@smoke empty state: fresh user sees FAQ and marketplace CTA', async ({ page }) => {
 		await page.goto('/dashboard/invoices');
 
 		// Header
