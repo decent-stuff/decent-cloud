@@ -2902,16 +2902,28 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         println!("  [ok] Caddy service is running");
 
                         // Check if Caddy is listening on expected ports
-                        if let Ok(ss_output) =
-                            std::process::Command::new("ss").args(["-tlnp"]).output()
-                        {
-                            let ss = String::from_utf8_lossy(&ss_output.stdout);
-                            if ss.contains(":443") && ss.contains("caddy") {
-                                println!("  [ok] Caddy listening on port 443");
-                            } else if ss.contains(":443") {
-                                println!("  [ok] Port 443 in use (Caddy or other)");
-                            } else {
-                                println!("  [WARN] Caddy not listening on port 443");
+                        match std::process::Command::new("ss").args(["-tlnp"]).output() {
+                            Ok(ss_output) => {
+                                let ss = String::from_utf8_lossy(&ss_output.stdout);
+                                if ss.contains(":443") && ss.contains("caddy") {
+                                    println!("  [ok] Caddy listening on port 443");
+                                } else if ss.contains(":443") {
+                                    println!("  [ok] Port 443 in use (Caddy or other)");
+                                } else {
+                                    println!("  [WARN] Caddy not listening on port 443");
+                                }
+                            }
+                            Err(e) => {
+                                // `ss` may be missing (iproute2 not installed),
+                                // not installed setuid, or otherwise unavailable
+                                // — surface this so the operator knows why the
+                                // port-listening check did not run instead of
+                                // seeing no output and assuming Caddy is fine.
+                                println!(
+                                    "  [WARN] Cannot verify Caddy listening ports via `ss` ({}); \
+                                     install iproute2 or check `ss -tlnp` manually",
+                                    e
+                                );
                             }
                         }
                     } else {
