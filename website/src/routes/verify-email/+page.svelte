@@ -5,6 +5,7 @@
 	import { verifyEmail } from '$lib/services/account-api';
 	import Icon from '$lib/components/Icons.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import AutoRedirect from '$lib/components/AutoRedirect.svelte';
 
 	type State = 'verifying' | 'success' | 'error';
 
@@ -85,18 +86,19 @@
 						</p>
 					</div>
 
-					<div class="pt-4 flex flex-col gap-3">
-						<Button variant="primary" type="button" onclick={handleGoToDashboard}>
-							Go to Dashboard
-						</Button>
-						<button
-							type="button"
-							onclick={handleGoToLogin}
-							class="text-neutral-500 hover:text-white transition-colors text-sm"
-						>
-							Go to Login
-						</button>
-					</div>
+				<div class="pt-4 flex flex-col gap-3">
+					<Button variant="primary" type="button" onclick={handleGoToDashboard}>
+						Go to Dashboard
+					</Button>
+					<AutoRedirect />
+					<button
+						type="button"
+						onclick={handleGoToLogin}
+						class="text-neutral-500 hover:text-white transition-colors text-sm"
+					>
+						Go to Login
+					</button>
+				</div>
 				</div>
 			{/if}
 

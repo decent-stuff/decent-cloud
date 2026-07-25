@@ -1,5 +1,11 @@
 import { testLoggedOut as test, expect } from './fixtures/test-account';
 import { setupConsoleLogging } from './fixtures/auth-helpers';
+import {
+	seedAccountDirect,
+	deleteAccountByUsername,
+	accountIdHex,
+	seedRecoveryToken,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E Tests for Account Recovery Flow
@@ -240,5 +246,55 @@ test.describe('Recovery Flow', () => {
 		await expect(
 			page.locator('button:has-text("Sign in with seed phrase instead")'),
 		).toBeVisible();
+	});
+
+	test('success: a valid DB-seeded token completes recovery, auto-logs-in, and shows the auto-redirect countdown (#445)', async ({ page }) => {
+		// Seed a standalone account + recovery token so the test exercises the
+		// REAL recovery success path end-to-end (token in URL → continue with
+		// the auto-generated seed → completeRecovery API → authStore login →
+		// success state with auto-redirect countdown).
+		const { username } = await seedAccountDirect();
+		try {
+			const accountHex = await accountIdHex(username);
+			const token = await seedRecoveryToken(accountHex);
+
+			await page.goto(`/recover?token=${token}`);
+
+			// Wait for seed phrase step - auto-generates when token is provided
+			await expect(page.locator('h3:has-text("Complete Recovery")')).toBeVisible({ timeout: 5000 });
+			await expect(page.locator('button:has-text("Copy to Clipboard")')).toBeVisible({ timeout: 10000 });
+
+			// Check the confirmation checkbox and click Continue. The complete
+			// call must succeed (token is valid hex + DB-seeded + unused + not
+			// expired), then loginWithSeedPhrase must succeed (completeRecovery
+			// added the auto-generated pubkey to account_public_keys).
+			await page.check('input[type="checkbox"]');
+			await Promise.all([
+				page.waitForResponse(
+					(r) => r.url().includes('/api/v1/accounts/recovery/complete'),
+					{ timeout: 10000 },
+				),
+				page.click('button:has-text("Continue")'),
+			]);
+
+			// Success state heading.
+			await expect(page.getByRole('heading', { name: 'Recovery Complete!' })).toBeVisible({
+				timeout: 15000,
+			});
+
+			// The AutoRedirect countdown copy must render on the success screen.
+			// We match the prefix (not the exact number) since it decrements.
+			await expect(page.getByText(/Redirecting to dashboard in \d+s/)).toBeVisible();
+
+			// The manual "Go now" link provides the accessibility escape hatch
+			// (the auto-redirect timer must never be the only path). Clicking it
+			// lands on /dashboard without waiting for the countdown.
+			const goNowLink = page.getByRole('link', { name: 'Go now' });
+			await expect(goNowLink).toBeVisible();
+			await goNowLink.click();
+			await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+		} finally {
+			await deleteAccountByUsername(username);
+		}
 	});
 });

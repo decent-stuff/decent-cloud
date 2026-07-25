@@ -8,6 +8,7 @@
 	import SeedPhraseStep from '$lib/components/SeedPhraseStep.svelte';
 	import Icon from '$lib/components/Icons.svelte';
 	import Button from '$lib/components/Button.svelte';
+	import AutoRedirect from '$lib/components/AutoRedirect.svelte';
 
 	type State = 'request' | 'request-sent' | 'generate-seed' | 'processing' | 'success';
 
@@ -193,24 +194,25 @@
 				</div>
 			{/if}
 
-			<!-- Success -->
-			{#if currentState === 'success'}
-				<div class="space-y-4 text-center py-8">
-					<div class="icon-box-accent mx-auto">
-						<Icon name="check" size={20} />
-					</div>
-					<h3 class="text-xl font-semibold text-white">Recovery Complete!</h3>
-					<p class="text-neutral-500 text-sm">
-						Your account has been recovered and you are now signed in.
-					</p>
-
-					<div class="pt-4">
-						<Button variant="primary" type="button" onclick={handleGoToDashboard}>
-							Go to Dashboard
-						</Button>
-					</div>
+		<!-- Success -->
+		{#if currentState === 'success'}
+			<div class="space-y-4 text-center py-8">
+				<div class="icon-box-accent mx-auto">
+					<Icon name="check" size={20} />
 				</div>
-			{/if}
+				<h3 class="text-xl font-semibold text-white">Recovery Complete!</h3>
+				<p class="text-neutral-500 text-sm">
+					Your account has been recovered and you are now signed in.
+				</p>
+
+				<div class="pt-4 flex flex-col gap-3 items-center">
+					<Button variant="primary" type="button" onclick={handleGoToDashboard}>
+						Go to Dashboard
+					</Button>
+					<AutoRedirect />
+				</div>
+			</div>
+		{/if}
 		</div>
 
 		<!-- Back link -->

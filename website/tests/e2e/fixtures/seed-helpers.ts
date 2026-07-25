@@ -263,6 +263,41 @@ export async function seedEmailVerificationToken(
 	return tokenHex;
 }
 
+/**
+ * Seed a `recovery_tokens` row directly and return the hex token to use in the
+ * `/recover?token=<hex>` URL.
+ *
+ * Mirrors `Database::create_recovery_token`
+ * (`api/src/database/recovery.rs:9`): the `token` column is BYTEA (production
+ * uses a 16-byte UUID v4), and `created_at`/`expires_at` are BIGINT ns. Default
+ * expiry is 24h (RECOVERY_TOKEN_EXPIRY_NS). `used_at` is left NULL so the row
+ * is consumable by `complete_recovery`.
+ *
+ * The complete handler hex-decodes the URL `token` param (via `decode_hex_path`)
+ * and looks the row up by exact bytes, so the hex we return is the same hex
+ * that goes into the URL — it MUST be valid hex (even-length, [0-9a-f]+) or the
+ * handler rejects with "Invalid recovery token hex: ...".
+ */
+export async function seedRecoveryToken(
+	accountHex: string,
+	opts?: { expiresInSeconds?: number },
+): Promise<string> {
+	const tokenHex = randomHex(16);
+	const now = nowNs();
+	const expiresInNs = BigInt((opts?.expiresInSeconds ?? 86_400) * 1_000_000_000);
+	const expiresAt = now + expiresInNs;
+	await sql(`
+		INSERT INTO recovery_tokens (token, account_id, created_at, expires_at)
+		VALUES (
+			decode('${tokenHex}', 'hex'),
+			decode('${accountHex}', 'hex'),
+			${now},
+			${expiresAt}
+		)
+	`);
+	return tokenHex;
+}
+
 /** Build the SQL VALUES clause for one contract seed row. See seedContract(). */
 export interface ContractSeed {
 	/** 32-byte hex ed25519 pubkey of the requester (test user). */

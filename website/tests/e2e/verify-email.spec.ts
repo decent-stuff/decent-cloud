@@ -106,4 +106,39 @@ test.describe('/verify-email route', () => {
 			await deleteAccountByUsername(username);
 		}
 	});
+
+	test('success: auto-redirect countdown appears and manual "Go now" link lands on /dashboard (#445)', async ({ page }) => {
+		// The success state auto-redirects to /dashboard after a short countdown,
+		// but the redirect is never the only path — a manual "Go now" link is
+		// always present (accessibility + test determinism). This test exercises
+		// the AutoRedirect component against the real success screen.
+		const { username } = await seedAccountDirect();
+		try {
+			const accountHex = await accountIdHex(username);
+			const email = `${username}@test.example.com`;
+			const token = await seedEmailVerificationToken(accountHex, email);
+
+			await page.goto(`/verify-email?token=${token}`);
+			await expect(page.getByRole('heading', { name: 'Email Verified!' })).toBeVisible({
+				timeout: 15000,
+			});
+
+			// The countdown copy must be visible immediately on success. We
+			// don't assert the exact number (it decrements every second and the
+			// render may be off-by-one); match the prefix.
+			await expect(page.getByText(/Redirecting to dashboard in \d+s/)).toBeVisible();
+
+			// The manual "Go now" link is the accessibility escape hatch —
+			// clicking it navigates to /dashboard without waiting for the timer.
+			const goNowLink = page.getByRole('link', { name: 'Go now' });
+			await expect(goNowLink).toBeVisible();
+			await goNowLink.click();
+
+			// SvelteKit intercepts the <a href="/dashboard/..."> for client-side
+			// nav. Assert the URL lands on /dashboard.
+			await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 });
+		} finally {
+			await deleteAccountByUsername(username);
+		}
+	});
 });
