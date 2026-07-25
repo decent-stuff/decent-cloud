@@ -1814,7 +1814,10 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
 
     // 1) Create + confirm a real test-mode PaymentIntent so there is a charge to refund.
     let pi: serde_json::Value = http
-        .post("https://api.stripe.com/v1/payment_intents")
+        .post(format!(
+            "{}/v1/payment_intents",
+            crate::stripe_client::STRIPE_API_BASE
+        ))
         .basic_auth(&secret_key, Some(""))
         .form(&[
             ("amount", "500"),
@@ -1906,7 +1909,8 @@ async fn test_cancel_stripe_contract_issues_live_refund() {
     let expected_cents = refund_e9s / 10_000_000;
     let refunds: serde_json::Value = http
         .get(format!(
-            "https://api.stripe.com/v1/refunds?payment_intent={pi_id}&limit=10"
+            "{}/v1/refunds?payment_intent={pi_id}&limit=10",
+            crate::stripe_client::STRIPE_API_BASE
         ))
         .basic_auth(&secret_key, Some(""))
         .send()
