@@ -300,6 +300,33 @@ pub async fn stripe_webhook(
                 contract_id_hex
             );
 
+            // Out-of-order delivery reconciliation (#426): if Stripe delivered
+            // `charge.dispute.created` BEFORE this checkout completion, the
+            // dispute was persisted as an orphan (NULL contract_id) because the
+            // contract's PI was not yet known. Now that we know the PI, backfill
+            // the FK so the dispute is visible on the contract. Best-effort +
+            // idempotent: failure here MUST NOT fail the webhook (payment already
+            // succeeded) and replays affect each orphan at most once. This only
+            // links the row -- it does not replay pause/refund; see the DB
+            // method docs and the follow-up tracked in #426.
+            if let Some(pi) = session.payment_intent.as_deref() {
+                match db.relink_orphan_disputes_for_payment_intent(&contract_id_bytes, pi).await {
+                    Ok(n) if n > 0 => tracing::info!(
+                        contract_id = %contract_id_hex,
+                        payment_intent = %pi,
+                        linked = n,
+                        "Reconciled orphan dispute(s) to contract after late checkout completion"
+                    ),
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(
+                        contract_id = %contract_id_hex,
+                        payment_intent = %pi,
+                        error = %format!("{:#}", e),
+                        "Failed to reconcile orphan disputes for contract; payment still succeeded"
+                    ),
+                }
+            }
+
             // Notify provider about new rental request
             match db.get_contract(&contract_id_bytes).await {
                 Ok(Some(contract)) => {
@@ -2217,6 +2244,125 @@ mod tests {
         assert!(
             contract_id.is_none(),
             "orphan dispute row MUST have NULL contract_id"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_orphan_dispute_relinks_on_late_checkout_completion() {
+        // Out-of-order delivery (#426): Stripe delivers `charge.dispute.created`
+        // BEFORE `checkout.session.completed` for the same payment. At dispute
+        // time the contract has no `stripe_payment_intent_id` yet, so the
+        // dispute is persisted as an orphan (NULL contract_id). When checkout
+        // completion later sets the PI on the contract, the reconciliation MUST
+        // backfill the FK so the dispute is visible on the contract.
+        //
+        // Money-path invariants asserted below:
+        //  * relink is idempotent (second call affects 0 rows);
+        //  * relink touches ONLY contract_id -- it does not mutate the
+        //    contract's status, payment_status, or refund_amount_e9s, so it
+        //    cannot trigger a double-refund / double-pause / spurious state flip.
+        let db = setup_test_db().await;
+        let contract_id = vec![0xC6; 32];
+
+        // Contract exists with NO stripe_payment_intent_id yet (checkout not
+        // yet delivered). insert_active_contract takes Option<pi>; pass None.
+        insert_active_contract(&db, &contract_id, None).await;
+
+        // 1. Dispute arrives first. Stripe knows the PI; the contract does not.
+        //    No metadata.contract_id -> lookup falls through -> orphan.
+        let dispute = dispute_event(
+            "charge.dispute.created",
+            "du_oop",
+            "ch_oop",
+            Some("pi_oop"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&dispute))
+            .await
+            .expect("orphan dispute MUST return Ok (Stripe retries on 5xx)");
+
+        let orphan_cid: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT contract_id FROM contract_disputes WHERE stripe_dispute_id = 'du_oop'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            orphan_cid.is_none(),
+            "dispute MUST be orphaned before checkout completion"
+        );
+
+        // 2. checkout.session.completed arrives: learn the PI on the contract.
+        db.update_checkout_session_payment(
+            &contract_id,
+            "cs_oop",
+            Some("pi_oop"),
+            None,
+            None,
+            false,
+            None,
+        )
+        .await
+        .expect("update_checkout_session_payment must succeed");
+
+        // Capture money-path columns AFTER checkout, BEFORE relink.
+        let before: (String, String, Option<i64>) = sqlx::query_as(
+            "SELECT status, payment_status, refund_amount_e9s \
+             FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+
+        // 3. Reconciliation runs (as the webhook handler does post-payment).
+        let linked = db
+            .relink_orphan_disputes_for_payment_intent(&contract_id, "pi_oop")
+            .await
+            .expect("relink must not error");
+        assert_eq!(linked, 1, "exactly one orphan dispute should have been linked");
+
+        // The orphan row now carries the contract_id FK.
+        let relinked_cid: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT contract_id FROM contract_disputes WHERE stripe_dispute_id = 'du_oop'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            relinked_cid.as_deref(),
+            Some(contract_id.as_slice()),
+            "orphan dispute MUST be linked to the contract after checkout completion"
+        );
+
+        // 4. Idempotency: replaying the reconciliation affects 0 rows.
+        let linked_again = db
+            .relink_orphan_disputes_for_payment_intent(&contract_id, "pi_oop")
+            .await
+            .expect("idempotent relink must not error");
+        assert_eq!(
+            linked_again, 0,
+            "relink MUST be idempotent -- second call affects zero rows"
+        );
+
+        // 5. Money-safety: relink touched ONLY contract_id on the dispute row.
+        //    Contract status / payment_status / refund_amount_e9s are unchanged.
+        let after: (String, String, Option<i64>) = sqlx::query_as(
+            "SELECT status, payment_status, refund_amount_e9s \
+             FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            before, after,
+            "relink MUST NOT mutate contract status / payment_status / refund_amount_e9s"
+        );
+        assert_eq!(
+            after.1, "succeeded",
+            "payment_status is set by update_checkout_session_payment, not by relink"
         );
     }
 

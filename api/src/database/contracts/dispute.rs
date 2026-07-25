@@ -422,6 +422,50 @@ impl Database {
         Ok(row.map(|r| r.contract_id))
     }
 
+    /// Reconcile orphan disputes after `checkout.session.completed` learns the
+    /// real PaymentIntent for a contract.
+    ///
+    /// Stripe occasionally delivers `charge.dispute.created` BEFORE
+    /// `checkout.session.completed` for the same payment. At dispute time the
+    /// contract has no `stripe_payment_intent_id` yet, so the dispute is
+    /// persisted as an orphan (`contract_id = NULL`; see
+    /// `lookup_contract_for_charge` in `openapi::webhooks`). This method
+    /// backfills the FK once the PI is known so the dispute is visible on the
+    /// contract and the charge-based lookup fallback works for any later
+    /// dispute event.
+    ///
+    /// Scope (intentionally narrow): this ONLY sets `contract_id`. It does NOT
+    /// replay pause / terminate / refund actions even if the dispute has since
+    /// closed -- that is a separate money-path concern tracked in a follow-up.
+    /// The orphan ops alert already fired at dispute-created time, so an
+    /// operator can act on still-open disputes; closing the FK link here just
+    /// makes the row queryable by contract and unblocks future events.
+    ///
+    /// Idempotent + money-safe by construction: `WHERE contract_id IS NULL`
+    /// means replays and concurrent invocations affect each orphan at most
+    /// once, and no payment / status / refund column is touched.
+    ///
+    /// Returns the number of orphan rows linked (0 when there was nothing to
+    /// reconcile -- the common case).
+    pub async fn relink_orphan_disputes_for_payment_intent(
+        &self,
+        contract_id: &[u8],
+        payment_intent_id: &str,
+    ) -> Result<u64> {
+        let now_ns = crate::now_ns()?;
+        let result = sqlx::query(
+            r#"UPDATE contract_disputes
+               SET contract_id = $1, updated_at_ns = $2
+               WHERE stripe_payment_intent_id = $3 AND contract_id IS NULL"#,
+        )
+        .bind(contract_id)
+        .bind(now_ns)
+        .bind(payment_intent_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     /// Look up a contract by Stripe charge ID. Used as a final fallback in the
     /// dispute-handler lookup chain when the dispute payload lacks a PI but
     /// carries a charge ID we have already seen via a previous dispute event
