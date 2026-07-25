@@ -5,14 +5,73 @@
 
 use anyhow::{bail, Context, Result};
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 const GITHUB_REPO: &str = "decent-stuff/decent-cloud";
 const BINARY_NAME: &str = "dc-agent-linux-amd64";
 const LOCK_FILE: &str = "/var/run/dc-agent-upgrade.lock";
 const UPGRADE_TIMEOUT_SECS: u64 = 120;
+/// Bounded budget for `dc-agent --version` after downloading a candidate
+/// binary. The check is local (no network) so 10s is plenty for even the
+/// slowest cold-start; without it a corrupt or interactive binary would hang
+/// the upgrade flow forever.
+const VERIFY_VERSION_TIMEOUT: Duration = Duration::from_secs(10);
+/// Bounded budget for `systemctl` invocations during upgrade (is-active,
+/// restart). 30s matches the project-wide HTTP/shell timeout convention.
+const SYSTEMCTL_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Captured output from a child process run with [`run_command_with_timeout`].
+#[derive(Debug)]
+struct TimedCommandOutput {
+    stdout: String,
+    status: ExitStatus,
+}
+
+/// Run a pre-built [`Command`] to completion, killing it if it does not exit
+/// before `timeout` elapses.
+///
+/// Mirrors the spawn / poll `try_wait` / SIGKILL-on-deadline pattern of
+/// [`crate::setup::execute_command_with_timeout`] but accepts a `&mut Command`
+/// directly so callers can pass specific binaries and arg lists (the freshly
+/// downloaded upgrade binary, `systemctl restart dc-agent`, ...) without
+/// routing through `sh -c`. stdout is captured; stderr is inherited so the
+/// operator sees live diagnostics from `systemctl` and the verify binary.
+fn run_command_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<TimedCommandOutput> {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .context("Failed to spawn command")?;
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break status,
+            None => {
+                if Instant::now() >= deadline {
+                    // Best-effort cleanup; ignore errors (process may have just exited).
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    bail!("Command timed out after {:?}", timeout);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    };
+
+    // Drain captured stdout now that the child has exited; EOF is guaranteed
+    // because the child's write end is closed.
+    let mut stdout = String::new();
+    if let Some(mut s) = child.stdout.take() {
+        s.read_to_string(&mut stdout)
+            .context("Failed to read command stdout")?;
+    }
+
+    Ok(TimedCommandOutput { stdout, status })
+}
 
 /// Parse a version string like "0.4.9" or "v0.4.9" into (major, minor, patch).
 pub fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
@@ -116,21 +175,21 @@ fn parse_checksum_file(content: &str, filename: &str) -> Option<String> {
 
 /// Verify that a binary runs and reports the expected version.
 fn verify_binary_version(binary_path: &Path, expected: &str) -> Result<()> {
-    let output = Command::new(binary_path)
-        .arg("--version")
-        .output()
-        .with_context(|| format!("Failed to execute {}", binary_path.display()))?;
+    let output = run_command_with_timeout(
+        Command::new(binary_path).arg("--version"),
+        VERIFY_VERSION_TIMEOUT,
+    )
+    .with_context(|| format!("Failed to execute {}", binary_path.display()))?;
 
     if !output.status.success() {
         bail!("Binary exited with non-zero status");
     }
 
-    let version_output = String::from_utf8_lossy(&output.stdout);
-    if !version_output.contains(expected) {
+    if !output.stdout.contains(expected) {
         bail!(
             "Version mismatch: expected {} but got {}",
             expected,
-            version_output.trim()
+            output.stdout.trim()
         );
     }
 
@@ -141,33 +200,37 @@ fn verify_binary_version(binary_path: &Path, expected: &str) -> Result<()> {
 fn is_systemd_service() -> bool {
     // Check for systemd-specific environment variable
     std::env::var("INVOCATION_ID").is_ok()
-        || Command::new("systemctl")
-            .args(["is-active", "dc-agent"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        || run_command_with_timeout(
+            Command::new("systemctl").args(["is-active", "dc-agent"]),
+            SYSTEMCTL_TIMEOUT,
+        )
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 /// Restart the dc-agent systemd service.
 fn restart_service() -> Result<()> {
-    let status = Command::new("systemctl")
-        .args(["restart", "dc-agent"])
-        .status()
-        .context("Failed to execute systemctl")?;
+    let status = run_command_with_timeout(
+        Command::new("systemctl").args(["restart", "dc-agent"]),
+        SYSTEMCTL_TIMEOUT,
+    )
+    .context("Failed to execute systemctl")?
+    .status;
 
     if !status.success() {
         bail!("systemctl restart failed");
     }
 
     // Wait a moment for service to start
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(Duration::from_secs(2));
 
     // Verify service is running
-    let check = Command::new("systemctl")
-        .args(["is-active", "dc-agent"])
-        .output()?;
+    let check = run_command_with_timeout(
+        Command::new("systemctl").args(["is-active", "dc-agent"]),
+        SYSTEMCTL_TIMEOUT,
+    )?;
 
-    if String::from_utf8_lossy(&check.stdout).trim() != "active" {
+    if check.stdout.trim() != "active" {
         bail!("Service failed to start after restart");
     }
 
@@ -462,6 +525,105 @@ fedcba654321  decent-cloud-darwin-arm64";
         assert_eq!(
             parse_checksum_file(content, "*dc-agent-linux-amd64"),
             Some("abc123def456".to_string())
+        );
+    }
+
+    /// `run_command_with_timeout` must complete promptly when the command is
+    /// fast. Mirrors `setup::tests::short_command_completes_under_generous_timeout`.
+    #[test]
+    fn run_command_with_timeout_captures_fast_output() {
+        let out = run_command_with_timeout(
+            Command::new("echo").arg("hello"),
+            Duration::from_secs(5),
+        )
+        .expect("echo should succeed");
+        assert_eq!(out.stdout, "hello\n");
+        assert!(out.status.success());
+    }
+
+    /// `run_command_with_timeout` must SIGKILL a long-running child once the
+    /// deadline elapses, returning an Err that names the timeout. Mirrors
+    /// `setup::tests::timeout_kills_long_running_command`. This is the
+    /// assertion that protects `verify_binary_version` and the three
+    /// `systemctl` callsites from hanging the upgrade flow on a stuck child.
+    #[test]
+    fn run_command_with_timeout_kills_long_running_command() {
+        let started = Instant::now();
+        let err = run_command_with_timeout(
+            Command::new("sleep").arg("30"),
+            Duration::from_millis(150),
+        )
+        .expect_err("sleep 30 must time out");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "should return promptly after timeout; elapsed: {:?}",
+            elapsed
+        );
+        let msg = format!("{:#}", err);
+        assert!(
+            msg.contains("timed out"),
+            "expected timeout error message, got: {}",
+            msg
+        );
+    }
+
+    /// `verify_binary_version` routes through `run_command_with_timeout` with
+    /// the 10s `VERIFY_VERSION_TIMEOUT` budget. Exercised here against a tiny
+    /// temp script that prints a known version string, so the assertion does
+    /// not depend on a real dc-agent binary being present or on a particular
+    /// coreutils variant (`/bin/echo --version` is intercepted by GNU
+    /// coreutils; `/bin/sh --version` is rejected by dash).
+    #[test]
+    fn verify_binary_version_passes_on_matching_output() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let script = std::env::temp_dir().join(format!(
+            "dc-agent-verify-version-test-{}-{}.sh",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&script, "#!/bin/sh\necho dc-agent test payload v9.9.9\n")
+            .expect("write temp script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod temp script");
+
+        let result = verify_binary_version(&script, "v9.9.9");
+        std::fs::remove_file(&script).ok();
+        result.expect("script output must contain the expected version tag");
+    }
+
+    /// Negative path: a version string that is absent from the binary's
+    /// `--version` output must produce a meaningful error rather than silently
+    /// succeeding.
+    #[test]
+    fn verify_binary_version_fails_on_mismatch() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let script = std::env::temp_dir().join(format!(
+            "dc-agent-verify-version-test-{}-{}.sh",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::write(&script, "#!/bin/sh\necho dc-agent test payload v9.9.9\n")
+            .expect("write temp script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod temp script");
+
+        let err = verify_binary_version(&script, "9.9.9-never-exists");
+        std::fs::remove_file(&script).ok();
+        let err = err.expect_err("mismatch must fail");
+        let msg = format!("{:#}", err);
+        assert!(
+            msg.contains("Version mismatch"),
+            "expected mismatch error, got: {}",
+            msg
         );
     }
 }
