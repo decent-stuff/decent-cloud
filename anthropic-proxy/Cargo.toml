@@ -1,0 +1,39 @@
+[package]
+name = "anthropic-proxy"
+version.workspace = true
+edition = "2021"
+
+[lib]
+name = "anthropic_proxy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "anthropic-proxy"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+axum = { version = "0.7", features = ["http1"] }
+bytes = "1"
+clap.workspace = true
+futures.workspace = true
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http1", "server"] }
+reqwest = { workspace = true, features = ["stream"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tower = "0.5"
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url = "2"
+
+[dev-dependencies]
+async-trait.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+# The proxy listens for Anthropic Messages-API calls from a customer container, strips any
+# client-supplied auth, injects the platform's x-api-key upstream, meters token usage per
+# identity, and streams the response back. See docs/specs/2026-04-25-decent-agents-identity-
+# provisioning-spec.md F.3 / G / H and GitHub issue #427.

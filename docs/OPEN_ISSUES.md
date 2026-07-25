@@ -18,7 +18,7 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | # | Title | Labels | Notes |
 |---|-------|--------|-------|
 | 418 | Decent Agents: beta onboarding (invite + first-run demo) | launch | First user-facing DA flow. Large (magic-link/Google auth → Stripe → GitHub App → demo PR → invite gate). |
-| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | Required for multi-tenant DA isolation. Large. |
+| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | **Architecture decided + core shipped** (host-side reverse proxy). New `anthropic-proxy` crate: injects key per-request, meters usage per identity, streams responses, redacts key everywhere. PoC proven against z.ai; 33 tests green. **Acceptance #3/#4 BLOCKED on #413 Rust impl** (container config doesn't exist yet). Not closed. |
 | 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | Depends on #415 meters. Large. |
 | 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | Meters, caps, Stripe cycle rollover. Large. |
 
@@ -91,6 +91,28 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-07-25 session (#427 core — Anthropic API key reverse proxy)
+
+Shipped the **core** of #427 as a new standalone workspace crate `anthropic-proxy` (decision:
+host-side reverse proxy). The customer container's `ANTHROPIC_BASE_URL` points at a host-side
+`anthropic-proxy` process that: strips any client-supplied `x-api-key`/`Authorization`/
+`anthropic-version`, injects the platform key upstream per-request (the key **never enters the
+container**), forwards the request path-transparently to the Anthropic-compatible upstream, streams
+the response back, and meters token usage per identity (non-streaming JSON + streaming SSE terminal
+`message_delta`). PoC proven end-to-end against the real z.ai Anthropic-compatible endpoint (both
+non-streaming + streaming); key redaction verified absent from all logs/errors.
+
+- Acceptance **#1** (architecture decision): done (host-side reverse proxy).
+- Acceptance **#2** (proxy injects key + meters per identity): **shipped** — crate + binary, 33 tests
+  green (nextest 0.13s), clippy clean, workspace build intact. MeteringRecorder trait leaves the
+  DB-backed recorder (writes `agent_runs.claude_{input,output}_tokens`) to #415/#416.
+- Acceptance **#3** (remove shared-key mount from container config) + **#4** (migrate beta
+  customers): **BLOCKED on #413** — its Rust container-provisioning does not exist yet
+  (`rg anthropic_api_key` = 0 Rust hits; #413 is spec-only). Do NOT attempt until #413 lands.
+
+Issue **#427 stays open** (blocked on #413 for #3/#4). dc-agent integration (spawn the proxy as a
+host-side process per identity, point the container's `ANTHROPIC_BASE_URL` at it) is also #413 scope.
+
 ### 2026-07-25 session (GH issue sweep — #442 / #426 / #444)
 
 Sweep of all open GH issues with parallel subagents. The 3 credential-free items shipped;
@@ -114,7 +136,7 @@ architectural decisions before one-pass production work can begin:
 | # | Title | Blocker |
 |---|-------|---------|
 | 418 | beta onboarding (invite + first-run demo) | Needs Stripe + Google OAuth + GitHub App creds + email/magic-link; the whole onboarding flow is greenfield. |
-| 427 | Anthropic API key proxy/sidecar | Needs Anthropic API key + an isolation-model/architecture decision (host-side reverse proxy vs API-side metering sidecar). |
+| 427 | Anthropic API key proxy/sidecar | **Core shipped** (host-side reverse proxy; `anthropic-proxy` crate). Remaining acceptance #3/#4 (remove shared-key mount + migrate beta) blocked on #413's Rust container-provisioning (spec-only today). |
 | 415 | subscription billing + active-hour/token caps | Depends on #427 (dispatch enforcement) + Stripe creds. Meter-table scaffold alone can't be PoC'd end-to-end. |
 | 416 | usage metering + customer dashboard | Depends on #415 meters. |
 | 429 | Anthropic key exfiltration mitigation | Depends on #427 + the agent container infra. |
