@@ -4116,13 +4116,13 @@ impl ProvidersApi {
         // Verify pool exists and belongs to provider
         let pool = match db.get_agent_pool(&pool_id.0).await {
             Ok(Some(p)) => {
-                let pool_owner = match hex::decode(&p.provider_pubkey) {
+                let pool_owner = match decode_hex_path(&p.provider_pubkey, "pool owner pubkey") {
                     Ok(pk) => pk,
-                    Err(_) => {
+                    Err(e) => {
                         return Json(ApiResponse {
                             success: false,
                             data: None,
-                            error: Some("Invalid pool owner pubkey".to_string()),
+                            error: Some(e),
                         });
                     }
                 };
@@ -4241,13 +4241,13 @@ impl ProvidersApi {
         // Verify pool exists and belongs to provider
         let pool = match db.get_agent_pool(&pool_id.0).await {
             Ok(Some(p)) => {
-                let pool_owner = match hex::decode(&p.provider_pubkey) {
+                let pool_owner = match decode_hex_path(&p.provider_pubkey, "pool owner pubkey") {
                     Ok(pk) => pk,
-                    Err(_) => {
+                    Err(e) => {
                         return Json(ApiResponse {
                             success: false,
                             data: None,
-                            error: Some("Invalid pool owner pubkey".to_string()),
+                            error: Some(e),
                         });
                     }
                 };
