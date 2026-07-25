@@ -84,4 +84,33 @@ test.describe('Become-provider onboarding submit (/dashboard/provider/support)',
 			await deleteProviderProfileByPubkey(pubkey);
 		}
 	});
+
+	test('?step=3 deep-link renders the Help Center form without clicking through steps 1+2', async ({ page, testAccount }) => {
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		try {
+			// The testAccount is a fresh account with no persisted wizard step in
+			// localStorage, so without the deep-link the page would land on step
+			// 1 (Support Portal). The ?step=3 deep-link must jump straight to the
+			// Help Center Profile form — the audit's UX goal (#16): a first-time
+			// provider should not be forced to click through steps 1 and 2 just
+			// to reach the Help Center profile.
+			await page.goto('/dashboard/provider/support?step=3');
+			await waitForAuthReady(page);
+
+			// The step-3 heading IS the "deep-link landed" signal. No "Save &
+			// Continue" clicks precede it.
+			await expect(page.getByRole('heading', { name: 'Help Center Profile' })).toBeVisible({ timeout: 15_000 });
+
+			// Guard: the step-1 heading must NOT also be rendered (the wizard
+			// renders exactly one step at a time), proving we are not still on
+			// step 1.
+			await expect(page.getByRole('heading', { name: 'Support Portal', exact: true })).toHaveCount(0);
+
+			// The Help Center form's #support-hours select is step-3-specific
+			// chrome; its visibility proves the form (not just the heading) mounted.
+			await expect(page.locator('#support-hours')).toBeVisible({ timeout: 10_000 });
+		} finally {
+			await deleteProviderProfileByPubkey(pubkey);
+		}
+	});
 });

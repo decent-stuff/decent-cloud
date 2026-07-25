@@ -31,12 +31,12 @@
 	import ContactsEditor from "$lib/components/ContactsEditor.svelte";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
 	import {
-		getWizardStep,
 		setWizardStep,
 		wizardStepLabels,
 		canGoBack,
 		isStepComplete,
 		WIZARD_STEP_COUNT,
+		resolveInitialStep,
 	} from "./wizard-logic";
 
 	interface CommonIssue {
@@ -222,7 +222,11 @@
 	];
 
 	onMount(() => {
-		currentStep = getWizardStep(localStorage);
+		// A valid `?step=N` query param deep-links to that step; otherwise fall
+		// back to the persisted localStorage step (returning-provider behavior).
+		// Persist the resolved value so a plain reload (no `?step`) stays put.
+		currentStep = resolveInitialStep(window.location.search, localStorage);
+		setWizardStep(localStorage, currentStep);
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((v) => {
 			isAuthenticated = v;
 		});

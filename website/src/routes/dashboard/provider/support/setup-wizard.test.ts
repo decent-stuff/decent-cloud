@@ -7,6 +7,9 @@ import {
 	wizardStepLabels,
 	WIZARD_STEP_COUNT,
 	WIZARD_STORAGE_KEY,
+	clampStep,
+	parseStepParam,
+	resolveInitialStep,
 	type WizardStepData,
 } from './wizard-logic';
 
@@ -183,5 +186,101 @@ describe('canGoBack', () => {
 
 	it('returns true for step 3', () => {
 		expect(canGoBack(3)).toBe(true);
+	});
+});
+
+// ---- clampStep ----
+
+describe('clampStep', () => {
+	it('passes through in-range integers unchanged', () => {
+		expect(clampStep(1)).toBe(1);
+		expect(clampStep(2)).toBe(2);
+		expect(clampStep(3)).toBe(3);
+	});
+
+	it('clamps values below 1 up to 1', () => {
+		expect(clampStep(0)).toBe(1);
+		expect(clampStep(-5)).toBe(1);
+	});
+
+	it('clamps values above WIZARD_STEP_COUNT down to WIZARD_STEP_COUNT', () => {
+		expect(clampStep(WIZARD_STEP_COUNT + 1)).toBe(WIZARD_STEP_COUNT);
+		expect(clampStep(99)).toBe(WIZARD_STEP_COUNT);
+	});
+
+	it('returns 1 for non-integer input', () => {
+		expect(clampStep(NaN)).toBe(1);
+		expect(clampStep(2.5)).toBe(1);
+	});
+});
+
+// ---- parseStepParam (?step=N deep-link, audit #16) ----
+
+describe('parseStepParam', () => {
+	it('returns the clamped step for a valid ?step=N', () => {
+		expect(parseStepParam('?step=1')).toBe(1);
+		expect(parseStepParam('?step=2')).toBe(2);
+		expect(parseStepParam('?step=3')).toBe(3);
+	});
+
+	it('accepts a search string without the leading ?', () => {
+		expect(parseStepParam('step=3')).toBe(3);
+	});
+
+	it('preserves other params alongside step', () => {
+		expect(parseStepParam('?foo=bar&step=2&baz=1')).toBe(2);
+	});
+
+	it('clamps out-of-range values to the nearest bound', () => {
+		expect(parseStepParam('?step=0')).toBe(1);
+		expect(parseStepParam('?step=99')).toBe(WIZARD_STEP_COUNT);
+		expect(parseStepParam('?step=-3')).toBe(1);
+	});
+
+	it('returns null when the param is absent', () => {
+		expect(parseStepParam('')).toBeNull();
+		expect(parseStepParam('?foo=bar')).toBeNull();
+	});
+
+	it('returns null for non-integer values (typo falls back to persisted step)', () => {
+		expect(parseStepParam('?step=abc')).toBeNull();
+		expect(parseStepParam('?step=')).toBeNull();
+		expect(parseStepParam('?step=2.5')).toBeNull();
+	});
+});
+
+// ---- resolveInitialStep (?step=N deep-link precedence) ----
+
+describe('resolveInitialStep', () => {
+	it('uses the ?step=N value when present and valid', () => {
+		const storage = makeStorage({ [WIZARD_STORAGE_KEY]: '1' });
+		expect(resolveInitialStep('?step=3', storage)).toBe(3);
+	});
+
+	it('falls back to the persisted localStorage step when ?step is absent', () => {
+		const storage = makeStorage({ [WIZARD_STORAGE_KEY]: '2' });
+		expect(resolveInitialStep('', storage)).toBe(2);
+		expect(resolveInitialStep('?other=1', storage)).toBe(2);
+	});
+
+	it('falls back to the persisted step when ?step is non-integer (typo)', () => {
+		const storage = makeStorage({ [WIZARD_STORAGE_KEY]: '2' });
+		expect(resolveInitialStep('?step=abc', storage)).toBe(2);
+	});
+
+	it('defaults to step 1 for a first-time provider with no ?step and no storage', () => {
+		const storage = makeStorage();
+		expect(resolveInitialStep('', storage)).toBe(1);
+	});
+
+	it('clamps an out-of-range ?step to the nearest bound', () => {
+		const storage = makeStorage({ [WIZARD_STORAGE_KEY]: '2' });
+		expect(resolveInitialStep('?step=99', storage)).toBe(WIZARD_STEP_COUNT);
+		expect(resolveInitialStep('?step=0', storage)).toBe(1);
+	});
+
+	it('deep-link wins over a different persisted step (explicit URL intent)', () => {
+		const storage = makeStorage({ [WIZARD_STORAGE_KEY]: '3' });
+		expect(resolveInitialStep('?step=1', storage)).toBe(1);
 	});
 });
