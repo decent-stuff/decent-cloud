@@ -88,7 +88,6 @@ Always keep your seed phrase stored securely offline.
 Yes:
 - DCT transactions: Cryptographically signed on blockchain
 - Stripe payments: Industry-standard PCI-compliant processing
-- ICPay: Blockchain-native secure payments
 - No payment data stored on Decent Cloud servers
 
 ### Can someone impersonate my identity?

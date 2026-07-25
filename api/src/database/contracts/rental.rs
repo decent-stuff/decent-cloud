@@ -150,8 +150,8 @@ impl Database {
 
         // Set payment_status based on payment method and self-rental
         // Self-rental is FREE - payment succeeds immediately
-        // Test payment method auto-succeeds without a checkout flow (it stands in
-        // for ICPay's pre-paid behaviour in E2E/testing).
+        // Test payment method auto-succeeds without a checkout flow (used for
+        // E2E/testing).
         // Stripe payments require webhook confirmation, so they start as pending
         let payment_status = if is_self_rental || payment_method_str == "test" {
             "succeeded"

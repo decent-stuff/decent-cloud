@@ -129,7 +129,6 @@ The system also shows **red flags** for risky providers:
 
 - **DCT tokens**: Native platform currency (no payment processing fees)
 - **Credit/Debit cards**: Via Stripe (USD, EUR, and other currencies)
-- **Cryptocurrencies**: BTC, ETH, SOL, ICP, USDC, and more via ICPay
 
 ### What happens after I pay for a resource?
 
@@ -264,7 +263,6 @@ All fees are transparent and clearly displayed:
 
 **Payment processing fees** (charged to providers):
 - **DCT tokens**: Free (no additional fees)
-- **ICPay (crypto)**: ~0.5%
 - **Stripe (cards)**: 3-5% (standard payment processor rates)
 
 **One-time fees:**
