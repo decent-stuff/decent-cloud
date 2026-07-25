@@ -70,6 +70,37 @@ effective_db_url() {
   printf '%s' "${API_DATABASE_URL:-${DATABASE_URL:-postgres://test:test@postgres:5432/test}}"
 }
 
+# Populate SECRETS_ENV with SOPS-managed key=value pairs for child services
+# (best-effort; mirrors agent/entrypoint.sh). Explicit dev-server vars below
+# always win (they come AFTER in the `env` arg list, and `env` is last-wins).
+# Placeholder values ("<set-me>") are skipped so the corresponding feature
+# disables cleanly via env-absence rather than running on a broken credential.
+SECRETS_ENV=()
+load_secrets_env() {
+  SECRETS_ENV=()
+  local dc_secrets="$ROOT/scripts/dc-secrets"
+  if [ ! -x "$dc_secrets" ]; then
+    echo "warning: $dc_secrets unavailable — services will run WITHOUT SOPS secrets." >&2
+    echo "         (set up the age key: see agent/docs/secrets.md)" >&2
+    return 0
+  fi
+  local output
+  if ! output=$(env DC_SECRETS_DIR="${DC_SECRETS_DIR:-$ROOT/secrets}" "$dc_secrets" export 2>/dev/null); then
+    echo "warning: dc-secrets export failed — services will run WITHOUT SOPS secrets." >&2
+    echo "         (is the age key present? see agent/docs/secrets.md)" >&2
+    return 0
+  fi
+  local line n=0
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    case "$line" in
+      *='<set-me>') continue ;;   # placeholder — leave unset so the feature disables cleanly
+      *=*) SECRETS_ENV+=("$line"); n=$((n + 1)) ;;
+    esac
+  done <<< "$output"
+  echo "Loaded $n secret(s) from SOPS store (placeholders skipped)."
+}
+
 _wait_for() {
   local name="$1" url="$2" deadline="$3" now deadline_s
   now=$(date +%s)
@@ -134,6 +165,9 @@ start_stack() {
   local start_time end_time elapsed
   start_time=$(date +%s)
 
+  # Make the warm stack secret-aware: pull SOPS-managed keys (best-effort).
+  load_secrets_env
+
   # ── API server ───────────────────────────────────────────────────────────
   local api_url
   if [ "$E2E_MODE" -eq 1 ]; then
@@ -146,6 +180,7 @@ start_stack() {
     else
       echo "Starting local API on :$API_PORT (e2e profile, rate-limit disabled)..."
       _start_service api "$ROOT" \
+        "${SECRETS_ENV[@]}" \
         "DATABASE_URL=$(effective_db_url)" \
         "API_SERVER_PORT=$API_PORT" \
         "FRONTEND_URL=http://localhost:$WEB_PORT" \
@@ -163,6 +198,7 @@ start_stack() {
     else
       echo "Starting local API on :$API_PORT..."
       _start_service api "$ROOT" \
+        "${SECRETS_ENV[@]}" \
         "DATABASE_URL=$(effective_db_url)" \
         "API_SERVER_PORT=$API_PORT" \
         "FRONTEND_URL=http://localhost:$WEB_PORT" \
