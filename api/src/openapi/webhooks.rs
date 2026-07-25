@@ -370,7 +370,7 @@ pub async fn stripe_webhook(
                 .and_then(|v| v.as_str());
 
             if let Some(contract_id_hex) = contract_id_hex {
-                match hex::decode(contract_id_hex) {
+                match decode_hex_path(contract_id_hex, "contract_id") {
                     Ok(contract_id_bytes) => {
                         // Update contract with the invoice ID
                         if let Err(e) = db
@@ -434,7 +434,7 @@ pub async fn stripe_webhook(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Invalid contract_id hex in invoice metadata: {:#}", e);
+                        tracing::warn!("invoice.paid: invalid contract_id in metadata: {e}");
                     }
                 }
             } else {
