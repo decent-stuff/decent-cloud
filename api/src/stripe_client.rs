@@ -12,7 +12,9 @@ use stripe::{
 /// Base URL for the raw Stripe REST API. The official `stripe::Client` used
 /// elsewhere in this file owns its own base URL; only `create_usage_record`
 /// bypasses it with a raw reqwest call, so the base is centralized here.
-const STRIPE_API_BASE: &str = "https://api.stripe.com";
+/// Exposed so the webhook-setup path in `main.rs` and the Stripe health check
+/// in `api-cli` can reuse it instead of hardcoding the URL.
+pub const STRIPE_API_BASE: &str = "https://api.stripe.com";
 
 /// Stripe API client wrapper for payment processing
 pub struct StripeClient {

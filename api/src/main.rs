@@ -477,7 +477,7 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
     // First, check if a webhook for this URL already exists
     print!("\nChecking existing webhooks... ");
     let list_response = client
-        .get("https://api.stripe.com/v1/webhook_endpoints")
+        .get(format!("{}/v1/webhook_endpoints", stripe_client::STRIPE_API_BASE))
         .basic_auth(&secret_key, None::<&str>)
         .send()
         .await
@@ -514,7 +514,8 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
 
         let update_response = client
             .post(format!(
-                "https://api.stripe.com/v1/webhook_endpoints/{}",
+                "{}/v1/webhook_endpoints/{}",
+                stripe_client::STRIPE_API_BASE,
                 webhook_id
             ))
             .basic_auth(&secret_key, None::<&str>)
@@ -547,7 +548,10 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
         form.push(("url", &webhook_url));
 
         let create_response = client
-            .post("https://api.stripe.com/v1/webhook_endpoints")
+            .post(format!(
+                "{}/v1/webhook_endpoints",
+                stripe_client::STRIPE_API_BASE
+            ))
             .basic_auth(&secret_key, None::<&str>)
             .form(&form)
             .send()

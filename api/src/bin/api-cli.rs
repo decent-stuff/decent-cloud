@@ -1820,7 +1820,10 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             if env::var("STRIPE_SECRET_KEY").is_ok() {
                 let start = std::time::Instant::now();
                 let stripe_result = http
-                    .get("https://api.stripe.com/v1/balance")
+                    .get(format!(
+                        "{}/v1/balance",
+                        api::stripe_client::STRIPE_API_BASE
+                    ))
                     .header(
                         "Authorization",
                         format!("Bearer {}", env::var("STRIPE_SECRET_KEY").unwrap()),
@@ -1880,7 +1883,7 @@ async fn handle_health_action(action: HealthAction, api_url: &str) -> Result<()>
             let key = env::var("STRIPE_SECRET_KEY").context("STRIPE_SECRET_KEY not set")?;
             let start = std::time::Instant::now();
             let response = http
-                .get("https://api.stripe.com/v1/balance")
+                .get(format!("{}/v1/balance", api::stripe_client::STRIPE_API_BASE))
                 .header("Authorization", format!("Bearer {}", key))
                 .send()
                 .await?;
