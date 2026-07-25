@@ -25,11 +25,13 @@ pub struct AuthCapabilities {
     pub google_oauth: bool,
 }
 
-/// Reports whether a non-empty value is set for `var`. Shared with the unit
-/// tests so the enabled/disabled branches can be exercised without depending
-/// on whichever OAuth env vars happen to be set in the test environment.
-fn env_is_set_and_nonempty(var: &str) -> bool {
-    matches!(std::env::var(var), Ok(v) if !v.trim().is_empty())
+/// True only when both values are present and non-empty (after trim). Factored
+/// out so the branch logic can be unit-tested without mutating process-global
+/// env vars, which race under parallel test execution.
+fn oauth_configured_from(client_id: Option<&str>, client_secret: Option<&str>) -> bool {
+    let id = client_id.map(str::trim).filter(|s| !s.is_empty());
+    let secret = client_secret.map(str::trim).filter(|s| !s.is_empty());
+    id.is_some() && secret.is_some()
 }
 
 /// Google OAuth is considered available only when BOTH the client id and the
@@ -38,8 +40,10 @@ fn env_is_set_and_nonempty(var: &str) -> bool {
 /// and the server's own doctor gate (`main.rs` ~line 1036) treats OAuth as
 /// functional only when both are present.
 pub fn google_oauth_configured() -> bool {
-    env_is_set_and_nonempty("GOOGLE_OAUTH_CLIENT_ID")
-        && env_is_set_and_nonempty("GOOGLE_OAUTH_CLIENT_SECRET")
+    oauth_configured_from(
+        std::env::var("GOOGLE_OAUTH_CLIENT_ID").ok().as_deref(),
+        std::env::var("GOOGLE_OAUTH_CLIENT_SECRET").ok().as_deref(),
+    )
 }
 
 #[OpenApi]
@@ -61,73 +65,48 @@ impl AuthApi {
 mod tests {
     use super::*;
 
-    /// Snapshot the two OAuth env vars, run `body`, then restore them exactly
-    /// (including re-adding ones that were previously unset). Env-mutation
-    /// tests must be serial within the process; these run under the default
-    /// single-threaded test harness for the api crate's lib tests.
-    fn with_env_vars<R>(body: impl FnOnce() -> R) -> R {
-        let id_was = std::env::var("GOOGLE_OAUTH_CLIENT_ID").ok();
-        let secret_was = std::env::var("GOOGLE_OAUTH_CLIENT_SECRET").ok();
-        let result = body();
-        match id_was {
-            Some(v) => std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", v),
-            None => std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID"),
-        }
-        match secret_was {
-            Some(v) => std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", v),
-            None => std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET"),
-        }
-        result
+    // Branch logic is tested against the pure helper (`oauth_configured_from`)
+    // rather than by mutating GOOGLE_OAUTH_* env vars: those are process-global
+    // and the binary test harness runs in parallel, so env-mutation tests race
+    // with each other and with oauth_simple::tests. The live env-read path
+    // (google_oauth_configured) is covered end-to-end by the auth-capabilities
+    // e2e spec, which asserts the e2e stack reports google_oauth=false.
+
+    #[test]
+    fn oauth_disabled_when_neither_credential_provided() {
+        assert!(!oauth_configured_from(None, None));
     }
 
     #[test]
-    fn google_oauth_disabled_when_neither_env_set() {
-        with_env_vars(|| {
-            std::env::remove_var("GOOGLE_OAUTH_CLIENT_ID");
-            std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
-            assert!(!google_oauth_configured());
-        });
+    fn oauth_disabled_when_only_client_id_provided() {
+        assert!(!oauth_configured_from(Some("test-client-id"), None));
     }
 
     #[test]
-    fn google_oauth_disabled_when_only_client_id_set() {
-        with_env_vars(|| {
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test-client-id");
-            std::env::remove_var("GOOGLE_OAUTH_CLIENT_SECRET");
-            assert!(!google_oauth_configured());
-        });
+    fn oauth_disabled_when_only_client_secret_provided() {
+        assert!(!oauth_configured_from(None, Some("test-secret")));
     }
 
     #[test]
-    fn google_oauth_disabled_when_value_is_blank() {
-        with_env_vars(|| {
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "   ");
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "secret");
-            assert!(!google_oauth_configured());
-        });
+    fn oauth_disabled_when_a_credential_is_blank() {
+        // Whitespace-only counts as missing — matches the trim+is_empty gate.
+        assert!(!oauth_configured_from(Some("   "), Some("secret")));
+        assert!(!oauth_configured_from(Some("id"), Some("  ")));
     }
 
     #[test]
-    fn google_oauth_enabled_when_both_set_and_nonempty() {
-        with_env_vars(|| {
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "test-client-id");
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "test-secret");
-            assert!(google_oauth_configured());
-        });
+    fn oauth_enabled_when_both_credentials_provided() {
+        assert!(oauth_configured_from(Some("client-id"), Some("secret")));
     }
 
     #[test]
     fn capabilities_payload_serializes_snake_case() {
-        with_env_vars(|| {
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_ID", "id");
-            std::env::set_var("GOOGLE_OAUTH_CLIENT_SECRET", "secret");
-            let caps = AuthCapabilities {
-                google_oauth: google_oauth_configured(),
-            };
-            let json = serde_json::to_value(&caps).unwrap();
-            assert_eq!(json["google_oauth"], true);
-            // Snake_case contract the frontend depends on — no camelCase drift.
-            assert!(json.get("googleOauth").is_none());
-        });
+        // The frontend reads data.google_oauth; guard against camelCase drift.
+        let json = serde_json::to_value(&AuthCapabilities { google_oauth: true }).unwrap();
+        assert_eq!(json["google_oauth"], true);
+        assert!(json.get("googleOauth").is_none());
+
+        let json = serde_json::to_value(&AuthCapabilities { google_oauth: false }).unwrap();
+        assert_eq!(json["google_oauth"], false);
     }
 }
