@@ -825,6 +825,8 @@ pub struct TotpStatusResponse {
 pub enum ApiTags {
     /// System endpoints
     System,
+    /// Authentication capability endpoints (pre-login)
+    Auth,
     /// Account management endpoints
     Accounts,
     /// Admin operations endpoints

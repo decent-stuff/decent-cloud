@@ -34,10 +34,21 @@
 	let createdAccount = $state<AccountInfo | null>(null);
 	let showSeedPhrase = $state(false);
 	let initialSeedMode = $state<'choose' | 'generate' | 'import'>('choose');
+	// Whether the server reports Google OAuth as configured (null = still
+	// loading). When false, the seed-phrase form is the default surface with
+	// no extra click — the OAuth-first layout only makes sense when OAuth
+	// actually works (#436). On fetch error we fall back to true (show
+	// everything), the safe pre-capability behavior.
+	let googleOAuthEnabled = $state<boolean | null>(null);
 	// Tracks whether the success state came from a fresh registration (vs an
 	// existing-account login) so the host page can route to /dashboard (where
 	// the first-login WelcomeModal renders) instead of the generic returnUrl.
 	let isNewRegistration = $state(false);
+
+	// The seed-phrase form is shown by default whenever Google OAuth is off, so
+	// users on a non-OAuth deployment don't need the extra "seed phrase instead"
+	// click to reach credential sign-in.
+	const effectiveShowSeed = $derived(showSeedPhrase || googleOAuthEnabled === false);
 
 	function showRegistration() {
 		initialSeedMode = 'generate';
@@ -51,6 +62,23 @@
 
 	onMount(async () => {
 		if (typeof window === 'undefined') return;
+
+		// Discover which sign-in methods the server actually supports so the
+		// form layout matches reality (#436). Errors fall back to "show
+		// everything" (googleOAuthEnabled = true) — the safe pre-capability
+		// behavior — so a capability-fetch failure never blocks login.
+		try {
+			const response = await fetch(`${API_BASE_URL}/api/v1/auth/capabilities`);
+			if (response.ok) {
+				const caps = (await response.json()) as { google_oauth?: boolean };
+				googleOAuthEnabled = Boolean(caps.google_oauth);
+			} else {
+				googleOAuthEnabled = true;
+			}
+		} catch {
+			googleOAuthEnabled = true;
+		}
+
 		const urlParams = new URLSearchParams(window.location.search);
 		if (urlParams.get('oauth') === 'google' && urlParams.get('step') === 'username') {
 			currentStep = 'oauth-username';
@@ -210,30 +238,31 @@
 </script>
 
 <div class="space-y-6">
-	{#if currentStep === 'seed'}
-		<div class="space-y-6">
-			<div class="text-center">
-				<h2 class="text-2xl font-bold text-white mb-2">Sign In</h2>
-				<p class="text-neutral-500 text-sm">Use your Google account or seed phrase</p>
-			</div>
+{#if currentStep === 'seed'}
+	<div class="space-y-6">
+		<div class="text-center">
+			<h2 class="text-2xl font-bold text-white mb-2">Sign In</h2>
+			<p class="text-neutral-500 text-sm">
+				{googleOAuthEnabled === false
+					? 'Use your seed phrase to sign in'
+					: 'Use your Google account or seed phrase'}
+			</p>
+		</div>
 
+		{#if googleOAuthEnabled}
 			<GoogleSignInButton />
+		{/if}
 
-			{#if !showSeedPhrase}
-				<button
-					type="button"
-					onclick={showSignIn}
-					class={getAuthCtaClass('seed')}
-				>
-					Sign in with seed phrase instead
-				</button>
-				<p class="text-center text-sm text-neutral-500 pt-1">
-					New here?
-					<button type="button" onclick={showRegistration} class="text-primary-400 hover:text-primary-300 font-medium underline">
-						Create an account
-					</button>
-				</p>
-			{:else}
+		{#if !effectiveShowSeed}
+			<button
+				type="button"
+				onclick={showSignIn}
+				class={getAuthCtaClass('seed')}
+			>
+				Sign in with seed phrase instead
+			</button>
+		{:else}
+			{#if googleOAuthEnabled}
 				<div class="relative">
 					<div class="absolute inset-0 flex items-center">
 						<div class="w-full border-t border-neutral-800"></div>
@@ -242,15 +271,31 @@
 						<span class="px-3 bg-surface text-neutral-500 text-xs uppercase tracking-wider">or</span>
 					</div>
 				</div>
+			{/if}
 
+		<!-- Key on the requested mode so the component remounts when the user
+		picks "Create an account" (generate) vs "Sign in with seed phrase" (choose).
+		SeedPhraseStep only reads initialMode on mount, and when OAuth is off the
+		form is mounted up front in 'choose' mode, so without the key the mode
+		switch would be silently ignored. -->
+		{#key initialSeedMode}
 			<SeedPhraseStep
 				initialMode={initialSeedMode}
 				showModeChoice={true}
 				onComplete={handleSeedComplete}
 			/>
-			{/if}
-		</div>
-	{/if}
+		{/key}
+		{/if}
+
+		<!-- Always reachable: jump straight to seed generation to register. -->
+		<p class="text-center text-sm text-neutral-500 pt-1">
+			New here?
+			<button type="button" onclick={showRegistration} class="text-primary-400 hover:text-primary-300 font-medium underline">
+				Create an account
+			</button>
+		</p>
+	</div>
+{/if}
 
 	<!-- Checking Account -->
 	{#if currentStep === 'checking-account'}

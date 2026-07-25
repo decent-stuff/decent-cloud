@@ -218,9 +218,11 @@ test.describe('Sign-In Flow', () => {
 
 		// Should redirect to /login page
 		await expect(page).toHaveURL('/login', { timeout: 5000 });
-		// Verify login page rendered (the seed-phrase button is the primary CTA after Google sign-in)
+		// The e2e stack ships with Google OAuth disabled, so per #436 the
+		// credential (seed-phrase) form is the default surface — the
+		// "Import Existing" mode button is visible without an extra click.
 		await expect(
-			page.locator('button:has-text("Sign in with seed phrase instead")'),
-		).toBeVisible();
+			page.getByRole('button', { name: 'Import Existing' }),
+		).toBeVisible({ timeout: 10_000 });
 	});
 });
