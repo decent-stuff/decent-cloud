@@ -13,6 +13,7 @@
 		type AccountSubscription
 	} from "$lib/services/api";
 	import type { IdentityInfo } from "$lib/stores/auth";
+	import { shouldShowTrialCopy } from "$lib/utils/subscription-plans";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let isAuthenticated = $state(false);
@@ -260,7 +261,7 @@
 								{/if}
 							</div>
 
-							{#if plan.trialDays > 0}
+							{#if shouldShowTrialCopy(plan)}
 								<p class="text-primary-400 text-sm mt-2">
 									{plan.trialDays}-day free trial
 								</p>
