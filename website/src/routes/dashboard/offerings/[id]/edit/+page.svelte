@@ -340,8 +340,8 @@
 				// letting them fill it in only to be denied. Compare lowercase hex
 				// — getOffering returns the raw (lowercase) pubkey from the DB and
 				// hexEncode produces lowercase.
-				const myPubkey = currentIdentity.publicKeyBytes
-					? hexEncode(currentIdentity.publicKeyBytes).toLowerCase()
+				const myPubkey = identity.publicKeyBytes
+					? hexEncode(identity.publicKeyBytes).toLowerCase()
 					: null;
 				if (!myPubkey || offering.pubkey.toLowerCase() !== myPubkey) {
 					deniedNotOwner = true;
