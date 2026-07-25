@@ -64,6 +64,11 @@
 	let submitting = $state(false);
 	let error = $state<string | null>(null);
 	let productTypes = $state<ProductType[]>([]);
+	// True when the offering loaded but is owned by another provider — the
+	// server's PUT is provider-scoped (check_authorization on :pubkey), so a
+	// non-owner Save is rejected anyway; this flag just stops us from showing
+	// a misleading editable form to someone who can't actually save it.
+	let deniedNotOwner = $state(false);
 
 	// Recipe template state
 	let selectedTemplate = $state('');
@@ -321,14 +326,30 @@
 			currentIdentity = identity;
 			if (identity) {
 				try {
-					// Load offering, cloud accounts, and product types in parallel
-					const [offering, , pts] = await Promise.all([
-						getOffering(offeringDbId),
-						loadCloudAccounts(),
-						getProductTypes()
-					]);
-					existing = offering;
-					productTypes = pts;
+				// Load offering, cloud accounts, and product types in parallel
+				const [offering, , pts] = await Promise.all([
+					getOffering(offeringDbId),
+					loadCloudAccounts(),
+					getProductTypes()
+				]);
+
+				// Ownership guard: the server scopes PUT to the provider's pubkey
+				// (check_authorization on /providers/:pubkey/offerings/:id), so a
+				// non-owner Save is rejected anyway. Refuse to render the editable
+				// form (and the Save button) to a non-owner up front instead of
+				// letting them fill it in only to be denied. Compare lowercase hex
+				// — getOffering returns the raw (lowercase) pubkey from the DB and
+				// hexEncode produces lowercase.
+				const myPubkey = currentIdentity.publicKeyBytes
+					? hexEncode(currentIdentity.publicKeyBytes).toLowerCase()
+					: null;
+				if (!myPubkey || offering.pubkey.toLowerCase() !== myPubkey) {
+					deniedNotOwner = true;
+					return;
+				}
+
+				existing = offering;
+				productTypes = pts;
 
 					// Populate form fields from existing offering
 					offerName = offering.offer_name;
@@ -388,6 +409,24 @@
 	{:else if !currentIdentity}
 		<div class="card p-8 border border-neutral-800 text-center">
 			<p class="text-neutral-400">Please authenticate to edit offerings.</p>
+		</div>
+	{:else if deniedNotOwner}
+		<div class="card p-8 border border-neutral-800 text-center space-y-4">
+			<h2 class="text-xl font-semibold text-white">You can't edit this offering</h2>
+			<p class="text-neutral-400">
+				Only the provider who owns this offering can edit it. Your account is not the owner.
+			</p>
+			<div class="flex items-center justify-center gap-4 pt-2">
+				<a
+					href="/dashboard/marketplace/{offeringDbId}"
+					class="px-4 py-2 bg-surface-elevated border border-neutral-700 text-white hover:border-primary-500 transition-colors"
+				>
+					View offering
+				</a>
+				<a href="/dashboard/offerings" class="text-neutral-400 hover:text-white transition-colors">
+					Back to offerings
+				</a>
+			</div>
 		</div>
 	{:else if existing}
 		<!-- Section 1: Infrastructure -->
