@@ -8,6 +8,7 @@ pub mod cloud;
 pub mod common;
 pub mod contracts;
 pub mod invoices;
+pub mod notifications;
 pub mod offerings;
 pub mod pools;
 pub mod providers;
@@ -31,6 +32,7 @@ pub use chatwoot::ChatwootApi;
 pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
 pub use invoices::InvoicesApi;
+pub use notifications::NotificationsApi;
 pub use offerings::OfferingsApi;
 pub use pools::PoolsApi;
 pub use providers::{contract_status_events, password_reset_events, ProvidersApi};
@@ -71,6 +73,7 @@ pub fn create_combined_api() -> impl OpenApi {
             VatApi,
             AgentsWaitlistApi,
             PoolsApi,
+            NotificationsApi,
         ),
     )
 }
