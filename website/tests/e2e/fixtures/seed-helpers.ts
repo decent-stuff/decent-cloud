@@ -316,6 +316,10 @@ export interface ContractSeed {
 	offeringId?: string;
 	/** Optional provider 32-byte hex pubkey. Random by default. */
 	providerPubkeyHex?: string;
+	/** Payment method. Default 'test'. Use 'stripe' to exercise the refund gate. */
+	paymentMethod?: string;
+	/** Stripe payment intent id (required when paymentMethod='stripe' and the refund gate runs). */
+	stripePaymentIntentId?: string;
 }
 
 /**
@@ -333,6 +337,7 @@ export async function seedContract(seed: ContractSeed): Promise<string> {
 	const durationHours = seed.durationHours ?? 1;
 	const offeringId = seed.offeringId ?? 'compute-001';
 	const paymentStatus = seed.paymentStatus ?? 'succeeded';
+	const paymentMethod = seed.paymentMethod ?? 'test';
 	const createdAt = nowNs().toString();
 	const sshPubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItestdata test@example.com';
 	const contact = 'email:test@example.com';
@@ -347,7 +352,7 @@ export async function seedContract(seed: ContractSeed): Promise<string> {
 			contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,
 			provider_pubkey, offering_id, payment_amount_e9s, duration_hours,
 			original_duration_hours, request_memo, created_at_ns, status,
-			status_updated_at_ns, currency, payment_method, payment_status
+			status_updated_at_ns, currency, payment_method, payment_status${seed.stripePaymentIntentId ? ', stripe_payment_intent_id' : ''}
 		) VALUES (
 			decode('${contractId}', 'hex'),
 			decode('${seed.requesterPubkeyHex}', 'hex'),
@@ -363,11 +368,65 @@ export async function seedContract(seed: ContractSeed): Promise<string> {
 			'${seed.status}',
 			${createdAt},
 			'${currency}',
-			'test',
-			'${paymentStatus}'
+			'${paymentMethod}',
+			'${paymentStatus}'${seed.stripePaymentIntentId ? `, '${seed.stripePaymentIntentId.replace(/'/g, "''")}'` : ''}
 		)
 	`);
 	return contractId;
+}
+
+/**
+ * Insert a refund_requests row directly (bypasses the gate). Used by admin
+ * panel e2e tests to seed the pending/approved/declined state the UI renders,
+ * without triggering real Stripe API calls (which the cancel path would do
+ * when the warm stack has STRIPE_SECRET_KEY configured).
+ *
+ * Returns the new row id as a string.
+ *
+ * Mirrors the columns `process_gated_refund` writes. `UNIQUE(contract_id,
+ * reason)` is respected — each (contract, reason) pair can only have one row.
+ */
+export async function seedRefundRequest(opts: {
+	contractIdHex: string;
+	requesterPubkeyHex: string;
+	refundAmountE9s: number | string;
+	reason: string;
+	status?: string;
+	userLatestPaymentE9s?: number | string;
+	capExceeded?: boolean;
+	paymentIntentId?: string;
+	currency?: string;
+}): Promise<string> {
+	const status = opts.status ?? 'pending';
+	const userLatest = opts.userLatestPaymentE9s ?? 0;
+	const capExceeded = opts.capExceeded ?? false;
+	const paymentIntentId = opts.paymentIntentId ?? 'pi_test_seed';
+	const currency = opts.currency ?? 'USD';
+	const createdAt = nowNs().toString();
+	const idempotencyKey = `seed-${opts.contractIdHex.slice(0, 16)}-${opts.reason}`;
+
+	const { stdout } = await execFileAsync('psql', [
+		...psqlArgs().args,
+		'--command',
+		`INSERT INTO refund_requests (
+			contract_id, requester_pubkey, refund_amount_e9s, reason, status,
+			user_latest_payment_e9s, cap_exceeded, payment_intent_id, currency,
+			idempotency_key, created_at_ns
+		) VALUES (
+			decode('${opts.contractIdHex}', 'hex'),
+			decode('${opts.requesterPubkeyHex}', 'hex'),
+			${opts.refundAmountE9s},
+			'${opts.reason}',
+			'${status}',
+			${userLatest},
+			${capExceeded},
+			'${paymentIntentId}',
+			'${currency}',
+			'${idempotencyKey}',
+			${createdAt}
+		) RETURNING id`,
+	], { env: psqlArgs().env });
+	return stdout.trim().split('\n')[0];
 }
 
 /** Insert a token_transfers row. Returns the new row id. */
@@ -400,6 +459,7 @@ export async function seedTransfer(opts: {
  */
 export async function deleteContractsForRequester(requesterPubkeyHex: string): Promise<void> {
 	await sql(`
+		DELETE FROM refund_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex');
 		DELETE FROM contract_events
 			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
 		DELETE FROM contract_usage_events
