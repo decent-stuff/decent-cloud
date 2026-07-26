@@ -318,6 +318,7 @@ async function authenticatePage(page, targetUrl, seedPhrase, timeout) {
       stored.push(phrase);
       localStorage.setItem('seed_phrases', JSON.stringify(stored));
     }
+    localStorage.setItem('first_login_onboarding_completed', 'true');
   }, seedPhrase);
 
   const authDone = page.waitForResponse(
