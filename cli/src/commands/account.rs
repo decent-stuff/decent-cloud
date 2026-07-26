@@ -33,7 +33,19 @@ pub async fn handle_account_command(
     );
 
     if let Some(to_principal_string) = &account_args.transfer_to {
-        let to_icrc1_account = IcrcCompatibleAccount::from(to_principal_string);
+        // Validate the recipient principal BEFORE constructing the account.
+        // `IcrcCompatibleAccount::from(&str)` panics on invalid principal text (its
+        // `From` impl uses `Principal::from_text(...).expect(...)`), so a user-supplied
+        // --transfer-to value must be parsed here and surfaced as a clear, actionable
+        // error rather than crashing the CLI with a panic (exit 101).
+        let owner = IcPrincipal::from_text(to_principal_string).map_err(|e| {
+            format!(
+                "Invalid --transfer-to principal '{}': {}. \
+                 Pass a valid IC principal (e.g. the recipient's Account Principal ID).",
+                to_principal_string, e
+            )
+        })?;
+        let to_icrc1_account = IcrcCompatibleAccount::new(owner, None);
 
         let transfer_amount_e9s = match &account_args.amount_dct {
             Some(value) => {

@@ -318,6 +318,74 @@ fn keygen_without_a_mnemonic_source_errors() {
     cmd.assert().failure();
 }
 
+#[test]
+fn account_transfer_to_without_amount_returns_meaningful_error() {
+    // `account --transfer-to <valid-principal> --identity <real>` with no --amount-*
+    // must reach the handler's amount-check and return the "Missing transfer amount"
+    // error (exit non-zero). Uses a VALID principal so parsing succeeds and the
+    // amount guard is what fails — distinct from the invalid-principal test below.
+    let (mut keygen, home) = dc();
+    keygen.args(["keygen", "--generate", "--identity", "sender"]);
+    keygen.assert().success();
+
+    let (mut cmd, _) = dc();
+    cmd.env("HOME", home.path());
+    cmd.args([
+        "account",
+        "--transfer-to",
+        // A valid IC principal text (canonical format) so principal parsing succeeds
+        // and the amount-guard is the thing that trips.
+        "rrkah-fqaaa-aaaaa-aaaaq-cai",
+        "--identity",
+        "sender",
+    ]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Missing transfer amount"),
+        "should explain the missing amount, got: {stderr}"
+    );
+}
+
+#[test]
+fn account_transfer_to_with_invalid_principal_returns_clean_error() {
+    // A malformed --transfer-to address must produce a CLEAN, explained error — NOT
+    // a panic/backtrace (exit 101). Regression guard for the transfer-principal
+    // validation fix: previously the CLI panicked via
+    // `IcrcCompatibleAccount::from(&str)`'s `Principal::from_text(...).expect(...)`.
+    let (mut keygen, home) = dc();
+    keygen.args(["keygen", "--generate", "--identity", "sender"]);
+    keygen.assert().success();
+
+    let (mut cmd, _) = dc();
+    cmd.env("HOME", home.path());
+    cmd.args([
+        "account",
+        "--transfer-to",
+        "not-a-valid-principal",
+        "--identity",
+        "sender",
+        "--amount-e9s",
+        "1",
+    ]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("panicked"),
+        "invalid principal must NOT panic; got backtrace:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("not-a-valid-principal"),
+        "should name the offending --transfer-to value, got: {stderr}"
+    );
+    // Must NOT be a Rust panic exit code (101).
+    assert_ne!(
+        out.status.code(),
+        Some(101),
+        "invalid principal must not crash with panic exit 101"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Warm-stack flows (real local API; auto-skipped if the stack is down)
 // ---------------------------------------------------------------------------
