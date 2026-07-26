@@ -307,16 +307,63 @@ pub async fn stripe_webhook(
             // the FK so the dispute is visible on the contract. Best-effort +
             // idempotent: failure here MUST NOT fail the webhook (payment already
             // succeeded) and replays affect each orphan at most once. This only
-            // links the row -- it does not replay pause/refund; see the DB
-            // method docs and the follow-up tracked in #426.
+            // links the row -- the lifecycle replay is #447, below.
             if let Some(pi) = session.payment_intent.as_deref() {
-                match db.relink_orphan_disputes_for_payment_intent(&contract_id_bytes, pi).await {
-                    Ok(n) if n > 0 => tracing::info!(
-                        contract_id = %contract_id_hex,
-                        payment_intent = %pi,
-                        linked = n,
-                        "Reconciled orphan dispute(s) to contract after late checkout completion"
-                    ),
+                let linked = db.relink_orphan_disputes_for_payment_intent(&contract_id_bytes, pi).await;
+                match linked {
+                    Ok(n) if n > 0 => {
+                        tracing::info!(
+                            contract_id = %contract_id_hex,
+                            payment_intent = %pi,
+                            linked = n,
+                            "Reconciled orphan dispute(s) to contract after late checkout completion"
+                        );
+                        // #447: replay the dispute-lifecycle pause that the
+                        // normal `charge.dispute.created` handler applies but
+                        // was missed while the dispute was orphaned. Money-safe
+                        // (pause is a status change only; refund columns are NOT
+                        // touched) and idempotent (pause_contract with the same
+                        // reason is a no-op). Closed-lost orphans are detected
+                        // and ops is paged -- their terminate+refund replay is a
+                        // money-path decision, intentionally deferred. Best-effort:
+                        // a replay failure MUST NOT fail the webhook (payment
+                        // already succeeded), mirroring the relink above.
+                        match db.replay_orphan_dispute_pause(&contract_id_bytes, pi).await {
+                            Ok(outcome) => {
+                                if outcome.paused > 0 {
+                                    tracing::info!(
+                                        contract_id = %contract_id_hex,
+                                        payment_intent = %pi,
+                                        paused = outcome.paused,
+                                        "Replayed missed dispute pause for re-linked orphan(s)"
+                                    );
+                                }
+                                if outcome.closed_lost_detected > 0 {
+                                    tracing::warn!(
+                                        contract_id = %contract_id_hex,
+                                        payment_intent = %pi,
+                                        closed_lost_detected = outcome.closed_lost_detected,
+                                        "Re-linked orphan dispute(s) closed LOST while orphaned; \
+                                         refund replay deferred (money-path) -- operator review required"
+                                    );
+                                    crate::notifications::telegram::send_ops_alert(&format!(
+                                        "Stripe dispute re-linked after late checkout for contract {} \
+                                         had {} dispute(s) CLOSED LOST while orphaned. \
+                                         Terminate+refund replay is deferred (money-path). \
+                                         REVIEW + issue the prorated refund manually.",
+                                        contract_id_hex, outcome.closed_lost_detected
+                                    ))
+                                    .await;
+                                }
+                            }
+                            Err(e) => tracing::warn!(
+                                contract_id = %contract_id_hex,
+                                payment_intent = %pi,
+                                error = %format!("{:#}", e),
+                                "Failed to replay orphan dispute pause; payment still succeeded"
+                            ),
+                        }
+                    }
                     Ok(_) => {}
                     Err(e) => tracing::warn!(
                         contract_id = %contract_id_hex,
@@ -2364,6 +2411,328 @@ mod tests {
             after.1, "succeeded",
             "payment_status is set by update_checkout_session_payment, not by relink"
         );
+    }
+
+    #[tokio::test]
+    async fn test_orphan_dispute_pause_replayed_on_late_checkout_completion() {
+        // #447: when an orphan dispute (open) is re-linked after late checkout
+        // completion, the `pause_contract` effect that the normal
+        // `charge.dispute.created` handler applies was MISSED while the dispute
+        // was orphaned. The replay MUST apply that pause idempotently and MUST
+        // NOT touch any money column (pause is a status change only; the
+        // refund path is a separate money concern that is deferred here).
+        let db = setup_test_db().await;
+        let contract_id = vec![0xD1; 32];
+
+        // Contract exists with NO stripe_payment_intent_id yet (checkout not
+        // yet delivered).
+        insert_active_contract(&db, &contract_id, None).await;
+
+        // 1. Dispute arrives first as an orphan: contract has no PI, so all
+        //    lookups fail and the row persists with NULL contract_id. No pause
+        //    is attempted (there is no contract to pause).
+        let dispute = dispute_event(
+            "charge.dispute.created",
+            "du_447_open",
+            "ch_447_open",
+            Some("pi_447_open"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&dispute))
+            .await
+            .expect("orphan dispute MUST return Ok");
+
+        // 2. checkout.session.completed learns the PI on the contract.
+        db.update_checkout_session_payment(
+            &contract_id,
+            "cs_447_open",
+            Some("pi_447_open"),
+            None,
+            None,
+            false,
+            None,
+        )
+        .await
+        .expect("update_checkout_session_payment must succeed");
+
+        // 3. Relink (the #426 reconciliation) backfills the FK.
+        let linked = db
+            .relink_orphan_disputes_for_payment_intent(&contract_id, "pi_447_open")
+            .await
+            .expect("relink must not error");
+        assert_eq!(linked, 1);
+
+        // GAP PROOF: after relink, the contract is STILL active (the pause
+        // effect was missed while the dispute was orphaned).
+        assert_eq!(
+            read_status(&db, &contract_id).await,
+            "active",
+            "gap: contract MUST still be active immediately after relink (pause not yet replayed)"
+        );
+
+        // 4. The #447 replay applies the missed pause.
+        let outcome = db
+            .replay_orphan_dispute_pause(&contract_id, "pi_447_open")
+            .await
+            .expect("replay must not error");
+        assert_eq!(outcome.paused, 1, "exactly one open dispute must be paused");
+        assert_eq!(
+            outcome.closed_lost_detected, 0,
+            "no closed-lost dispute in this scenario"
+        );
+
+        // The pause effect is now applied, mirroring the normal handler.
+        assert_eq!(read_status(&db, &contract_id).await, "paused");
+        let pause_reason: String = sqlx::query_scalar(
+            "SELECT pause_reason FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(pause_reason, "stripe_dispute:du_447_open");
+        assert_eq!(
+            count_history_to(&db, &contract_id, "paused").await,
+            1,
+            "exactly one paused history row"
+        );
+
+        // 5. IDEMPOTENCY: replaying the pause is a no-op (pause_contract with
+        //    the same reason returns Ok without a second transition).
+        let outcome_again = db
+            .replay_orphan_dispute_pause(&contract_id, "pi_447_open")
+            .await
+            .expect("idempotent replay must not error");
+        assert_eq!(outcome_again.paused, 1, "replay re-confirms the pause");
+        assert_eq!(
+            count_history_to(&db, &contract_id, "paused").await,
+            1,
+            "idempotent replay MUST NOT emit a second paused history row"
+        );
+
+        // 6. MONEY-SAFETY: the replay touched NO money column. Refund columns
+        //    stay NULL/zero and payment_status stays 'succeeded'. The deferred
+        //    refund path (closed-lost) is a separate money concern.
+        let money: (Option<i64>, Option<String>, Option<i64>, String) = sqlx::query_as(
+            "SELECT refund_amount_e9s, stripe_refund_id, refund_created_at_ns, payment_status \
+             FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(money.0, None, "refund_amount_e9s MUST stay NULL (no refund)");
+        assert_eq!(money.1, None, "stripe_refund_id MUST stay NULL (no refund)");
+        assert_eq!(
+            money.2, None,
+            "refund_created_at_ns MUST stay NULL (no refund)"
+        );
+        assert_eq!(
+            money.3, "succeeded",
+            "payment_status MUST be unchanged by the pause replay"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_orphan_dispute_closed_lost_is_detected_not_auto_refunded() {
+        // #447 money-path guard: if a dispute CLOSED as `lost` while it was
+        // orphaned, the terminate+refund replay is a MONEY decision and is
+        // intentionally NOT auto-applied (would need the idempotency-key path
+        // + Stripe client + operator sign-off). The replay MUST:
+        //  * detect the closed-lost orphan and surface it (so the webhook can
+        //    page ops to review), and
+        //  * NOT pause the contract (a lost dispute should terminate, not
+        //    pause), and
+        //  * NOT touch any refund column (no auto-refund -> no double-refund).
+        let db = setup_test_db().await;
+        let contract_id = vec![0xD2; 32];
+        insert_active_contract(&db, &contract_id, None).await;
+
+        // Orphan dispute that has already CLOSED LOST while orphaned.
+        // Runtime query (not `query!`) to avoid churning `.sqlx` for a
+        // test-only insert; the dispute schema is stable.
+        let now_ns = crate::now_ns().unwrap();
+        sqlx::query(
+            "INSERT INTO contract_disputes \
+             (contract_id, stripe_dispute_id, stripe_charge_id, stripe_payment_intent_id, \
+              reason, status, amount_cents, currency, raw_event, created_at_ns, updated_at_ns, closed_at_ns) \
+             VALUES (NULL, 'du_447_lost', 'ch_447_lost', 'pi_447_lost', \
+                     'fraudulent', 'lost', 5000, 'usd', '{}'::jsonb, $1, $1, $1)",
+        )
+        .bind(now_ns)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        db.update_checkout_session_payment(
+            &contract_id,
+            "cs_447_lost",
+            Some("pi_447_lost"),
+            None,
+            None,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+        db.relink_orphan_disputes_for_payment_intent(&contract_id, "pi_447_lost")
+            .await
+            .unwrap();
+
+        let outcome = db
+            .replay_orphan_dispute_pause(&contract_id, "pi_447_lost")
+            .await
+            .expect("replay must not error on closed-lost orphan");
+
+        // The closed-lost orphan is surfaced for operator review.
+        assert_eq!(
+            outcome.closed_lost_detected, 1,
+            "closed-lost orphan MUST be detected so ops can review the deferred refund"
+        );
+        assert_eq!(
+            outcome.paused, 0,
+            "a lost dispute MUST NOT be paused (terminate is the correct action, deferred)"
+        );
+
+        // Contract stays active: we neither paused nor terminated.
+        assert_eq!(
+            read_status(&db, &contract_id).await,
+            "active",
+            "closed-lost orphan replay MUST NOT transition the contract"
+        );
+
+        // MONEY-SAFETY: no refund columns mutated (the money replay is deferred).
+        let money: (Option<i64>, Option<String>) = sqlx::query_as(
+            "SELECT refund_amount_e9s, stripe_refund_id \
+             FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            money.0, None,
+            "NO auto-refund -- the closed-lost money replay is deferred"
+        );
+        assert_eq!(money.1, None, "NO stripe_refund_id written");
+    }
+
+    #[tokio::test]
+    async fn test_orphan_dispute_replay_graceful_when_contract_not_pausable() {
+        // #447 realistic case: at checkout.session.completed the contract is
+        // still `requested` (provider has not accepted yet). A `requested`
+        // contract cannot transition to `paused` (state machine only allows
+        // Active/Provisioned -> Paused), so the replayed pause MUST fail
+        // gracefully -- no crash, no money movement, dispute stays linked and
+        // visible. This mirrors exactly what the normal `handle_dispute_created`
+        // does when a dispute arrives on a pre-active contract: it logs + pages
+        // ops but does not 500. The deeper "pause-on-activation" gap is a
+        // separate concern (needs state-machine + dc-agent coordination).
+        let db = setup_test_db().await;
+        let contract_id = vec![0xD3; 32];
+
+        // Insert a `requested` contract (NOT active) with NO PI yet.
+        // Runtime query (not `query!`) to avoid churning `.sqlx` for a
+        // test-only insert with different column literals than the helpers.
+        let now_ns = crate::now_ns().unwrap();
+        sqlx::query(
+            "INSERT INTO contract_sign_requests \
+             (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, \
+              provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, \
+              status, payment_method, stripe_payment_intent_id, payment_status, currency, \
+              provisioning_completed_at_ns, end_timestamp_ns) \
+             VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-447', 100000000000, 'poc', 0, \
+                     'requested', 'stripe', NULL, 'pending', 'usd', $4, $5)",
+        )
+        .bind(&contract_id[..])
+        .bind(&[1u8; 32][..])
+        .bind(&[2u8; 32][..])
+        .bind(now_ns - 60_000_000_000)
+        .bind(now_ns + 86_400_000_000_000i64)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        // Orphan open dispute.
+        let dispute = dispute_event(
+            "charge.dispute.created",
+            "du_447_req",
+            "ch_447_req",
+            Some("pi_447_req"),
+            "needs_response",
+            None,
+        );
+        handle_dispute_created(&db, &unwrap_object(&dispute))
+            .await
+            .unwrap();
+        db.update_checkout_session_payment(
+            &contract_id,
+            "cs_447_req",
+            Some("pi_447_req"),
+            None,
+            None,
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+        db.relink_orphan_disputes_for_payment_intent(&contract_id, "pi_447_req")
+            .await
+            .unwrap();
+
+        // Replay MUST NOT error even though the contract is not pausable.
+        let outcome = db
+            .replay_orphan_dispute_pause(&contract_id, "pi_447_req")
+            .await
+            .expect("replay MUST NOT error when contract is not pausable");
+        assert_eq!(
+            outcome.paused, 0,
+            "pause MUST NOT be counted as applied when the contract cannot transition to paused"
+        );
+        assert_eq!(outcome.closed_lost_detected, 0);
+
+        // Contract stays `requested`; pause_reason stays NULL (nothing to pause).
+        assert_eq!(read_status(&db, &contract_id).await, "requested");
+        let pause_reason: Option<String> = sqlx::query_scalar(
+            "SELECT pause_reason FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(pause_reason.is_none(), "no pause_reason written");
+
+        // Dispute IS linked (the relink worked) -- the row stays visible.
+        let linked: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT contract_id FROM contract_disputes WHERE stripe_dispute_id = 'du_447_req'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            linked.as_deref(),
+            Some(contract_id.as_slice()),
+            "dispute MUST remain linked even when pause could not be applied"
+        );
+
+        // MONEY-SAFETY: no refund columns mutated.
+        let refund: Option<i64> = sqlx::query_scalar(
+            "SELECT refund_amount_e9s FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(refund.is_none(), "no refund column touched");
+
+        // IDEMPOTENT: re-running the replay is still a no-op.
+        let outcome_again = db
+            .replay_orphan_dispute_pause(&contract_id, "pi_447_req")
+            .await
+            .unwrap();
+        assert_eq!(outcome_again.paused, 0);
+        assert_eq!(read_status(&db, &contract_id).await, "requested");
     }
 
     #[tokio::test]
