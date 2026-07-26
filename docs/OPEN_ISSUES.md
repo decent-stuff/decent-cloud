@@ -43,6 +43,19 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > reconciliation (`relink_orphan_disputes_for_payment_intent`, idempotent, no money-column writes).
 > The scoped-out retroactive pause/refund replay filed as **#447**.
 
+> **#447 (PARTIALLY SHIPPED 2026-07-26, `71732957`):** the missed effect was `pause_contract` (the
+> normal `handle_dispute_created` handler pauses the matched contract; an orphan missed that). PoC
+> confirmed the gap. Shipped `Database::replay_orphan_dispute_pause` — wired best-effort after the
+> relink in `checkout.session.completed`, it replays the missed non-money pause for re-linked OPEN
+> disputes (idempotent via `pause_contract`'s same-reason no-op), detects closed-`lost` orphans and
+> pages ops (no auto-refund), and fails gracefully when the contract is not yet pausable (the
+> realistic `requested` state). Money-safe: pause touches status/audit rows only, NEVER refund
+> columns; 3 DB-backed tests. **Deferred (money-path, needs operator sign-off):** (1) auto-replay of
+> terminate+refund for orphans that closed `lost` while orphaned — currently detected + ops-paged,
+> recommend an operator-triggered replay endpoint; (2) pause-on-activation for contracts that become
+> active after the replay ran (pre-existing gap, needs state-machine + dc-agent coordination). #447
+> stays **open** until the money-path follow-up lands.
+
 > **#443** (boot-gate asymmetry: no `require_icpay_in_prod`) and **#420** (ICPay automated payouts)
 > closed **2026-07-24 — moot**: the ICPay rail was fully retired (Stripe is the sole rail). See
 > "Recently closed" below.
