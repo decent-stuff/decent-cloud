@@ -386,6 +386,220 @@ fn account_transfer_to_with_invalid_principal_returns_clean_error() {
     );
 }
 
+#[test]
+fn account_list_all_prints_both_registered_sections_on_fresh_ledger() {
+    // `account --list-all` is the alias-stable entry point for the on-disk local
+    // listing (calls list_identities with All). Distinct from `ledger-local
+    // --list-accounts` (covered in cli_smoke.rs) — this asserts the actual
+    // `account` subcommand dispatches to the same listing and prints BOTH section
+    // headers on a fresh ledger.
+    let (mut cmd, _home) = dc();
+    cmd.args(["account", "--list-all"]);
+    cmd.assert()
+        .success()
+        .stdout(contains("Registered providers"))
+        .stdout(contains("Registered users"));
+}
+
+#[test]
+fn account_list_accounts_alias_matches_list_all() {
+    // `--list-accounts` is a visible alias for `--list-all`. It must dispatch to
+    // the identical handler and print the same section headers. Guards against the
+    // alias registration regressing (clap `visible_aliases`).
+    let (mut cmd, _home) = dc();
+    cmd.args(["account", "--list-accounts"]);
+    cmd.assert()
+        .success()
+        .stdout(contains("Registered providers"))
+        .stdout(contains("Registered users"));
+}
+
+#[test]
+fn provider_list_prints_providers_section_on_fresh_ledger() {
+    // `provider list` (without --only-local) reads the synced local ledger and
+    // prints the "# Registered providers" section. On a fresh ledger there are no
+    // entries, but the section header must still appear — proving the provider-list
+    // dispatch + ledger iteration path works end-to-end.
+    let (mut cmd, _home) = dc();
+    cmd.args(["provider", "list"]);
+    cmd.assert().success().stdout(contains("Registered providers"));
+}
+
+#[test]
+fn user_list_prints_users_section_on_fresh_ledger() {
+    // Mirror of the provider-list test for the user domain. Asserts the "# Registered
+    // users" section header on a fresh ledger.
+    let (mut cmd, _home) = dc();
+    cmd.args(["user", "list"]);
+    cmd.assert().success().stdout(contains("Registered users"));
+}
+
+#[test]
+fn listing_only_local_with_balances_flag_shows_balance_column() {
+    // `--balances` toggles the per-identity balance field in listings. With a
+    // generated identity present, `provider list --only-local --balances` must
+    // include the literal "balance" token in the printed line (the no-balances path
+    // omits it). Proves the --balances flag is wired through to println_identity.
+    let (mut keygen, home) = dc();
+    keygen.args(["keygen", "--generate", "--identity", "bal-id"]);
+    keygen.assert().success();
+
+    let run = |args: &[&str]| -> String {
+        let (mut cmd, _) = dc();
+        cmd.env("HOME", home.path());
+        cmd.args(args);
+        let out = cmd.assert().success().get_output().clone();
+        String::from_utf8_lossy(&out.stdout).to_string()
+    };
+
+    let with_balances = run(&["provider", "list", "--only-local", "--balances"]);
+    let without_balances = run(&["provider", "list", "--only-local"]);
+    assert!(
+        with_balances.contains("balance"),
+        "--balances should add the balance field: {with_balances}"
+    );
+    assert!(
+        !without_balances.contains("balance"),
+        "without --balances the balance field should be absent: {without_balances}"
+    );
+    assert!(
+        with_balances.contains("bal-id"),
+        "the generated identity should be listed: {with_balances}"
+    );
+}
+
+#[test]
+fn local_ledger_dir_flag_places_ledger_file_at_custom_path() {
+    // `--local-ledger-dir <dir>` overrides the default ~/.dcc/ledger location. After
+    // any ledger command, <dir>/main.bin must exist (the LedgerMap creates + grows it
+    // on first access). Asserts the global flag is honored end-to-end.
+    let home = TempDir::new().expect("create temp HOME");
+    let ledger_dir = TempDir::new().expect("create temp ledger dir");
+    let mut cmd = Command::cargo_bin("dc").expect("locate dc binary");
+    cmd.env("HOME", home.path());
+    cmd.env("RUST_LOG", "dc=info,ledger_map=error");
+    cmd.args([
+        "--local-ledger-dir",
+        ledger_dir.path().to_str().unwrap(),
+        "ledger-local",
+        "--list-accounts",
+    ]);
+    cmd.assert().success();
+    let ledger_file = ledger_dir.path().join("main.bin");
+    assert!(
+        ledger_file.exists(),
+        "main.bin should exist under --local-ledger-dir at {}",
+        ledger_file.display()
+    );
+}
+
+#[test]
+fn verbose_flag_enables_debug_level_logging() {
+    // `-v` sets RUST_LOG=debug when RUST_LOG is not already in the environment,
+    // surfacing DEBUG-level log lines on stderr. Without -v only INFO+ shows. We do
+    // NOT set RUST_LOG here (unlike dc()) so the -v branch in init_logger takes
+    // effect, then assert at least one DEBUG line appears.
+    let home = TempDir::new().expect("create temp HOME");
+    let mut cmd = Command::cargo_bin("dc").expect("locate dc binary");
+    cmd.env_remove("RUST_LOG");
+    cmd.env("HOME", home.path());
+    cmd.args(["-v", "keygen", "--generate", "--identity", "verbose-id"]);
+    let out = cmd.assert().success().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.lines().any(|l| l.contains("DEBUG")),
+        "-v should emit DEBUG log lines; stderr was:\n{stderr}"
+    );
+}
+
+#[test]
+fn account_balance_for_nonexistent_identity_errors() {
+    // `account --balance --identity <ghost>` must fail cleanly (exit non-zero) with a
+    // file-not-found style error naming the missing identity PEM. This is the
+    // handler-level load_from_dir failure path (identity resolves under
+    // ~/.dcc/identity/<name>/ which does not exist in a fresh HOME).
+    let (mut cmd, _home) = dc();
+    cmd.args(["account", "--balance", "--identity", "does-not-exist"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("does-not-exist") || stderr.contains("public.pem") || stderr.contains("NotFound"),
+        "should surface the missing identity, got: {stderr}"
+    );
+}
+
+#[test]
+fn provider_register_without_identity_errors() {
+    // `provider register` requires --identity (the handler-level guard, since there
+    // is no clap `requires` on a leaf subcommand with no args). Must exit non-zero
+    // with the actionable "Identity must be specified" message.
+    let (mut cmd, _home) = dc();
+    cmd.args(["provider", "register"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Identity must be specified"),
+        "should explain the missing identity, got: {stderr}"
+    );
+}
+
+#[test]
+fn provider_check_in_without_identity_errors() {
+    // `provider check-in` (full path, not --only-nonce) requires --identity at the
+    // handler level. Must fail with the actionable identity message.
+    let (mut cmd, _home) = dc();
+    cmd.args(["provider", "check-in"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Identity must be specified"),
+        "should explain the missing identity, got: {stderr}"
+    );
+}
+
+#[test]
+fn user_register_without_identity_errors() {
+    // `user register` requires --identity at the handler level. Mirrors the provider
+    // register guard. Must fail with the actionable identity message.
+    let (mut cmd, _home) = dc();
+    cmd.args(["user", "register"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Identity must be specified"),
+        "should explain the missing identity, got: {stderr}"
+    );
+}
+
+#[test]
+fn ledger_remote_push_without_identity_errors() {
+    // `ledger-remote data-push` requires --identity at the handler level. We pair it
+    // with `--network local` to avoid the default mainnet canister round-trip; the
+    // identity guard fires before any network call regardless.
+    let (mut cmd, _home) = dc();
+    cmd.args(["--network", "local", "ledger-remote", "data-push"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Identity must be specified"),
+        "should explain the missing identity, got: {stderr}"
+    );
+}
+
+#[test]
+fn ledger_remote_push_authorize_without_identity_errors() {
+    // `ledger-remote data-push-authorize` requires --identity at the handler level.
+    // Same --network local short-circuit as the push test.
+    let (mut cmd, _home) = dc();
+    cmd.args(["--network", "local", "ledger-remote", "data-push-authorize"]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Identity must be specified"),
+        "should explain the missing identity, got: {stderr}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Warm-stack flows (real local API; auto-skipped if the stack is down)
 // ---------------------------------------------------------------------------

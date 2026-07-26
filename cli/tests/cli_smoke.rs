@@ -210,3 +210,64 @@ fn no_args_prints_help_and_exits_nonzero() {
         .code(2)
         .stderr(contains("Decent Cloud CLI"));
 }
+
+#[test]
+fn account_balance_without_identity_is_a_clap_error() {
+    // `--balance` is declared `requires = "identity"`, so omitting --identity must
+    // fail fast at the clap layer (exit 2) with a message naming --identity. This is
+    // distinct from the handler-level identity guard tested in cli_flows.rs.
+    Command::cargo_bin("dc")
+        .unwrap()
+        .args(["account", "--balance"])
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(contains("required arguments were not provided"))
+        .stderr(contains("--identity"));
+}
+
+#[test]
+fn account_transfer_to_conflicting_amount_flags_is_a_clap_error() {
+    // `--amount-e9s` and `--amount-dct` are declared `conflicts_with`. Supplying both
+    // must be rejected by clap (exit 2), never silently picked between.
+    let (mut cmd, _home) = dc_with_isolated_home();
+    cmd.args([
+        "account",
+        "--transfer-to",
+        "rrkah-fqaaa-aaaaa-aaaaq-cai",
+        "--identity",
+        "x",
+        "--amount-e9s",
+        "1",
+        "--amount-dct",
+        "1",
+    ]);
+    cmd.assert().failure().code(2);
+}
+
+#[test]
+fn ledger_remote_subcommand_aliases_resolve() {
+    // The data-fetch/data-push/data-push-authorize commands expose visible aliases
+    // (fetch/pull, push, push-authorize/push-auth). To prove clap ACCEPTS each alias
+    // (rather than rejecting it as "unrecognized subcommand") WITHOUT touching the
+    // network, we pair it with `--network bogus`: handle_command validates the
+    // network BEFORE dispatching the subcommand handler, so a valid alias reaches
+    // the InvalidNetwork error (exit 1, mentions "bogus"), while an unknown alias
+    // is rejected by clap first (exit 2, "unrecognized subcommand").
+    for alias in ["fetch", "pull", "push", "push-auth", "push-authorize"] {
+        let (mut cmd, _home) = dc_with_isolated_home();
+        cmd.args(["--network", "bogus", "ledger-remote", alias]);
+        let out = cmd.assert().get_output().clone();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "`ledger-remote {alias}` should resolve as an alias (exit 1 from InvalidNetwork), got {:?}",
+            out.status.code()
+        );
+        assert!(
+            stderr.contains("bogus") && !stderr.contains("unrecognized subcommand"),
+            "`ledger-remote {alias}` should be accepted; stderr: {stderr}"
+        );
+    }
+}
