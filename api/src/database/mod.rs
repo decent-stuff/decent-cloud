@@ -21,6 +21,7 @@ pub mod offerings;
 pub mod providers;
 pub mod recovery;
 pub mod refund_audit;
+pub mod refund_requests;
 pub mod reputation;
 pub mod reseller;
 pub mod rewards;

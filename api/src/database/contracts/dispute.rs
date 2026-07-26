@@ -637,27 +637,34 @@ impl Database {
             return Ok((None, None));
         }
 
-        let refund_cents = refund_e9s / 10_000_000;
-        let key = dispute_refund_idempotency_key(stripe_dispute_id);
-        let stripe_refund_id = self
-            .issue_audited_refund(crate::database::refund_audit::AuditedRefundInput {
+        let requester_pubkey_bytes = hex::decode(&contract.requester_pubkey).unwrap_or_default();
+
+        use crate::database::refund_requests::{GatedRefundInput, RefundGateOutcome};
+        let stripe_refund_id = match self
+            .process_gated_refund(GatedRefundInput {
                 contract_id,
-                idempotency_key: &key,
-                payment_intent_id,
-                refund_cents,
-                currency: &contract.currency,
+                requester_pubkey: &requester_pubkey_bytes,
+                refund_e9s,
                 reason: "dispute_lost",
+                payment_intent_id,
+                currency: &contract.currency,
                 stripe_dispute_id: Some(stripe_dispute_id),
                 stripe_client,
             })
-            .await?;
+            .await?
+        {
+            RefundGateOutcome::AutoIssued {
+                stripe_refund_id, ..
+            } => stripe_refund_id,
+            RefundGateOutcome::PendingApproval { .. } => None,
+            RefundGateOutcome::NoRefund => None,
+        };
 
-        if let Some(ref id) = stripe_refund_id {
+        if let Some(ref id) = &stripe_refund_id {
             tracing::info!(
                 contract_id = %hex::encode(contract_id),
                 stripe_dispute_id,
                 stripe_refund_id = %id,
-                refund_cents,
                 "Stripe dispute-lost refund issued"
             );
         }

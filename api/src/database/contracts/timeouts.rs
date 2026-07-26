@@ -319,14 +319,15 @@ impl Database {
         // our read and write. If the row is no longer in the eligible set,
         // we short-circuit with zero side effects.
         let mut tx = self.pool.begin().await?;
-        let row: Option<(String, String, String, i64, String, Option<String>, Option<String>)> = sqlx::query_as(
+        let row: Option<(String, String, String, i64, String, Option<String>, Option<String>, Vec<u8>)> = sqlx::query_as(
             r#"SELECT status,
                       payment_method,
                       payment_status,
                       payment_amount_e9s,
                       currency,
                       stripe_payment_intent_id,
-                      stripe_checkout_session_id
+                      stripe_checkout_session_id,
+                      requester_pubkey
                  FROM contract_sign_requests
                 WHERE contract_id = $1
                   AND status IN ('accepted', 'provisioning')
@@ -344,6 +345,7 @@ impl Database {
             currency,
             stripe_payment_intent_id,
             stripe_checkout_session_id,
+            requester_pubkey,
         )) = row
         else {
             tx.rollback().await?;
@@ -411,32 +413,32 @@ impl Database {
                 .as_deref()
                 .or(stripe_checkout_session_id.as_deref());
             if let Some(payment_intent_id) = payment_intent_id {
-                let refund_cents = payment_amount_e9s / 10_000_000;
-                let unique_token = format!("provisioning_failed:{}", now_ns);
-                let key = crate::refund::refund_idempotency_key(
-                    "provisioning_failed",
-                    contract_id,
-                    &unique_token,
-                );
-                let refund_id = self
-                    .issue_audited_refund(crate::database::refund_audit::AuditedRefundInput {
+                use crate::database::refund_requests::{GatedRefundInput, RefundGateOutcome};
+                let outcome = self
+                    .process_gated_refund(GatedRefundInput {
                         contract_id,
-                        idempotency_key: &key,
-                        payment_intent_id,
-                        refund_cents,
-                        currency: &currency,
+                        requester_pubkey: &requester_pubkey,
+                        refund_e9s: payment_amount_e9s,
                         reason: "provisioning_failed",
+                        payment_intent_id,
+                        currency: &currency,
                         stripe_dispute_id: None,
                         stripe_client,
                     })
                     .await?;
 
+                let refund_id: Option<&str> = match &outcome {
+                    RefundGateOutcome::AutoIssued {
+                        stripe_refund_id, ..
+                    } => stripe_refund_id.as_deref(),
+                    _ => None,
+                };
+
                 // R5: only flip payment_status to 'refunded' when a real Stripe
                 // refund id was returned. When no client is configured the
                 // refund is NOT issued; record the attempted amount for
-                // reconciliation but never claim 'refunded' (the customer would
-                // see "refunded" while no money moved).
-                if let Some(ref id) = refund_id {
+                // reconciliation but never claim 'refunded'.
+                if let Some(id) = refund_id {
                     sqlx::query(
                         "UPDATE contract_sign_requests SET refund_amount_e9s = $1, stripe_refund_id = $2, refund_created_at_ns = $3, payment_status = 'refunded' WHERE contract_id = $4",
                     )
@@ -450,14 +452,12 @@ impl Database {
                     tracing::info!(
                         contract_id = %hex::encode(contract_id),
                         stripe_refund_id = %id,
-                        refund_cents,
                         "Provisioning-failure auto-refund issued"
                     );
                 } else {
-                    tracing::warn!(
-                        contract_id = %hex::encode(contract_id),
-                        refund_cents,
-                        "Provisioning-failure refund computed but NOT issued (no Stripe client configured); payment_status left unchanged"
+                    let held = matches!(
+                        outcome,
+                        RefundGateOutcome::PendingApproval { .. }
                     );
                     sqlx::query(
                         "UPDATE contract_sign_requests SET refund_amount_e9s = $1, refund_created_at_ns = $2 WHERE contract_id = $3",
@@ -467,6 +467,18 @@ impl Database {
                     .bind(contract_id)
                     .execute(&self.pool)
                     .await?;
+
+                    if held {
+                        tracing::warn!(
+                            contract_id = %hex::encode(contract_id),
+                            "Provisioning-failure refund HELD for admin approval (exceeds user's latest payment); payment_status left unchanged"
+                        );
+                    } else {
+                        tracing::warn!(
+                            contract_id = %hex::encode(contract_id),
+                            "Provisioning-failure refund computed but NOT issued (no Stripe client configured); payment_status left unchanged"
+                        );
+                    }
                 }
             }
         }

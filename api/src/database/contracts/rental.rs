@@ -420,64 +420,62 @@ impl Database {
         // pre-released). Routed through the SAME net calc the cancel path uses
         // so both honour the policy.
         let reject_ts_ns = crate::now_ns()?;
-        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_status
-            == dcc_common::payment_status::SUCCEEDED
-        {
-            let net_refund_e9s = self
-                .calculate_net_refund_e9s(&contract, reject_ts_ns)
-                .await?;
-            if net_refund_e9s <= 0 {
-                (None, None)
-            } else {
-                match contract.payment_method.as_str() {
-                    "stripe" => {
-                        // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
-                        // ID (cs_*) for legacy rows that predate the column split.
-                        let stripe_id = contract
-                            .stripe_payment_intent_id
-                            .as_deref()
-                            .or(contract.stripe_checkout_session_id.as_deref());
-                        if let Some(payment_intent_id) = stripe_id {
-                            let refund_cents = net_refund_e9s / 10_000_000;
-                            let unique_token = format!("reject:{}", reject_ts_ns);
-                            let key = crate::refund::refund_idempotency_key(
-                                "reject",
-                                contract_id,
-                                &unique_token,
-                            );
-                            let refund_id = self
-                                .issue_audited_refund(
-                                    crate::database::refund_audit::AuditedRefundInput {
-                                        contract_id,
-                                        idempotency_key: &key,
-                                        payment_intent_id,
-                                        refund_cents,
-                                        currency: &contract.currency,
-                                        reason: "reject",
-                                        stripe_dispute_id: None,
-                                        stripe_client,
-                                    },
-                                )
-                                .await?;
-                            if let Some(ref id) = refund_id {
-                                tracing::info!(
-                                    "Stripe net refund created: {} for rejected contract {} (amount: {} cents)",
-                                    id,
-                                    hex::encode(contract_id),
-                                    refund_cents
-                                );
+        let requester_pubkey_bytes = hex::decode(&contract.requester_pubkey).unwrap_or_else(|e| {
+            tracing::warn!(
+                contract_id = %contract.contract_id,
+                error = %e,
+                "Failed to decode requester_pubkey hex for refund gate; using empty bytes"
+            );
+            Vec::new()
+        });
+        let (refund_amount_e9s, stripe_refund_id) =
+            if contract.payment_status == dcc_common::payment_status::SUCCEEDED
+                && contract.payment_method == "stripe"
+            {
+                let net_refund_e9s = self
+                    .calculate_net_refund_e9s(&contract, reject_ts_ns)
+                    .await?;
+                if net_refund_e9s <= 0 {
+                    (None, None)
+                } else {
+                    let stripe_id = contract
+                        .stripe_payment_intent_id
+                        .as_deref()
+                        .or(contract.stripe_checkout_session_id.as_deref());
+                    match stripe_id {
+                        Some(payment_intent_id) => {
+                            use crate::database::refund_requests::{
+                                GatedRefundInput, RefundGateOutcome,
+                            };
+                            match self
+                                .process_gated_refund(GatedRefundInput {
+                                    contract_id,
+                                    requester_pubkey: &requester_pubkey_bytes,
+                                    refund_e9s: net_refund_e9s,
+                                    reason: "reject",
+                                    payment_intent_id,
+                                    currency: &contract.currency,
+                                    stripe_dispute_id: None,
+                                    stripe_client,
+                                })
+                                .await?
+                            {
+                                RefundGateOutcome::AutoIssued {
+                                    refund_amount_e9s,
+                                    stripe_refund_id,
+                                } => (Some(refund_amount_e9s), stripe_refund_id),
+                                RefundGateOutcome::PendingApproval {
+                                    refund_amount_e9s, ..
+                                } => (Some(refund_amount_e9s), None),
+                                RefundGateOutcome::NoRefund => (None, None),
                             }
-                            (Some(net_refund_e9s), refund_id)
-                        } else {
-                            (Some(net_refund_e9s), None)
                         }
+                        None => (Some(net_refund_e9s), None),
                     }
-                    _ => (None, None),
                 }
-            }
-        } else {
-            (None, None)
-        };
+            } else {
+                (None, None)
+            };
 
         // Update status and refund info atomically
         let updated_at_ns = crate::now_ns()?;
@@ -614,87 +612,55 @@ impl Database {
             ));
         }
 
-        // Calculate prorated refund based on payment method
+        // Calculate prorated refund through the approval gate.
         let current_timestamp_ns = crate::now_ns()?;
-        let (refund_amount_e9s, stripe_refund_id) = if contract.payment_status == "succeeded" {
-            match contract.payment_method.as_str() {
-                "stripe" => {
-                    // Prefer real PaymentIntent ID (pi_*); fall back to checkout session
-                    // ID (cs_*) for legacy rows that predate the column split.
-                    let stripe_id = contract
-                        .stripe_payment_intent_id
-                        .as_deref()
-                        .or(contract.stripe_checkout_session_id.as_deref());
-                    // A succeeded Stripe payment always carries a PaymentIntent or checkout
-                    // session id (set by the webhook / verify-checkout path). Missing both is
-                    // a data-integrity violation: fail loudly rather than silently cancel the
-                    // contract without refunding the customer.
-                    let Some(payment_intent_id) = stripe_id else {
-                        tracing::error!(
-                            "Stripe contract {} has payment_status=succeeded but no stripe_payment_intent_id/stripe_checkout_session_id; refusing to cancel without a refund",
-                            hex::encode(contract_id)
-                        );
-                        return Err(anyhow::anyhow!(
-                            "Cannot refund Stripe contract {}: succeeded payment has no payment_intent_id or checkout_session_id",
-                            hex::encode(contract_id)
-                        ));
-                    };
+        let (refund_amount_e9s, stripe_refund_id) =
+            if contract.payment_status == "succeeded" && contract.payment_method == "stripe" {
+                let stripe_id = contract
+                    .stripe_payment_intent_id
+                    .as_deref()
+                    .or(contract.stripe_checkout_session_id.as_deref());
+                let Some(payment_intent_id) = stripe_id else {
+                    tracing::error!(
+                        contract_id = %hex::encode(contract_id),
+                        "Stripe contract has payment_status=succeeded but no stripe_payment_intent_id/stripe_checkout_session_id; refusing to cancel without a refund"
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Cannot refund Stripe contract {}: succeeded payment has no payment_intent_id or checkout_session_id",
+                        hex::encode(contract_id)
+                    ));
+                };
 
-                    // Refund the gross prorated remainder for unused time. Under Stripe-only
-                    // no funds are ever pre-released, so `calculate_net_refund_e9s` returns
-                    // the full prorated refund.
-                    let refund_e9s = self
-                        .calculate_net_refund_e9s(&contract, current_timestamp_ns)
-                        .await?;
+                let refund_e9s = self
+                    .calculate_net_refund_e9s(&contract, current_timestamp_ns)
+                    .await?;
 
-                    // Only process refund if amount is positive
-                    if refund_e9s > 0 {
-                        // Convert e9s to cents for Stripe (e9s / 10_000_000 = cents)
-                        let refund_cents = refund_e9s / 10_000_000;
-                        let unique_token = format!("cancel:{}", current_timestamp_ns);
-                        let key = crate::refund::refund_idempotency_key(
-                            "cancel",
-                            contract_id,
-                            &unique_token,
-                        );
-                        let refund_id = self
-                            .issue_audited_refund(
-                                crate::database::refund_audit::AuditedRefundInput {
-                                    contract_id,
-                                    idempotency_key: &key,
-                                    payment_intent_id,
-                                    refund_cents,
-                                    currency: &contract.currency,
-                                    reason: "cancel",
-                                    stripe_dispute_id: None,
-                                    stripe_client,
-                                },
-                            )
-                            .await?;
-                        match refund_id {
-                            Some(ref id) => tracing::info!(
-                                "Stripe refund created: {} for contract {} (amount: {} cents)",
-                                id,
-                                hex::encode(contract_id),
-                                refund_cents
-                            ),
-                            None => tracing::warn!(
-                                "Stripe refund for contract {} computed at {} cents but Stripe returned no refund id (client not configured / dry-run); recording amount only",
-                                hex::encode(contract_id),
-                                refund_cents
-                            ),
-                        }
-                        (Some(refund_e9s), refund_id)
-                    } else {
-                        (None, None)
-                    }
+                use crate::database::refund_requests::{GatedRefundInput, RefundGateOutcome};
+                match self
+                    .process_gated_refund(GatedRefundInput {
+                        contract_id,
+                        requester_pubkey: cancelled_by_pubkey,
+                        refund_e9s,
+                        reason: "cancel",
+                        payment_intent_id,
+                        currency: &contract.currency,
+                        stripe_dispute_id: None,
+                        stripe_client,
+                    })
+                    .await?
+                {
+                    RefundGateOutcome::AutoIssued {
+                        refund_amount_e9s,
+                        stripe_refund_id,
+                    } => (Some(refund_amount_e9s), stripe_refund_id),
+                    RefundGateOutcome::PendingApproval {
+                        refund_amount_e9s, ..
+                    } => (Some(refund_amount_e9s), None),
+                    RefundGateOutcome::NoRefund => (None, None),
                 }
-                _ => (None, None),
-            }
-        } else {
-            // Payment not succeeded yet
-            (None, None)
-        };
+            } else {
+                (None, None)
+            };
 
         // Update status, refund info, and history atomically
         let updated_at_ns = crate::now_ns()?;
