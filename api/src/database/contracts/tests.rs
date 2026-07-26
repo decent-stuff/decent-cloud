@@ -5391,3 +5391,571 @@ async fn test_reject_stripe_without_client_does_not_mark_refunded() {
     assert_eq!(contract.payment_status, "succeeded");
     assert!(contract.stripe_refund_id.is_none());
 }
+
+// =========================================================================
+// Refund approval gate tests (migration 051, refund_requests table)
+// =========================================================================
+
+/// Helper: fetch the refund_request row for a contract (if any).
+async fn fetch_refund_request_for_contract(
+    db: &Database,
+    contract_id: &[u8],
+) -> Option<crate::database::refund_requests::RefundRequest> {
+    sqlx::query_as(
+        r#"SELECT id, contract_id, requester_pubkey, refund_amount_e9s,
+                  reason, status, user_latest_payment_e9s, cap_exceeded,
+                  payment_intent_id, currency, stripe_dispute_id,
+                  stripe_refund_id, idempotency_key, created_at_ns,
+                  reviewed_at_ns, reviewed_by, review_note
+             FROM refund_requests WHERE contract_id = $1"#,
+    )
+    .bind(contract_id)
+    .fetch_optional(&db.pool)
+    .await
+    .unwrap()
+}
+
+/// Helper: set created_at_ns on a contract (non-macro sqlx — literal value).
+async fn set_contract_created_at(db: &Database, contract_id: &[u8], ts: i64) {
+    sqlx::query("UPDATE contract_sign_requests SET created_at_ns = $1 WHERE contract_id = $2")
+        .bind(ts)
+        .bind(contract_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+}
+
+/// Helper: insert a refund_request row directly (non-macro sqlx — SQLX_OFFLINE).
+async fn insert_refund_request(
+    db: &Database,
+    contract_id: &[u8],
+    requester_pubkey: &[u8],
+    refund_amount_e9s: i64,
+    reason: &str,
+    status: &str,
+    user_latest_payment_e9s: i64,
+    cap_exceeded: bool,
+    payment_intent_id: &str,
+    stripe_refund_id: Option<&str>,
+) -> i64 {
+    let created_ns = crate::now_ns().unwrap();
+    let idem = format!("{}:{}", reason, hex::encode(contract_id));
+    let row: (i64,) = sqlx::query_as(
+        r#"INSERT INTO refund_requests
+             (contract_id, requester_pubkey, refund_amount_e9s, reason, status,
+              user_latest_payment_e9s, cap_exceeded, payment_intent_id, currency,
+              stripe_refund_id, idempotency_key, created_at_ns)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'usd', $9, $10, $11)
+           RETURNING id"#,
+    )
+    .bind(contract_id)
+    .bind(requester_pubkey)
+    .bind(refund_amount_e9s)
+    .bind(reason)
+    .bind(status)
+    .bind(user_latest_payment_e9s)
+    .bind(cap_exceeded)
+    .bind(payment_intent_id)
+    .bind(stripe_refund_id)
+    .bind(&idem)
+    .bind(created_ns)
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    row.0
+}
+
+#[tokio::test]
+async fn test_cancel_creates_auto_issued_refund_request_when_cap_passes() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![1u8; 32];
+    let provider_pk = vec![2u8; 32];
+    let contract_id = vec![201u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+    let start_ns = now_ns - 1_000_000_000;
+    let end_ns = now_ns + 10_000_000_000;
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-gate-1".to_string(),
+            payment_intent_id: "pi_gate_auto".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000, // $10
+            start_timestamp_ns: start_ns,
+            end_timestamp_ns: end_ns,
+        },
+    )
+    .await;
+
+    // Single contract → user_latest_payment = this contract's payment = 1B.
+    // Prorated refund ≈ full amount (just started). refund ≤ cap → auto-issue.
+    db.cancel_contract(&contract_id, &requester_pk, Some("test"), None)
+        .await
+        .expect("cancel should succeed");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    // No stripe client → refund not actually issued → payment_status stays 'succeeded' (R5)
+    assert_eq!(contract.payment_status, "succeeded");
+
+    let rr = fetch_refund_request_for_contract(&db, &contract_id)
+        .await
+        .expect("refund_request row must exist");
+    assert_eq!(rr.reason, "cancel");
+    assert_eq!(rr.status, "auto_issued");
+    assert!(!rr.cap_exceeded);
+    assert_eq!(rr.refund_amount_e9s, 1_000_000_000);
+}
+
+#[tokio::test]
+async fn test_cancel_holds_refund_when_cap_exceeded() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![3u8; 32];
+    let provider_pk = vec![4u8; 32];
+
+    // Contract A: large payment ($200), older created_at → refund target
+    let contract_a = vec![202u8; 32];
+    // Contract B: small payment ($1), newer created_at → becomes "latest payment" cap
+    let contract_b = vec![203u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+
+    // Insert contract A (the one we'll cancel)
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_a.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-gate-a".to_string(),
+            payment_intent_id: "pi_gate_a".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 2_000_000_000, // $200
+            start_timestamp_ns: now_ns - 1_000_000_000,
+            end_timestamp_ns: now_ns + 10_000_000_000,
+        },
+    )
+    .await;
+    // Set created_at_ns to 100 (older)
+    set_contract_created_at(&db, &contract_a, 100).await;
+
+    // Insert contract B (the "latest payment" — only $1)
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_b.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-gate-b".to_string(),
+            payment_intent_id: "pi_gate_b".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 100_000_000, // $1
+            start_timestamp_ns: now_ns - 1_000_000_000,
+            end_timestamp_ns: now_ns + 10_000_000_000,
+        },
+    )
+    .await;
+    // Set created_at_ns to 200 (newer → becomes the "latest payment")
+    set_contract_created_at(&db, &contract_b, 200).await;
+
+    // Cancel contract A: prorated refund ≈ $200, but latest payment is $1 → cap exceeded
+    db.cancel_contract(&contract_a, &requester_pk, Some("test"), None)
+        .await
+        .expect("cancel should still succeed (status flip proceeds)");
+
+    let contract = db.get_contract(&contract_a).await.unwrap().unwrap();
+    assert_eq!(contract.status, "cancelled");
+    // Pending approval → no refund issued → payment_status stays 'succeeded'
+    assert_eq!(contract.payment_status, "succeeded");
+
+    let rr = fetch_refund_request_for_contract(&db, &contract_a)
+        .await
+        .expect("refund_request row must exist");
+    assert_eq!(rr.reason, "cancel");
+    assert_eq!(rr.status, "pending");
+    assert!(rr.cap_exceeded);
+    assert_eq!(rr.user_latest_payment_e9s, 100_000_000); // $1 from contract B
+    assert_eq!(rr.refund_amount_e9s, 2_000_000_000); // $200
+}
+
+#[tokio::test]
+async fn test_admin_approve_pending_refund_request() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![5u8; 32];
+    let provider_pk = vec![6u8; 32];
+    let contract_id = vec![204u8; 32];
+    let admin_pk = vec![7u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+
+    // Single contract — cancel creates auto_issued (cap passes). We then
+    // simulate a pending request by inserting one directly.
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-approve".to_string(),
+            payment_intent_id: "pi_approve".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 500_000_000, // $5
+            start_timestamp_ns: now_ns - 1_000_000_000,
+            end_timestamp_ns: now_ns + 10_000_000_000,
+        },
+    )
+    .await;
+
+    // Insert a pending refund_request directly (simulating cap-exceeded scenario)
+    let rr_id = insert_refund_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        500_000_000,
+        "cancel",
+        "pending",
+        100_000_000, // latest payment only $1
+        true,
+        "pi_approve",
+        None,
+    )
+    .await;
+
+    // Admin approves (no stripe client → dry-run, but status flips)
+    let approved = db
+        .approve_refund_request(rr_id, &admin_pk, Some("LGTM"), None)
+        .await
+        .expect("approve should succeed");
+
+    assert_eq!(approved.status, "approved");
+    assert!(approved.reviewed_at_ns.is_some());
+    assert_eq!(approved.reviewed_by, Some(admin_pk.clone()));
+    assert_eq!(approved.review_note.as_deref(), Some("LGTM"));
+}
+
+#[tokio::test]
+async fn test_admin_decline_pending_refund_request() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![8u8; 32];
+    let provider_pk = vec![9u8; 32];
+    let contract_id = vec![205u8; 32];
+    let admin_pk = vec![10u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-decline".to_string(),
+            payment_intent_id: "pi_decline".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 500_000_000,
+            start_timestamp_ns: now_ns - 1_000_000_000,
+            end_timestamp_ns: now_ns + 10_000_000_000,
+        },
+    )
+    .await;
+
+    let rr_id = insert_refund_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        500_000_000,
+        "cancel",
+        "pending",
+        100_000_000,
+        true,
+        "pi_decline",
+        None,
+    )
+    .await;
+
+    let declined = db
+        .decline_refund_request(rr_id, &admin_pk, Some("suspicious"))
+        .await
+        .expect("decline should succeed");
+
+    assert_eq!(declined.status, "declined");
+    assert_eq!(declined.review_note.as_deref(), Some("suspicious"));
+
+    // Verify no refund was issued (stripe_refund_id still None)
+    assert!(declined.stripe_refund_id.is_none());
+}
+
+#[tokio::test]
+async fn test_refund_gate_trigger_blocks_refund_without_request_row() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![11u8; 32];
+    let provider_pk = vec![12u8; 32];
+    let contract_id = vec![206u8; 32];
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk,
+            provider_pubkey: provider_pk,
+            offering_id: "off-trigger".to_string(),
+            payment_intent_id: "pi_trigger".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+
+    // Attempt to set payment_status='refunded' WITHOUT a refund_request row.
+    // The trigger must block this — the unbypassable backstop.
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET payment_status = 'refunded' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+
+    assert!(
+        result.is_err(),
+        "Trigger must block payment_status='refunded' without a refund_request row"
+    );
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("refund") || err_msg.contains("Refund") || err_msg.contains("enforce_refund"),
+        "Error should mention refund gate, got: {err_msg}"
+    );
+
+    // Verify the contract's payment_status is unchanged
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "succeeded");
+}
+
+#[tokio::test]
+async fn test_refund_gate_trigger_blocks_stripe_refund_id_without_request_row() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![13u8; 32];
+    let provider_pk = vec![14u8; 32];
+    let contract_id = vec![207u8; 32];
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk,
+            provider_pubkey: provider_pk,
+            offering_id: "off-trigger2".to_string(),
+            payment_intent_id: "pi_trigger2".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+
+    // Attempt to set stripe_refund_id without a refund_request row.
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET stripe_refund_id = 're_fake' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+
+    assert!(
+        result.is_err(),
+        "Trigger must block setting stripe_refund_id without a refund_request row"
+    );
+}
+
+#[tokio::test]
+async fn test_refund_gate_trigger_allows_with_approved_request() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![15u8; 32];
+    let provider_pk = vec![16u8; 32];
+    let contract_id = vec![208u8; 32];
+    let admin_pk = vec![17u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-trigger-ok".to_string(),
+            payment_intent_id: "pi_trigger_ok".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+
+    // Insert an APPROVED refund_request (with stripe_refund_id)
+    let rr_id = insert_refund_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        1_000_000_000,
+        "cancel",
+        "approved",
+        1_000_000_000,
+        false,
+        "pi_trigger_ok",
+        Some("re_ok"),
+    )
+    .await;
+    // Set reviewed_by
+    let now_ns2 = crate::now_ns().unwrap();
+    sqlx::query("UPDATE refund_requests SET reviewed_at_ns = $1, reviewed_by = $2 WHERE id = $3")
+        .bind(now_ns2)
+        .bind(&admin_pk)
+        .bind(rr_id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+    // Now the trigger should ALLOW setting payment_status='refunded'
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET payment_status = 'refunded' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+
+    assert!(result.is_ok(), "Trigger should allow refund with approved request");
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(contract.payment_status, "refunded");
+}
+
+#[tokio::test]
+async fn test_refund_gate_trigger_rejects_declined_request() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![18u8; 32];
+    let provider_pk = vec![19u8; 32];
+    let contract_id = vec![209u8; 32];
+
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow");
+
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: contract_id.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-trigger-decl".to_string(),
+            payment_intent_id: "pi_trigger_decl".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 1_000_000_000,
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+
+    // Insert a DECLINED refund_request (should NOT allow refund)
+    insert_refund_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        1_000_000_000,
+        "cancel",
+        "declined",
+        100_000_000,
+        true,
+        "pi_trigger_decl",
+        None,
+    )
+    .await;
+
+    // Trigger must STILL block — declined is not auto_issued/approved
+    let result = sqlx::query(
+        "UPDATE contract_sign_requests SET payment_status = 'refunded' WHERE contract_id = $1",
+    )
+    .bind(&contract_id)
+    .execute(&db.pool)
+    .await;
+
+    assert!(
+        result.is_err(),
+        "Trigger must block refund with a DECLINED request"
+    );
+}
+
+#[tokio::test]
+async fn test_get_user_latest_stripe_payment() {
+    let db = setup_test_db().await;
+    let requester_pk = vec![20u8; 32];
+    let provider_pk = vec![21u8; 32];
+
+    // No contracts → None (cap = 0, all refunds held)
+    let latest = db.get_user_latest_stripe_payment(&requester_pk).await.unwrap();
+    assert!(latest.is_none());
+
+    // Insert contract with payment = $5
+    let cid1 = vec![210u8; 32];
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: cid1.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk.clone(),
+            offering_id: "off-latest-1".to_string(),
+            payment_intent_id: "pi_latest_1".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 500_000_000, // $5
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+    set_contract_created_at(&db, &cid1, 100).await;
+
+    let latest = db.get_user_latest_stripe_payment(&requester_pk).await.unwrap();
+    assert_eq!(latest, Some(500_000_000));
+
+    // Insert newer contract with payment = $2
+    let cid2 = vec![211u8; 32];
+    insert_stripe_contract_with_timestamps(
+        &db,
+        StripeContractParams {
+            contract_id: cid2.clone(),
+            requester_pubkey: requester_pk.clone(),
+            provider_pubkey: provider_pk,
+            offering_id: "off-latest-2".to_string(),
+            payment_intent_id: "pi_latest_2".to_string(),
+            payment_status: "succeeded".to_string(),
+            payment_amount_e9s: 200_000_000, // $2
+            start_timestamp_ns: 0,
+            end_timestamp_ns: 1,
+        },
+    )
+    .await;
+    set_contract_created_at(&db, &cid2, 200).await;
+
+    // Latest should now be $2 (the most recent, not the largest)
+    let latest = db.get_user_latest_stripe_payment(&requester_pk).await.unwrap();
+    assert_eq!(latest, Some(200_000_000));
+}
