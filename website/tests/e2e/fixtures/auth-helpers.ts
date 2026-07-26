@@ -253,3 +253,52 @@ export async function waitForApiResponse(
 export function assertNoNativeDialog(page: Page): void {
 	page.on('dialog', (d) => expect(d.type(), 'native dialog must not fire').toBe('never'));
 }
+
+/**
+ * Drive the inline two-step confirm pattern used across the dashboard: click
+ * the `arm` button → assert the inline Confirm (+ optional `secondary`)
+ * button appears → click Confirm → optionally wait for the mutation response.
+ *
+ * Replaces the per-spec boilerplate of the same shape (inline-confirm-delete's
+ * parametrized driver, rentals cancel, …). `row` scopes every button lookup, so
+ * pass the card/row locator that uniquely contains the buttons (or `page` when
+ * the labels are page-unique). `arm` is the first-click label that reveals the
+ * confirm bar; `confirm` defaults to 'Confirm'.
+ *
+ * `secondary` (e.g. 'Cancel' or 'Abort') is also asserted visible when passed —
+ * omit it for surfaces that expose no cancel affordance, or where it would
+ * match an unrelated control (page-scoped footer Cancel, etc.). `exact` is
+ * forwarded to every `getByRole` lookup; leave it unset for the default
+ * case-insensitive substring match. `waitForResponse` is a URL substring; when
+ * set, a non-GET response whose URL contains it is awaited — armed BEFORE the
+ * Confirm click so the mutation's own response is the one captured.
+ */
+export async function confirmInlineAction(
+	page: Page,
+	row: Locator,
+	opts: {
+		arm: string;
+		confirm?: string;
+		secondary?: string;
+		waitForResponse?: string;
+		exact?: boolean;
+	},
+): Promise<void> {
+	const confirmLabel = opts.confirm ?? 'Confirm';
+	await row.getByRole('button', { name: opts.arm, exact: opts.exact }).click();
+	const confirmBtn = row.getByRole('button', { name: confirmLabel, exact: opts.exact });
+	await expect(confirmBtn).toBeVisible();
+	if (opts.secondary) {
+		await expect(
+			row.getByRole('button', { name: opts.secondary, exact: opts.exact }),
+		).toBeVisible();
+	}
+	const responsePromise = opts.waitForResponse
+		? page.waitForResponse(
+				(r) => r.url().includes(opts.waitForResponse!) && r.request().method() !== 'GET',
+				{ timeout: 15000 },
+			)
+		: undefined;
+	await confirmBtn.click();
+	if (responsePromise) await responsePromise;
+}

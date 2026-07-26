@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/test-account';
 import type { Page, Locator } from '@playwright/test';
-import { assertNoNativeDialog } from './fixtures/auth-helpers';
+import { assertNoNativeDialog, confirmInlineAction } from './fixtures/auth-helpers';
 import {
 	pubkeyHexFromSeed,
 	randomHex,
@@ -50,9 +50,10 @@ test.describe.configure({ mode: 'serial' });
 interface EntityHandle {
 	/** Locate the seeded row on the page after navigating to `route`. */
 	row: (page: Page) => Locator;
-	/** Optional: wait for the signed DELETE response (surfaces that round-trip
-	 * a signed request before refetching — reseller, agent-pool revoke). */
-	waitForDeleteResponse?: (page: Page) => Promise<unknown>;
+	/** Optional: URL substring of the signed DELETE/PUT the Confirm click fires
+	 * (surfaces that round-trip a signed request before refetching — reseller,
+	 * agent-pool revoke). When set, confirmInlineAction awaits that response. */
+	deleteResponseUrl?: string;
 	/** Assert the Confirm click performed the real server-side mutation. */
 	expectConfirmed: (page: Page) => Promise<void>;
 	/** Remove the seeded row (and any FK scaffolding) regardless of test outcome. */
@@ -219,11 +220,9 @@ const ENTITIES: InlineConfirmEntity[] = [
 			const prefix = extPubkey.slice(0, 8);
 			return {
 				row: (page) => page.locator('div.bg-surface-elevated', { hasText: prefix }).first(),
-				// The Confirm fires a signed DELETE; wait for it before the list refetches.
-				waitForDeleteResponse: (page) => page.waitForResponse(
-					(resp) => resp.request().method() === 'DELETE' && resp.url().includes(`/api/v1/reseller/relationships/${extPubkey}`),
-					{ timeout: 15000 },
-				),
+				// The Confirm fires a signed DELETE; the helper awaits it before
+				// the list refetches.
+				deleteResponseUrl: `/api/v1/reseller/relationships/${extPubkey}`,
 				expectConfirmed: async (page) => {
 					await expect(page.getByText('Reseller relationship deleted')).toBeVisible({ timeout: 10000 });
 					await expect(page.locator('div.bg-surface-elevated', { hasText: prefix })).toHaveCount(0);
@@ -285,10 +284,8 @@ const ENTITIES: InlineConfirmEntity[] = [
 				poolId,
 				agentPubkey,
 				createdRegistration,
-				waitForDeleteResponse: (page) => page.waitForResponse(
-					(resp) => resp.request().method() === 'DELETE' && resp.url().includes(`/agent-delegations/${agentPubkey}`),
-					{ timeout: 15000 },
-				),
+				// The Confirm fires a signed DELETE; the helper awaits it.
+				deleteResponseUrl: `/agent-delegations/${agentPubkey}`,
 				expectConfirmed: async (page) => {
 					const row = page.locator('tr', { hasText: 'E2E Inline Agent' });
 					await expect(row.getByRole('button', { name: 'Revoke' })).toHaveCount(0, { timeout: 10000 });
@@ -326,18 +323,14 @@ test.describe('Inline two-step confirm-and-delete (parametrized)', () => {
 				const row = handle.row(page);
 				await expect(row.getByRole('button', { name: entity.arm })).toBeVisible({ timeout: 10000 });
 
-				// First click: reveals inline Confirm + Cancel (no native dialog).
-				await row.getByRole('button', { name: entity.arm }).click();
-				const confirmBtn = row.getByRole('button', { name: 'Confirm' });
-				await expect(confirmBtn).toBeVisible();
-				await expect(row.getByRole('button', { name: 'Cancel' })).toBeVisible();
-
-				// Second click: performs the mutation. If the surface round-trips
-				// a signed DELETE, arm the response waiter BEFORE the click.
-				const deleteWait = handle.waitForDeleteResponse;
-				const deletePromise = deleteWait ? deleteWait(page) : undefined;
-				await confirmBtn.click();
-				if (deletePromise) await deletePromise;
+				// Two-step inline confirm: arm reveals Confirm + Cancel (no native
+				// dialog), then Confirm performs the mutation. If the surface
+				// round-trips a signed DELETE, the helper awaits it.
+				await confirmInlineAction(page, row, {
+					arm: entity.arm,
+					secondary: 'Cancel',
+					waitForResponse: handle.deleteResponseUrl,
+				});
 
 				await handle.expectConfirmed(page);
 			} finally {

@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/test-account';
+import { confirmInlineAction } from './fixtures/auth-helpers';
 import {
 	pubkeyHexFromSeed,
 	seedContract,
@@ -161,16 +162,10 @@ test.describe('/dashboard/rentals', () => {
 			await expect(card).toBeVisible();
 			await expect(card.getByText('Awaiting Payment')).toBeVisible();
 
-			// First Cancel click reveals an inline Confirm (no native dialog).
-			// The button has e.preventDefault so the link navigation is suppressed.
-			await card.getByRole('button', { name: 'Cancel' }).click();
-			const confirmBtn = card.getByRole('button', { name: 'Confirm' });
-			await expect(confirmBtn).toBeVisible();
-			// An Abort button lets the user back out.
-			await expect(card.getByRole('button', { name: 'Abort' })).toBeVisible();
-
-			// Second click performs the cancellation.
-			await confirmBtn.click();
+			// Two-step inline confirm: first Cancel arms (the button has
+			// e.preventDefault so the link navigation is suppressed), Confirm +
+			// Abort appear, then Confirm performs the cancellation.
+			await confirmInlineAction(page, card, { arm: 'Cancel', secondary: 'Abort' });
 
 			// After cancel succeeds, the card shows the "Renew" button (only
 			// available for terminal/cancelled contracts).
