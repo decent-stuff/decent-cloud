@@ -104,6 +104,23 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-07-26 session (refund approval gate + e2e harness expansion)
+
+Refund approval gate (user-requested cost-safe billing policy) fully shipped +
+e2e harness expanded for both CLI and web. All work TDD-first, verified against
+the real warm stack.
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| Refund approval gate — full feature | Backend + admin UI + e2e | **Plan**: `docs/plans/2026-07-26-refund-approval-gate.md` (`6c22263a`). Policy: auto-refund when `refund_e9s ≤ user's latest Stripe payment`; hold for admin approval otherwise; Telegram on every event; unbypassable DB trigger. **Migration 051** (`335386f2`): `refund_requests` table + `enforce_refund_approval_gate` trigger (blocks `payment_status='refunded'` / `stripe_refund_id` first-set without matching `refund_requests` row with `status IN ('auto_issued','approved')`). **DB layer**: `process_gated_refund` replaces direct `issue_audited_refund` calls in ALL 4 refund paths (cancel/reject/dispute_lost/provisioning_failed). **Admin API** (`f7b75b9f`): `GET/POST /admin/refund-requests` (list/approve/decline). **Admin UI** (`b4f1ba3d`): refund-requests section in `/dashboard/admin` with status filter, cap-exceeded badge, inline review panel. **DB gate tests** (`8ec052ad`): 9 integration tests (auto-issue, cap-exceeded hold, admin approve/decline, trigger blocks bypass × 3). **E2E** (`217eee8c`): 3 admin panel tests (API listing, UI decline end-to-end, status filter). |
+| CLI e2e harness expansion (#444) | Coverage | `1331273f`/`8699f7cc`/`413d2a28`: 18 new tests (13 offline flows + 3 smoke + 4 IC-mainnet `#[ignore]` + 1 hardened). Default tier 41→59 @0.58s; IC tier 2→6. Found + fixed production bug: `account --transfer-to <bad>` panicked via `IcrcCompatibleAccount::from().expect()` → validates principal at call site. |
+| Web e2e: confirmInlineAction helper (#444 audit #11) | DRY | `4f5e4906`: extracted `confirmInlineAction(page, row, {arm, confirm?, secondary?, waitForResponse?})` in `auth-helpers.ts`; applied to 7 inline-delete entities + rentals cancel. ~50 LOC boilerplate collapsed. Audit items #4/#5/#7 verified already shipped. |
+| Baseline: auth-capabilities stale OAuth | Test | `d33ff5bc`: 2 `@smoke` tests hardcoded `google_oauth=false` but warm stack now has OAuth on. Rewrote spec env-agnostic: reads real `/api/v1/auth/capabilities`. Smoke 27/27 green. |
+
+**Refund gate — remaining edge:**
+- Admin **approve** path calls Stripe via `issue_audited_refund`. E2E tests cover it with `stripe_client=None` (DB integration tests) and via the admin UI (DB-seeded refund_requests, decline fully tested). A full approve→Stripe-refund e2e requires either a Stripe test-mode payment intent or `STRIPE_SECRET_KEY` unset on the test stack.
+- `dispute_refund_idempotency_key` dead-code warning in non-test builds (used only by webhooks tests) — cosmetic.
+
 ### 2026-07-25 session (#427 core — Anthropic API key reverse proxy)
 
 Shipped the **core** of #427 as a new standalone workspace crate `anthropic-proxy` (decision:
