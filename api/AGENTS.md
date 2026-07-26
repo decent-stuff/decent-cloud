@@ -6,12 +6,12 @@
 ## STRUCTURE
 ```text
 api/
-|- src/main.rs          # api-server binary and startup validation
-|- src/bin/api-cli.rs   # admin/test CLI
-|- src/openapi/         # HTTP endpoint surface
-|- src/database/        # SQLx-backed persistence layer
-|- migrations_pg/       # schema migrations
-`- email-utils/         # api-only helper crate
+|- src/main.rs            # api-server binary and startup validation
+|- src/bin/api-cli/       # admin/test CLI (dir-bin: main.rs + per-subcommand modules)
+|- src/openapi/           # HTTP endpoint surface
+|- src/database/          # SQLx-backed persistence layer
+|- migrations_pg/         # schema migrations
+`- email-utils/           # api-only helper crate
 ```
 
 ## WHERE TO LOOK
@@ -20,7 +20,7 @@ api/
 | Server boot, env validation | `src/main.rs` | `Serve`, `Doctor`, `Sync`, `Setup` commands |
 | Endpoint behavior | `src/openapi/` | Handlers grouped by domain |
 | DB queries and models | `src/database/` | Large module set; has its own child AGENTS |
-| Admin/test automation | `src/bin/api-cli.rs` | Contract, DNS, health, E2E helpers |
+| Admin/test automation | `src/bin/api-cli/` | Dir-bin: `main.rs` (clap wiring + shared DTOs/helpers) + one module per subcommand (`identity`, `account`, `contract`, `offering`, `provider`, `notify`, `dns`, `gateway`, `health`, `e2e`, `admin`, `cloud`, `recipe`) |
 | Chatwoot support bot | `src/support_bot/` | Has existing local `AGENTS.md` |
 | Help center/doc sync | `src/sync_docs.rs`, `src/helpcenter/` | Chatwoot docs flow |
 

@@ -13,7 +13,7 @@ path = "src/bin/test-email.rs"
 
 [[bin]]
 name = "api-cli"
-path = "src/bin/api-cli.rs"
+path = "src/bin/api-cli/main.rs"
 
 [dependencies]
 anyhow.workspace = true
