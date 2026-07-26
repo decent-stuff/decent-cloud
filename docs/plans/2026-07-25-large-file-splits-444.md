@@ -143,3 +143,43 @@ concurrent `cargo test … webhooks` run from another session — the warm stack
    third nested tuple). Do this before adding the first `accounts.rs`-derived type.
 4. Then `accounts.rs` (recovery + TOTP clusters).
 5. Then `offerings.rs` (query-group split, DB-layer focused — dedicated PR).
+
+## Wave 8 (2026-07-26) — Path A: combined-API tuple rebalance `(9,16) → (13,12)`
+
+**What was done:** rebalanced `create_combined_api` in `api/src/openapi.rs` by
+moving 4 standalone `*Api` types — `PoolsApi`, `NotificationsApi`, `SlaApi`,
+`AllowlistApi` — from the second inner tuple into the first. The structure went
+from `(9-tuple, 16-tuple)` to `(13-tuple, 12-tuple)`. No `*Api` type was added or
+removed; no handler code was touched — only the 4 tuple entries changed position.
+poem-openapi's spec emission order is cosmetic (JSON objects are unordered), and
+these 4 types have no ordering significance relative to the others, so the move
+is behavior-neutral.
+
+**Why:** the second inner tuple was pinned at the poem-openapi arity-16 max
+(`OpenApi` is implemented for tuples up to arity 16 in 5.1.16). Any new `*Api`
+extraction (e.g. from `accounts.rs`) was blocked until a slot was freed. This is
+the gating "Path A" prerequisite called out at the end of Wave 7.
+
+**Verification (definitive, clean-room):** the live `/api/v1/openapi` spec is
+**deep-equal** before/after the rebalance. To eliminate a stale incremental-
+compilation artifact in `target/` (which initially produced a misleading non-empty
+diff), the comparison was run after `cargo clean -p api` on both sides:
+
+- Fresh debug build of original `(9,16)` source → spare api-server on `:59015` →
+  `spec_before_fresh` (192 paths, 337 schemas).
+- Fresh debug build of rebalanced `(13,12)` source → spare api-server on `:59016` →
+  `spec_after_fresh` (192 paths, 337 schemas).
+- `diff spec_before_fresh spec_after_fresh` → **empty (exit 0)**.
+- Corroborating: `diff spec_after_fresh` vs the warm-stack release binary on
+  `:59011` → also **empty (exit 0)**.
+
+The warm stack (api `:59011` / web `:59010`) was never restarted; both captures
+used spare ports against the same `postgres:5432`. `cargo build -p api --bin
+api-server` is clean (only the 2 pre-existing `dead_code` warnings in
+`refund_requests.rs`, unrelated).
+
+**Headroom after this wave:** tuple 2 is at 12/16 → **4 free slots** for future
+`*Api` extractions. Tuple 1 is at 13/16 → 3 free slots. The next wave can now add
+the `accounts.rs` recovery and TOTP cluster types without a further restructure.
+
+**Commit:** `refactor: rebalance OpenAPI tuple (9,16)→(13,12) to unblock #444 splits`
