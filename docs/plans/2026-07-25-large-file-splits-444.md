@@ -92,7 +92,7 @@ module per `clap` subcommand**: `identity`, `account`, `contract`, `offering`,
 `provider`, `notify`, `dns`, `gateway`, `health`, `e2e`, `admin`, `cloud`,
 `recipe` (13 modules). The pre-existing shared `api_cli/` client+identity infra
 (`client.rs`, `identity.rs`, `mod.rs`) moved under the new dir as a pure
-`git` rename (0 content change). Commit `346da04d`.
+ `git` rename (0 content change). Commit `c7dbf962`.
 
 Why this design:
 - `main.rs` is now the crate root holding only the top-level `clap` wiring
