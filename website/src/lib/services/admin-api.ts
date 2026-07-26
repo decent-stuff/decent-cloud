@@ -270,3 +270,86 @@ export async function setAdminStatus(
 		{ isAdmin }
 	);
 }
+
+/**
+ * A single refund request for admin review (hex-encoded byte fields).
+ */
+export interface AdminRefundRequestInfo {
+	id: number;
+	contractId: string;
+	requesterPubkey: string;
+	refundAmountE9s: number;
+	reason: string;
+	status: string;
+	userLatestPaymentE9s: number;
+	capExceeded: boolean;
+	paymentIntentId: string;
+	currency: string;
+	stripeDisputeId: string | null;
+	stripeRefundId: string | null;
+	createdAtNs: number;
+	reviewedAtNs: number | null;
+	reviewedBy: string | null;
+	reviewNote: string | null;
+}
+
+/**
+ * Paginated list of refund requests for admin listing.
+ */
+export interface AdminRefundRequestListResponse {
+	requests: AdminRefundRequestInfo[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+/**
+ * List refund requests, optionally filtered by status (default: pending).
+ * Pass status `"all"` to return every request regardless of state.
+ */
+export async function listRefundRequests(
+	identity: Ed25519KeyIdentity,
+	status?: string,
+	limit?: number,
+	offset?: number
+): Promise<AdminRefundRequestListResponse> {
+	const params = new URLSearchParams();
+	if (status !== undefined) params.set('status', status);
+	if (limit !== undefined) params.set('limit', limit.toString());
+	if (offset !== undefined) params.set('offset', offset.toString());
+	const query = params.toString();
+	const path = query ? `/api/v1/admin/refund-requests?${query}` : '/api/v1/admin/refund-requests';
+	return authenticatedFetch<AdminRefundRequestListResponse>(identity, 'GET', path);
+}
+
+/**
+ * Approve a pending refund request. Issues a REAL Stripe refund.
+ */
+export async function approveRefundRequest(
+	identity: Ed25519KeyIdentity,
+	id: number,
+	note?: string
+): Promise<AdminRefundRequestInfo> {
+	return authenticatedFetch<AdminRefundRequestInfo>(
+		identity,
+		'POST',
+		`/api/v1/admin/refund-requests/${id}/approve`,
+		{ note }
+	);
+}
+
+/**
+ * Decline a pending refund request. No Stripe refund is issued.
+ */
+export async function declineRefundRequest(
+	identity: Ed25519KeyIdentity,
+	id: number,
+	note?: string
+): Promise<AdminRefundRequestInfo> {
+	return authenticatedFetch<AdminRefundRequestInfo>(
+		identity,
+		'POST',
+		`/api/v1/admin/refund-requests/${id}/decline`,
+		{ note }
+	);
+}

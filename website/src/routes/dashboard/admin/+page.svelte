@@ -15,11 +15,15 @@
 		deleteAccount,
 		listAccounts,
 		setAdminStatus,
+		listRefundRequests,
+		approveRefundRequest,
+		declineRefundRequest,
 		type EmailQueueEntry,
 		type EmailStats,
 		type AdminAccountInfo,
 		type AccountDeletionSummary,
 		type AdminAccountListResponse,
+		type AdminRefundRequestListResponse,
 	} from "$lib/services/admin-api";
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -64,6 +68,17 @@
 	let togglingAdminFor = $state<string | null>(null);
 	const ACCOUNTS_PER_PAGE = 20;
 
+	// Refund requests state
+	let refundList = $state<AdminRefundRequestListResponse | null>(null);
+	let loadingRefunds = $state(false);
+	let refundsError = $state<string | null>(null);
+	let refundStatusFilter = $state('pending');
+	let refundPage = $state(0);
+	let processingRefundId = $state<number | null>(null);
+	let reviewTarget = $state<{ id: number; action: 'approve' | 'decline' } | null>(null);
+	let reviewNote = $state('');
+	const REFUNDS_PER_PAGE = 20;
+
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
 
 	onMount(() => {
@@ -72,6 +87,7 @@
 			if (value?.account?.isAdmin) {
 				loadData();
 				loadAccounts();
+				loadRefundRequests();
 			}
 		});
 	});
@@ -330,6 +346,122 @@
 		expandedAccountUsername = null;
 		expandedAccountInfo = null;
 		loadAccounts();
+	}
+
+	async function loadRefundRequests() {
+		if (!currentIdentity?.identity) return;
+
+		loadingRefunds = true;
+		refundsError = null;
+
+		try {
+			refundList = await listRefundRequests(
+				currentIdentity.identity,
+				refundStatusFilter,
+				REFUNDS_PER_PAGE,
+				refundPage * REFUNDS_PER_PAGE
+			);
+		} catch (err) {
+			refundsError = err instanceof Error ? err.message : "Failed to load refund requests";
+			console.error("Failed to load refund requests:", err);
+		} finally {
+			loadingRefunds = false;
+		}
+	}
+
+	function onRefundStatusFilterChanged() {
+		refundPage = 0;
+		reviewTarget = null;
+		reviewNote = "";
+		loadRefundRequests();
+	}
+
+	function goToRefundPage(page: number) {
+		refundPage = page;
+		reviewTarget = null;
+		reviewNote = "";
+		loadRefundRequests();
+	}
+
+	function startReview(id: number, action: "approve" | "decline") {
+		reviewTarget = { id, action };
+		reviewNote = "";
+	}
+
+	function cancelReview() {
+		reviewTarget = null;
+		reviewNote = "";
+	}
+
+	async function confirmReview() {
+		if (!currentIdentity?.identity || !reviewTarget) return;
+
+		const { id, action } = reviewTarget;
+		processingRefundId = id;
+		refundsError = null;
+
+		try {
+			const note = reviewNote.trim() || undefined;
+			if (action === "approve") {
+				await approveRefundRequest(currentIdentity.identity, id, note);
+			} else {
+				await declineRefundRequest(currentIdentity.identity, id, note);
+			}
+			reviewTarget = null;
+			reviewNote = "";
+			await loadRefundRequests();
+		} catch (err) {
+			refundsError = err instanceof Error ? err.message : `Failed to ${action} refund request`;
+			console.error(`Failed to ${action} refund request:`, err);
+		} finally {
+			processingRefundId = null;
+		}
+	}
+
+	function formatNanoTs(ns: number): string {
+		return new Date(ns / 1_000_000).toLocaleString();
+	}
+
+	function formatRefundAmount(e9s: number, currency: string): string {
+		const cents = e9s / 10_000_000;
+		try {
+			return new Intl.NumberFormat("en-US", {
+				style: "currency",
+				currency: currency.toUpperCase(),
+			}).format(cents / 100);
+		} catch {
+			return `$${(cents / 100).toFixed(2)}`;
+		}
+	}
+
+	function formatRefundStatus(status: string): string {
+		switch (status) {
+			case "pending":
+				return "Pending";
+			case "auto_issued":
+				return "Auto-Issued";
+			case "approved":
+				return "Approved";
+			case "declined":
+				return "Declined";
+			default:
+				return status;
+		}
+	}
+
+	function refundStatusColor(status: string): string {
+		switch (status) {
+			case "pending":
+				return "text-yellow-400";
+			case "auto_issued":
+				return "text-blue-400";
+			case "approved":
+				return "text-green-400";
+			case "declined":
+				return "text-red-400";
+			default:
+				return "text-neutral-400";
+		}
 	}
 </script>
 
@@ -701,7 +833,197 @@
 			</div>
 
 
-			<!-- Sent Emails -->
+			<!-- Refund Requests -->
+		<div class="card p-6 border border-neutral-800">
+			<div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+				<h2 class="text-2xl font-bold text-white">Refund Requests</h2>
+				<div class="flex items-center gap-2">
+					<label for="refund-status-filter" class="text-neutral-400 text-sm">Status:</label>
+					<select
+						id="refund-status-filter"
+						bind:value={refundStatusFilter}
+						onchange={onRefundStatusFilterChanged}
+						class="px-3 py-1 bg-surface-elevated border border-neutral-800 rounded text-white focus:outline-none focus:border-primary-500"
+					>
+						<option value="pending">Pending</option>
+						<option value="all">All</option>
+						<option value="auto_issued">Auto-Issued</option>
+						<option value="approved">Approved</option>
+						<option value="declined">Declined</option>
+					</select>
+				</div>
+			</div>
+
+			{#if refundsError}
+				<div class="p-3 bg-red-500/20 text-red-200 mb-4">
+					{refundsError}
+				</div>
+			{/if}
+
+			{#if loadingRefunds && !refundList}
+				<div class="text-neutral-500 text-center py-8">Loading refund requests...</div>
+			{:else if refundList}
+				<div class="mb-4 text-neutral-500 text-sm">
+					Showing {refundList.requests.length} of {refundList.total} refund requests
+				</div>
+
+				{#if refundList.requests.length === 0}
+					<p class="text-neutral-500 text-center py-8">
+						No refund requests
+					</p>
+				{:else}
+					<div class="overflow-x-auto">
+						<table class="w-full text-left text-white/90">
+							<thead class="text-neutral-400 border-b border-neutral-800">
+								<tr>
+									<th class="pb-3 px-2">Contract</th>
+									<th class="pb-3 px-2">Reason</th>
+									<th class="pb-3 px-2">Refund</th>
+									<th class="pb-3 px-2">Last Payment</th>
+									<th class="pb-3 px-2">Cap</th>
+									<th class="pb-3 px-2">Status</th>
+									<th class="pb-3 px-2">Created</th>
+									<th class="pb-3 px-2">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each refundList.requests as req (req.id)}
+									<tr class="border-b border-neutral-800 hover:bg-surface-elevated transition-colors">
+										<td class="py-3 px-2 font-mono text-xs" title={req.contractId}>
+											{req.contractId.slice(0, 10)}…{req.contractId.slice(-6)}
+										</td>
+										<td class="py-3 px-2 text-sm">{req.reason}</td>
+										<td class="py-3 px-2 font-medium">
+											{formatRefundAmount(req.refundAmountE9s, req.currency)}
+										</td>
+										<td class="py-3 px-2 text-sm">
+											{formatRefundAmount(req.userLatestPaymentE9s, req.currency)}
+										</td>
+										<td class="py-3 px-2">
+											{#if req.capExceeded}
+												<span class="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded">Exceeded</span>
+											{:else}
+												<span class="text-neutral-600 text-xs">OK</span>
+											{/if}
+										</td>
+										<td class="py-3 px-2">
+											<span class="text-sm {refundStatusColor(req.status)}">
+												{formatRefundStatus(req.status)}
+											</span>
+										</td>
+										<td class="py-3 px-2 text-sm">
+											{formatNanoTs(req.createdAtNs)}
+										</td>
+										<td class="py-3 px-2">
+											{#if req.status === "pending"}
+												<div class="flex gap-2">
+													<button
+														type="button"
+														onclick={() => startReview(req.id, "approve")}
+														disabled={processingRefundId === req.id}
+														class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+													>
+														Approve
+													</button>
+													<button
+														type="button"
+														onclick={() => startReview(req.id, "decline")}
+														disabled={processingRefundId === req.id}
+														class="px-3 py-1 text-sm bg-red-600/20 text-red-400 border border-red-500/30 rounded hover:bg-red-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+													>
+														Decline
+													</button>
+												</div>
+											{:else}
+												<span class="text-neutral-600 text-xs">—</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+
+					<!-- Inline review prompt (note + explicit confirm) -->
+					{#if reviewTarget}
+						{@const targetReq = refundList.requests.find((r) => r.id === reviewTarget?.id)}
+						{#if targetReq}
+							<div class="mt-4 bg-surface-elevated border border-neutral-800 p-4 space-y-3">
+								<p class="text-white font-medium">
+									{reviewTarget.action === "approve" ? "Approve" : "Decline"} refund for
+									{formatRefundAmount(targetReq.refundAmountE9s, targetReq.currency)}?
+								</p>
+								{#if reviewTarget.action === "approve"}
+									<p class="text-yellow-300 text-sm">
+										⚠ This will issue a refund of
+										{formatRefundAmount(targetReq.refundAmountE9s, targetReq.currency)}.
+										Are you sure?
+									</p>
+								{/if}
+								<textarea
+									bind:value={reviewNote}
+									placeholder="Optional note (recorded in audit log)"
+									rows="2"
+									class="w-full px-3 py-2 bg-surface-elevated border border-neutral-800 rounded text-white placeholder-white/40 focus:outline-none focus:border-primary-500"
+								></textarea>
+								<div class="flex gap-2">
+									<button
+										type="button"
+										onclick={confirmReview}
+										disabled={processingRefundId === reviewTarget.id}
+										class="px-4 py-1 rounded text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors {reviewTarget.action === "approve"
+											? "bg-green-600 hover:bg-green-700"
+											: "bg-red-600 hover:bg-red-700"}"
+									>
+										{#if processingRefundId === reviewTarget.id}
+											Processing...
+										{:else}
+											Confirm {reviewTarget.action}
+										{/if}
+									</button>
+									<button
+										type="button"
+										onclick={cancelReview}
+										disabled={processingRefundId === reviewTarget.id}
+										class="px-4 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 transition-colors"
+									>
+										Cancel
+									</button>
+								</div>
+							</div>
+						{/if}
+					{/if}
+
+					<!-- Pagination -->
+					{#if refundList.total > REFUNDS_PER_PAGE}
+						{@const totalPages = Math.ceil(refundList.total / REFUNDS_PER_PAGE)}
+						<div class="flex items-center justify-center gap-2 mt-4">
+							<button
+								type="button"
+								onclick={() => goToRefundPage(refundPage - 1)}
+								disabled={refundPage === 0 || loadingRefunds}
+								class="px-3 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								Previous
+							</button>
+							<span class="text-neutral-500 text-sm">
+								Page {refundPage + 1} of {totalPages}
+							</span>
+							<button
+								type="button"
+								onclick={() => goToRefundPage(refundPage + 1)}
+								disabled={refundPage >= totalPages - 1 || loadingRefunds}
+								class="px-3 py-1 bg-surface-elevated text-white rounded hover:bg-surface-elevated disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+							>
+								Next
+							</button>
+						</div>
+					{/if}
+				{/if}
+			{/if}
+		</div>
+
+		<!-- Sent Emails -->
 			<div class="card p-6 border border-neutral-800">
 				<h2 class="text-2xl font-bold text-white mb-4">Sent Emails</h2>
 
