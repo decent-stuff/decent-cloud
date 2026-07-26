@@ -729,13 +729,101 @@ fn ledger_remote_get_registration_fee_against_ic_mainnet() {
 #[ignore = "hits the real IC mainnet (icp-api.io); run via --run-ignored only"]
 fn ledger_remote_get_check_in_nonce_against_ic_mainnet() {
     // Read-only IC canister query: fetches the check-in nonce as hex. Proves
-    // the nonce query path works end-to-end.
+    // the nonce query path works end-to-end. The nonce is the LAST non-empty
+    // stdout line (ledger-map prints a "Growing persistent storage" status line
+    // first on a fresh HOME — that println is a known ledger-map quirk).
     let (mut cmd, _home) = dc();
     cmd.args(["ledger-remote", "get-check-in-nonce"]);
     let out = cmd.assert().success().get_output().clone();
-    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let nonce = stdout
+        .lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or_else(|| panic!("check-in nonce line missing; stdout:\n{stdout}"));
     assert!(
-        !stdout.is_empty() && stdout.chars().all(|c| c.is_ascii_hexdigit()),
-        "check-in nonce should be hex on stdout: {stdout}"
+        !nonce.is_empty() && nonce.chars().all(|c| c.is_ascii_hexdigit()),
+        "check-in nonce should be hex (last stdout line), got: {nonce}\nfull stdout:\n{stdout}"
+    );
+}
+
+#[test]
+#[ignore = "hits the real IC mainnet (icp-api.io); run via --run-ignored only"]
+fn ledger_remote_metadata_against_ic_mainnet() {
+    // Read-only IC canister query: fetches canister metadata (Key/Value table).
+    // Proves the metadata query path + tabular rendering work against the real
+    // network. Asserts the table header is printed.
+    let (mut cmd, _home) = dc();
+    cmd.args(["ledger-remote", "metadata"]);
+    let out = cmd.assert().success().get_output().clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Key") && stdout.contains("Value"),
+        "metadata table header should be printed: {stdout}"
+    );
+}
+
+#[test]
+#[ignore = "hits the real IC mainnet (icp-api.io); run via --run-ignored only"]
+fn ledger_remote_get_logs_warn_against_ic_mainnet() {
+    // Read-only IC canister query: fetches WARN-level canister logs. Proves the
+    // get_logs transport + the format_log_lines rendering work against the real
+    // network for one representative log level. We use WARN (not INFO/DEBUG)
+    // because the INFO log payload currently exceeds the IC's 3MB reply limit
+    // (the canister rejects with IC0504 "payload too large"); WARN/ERROR are
+    // smaller and succeed. DEBUG/WARN/ERROR share the same code path.
+    let (mut cmd, _home) = dc();
+    cmd.args(["ledger-remote", "get-logs-warn"]);
+    let out = cmd.assert().success().get_output().clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Ledger canister WARN logs:"),
+        "should print the WARN logs header: {stdout}"
+    );
+}
+
+#[test]
+#[ignore = "hits the real IC mainnet (icp-api.io); run via --run-ignored only"]
+fn provider_check_in_only_nonce_against_ic_mainnet() {
+    // Read-only IC canister query via the `provider check-in --only-nonce` path
+    // (distinct from `ledger-remote get-check-in-nonce` — same canister call, but
+    // exercises the provider-command dispatch + the `0x`-prefixed formatting). The
+    // nonce is the last stdout line starting with "0x" (ledger-map prints a status
+    // line first on a fresh HOME).
+    let (mut cmd, _home) = dc();
+    cmd.args(["provider", "check-in", "--only-nonce"]);
+    let out = cmd.assert().success().get_output().clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let nonce = stdout
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("0x"))
+        .unwrap_or_else(|| panic!("check-in --only-nonce should print a 0x nonce; stdout:\n{stdout}"));
+    assert!(
+        nonce.len() > 2 && nonce[2..].chars().all(|c| c.is_ascii_hexdigit()),
+        "0x nonce should be hex after the prefix, got: {nonce}"
+    );
+}
+
+#[test]
+#[ignore = "hits the real IC mainnet (icp-api.io); run via --run-ignored only"]
+fn ledger_remote_data_fetch_against_ic_mainnet() {
+    // Read-only-to-local IC canister query: `data-fetch` pulls the latest ledger
+    // into the local file and must succeed against mainnet, leaving a readable
+    // local ledger behind. This is the core "ledger sync" user flow.
+    let (mut cmd, home) = dc();
+    cmd.args(["ledger-remote", "data-fetch"]);
+    cmd.assert().success();
+
+    // The synced ledger must now be readable offline and contain at least the
+    // providers section (mainnet always has registered providers).
+    let (mut list, _) = dc();
+    list.env("HOME", home.path());
+    list.args(["account", "--list-all"]);
+    let out = list.assert().success().get_output().clone();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("Registered providers"),
+        "after data-fetch the local ledger should list providers: {stdout}"
     );
 }
