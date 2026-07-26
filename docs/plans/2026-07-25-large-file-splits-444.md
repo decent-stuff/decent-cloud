@@ -79,19 +79,67 @@ file-split purpose.
 | File | Lines | Verdict | Rationale |
 |------|------:|---------|-----------|
 | `api/src/openapi/providers.rs` | 4280 | **done (clusters exhausted)** | All 6 separable clusters extracted across Waves 5–6; remaining body is the interwoven providers/offerings/rental core. Note: combined-API tuple now at `(9, 16)` — the 16 is the poem-openapi max, so the *next* new `*Api` anywhere needs a tuple restructure first |
-| `api/src/openapi/accounts.rs` | 2903 | **defer-with-plan** | Single `#[OpenApi] impl AccountsApi`; clusters (recovery, TOTP, contacts, keys) are cohesive but several share the account-resolution helper flow. Lower payoff than providers.rs; do after providers.rs clusters land |
-| `api/src/database/offerings.rs` | 2865 | **defer-with-plan** | Pure DB layer (no OpenAPI constraint) — a split is mechanically simpler (move query groups to `offerings_*.rs` + `pub use`), but it's a different risk profile (SQL mapping) and should be its own PR with query-level test coverage confirmed first |
-| `api/src/bin/api-cli.rs` | 3657 | **defer-with-plan** | CLI binary using `clap` subcommands. Natural split is per-subcommand module (`contract`, `dns`, `e2e`, `gateway`, `identity`, `health`). Each subcommand is largely self-contained; lowest-risk of the remaining files but out of the OpenAPI-focused scope of this wave |
+| `api/src/openapi/accounts.rs` | 2903 | **defer-with-plan (needs Path A first)** | Single `#[OpenApi] impl AccountsApi`; clusters (recovery, TOTP, contacts, keys) are cohesive but several share the account-resolution helper flow. Gated on the tuple restructure below (the second inner tuple is at the arity-16 cap) |
+| `api/src/database/offerings.rs` | 2865 | **defer-with-plan (assessed Wave 7)** | The recommendations cluster (saved-offerings + analytics + recommendations, `impl Database` block #3) is logically self-contained but **spatially scattered**: private `SignalOffering` struct at L240, the impl methods L2311–2629, free engine fns (`build_preference_profile`/`score_candidate`), and the inline `mod recommendation_tests` L2730–2865. The pub DTOs it depends on (`Offering`, `OfferingAnalytics`, `TrendingOffering`, `OfferingPricingStats`, `DailyViewTrend`) stay put. Extracting it cleanly = pulling 4 non-contiguous regions + careful pub/private split; keep deferred to a dedicated PR with query-level test coverage, as originally cautioned |
+| `api/src/bin/api-cli.rs` | ~~3657~~ → 547 (`main.rs`) | **done (Wave 7)** | Split into a directory binary `src/bin/api-cli/` with one module per `clap` subcommand + the shared `api_cli/` client/identity infra moved under it. `main.rs` keeps only `clap` wiring + leaf handlers + cross-domain shared DTOs/helpers (private; subcommand modules reach them via `crate::`). Zero OpenAPI impact |
 | `website/src/lib/services/api.ts` | 4228 | **out of scope** | Frontend; separate concern. Do not touch in a backend DRY/split wave |
+
+## Wave 7 (2026-07-26) — api-cli per-subcommand split (Path B, no OpenAPI impact)
+
+`api/src/bin/api-cli.rs` (3753 → 547 in `main.rs`, **−3206 / −85%**) — split the
+monolithic CLI binary into a directory binary (`src/bin/api-cli/`) with **one
+module per `clap` subcommand**: `identity`, `account`, `contract`, `offering`,
+`provider`, `notify`, `dns`, `gateway`, `health`, `e2e`, `admin`, `cloud`,
+`recipe` (13 modules). The pre-existing shared `api_cli/` client+identity infra
+(`client.rs`, `identity.rs`, `mod.rs`) moved under the new dir as a pure
+`git` rename (0 content change). Commit `346da04d`.
+
+Why this design:
+- `main.rs` is now the crate root holding only the top-level `clap` wiring
+  (`Cli` / `Environment` / `Commands` / `main` dispatch), the two leaf handlers
+  (`test-email`, `seed-provider`), and the cross-domain **shared DTOs + helpers**
+  (DB connect, contract-lifecycle `wait`/`cancel`, cloud-account request/response
+  types, `Offering`/`Contract`/`CreateContractRequest`/`RentalRequestResponse`).
+- Those shared items stay **private** at the crate root; the subcommand modules
+  are *descendants* and reach them via `crate::…` (Rust privacy lets a descendant
+  see an ancestor's private items — including private struct fields). So **only**
+  each module's `*Action` enum + `handle_*` fn need `pub(crate)`; no field-level
+  visibility churn. This mirrors how `providers.rs` kept its shared helpers.
+- `gateway_tests` and `cloud_tests` moved verbatim into `gateway.rs` / `cloud.rs`
+  (co-located with the code they test).
+
+Verification (Path B bar — no OpenAPI tuple touched, so no spec comparison
+needed): `cargo build -p api --bin api-cli` clean; `--help` output byte-identical
+(all 16 commands + every subcommand's args preserved); all 16 unit tests pass
+(incl. relocated `cloud::cloud_tests::*` and `gateway::gateway_tests::*`);
+`cargo clippy --tests -p api --bin api-cli` clean (the only remaining warnings
+are the 3 pre-existing `database/contracts` ones, untouched by this binary-only
+change). Built in an isolated `CARGO_TARGET_DIR` to avoid lock contention with a
+concurrent `cargo test … webhooks` run from another session — the warm stack
+(api 59011 / web 59010) was never restarted.
+
+**What's next for #444:**
+1. **Path A (gating prerequisite):** restructure `create_combined_api` so the
+   second inner tuple is no longer at the arity-16 cap — either rebalance ~4
+   entries from the 16-tuple into the 9-tuple (→ `(13, 12)`) or add a third
+   nested tuple. Verify via the live-spec deep-equality method (spare-port
+   api-server on 59012/59013, same Postgres, deep-compare paths+schemas). Ship
+   this as its own commit *before* adding any new `*Api`.
+2. **`openapi/accounts.rs` (2903):** then extract the recovery + TOTP clusters
+   (each its own `*Api`), now that Path A gives tuple headroom.
+3. **`database/offerings.rs` (2865):** the recommendations `impl Database` block
+   is logically separable but scattered (see verdict above) — dedicated PR with
+   query-level test coverage, not a mechanical wave task.
 
 ## Recommended sequence for closing #444
 
 1. ~~Land the 5 providers.rs clusters above~~ — **DONE** (Waves 5–6). providers.rs
    is down to 4280 lines and its separable clusters are exhausted.
-2. **Gating prerequisite for any further OpenAPI split:** restructure
+2. ~~`api-cli.rs` (per-subcommand) — independent of OpenAPI~~ — **DONE** (Wave 7):
+   3753 → 547 (`main.rs`), 13 subcommand modules.
+3. **Gating prerequisite for any further OpenAPI split:** restructure
    `create_combined_api` so the second inner tuple is no longer at the arity-16
    cap (e.g. rebalance into the first inner tuple, which sits at 9, or introduce a
    third nested tuple). Do this before adding the first `accounts.rs`-derived type.
-3. Then `accounts.rs` (recovery + TOTP clusters).
-4. Then `offerings.rs` (query-group split, DB-layer focused).
-5. `api-cli.rs` (per-subcommand) can proceed in parallel — independent of OpenAPI.
+4. Then `accounts.rs` (recovery + TOTP clusters).
+5. Then `offerings.rs` (query-group split, DB-layer focused — dedicated PR).
