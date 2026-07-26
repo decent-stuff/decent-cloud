@@ -104,11 +104,12 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
-### 2026-07-26 session (refund approval gate + e2e harness expansion)
+### 2026-07-26 session (refund approval gate + e2e harness expansion + UX audit)
 
-Refund approval gate (user-requested cost-safe billing policy) fully shipped +
-e2e harness expanded for both CLI and web. All work TDD-first, verified against
-the real warm stack.
+Refund approval gate (user-requested cost-safe billing policy) fully shipped,
+e2e harness expanded for both CLI and web, OpenAPI tuple rebalanced to unblock
+future #444 splits, and a full live UX audit found no product issues. All work
+TDD-first, verified against the real warm stack.
 
 | Fix | Area | Resolution |
 |-----|------|------------|
@@ -116,6 +117,10 @@ the real warm stack.
 | CLI e2e harness expansion (#444) | Coverage | `1331273f`/`8699f7cc`/`413d2a28`: 18 new tests (13 offline flows + 3 smoke + 4 IC-mainnet `#[ignore]` + 1 hardened). Default tier 41→59 @0.58s; IC tier 2→6. Found + fixed production bug: `account --transfer-to <bad>` panicked via `IcrcCompatibleAccount::from().expect()` → validates principal at call site. |
 | Web e2e: confirmInlineAction helper (#444 audit #11) | DRY | `4f5e4906`: extracted `confirmInlineAction(page, row, {arm, confirm?, secondary?, waitForResponse?})` in `auth-helpers.ts`; applied to 7 inline-delete entities + rentals cancel. ~50 LOC boilerplate collapsed. Audit items #4/#5/#7 verified already shipped. |
 | Baseline: auth-capabilities stale OAuth | Test | `d33ff5bc`: 2 `@smoke` tests hardcoded `google_oauth=false` but warm stack now has OAuth on. Rewrote spec env-agnostic: reads real `/api/v1/auth/capabilities`. Smoke 27/27 green. |
+| #444: OpenAPI tuple rebalance | Tech debt | `87a48059`: rebalanced `create_combined_api()` from `(9-tuple, 16-tuple)` → `(13-tuple, 12-tuple)` by moving `PoolsApi`/`NotificationsApi`/`SlaApi`/`AllowlistApi` to tuple 1. Verified via clean-room spec diff (empty — 192 paths, 337 schemas both sides). Unblocks future handler splits (accounts.rs recovery/TOTP, offerings.rs recommendations) — tuple 2 now has 4 free slots. |
+| Decent-Agents cluster re-verify | Status | **#413 (per-subscription agent identity) CLOSED** — was the key blocker. `anthropic-proxy` crate fully functional (1680 lines, 33/33 tests pass): key injection/stripping, per-identity metering, redaction, loud failure on errors. Remaining issues (#418 beta onboarding, #415/#416 billing/metering, #429-#432 deferred) are product/business decisions, not code-blocked. |
+| Live UX audit (no mocks) | UX | `9995fafd`: audited 8 pages (landing, marketplace, login, dashboard, my-rentals, account settings, admin panel, mobile marketplace) against the real warm stack via `browser.js` + zai-vision. **0 product UX issues found.** Fixed `browser.js` `authenticatePage()` — was not setting `first_login_onboarding_completed` in localStorage, so WelcomeModal blocked authed-page screenshots. |
+| FLOWS.md gap assessment | Coverage | Wave 2 review: only 2 ⚠️ partial rows + 1 ❌ sub-item remain, ALL blocked on external deps (rent flow excluded from smoke by design; password-resets empty-state needs backing table ID; send-test-email needs MAILCHANNELS_API_KEY). No actionable code gaps. |
 
 **Refund gate — remaining edge:**
 - Admin **approve** path calls Stripe via `issue_audited_refund`. E2E tests cover it with `stripe_client=None` (DB integration tests) and via the admin UI (DB-seeded refund_requests, decline fully tested). A full approve→Stripe-refund e2e requires either a Stripe test-mode payment intent or `STRIPE_SECRET_KEY` unset on the test stack.
