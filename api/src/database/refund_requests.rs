@@ -235,6 +235,29 @@ impl Database {
         })
     }
 
+    /// Count refund requests, optionally filtered by status. Used for pagination.
+    pub async fn count_refund_requests(&self, status_filter: Option<&str>) -> Result<i64> {
+        let count: i64 = if let Some(status) = status_filter {
+            sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM refund_requests WHERE status = $1"#,
+            )
+            .bind(status)
+            .fetch_one(&self.pool)
+            .await
+        } else {
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM refund_requests"#)
+                .fetch_one(&self.pool)
+                .await
+        }
+        .with_context(|| {
+            format!(
+                "Failed to count refund_requests (status={:?})",
+                status_filter
+            )
+        })?;
+        Ok(count)
+    }
+
     /// List refund requests, optionally filtered by status. Ordered newest-first.
     pub async fn list_refund_requests(
         &self,

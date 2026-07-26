@@ -455,6 +455,15 @@ pub struct AdminSetAdminStatusRequest {
     pub is_admin: bool,
 }
 
+/// Admin review note for approve/decline a refund request.
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminRefundReviewRequest {
+    /// Optional note explaining the decision.
+    pub note: Option<String>,
+}
+
 // Request/Response types for user notification config
 #[derive(Debug, Serialize, Deserialize, Object)]
 #[oai(rename_all = "camelCase")]

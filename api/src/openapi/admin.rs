@@ -1,12 +1,13 @@
 use super::common::{
     AdminAccountDeletionSummary, AdminAddRecoveryKeyRequest, AdminDisableKeyRequest,
-    AdminSendTestEmailRequest, AdminSetAccountEmailRequest,
+    AdminRefundReviewRequest, AdminSendTestEmailRequest, AdminSetAccountEmailRequest,
     AdminSetAdminStatusRequest, AdminSetEmailVerifiedRequest, ApiResponse, ApiTags,
     decode_hex_path, decode_pubkey,
 };
 use crate::{
     auth::AdminAuthenticatedUser,
     database::email::{EmailQueueEntry, EmailStats},
+    database::refund_requests::RefundRequest,
     database::Database,
     email_service::EmailService,
 };
@@ -37,6 +38,40 @@ pub struct AdminAccountInfo {
 #[serde(rename_all = "camelCase")]
 pub struct AdminAccountListResponse {
     pub accounts: Vec<AdminAccountInfo>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+/// A single refund request for admin review (hex-encoded byte fields).
+#[derive(Debug, Clone, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminRefundRequestInfo {
+    pub id: i64,
+    pub contract_id: String,
+    pub requester_pubkey: String,
+    pub refund_amount_e9s: i64,
+    pub reason: String,
+    pub status: String,
+    pub user_latest_payment_e9s: i64,
+    pub cap_exceeded: bool,
+    pub payment_intent_id: String,
+    pub currency: String,
+    pub stripe_dispute_id: Option<String>,
+    pub stripe_refund_id: Option<String>,
+    pub created_at_ns: i64,
+    pub reviewed_at_ns: Option<i64>,
+    pub reviewed_by: Option<String>,
+    pub review_note: Option<String>,
+}
+
+/// Paginated list of refund requests for admin listing.
+#[derive(Debug, Clone, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct AdminRefundRequestListResponse {
+    pub requests: Vec<AdminRefundRequestInfo>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -912,16 +947,194 @@ impl AdminApi {
             }),
         }
     }
+
+    /// Admin: List refund requests
+    ///
+    /// Returns a paginated list of refund requests, optionally filtered by status.
+    /// Default filter is `pending` (the queue needing review); pass `status=all` for everything.
+    #[oai(path = "/admin/refund-requests", method = "get", tag = "ApiTags::Admin")]
+    async fn admin_list_refund_requests(
+        &self,
+        db: Data<&Arc<Database>>,
+        _admin: AdminAuthenticatedUser,
+        status: Query<Option<String>>,
+        limit: Query<Option<i64>>,
+        offset: Query<Option<i64>>,
+    ) -> Json<ApiResponse<AdminRefundRequestListResponse>> {
+        let limit = limit.0.unwrap_or(50).clamp(1, 200);
+        let offset = offset.0.unwrap_or(0).max(0);
+
+        // Normalize status filter: "all" (case-insensitive) → None, otherwise pass through.
+        let status_filter = status
+            .0
+            .as_deref()
+            .filter(|s| !s.eq_ignore_ascii_case("all"));
+
+        let total = match db.count_refund_requests(status_filter).await {
+            Ok(t) => t,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let rows = match db.list_refund_requests(status_filter, limit, offset).await {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        let requests: Vec<AdminRefundRequestInfo> = rows
+            .into_iter()
+            .map(refund_request_to_info)
+            .collect();
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(AdminRefundRequestListResponse {
+                requests,
+                total,
+                limit,
+                offset,
+            }),
+            error: None,
+        })
+    }
+
+    /// Admin: Approve a pending refund request
+    ///
+    /// Issues the Stripe refund for a pending refund request. The DB layer
+    /// atomically flips status pending→approved and then calls Stripe.
+    #[oai(
+        path = "/admin/refund-requests/:id/approve",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_approve_refund_request(
+        &self,
+        db: Data<&Arc<Database>>,
+        admin: AdminAuthenticatedUser,
+        id: Path<i64>,
+        req: Json<AdminRefundReviewRequest>,
+    ) -> Json<ApiResponse<AdminRefundRequestInfo>> {
+        let stripe_client = crate::stripe_client::StripeClient::new().ok();
+        let row = match db
+            .approve_refund_request(
+                id.0,
+                &admin.pubkey,
+                req.note.as_deref(),
+                stripe_client.as_ref(),
+            )
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        tracing::info!(
+            request_id = row.id,
+            admin_pubkey = %hex::encode(&admin.pubkey),
+            "Admin approved refund request {}",
+            row.id
+        );
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(refund_request_to_info(row)),
+            error: None,
+        })
+    }
+
+    /// Admin: Decline a pending refund request
+    ///
+    /// Marks the refund request as declined. No Stripe refund is issued.
+    #[oai(
+        path = "/admin/refund-requests/:id/decline",
+        method = "post",
+        tag = "ApiTags::Admin"
+    )]
+    async fn admin_decline_refund_request(
+        &self,
+        db: Data<&Arc<Database>>,
+        admin: AdminAuthenticatedUser,
+        id: Path<i64>,
+        req: Json<AdminRefundReviewRequest>,
+    ) -> Json<ApiResponse<AdminRefundRequestInfo>> {
+        let row = match db
+            .decline_refund_request(id.0, &admin.pubkey, req.note.as_deref())
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+
+        tracing::info!(
+            request_id = row.id,
+            admin_pubkey = %hex::encode(&admin.pubkey),
+            "Admin declined refund request {}",
+            row.id
+        );
+
+        Json(ApiResponse {
+            success: true,
+            data: Some(refund_request_to_info(row)),
+            error: None,
+        })
+    }
+}
+
+/// Convert a `RefundRequest` DB row to the API-facing `AdminRefundRequestInfo`,
+/// hex-encoding the byte fields.
+fn refund_request_to_info(r: RefundRequest) -> AdminRefundRequestInfo {
+    AdminRefundRequestInfo {
+        id: r.id,
+        contract_id: hex::encode(&r.contract_id),
+        requester_pubkey: hex::encode(&r.requester_pubkey),
+        refund_amount_e9s: r.refund_amount_e9s,
+        reason: r.reason,
+        status: r.status,
+        user_latest_payment_e9s: r.user_latest_payment_e9s,
+        cap_exceeded: r.cap_exceeded,
+        payment_intent_id: r.payment_intent_id,
+        currency: r.currency,
+        stripe_dispute_id: r.stripe_dispute_id,
+        stripe_refund_id: r.stripe_refund_id,
+        created_at_ns: r.created_at_ns,
+        reviewed_at_ns: r.reviewed_at_ns,
+        reviewed_by: r.reviewed_by.as_ref().map(hex::encode),
+        review_note: r.review_note,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AdminAccountInfo, AdminAccountListResponse};
+    use super::{AdminAccountInfo, AdminAccountListResponse, AdminRefundRequestInfo, AdminRefundRequestListResponse, refund_request_to_info};
     use crate::database::email::{EmailQueueEntry, EmailStats};
+    use crate::database::refund_requests::RefundRequest;
     use crate::openapi::common::{
-        AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminSendTestEmailRequest,
-        AdminSetAccountEmailRequest, AdminSetAdminStatusRequest, AdminSetEmailVerifiedRequest,
-        ApiResponse,
+        AdminAddRecoveryKeyRequest, AdminDisableKeyRequest, AdminRefundReviewRequest,
+        AdminSendTestEmailRequest, AdminSetAccountEmailRequest, AdminSetAdminStatusRequest,
+        AdminSetEmailVerifiedRequest, ApiResponse,
     };
 
     // ---- AdminDisableKeyRequest ----
@@ -1310,5 +1523,176 @@ mod tests {
         let result = hex::decode(&hex_str);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 32);
+    }
+
+    // ---- AdminRefundReviewRequest ----
+
+    #[test]
+    fn test_admin_refund_review_request_with_note() {
+        let json = r#"{"note":"approved — verified dispute"}"#;
+        let req: AdminRefundReviewRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.note.as_deref(), Some("approved — verified dispute"));
+    }
+
+    #[test]
+    fn test_admin_refund_review_request_without_note() {
+        let json = r#"{}"#;
+        let req: AdminRefundReviewRequest = serde_json::from_str(json).unwrap();
+        assert!(req.note.is_none());
+    }
+
+    #[test]
+    fn test_admin_refund_review_request_serialization_camel_case() {
+        let req = AdminRefundReviewRequest {
+            note: Some("declined — fraud".to_string()),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["note"], "declined — fraud");
+    }
+
+    // ---- AdminRefundRequestInfo (via refund_request_to_info) ----
+
+    fn sample_refund_request() -> RefundRequest {
+        RefundRequest {
+            id: 42,
+            contract_id: vec![0xde, 0xad, 0xbe, 0xef],
+            requester_pubkey: vec![0xab; 32],
+            refund_amount_e9s: 5_000_000_000, // 500 cents
+            reason: "cancel".to_string(),
+            status: "pending".to_string(),
+            user_latest_payment_e9s: 1_000_000_000, // 100 cents
+            cap_exceeded: true,
+            payment_intent_id: "pi_test_123".to_string(),
+            currency: "usd".to_string(),
+            stripe_dispute_id: None,
+            stripe_refund_id: None,
+            idempotency_key: "cancel:deadbeef".to_string(),
+            created_at_ns: 1_700_000_000_000_000_000,
+            reviewed_at_ns: None,
+            reviewed_by: None,
+            review_note: None,
+        }
+    }
+
+    #[test]
+    fn test_refund_request_to_info_hex_encoding() {
+        let info = refund_request_to_info(sample_refund_request());
+        assert_eq!(info.id, 42);
+        assert_eq!(info.contract_id, "deadbeef");
+        assert_eq!(info.requester_pubkey, hex::encode([0xab; 32]));
+        assert_eq!(info.refund_amount_e9s, 5_000_000_000);
+        assert_eq!(info.reason, "cancel");
+        assert_eq!(info.status, "pending");
+        assert_eq!(info.user_latest_payment_e9s, 1_000_000_000);
+        assert!(info.cap_exceeded);
+        assert_eq!(info.payment_intent_id, "pi_test_123");
+        assert_eq!(info.currency, "usd");
+        assert!(info.stripe_dispute_id.is_none());
+        assert!(info.stripe_refund_id.is_none());
+        assert_eq!(info.created_at_ns, 1_700_000_000_000_000_000);
+        assert!(info.reviewed_at_ns.is_none());
+        assert!(info.reviewed_by.is_none());
+        assert!(info.review_note.is_none());
+    }
+
+    #[test]
+    fn test_refund_request_to_info_camel_case_json() {
+        let info = refund_request_to_info(sample_refund_request());
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["id"], 42_i64);
+        assert_eq!(json["contractId"], "deadbeef");
+        assert_eq!(json["refundAmountE9s"], 5_000_000_000_i64);
+        assert_eq!(json["userLatestPaymentE9s"], 1_000_000_000_i64);
+        assert_eq!(json["capExceeded"], true);
+        assert_eq!(json["paymentIntentId"], "pi_test_123");
+        assert_eq!(json["stripeDisputeId"], serde_json::Value::Null);
+        assert_eq!(json["reviewedAtNs"], serde_json::Value::Null);
+        assert_eq!(json["reviewedBy"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_refund_request_to_info_with_review_fields() {
+        let mut req = sample_refund_request();
+        req.status = "approved".to_string();
+        req.stripe_refund_id = Some("re_abc".to_string());
+        req.reviewed_at_ns = Some(1_800_000_000_000_000_000);
+        req.reviewed_by = Some(vec![0xcd; 32]);
+        req.review_note = Some("LGTM".to_string());
+        let info = refund_request_to_info(req);
+        assert_eq!(info.status, "approved");
+        assert_eq!(info.stripe_refund_id.as_deref(), Some("re_abc"));
+        assert_eq!(info.reviewed_at_ns, Some(1_800_000_000_000_000_000));
+        assert_eq!(info.reviewed_by.as_deref(), Some(hex::encode([0xcd; 32]).as_str()));
+        assert_eq!(info.review_note.as_deref(), Some("LGTM"));
+    }
+
+    #[test]
+    fn test_refund_request_to_info_with_dispute_id() {
+        let mut req = sample_refund_request();
+        req.reason = "dispute_lost".to_string();
+        req.stripe_dispute_id = Some("dp_xyz".to_string());
+        let info = refund_request_to_info(req);
+        assert_eq!(info.reason, "dispute_lost");
+        assert_eq!(info.stripe_dispute_id.as_deref(), Some("dp_xyz"));
+    }
+
+    // ---- AdminRefundRequestListResponse ----
+
+    #[test]
+    fn test_admin_refund_request_list_response_pagination() {
+        let resp = AdminRefundRequestListResponse {
+            requests: vec![refund_request_to_info(sample_refund_request())],
+            total: 3,
+            limit: 10,
+            offset: 0,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["total"], 3_i64);
+        assert_eq!(json["limit"], 10_i64);
+        assert_eq!(json["offset"], 0_i64);
+        let arr = json["requests"].as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["contractId"], "deadbeef");
+    }
+
+    #[test]
+    fn test_admin_refund_request_list_response_empty() {
+        let resp = AdminRefundRequestListResponse {
+            requests: vec![],
+            total: 0,
+            limit: 50,
+            offset: 0,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["requests"].as_array().unwrap().len(), 0);
+        assert_eq!(json["total"], 0_i64);
+    }
+
+    // ---- ApiResponse<AdminRefundRequestInfo> ----
+
+    #[test]
+    fn test_api_response_refund_request_info_success() {
+        let resp = ApiResponse {
+            success: true,
+            data: Some(refund_request_to_info(sample_refund_request())),
+            error: None,
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], true);
+        assert_eq!(json["data"]["id"], 42_i64);
+        assert!(json.get("error").is_none());
+    }
+
+    #[test]
+    fn test_api_response_refund_request_info_error() {
+        let resp: ApiResponse<AdminRefundRequestInfo> = ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Refund request not found".to_string()),
+        };
+        let json = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["error"], "Refund request not found");
+        assert!(json.get("data").is_none());
     }
 }
