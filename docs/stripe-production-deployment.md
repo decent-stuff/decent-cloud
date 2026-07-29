@@ -33,12 +33,12 @@ Set credentials via dc-secrets for your target environment:
 
 **For production:**
 ```bash
-scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_live_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET
+scripts/dc-secrets set shared/prod STRIPE_SECRET_KEY=sk_live_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET
 ```
 
 **For development:**
 ```bash
-scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_test_secret
+scripts/dc-secrets set shared/dev STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_test_secret
 ```
 
 ### 2. Deploy with deploy.py

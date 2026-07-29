@@ -160,15 +160,15 @@ docker run cloudflare/cloudflared:latest tunnel --no-autoupdate run --token eyJh
 
 ### Step 4: Save Token via dc-secrets
 
-Set the tunnel token using dc-secrets:
+Set the tunnel token using dc-secrets (in the dev or prod secrets layer):
 
 ```bash
-scripts/dc-secrets set shared/env TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
+scripts/dc-secrets set shared/prod TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
 ```
 
 Verify it was saved:
 ```bash
-scripts/dc-secrets list shared/env
+scripts/dc-secrets list shared/prod
 ```
 
 ### Step 5: Start Services

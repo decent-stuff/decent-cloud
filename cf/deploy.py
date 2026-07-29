@@ -215,8 +215,13 @@ def check_docker() -> bool:
         return False
 
 
-def load_secrets_from_sops() -> Optional[dict[str, str]]:
-    """Load all secrets from dc-secrets (SOPS-encrypted store)."""
+def load_secrets_from_sops(environment: str) -> Optional[dict[str, str]]:
+    """Load all secrets from dc-secrets (SOPS-encrypted store) for one env layer.
+
+    ``environment`` selects the secrets layer (``dev``/``prod``) merged over the
+    common layer. It MUST match the deploy target so a prod deploy never reads
+    dev credentials (or vice versa).
+    """
     dc_secrets = Path(__file__).parent.parent / "scripts" / "dc-secrets"
     if not dc_secrets.exists():
         print_error(f"dc-secrets not found at {dc_secrets}")
@@ -224,11 +229,11 @@ def load_secrets_from_sops() -> Optional[dict[str, str]]:
 
     try:
         result = subprocess.run(
-            [str(dc_secrets), "export"],
+            [str(dc_secrets), "export", environment],
             capture_output=True, text=True, check=True,
         )
     except subprocess.CalledProcessError as e:
-        print_error(f"dc-secrets export failed: {e.stderr.strip()}")
+        print_error(f"dc-secrets export {environment} failed: {e.stderr.strip()}")
         return None
 
     env_vars: dict[str, str] = {}
@@ -411,7 +416,7 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
         if not stripe_key:
             print_warning("STRIPE_PUBLISHABLE_KEY not found in environment config")
             print_warning("Credit card payments will NOT work without this key")
-            print_info("Add it: scripts/dc-secrets set shared/env STRIPE_PUBLISHABLE_KEY=pk_test_...")
+            print_info(f"Add it: scripts/dc-secrets set shared/{environment} STRIPE_PUBLISHABLE_KEY=pk_test_...")
             print_info("Use pk_test_... for dev, pk_live_... for prod")
             print()
             # Don't fail - allow deployment without Stripe (DCT payments still work)
@@ -500,8 +505,8 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         return 1
     print()
 
-    # Load all secrets from dc-secrets (SOPS-encrypted store)
-    secrets = load_secrets_from_sops()
+    # Load all secrets from dc-secrets (SOPS-encrypted store) for THIS env layer.
+    secrets = load_secrets_from_sops(env_name)
     if not secrets:
         print_error("Failed to load secrets from dc-secrets. Run: scripts/dc-secrets init")
         return 1
@@ -517,13 +522,13 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
         if is_prod:
             print_error("TUNNEL_TOKEN not found in dc-secrets")
             print()
-            print("Add it: scripts/dc-secrets set shared/env TUNNEL_TOKEN=<token>")
+            print(f"Add it: scripts/dc-secrets set shared/{env_name} TUNNEL_TOKEN=<token>")
             print("Get token from: https://one.dash.cloudflare.com/")
             print()
             return 1
         else:
             print_warning("TUNNEL_TOKEN not found - public access will not work")
-            print_info("Add it: scripts/dc-secrets set shared/env TUNNEL_TOKEN=<token>")
+            print_info(f"Add it: scripts/dc-secrets set shared/{env_name} TUNNEL_TOKEN=<token>")
             print()
     else:
         print_success("Tunnel token loaded")

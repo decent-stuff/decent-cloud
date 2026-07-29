@@ -137,7 +137,7 @@ The project uses two separate database environment variables for different purpo
 - **DATABASE_URL**: Used by the API server at runtime
   - Includes the database name: `postgres://test:test@localhost:5432/test`
   - Points to a specific database for the application to use
-  - Set via `scripts/dc-secrets set shared/env DATABASE_URL=postgres://test:test@localhost:5432/test`
+  - Set via `scripts/dc-secrets set shared/play DATABASE_URL=postgres://test:test@localhost:5432/test`
 
 - **TEST_DATABASE_URL**: Used by tests for database management
   - Does NOT include a database name: `postgres://test:test@localhost:5432`
@@ -198,9 +198,9 @@ DATABASE_URL=postgres://test:test@localhost:5432/test sqlx migrate run --source 
 - **Test failures**: Ensure TEST_DATABASE_URL is set correctly via dc-secrets
   ```bash
   # Verify with:
-  scripts/dc-secrets get shared/env TEST_DATABASE_URL
+  scripts/dc-secrets get shared/play TEST_DATABASE_URL
   # Set if missing:
-  scripts/dc-secrets set shared/env TEST_DATABASE_URL=postgres://test:test@localhost:5432
+  scripts/dc-secrets set shared/play TEST_DATABASE_URL=postgres://test:test@localhost:5432
   ```
 
 ### Docker Setup for Volume Permissions
@@ -380,7 +380,8 @@ The API backend includes optional email support using [MailChannels](https://www
 
 Set these via dc-secrets (see `api/.env.example` for reference):
 ```bash
-scripts/dc-secrets set shared/env MAILCHANNELS_API_KEY=your_key FRONTEND_URL=http://localhost:59000
+scripts/dc-secrets set shared/common MAILCHANNELS_API_KEY=your_key
+scripts/dc-secrets set shared/play FRONTEND_URL=http://localhost:59000
 ```
 
 ### How Email Works
@@ -396,7 +397,7 @@ DKIM (DomainKeys Identified Mail) improves email deliverability by signing email
 
 1. Generate a DKIM key pair (MailChannels dashboard or `openssl`)
 2. Add the public key as a TXT record in your DNS
-3. Add the private key (base64 encoded) via `scripts/dc-secrets set shared/env DKIM_PRIVATE_KEY=...`
+3. Add the private key (base64 encoded) via `scripts/dc-secrets set shared/common DKIM_PRIVATE_KEY=...`
 
 Without DKIM, emails will still be sent but may have lower deliverability rates.
 
@@ -424,10 +425,10 @@ Optional payment processing for marketplace rentals. Without Stripe, only DCT to
    - Copy `pk_test_...` (publishable) and `sk_test_...` (secret)
    - Use test keys for development, live keys (`pk_live_...`, `sk_live_...`) for production
 
-3. **Set Environment Variables** via dc-secrets:
+3. **Set Environment Variables** via dc-secrets (local dev uses the `play` layer):
 ```bash
-scripts/dc-secrets set shared/env STRIPE_SECRET_KEY=sk_test_your_key STRIPE_PUBLISHABLE_KEY=pk_test_your_key STRIPE_WEBHOOK_SECRET=whsec_test_secret
-scripts/dc-secrets set shared/env VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_key
+scripts/dc-secrets set shared/play STRIPE_SECRET_KEY=sk_test_your_key STRIPE_PUBLISHABLE_KEY=pk_test_your_key STRIPE_WEBHOOK_SECRET=whsec_test_secret
+scripts/dc-secrets set shared/play VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_key
 ```
 
 4. **Test Locally**: Use test cards (no real charges)
@@ -441,13 +442,13 @@ Dashboard → Developers → Webhooks → Add endpoint:
 - URL: `https://your-domain.com/api/v1/webhooks/stripe`
 - API version: `2025-11-17` (or latest)
 - Events: **`payment_intent.succeeded`** and **`payment_intent.payment_failed`** only
-- Update `STRIPE_WEBHOOK_SECRET` via `scripts/dc-secrets set shared/env STRIPE_WEBHOOK_SECRET=whsec_...`
+- Update `STRIPE_WEBHOOK_SECRET` via `scripts/dc-secrets set shared/prod STRIPE_WEBHOOK_SECRET=whsec_...`
 
 **Local Webhook Testing** (optional - for realistic testing):
 ```bash
 stripe listen --forward-to localhost:59001/api/v1/webhooks/stripe
 # Set webhook secret from CLI output via dc-secrets:
-# scripts/dc-secrets set shared/env STRIPE_WEBHOOK_SECRET=whsec_...
+# scripts/dc-secrets set shared/play STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 For E2E test setup, see [website/tests/e2e/STRIPE_TESTING_SETUP.md](../website/tests/e2e/STRIPE_TESTING_SETUP.md).

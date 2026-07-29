@@ -85,8 +85,8 @@ load_secrets_env() {
     return 0
   fi
   local output
-  if ! output=$(env DC_SECRETS_DIR="${DC_SECRETS_DIR:-$ROOT/secrets}" "$dc_secrets" export 2>/dev/null); then
-    echo "warning: dc-secrets export failed — services will run WITHOUT SOPS secrets." >&2
+  if ! output=$(env DC_SECRETS_DIR="${DC_SECRETS_DIR:-$ROOT/secrets}" "$dc_secrets" export play 2>/dev/null); then
+    echo "warning: dc-secrets export play failed — services will run WITHOUT SOPS secrets." >&2
     echo "         (is the age key present? see agent/docs/secrets.md)" >&2
     return 0
   fi

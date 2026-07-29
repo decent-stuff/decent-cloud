@@ -39,6 +39,7 @@ assert_eq "creates identity" "true" "$([[ -f "$TEST_DIR/.age-identity" ]] && ech
 assert_eq "creates sops config" "true" "$([[ -f "$TEST_DIR/.sops.yaml" ]] && echo true || echo false)"
 assert_eq "creates shared dir" "true" "$([[ -d "$TEST_DIR/shared" ]] && echo true || echo false)"
 assert_eq "creates agents dir" "true" "$([[ -d "$TEST_DIR/agents" ]] && echo true || echo false)"
+assert_eq "creates hires dir" "true" "$([[ -d "$TEST_DIR/hires" ]] && echo true || echo false)"
 # Idempotent
 "$DC_SECRETS" init >/dev/null 2>&1
 assert_eq "init idempotent" "0" "$?"
@@ -73,19 +74,42 @@ echo "--- agent-specific creds ---"
 assert_eq "agent-1 key" "secret_a1" "$("$DC_SECRETS" get agents/a1 AGENT_KEY)"
 assert_eq "agent-2 key" "secret_a2" "$("$DC_SECRETS" get agents/a2 AGENT_KEY)"
 
-echo "--- export ---"
-"$DC_SECRETS" set shared/base DB_URL=postgres://localhost
-export_out=$("$DC_SECRETS" export --agent a1)
-assert_eq "export has shared" "true" "$(echo "$export_out" | grep -q 'DB_URL=postgres://localhost' && echo true || echo false)"
-assert_eq "export has agent" "true" "$(echo "$export_out" | grep -q 'AGENT_KEY=secret_a1' && echo true || echo false)"
-assert_eq "export no blank lines" "0" "$(echo "$export_out" | grep -c '^$')"
+echo "--- export: layered model ---"
+"$DC_SECRETS" set shared/common COMMON_KEY=common_val DB_URL=postgres://localhost
+"$DC_SECRETS" set shared/prod PROD_ONLY=secret DB_URL=postgres://prod
+# Bare export = common-only (no env leakage) — the root-cause regression.
+bare_out=$("$DC_SECRETS" export)
+assert_eq "bare export has common key" "common_val" "$(echo "$bare_out" | grep '^COMMON_KEY=' | cut -d= -f2-)"
+assert_eq "bare export does NOT leak prod" "false" "$(echo "$bare_out" | grep -q '^PROD_ONLY=' && echo true || echo false)"
 
-echo "--- export agent override ---"
-"$DC_SECRETS" set shared/override SHARED_KEY=shared_val
+# `export prod` merges common + prod; last DB_URL occurrence is prod.
+prod_out=$("$DC_SECRETS" export prod)
+assert_eq "export prod has common" "true" "$(echo "$prod_out" | grep -q '^COMMON_KEY=common_val' && echo true || echo false)"
+assert_eq "export prod has prod-only" "true" "$(echo "$prod_out" | grep -q '^PROD_ONLY=secret' && echo true || echo false)"
+last_db=$(echo "$prod_out" | grep '^DB_URL=' | tail -1 | cut -d= -f2-)
+assert_eq "export prod last DB_URL wins" "postgres://prod" "$last_db"
+assert_eq "export no blank lines" "0" "$(echo "$prod_out" | grep -c '^$')"
+
+echo "--- export: agent overlay after env ---"
+"$DC_SECRETS" set shared/common SHARED_KEY=common_val
 "$DC_SECRETS" set agents/a3 SHARED_KEY=agent_val
-override_out=$("$DC_SECRETS" export --agent a3)
+override_out=$("$DC_SECRETS" export common --agent a3)
 last_val=$(echo "$override_out" | grep '^SHARED_KEY=' | tail -1 | cut -d= -f2-)
-assert_eq "agent overrides shared" "agent_val" "$last_val"
+assert_eq "agent overrides common" "agent_val" "$last_val"
+
+echo "--- export: missing/invalid env layer dies loud ---"
+# dev.yaml does NOT exist in this store (only common.yaml + prod.yaml), so a
+# valid-but-absent env layer must fail-fast — never silently fall to common-only.
+assert_fail "missing env layer dies" export dev
+assert_fail "unknown env name rejected" export bogus
+# Bare export with no shared/common.yaml must die loud (common is mandatory).
+# assert_fail inherits the exported DC_SECRETS_DIR, so swap it to a fresh empty
+# store for this one check, then restore.
+NO_COMMON=$(mktemp -d); EXTRA_DIRS+=("$NO_COMMON")
+DC_SECRETS_DIR="$NO_COMMON" "$DC_SECRETS" init >/dev/null 2>&1
+SAVED_DIR="$DC_SECRETS_DIR"; export DC_SECRETS_DIR="$NO_COMMON"
+assert_fail "bare export w/o common.yaml dies" export
+export DC_SECRETS_DIR="$SAVED_DIR"
 
 echo "--- list ---"
 list_out=$("$DC_SECRETS" list)

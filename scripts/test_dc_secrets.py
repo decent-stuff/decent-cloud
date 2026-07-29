@@ -87,7 +87,7 @@ def test_init_creates_store_with_generated_key(tmp_path):
     assert r.returncode == 0, r.stderr
     assert (store / ".age-identity").is_file()
     assert (store / ".sops.yaml").is_file()
-    for sub in ("shared", "agents", ".locks"):
+    for sub in ("shared", "agents", "hires", ".locks"):
         assert (store / sub).is_dir()
     assert "Initialized secrets store at" in r.stdout
     assert "Recipient:" in r.stdout
@@ -142,13 +142,14 @@ def test_roundtrip_gnarly_values(tmp_path):
     store = tmp_path / "store"
     init_store(store)
     run_dc(
-        ["set", "shared/env", f"GNARLY={GNARLY_URL}", f"SPECIAL={SPECIAL_CHARS}"],
+        ["set", "shared/common", f"GNARLY={GNARLY_URL}", f"SPECIAL={SPECIAL_CHARS}"],
         dc_dir=store,
     )
     # get path
-    assert run_dc(["get", "shared/env", "GNARLY"], dc_dir=store).stdout == GNARLY_URL + "\n"
-    assert run_dc(["get", "shared/env", "SPECIAL"], dc_dir=store).stdout == SPECIAL_CHARS + "\n"
-    # export path (unquoted KEY=value, value as-is)
+    assert run_dc(["get", "shared/common", "GNARLY"], dc_dir=store).stdout == GNARLY_URL + "\n"
+    assert run_dc(["get", "shared/common", "SPECIAL"], dc_dir=store).stdout == SPECIAL_CHARS + "\n"
+    # export path (unquoted KEY=value, value as-is). Bare export is common-only,
+    # so seeding shared/common makes these keys visible without an env overlay.
     out = run_dc(["export"], dc_dir=store).stdout
     assert export_value(out, "GNARLY") == GNARLY_URL
     assert export_value(out, "SPECIAL") == SPECIAL_CHARS
@@ -219,25 +220,117 @@ def test_delete_last_key_removes_file(tmp_path):
     assert not f.exists()
 
 
-# ─── export ───────────────────────────────────────────────────────────────────
+# ─── export: layered model ─────────────────────────────────────────────────────
+def test_export_common_only_is_bare_export(tmp_path):
+    """Bare `export` (no env) is common-only — a key living ONLY in an env layer
+    must NEVER leak out. This is the root-cause regression: the old flat glob
+    dumped every shared/*.yaml regardless of environment."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "COMMON=common_val"], dc_dir=store)
+    run_dc(["set", "shared/prod", "PROD_ONLY=secret"], dc_dir=store)
+    run_dc(["set", "shared/dev", "DEV_ONLY=secret"], dc_dir=store)
+    out = run_dc(["export"], dc_dir=store)
+    assert out.returncode == 0, out.stderr
+    assert export_value(out.stdout, "COMMON") == "common_val"
+    # No env leakage: bare export sees common and nothing else.
+    assert export_value(out.stdout, "PROD_ONLY") is None
+    assert export_value(out.stdout, "DEV_ONLY") is None
+
+
+def test_export_env_layer_merges_common_plus_env(tmp_path):
+    """`export <env>` emits common THEN env (last wins). A key in both is emitted
+    twice; shell `eval` keeps the last (env-specific) value."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "SHARED=common", "ONLY_COMMON=1"], dc_dir=store)
+    run_dc(["set", "shared/play", "SHARED=play", "ONLY_PLAY=1"], dc_dir=store)
+    out = run_dc(["export", "play"], dc_dir=store)
+    assert out.returncode == 0, out.stderr
+    lines = out.stdout.splitlines()
+    # common keys present, env-only key present
+    assert "ONLY_COMMON=1" in lines
+    assert "ONLY_PLAY=1" in lines
+    # SHARED appears twice (common then play); last wins under eval.
+    shared_lines = [ln for ln in lines if ln.startswith("SHARED=")]
+    assert shared_lines == ["SHARED=common", "SHARED=play"]
+
+
+def test_export_missing_common_layer_dies_loud(tmp_path):
+    """No shared/common.yaml → die loud (common is mandatory)."""
+    store = tmp_path / "store"
+    init_store(store)  # creates shared/ but no common.yaml yet
+    r = run_dc(["export"], dc_dir=store)
+    assert r.returncode == 1
+    assert "common layer 'shared/common.yaml' not found" in r.stderr
+
+
+def test_export_missing_env_layer_dies_loud(tmp_path):
+    """Asking for an env whose layer file does not exist → die loud with a
+    create-it hint (fail-fast, never silently fall back to common-only)."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "K=v"], dc_dir=store)
+    r = run_dc(["export", "prod"], dc_dir=store)
+    assert r.returncode == 1
+    assert "env layer 'prod' not found" in r.stderr
+    assert "dc-secrets set shared/prod" in r.stderr
+
+
+def test_export_rejects_unknown_env_name(tmp_path):
+    """An invalid env name is rejected — fail-fast, not treated as common-only."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "K=v"], dc_dir=store)
+    r = run_dc(["export", "bogus"], dc_dir=store)
+    assert r.returncode == 1
+    assert "unknown env layer 'bogus'" in r.stderr
+
+
+def test_export_common_explicit_equals_bare(tmp_path):
+    """`export common` is identical to bare `export` (both common-only)."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "A=1", "B=2"], dc_dir=store)
+    bare = run_dc(["export"], dc_dir=store).stdout
+    explicit = run_dc(["export", "common"], dc_dir=store).stdout
+    assert bare == explicit
+
+
 def test_export_shared_then_agent(tmp_path):
     store = tmp_path / "store"
     init_store(store)
-    run_dc(["set", "shared/base", "SHARED=base"], dc_dir=store)
+    run_dc(["set", "shared/common", "SHARED=common"], dc_dir=store)
     run_dc(["set", "agents/a1", "AGENT=a1"], dc_dir=store)
-    out = run_dc(["export", "--agent", "a1"], dc_dir=store).stdout
+    out = run_dc(["export", "common", "--agent", "a1"], dc_dir=store).stdout
     # shared printed first, agent override after.
-    assert out.index("SHARED=base") < out.index("AGENT=a1")
+    assert out.index("SHARED=common") < out.index("AGENT=a1")
     # no blank lines (would break eval).
     assert all(line.strip() for line in out.splitlines())
+
+
+def test_export_agent_overlays_after_env(tmp_path):
+    """Order is common → env → agents → hires; the last occurrence of a key wins
+    under shell `eval`. Missing agent/hires files are NOT fatal."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "K=common"], dc_dir=store)
+    run_dc(["set", "shared/prod", "K=prod"], dc_dir=store)
+    run_dc(["set", "agents/x", "K=agent"], dc_dir=store)
+    run_dc(["set", "hires/x", "K=hire", "HIRE_ONLY=1"], dc_dir=store)
+    out = run_dc(["export", "prod", "--agent", "x"], dc_dir=store).stdout
+    k_lines = [ln for ln in out.splitlines() if ln.startswith("K=")]
+    # Strict overlay order; the hire value is last → wins under eval.
+    assert k_lines == ["K=common", "K=prod", "K=agent", "K=hire"]
+    assert "HIRE_ONLY=1" in out.splitlines()
 
 
 def test_export_agent_override_wins_as_last(tmp_path):
     store = tmp_path / "store"
     init_store(store)
-    run_dc(["set", "shared/env", "K=shared"], dc_dir=store)
+    run_dc(["set", "shared/common", "K=common"], dc_dir=store)
     run_dc(["set", "agents/a2", "K=agent"], dc_dir=store)
-    out = run_dc(["export", "--agent", "a2"], dc_dir=store).stdout
+    out = run_dc(["export", "common", "--agent", "a2"], dc_dir=store).stdout
     # The agent value is the last K= occurrence -> a shell `eval` takes it.
     k_lines = [ln for ln in out.splitlines() if ln.startswith("K=")]
     assert k_lines[-1] == "K=agent"

@@ -83,7 +83,7 @@ Check if OAuth account exists
 Set via dc-secrets:
 
 ```bash
-scripts/dc-secrets set shared/env \
+scripts/dc-secrets set shared/play \
   GOOGLE_OAUTH_CLIENT_ID=your_dev_google_client_id \
   GOOGLE_OAUTH_CLIENT_SECRET=your_dev_google_client_secret \
   GOOGLE_OAUTH_REDIRECT_URL=http://localhost:59001/api/v1/oauth/google/callback \
@@ -125,7 +125,7 @@ npm run dev
 Set via dc-secrets:
 
 ```bash
-scripts/dc-secrets set shared/env \
+scripts/dc-secrets set shared/prod \
   GOOGLE_OAUTH_CLIENT_ID=your_prod_google_client_id \
   GOOGLE_OAUTH_CLIENT_SECRET=your_prod_google_client_secret \
   GOOGLE_OAUTH_REDIRECT_URL=https://api.decent-cloud.org/api/v1/oauth/google/callback \
@@ -230,7 +230,7 @@ For multi-server production deployments:
 ### "GOOGLE_OAUTH_CLIENT_ID environment variable not set"
 
 **Solution:**
-- Ensure all 4 environment variables are set via `scripts/dc-secrets set shared/env`
+- Ensure all 4 environment variables are set via `scripts/dc-secrets set shared/<env>` (env = play/dev/prod)
 - Restart the API server after adding variables
 
 ### OAuth callback redirects to error page

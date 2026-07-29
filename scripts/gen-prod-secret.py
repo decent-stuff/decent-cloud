@@ -19,12 +19,12 @@ Usage:
 
 The 37 emitted keys are cross-checked against
 deploy/k8s/decent-cloud-secret.yaml.template (fail loud on drift).
-API_DATABASE_URL is BUILT from PROD_POSTGRES_PASSWORD (the dedicated prod role
-password) with a FIXED user/db of decent_cloud_prod@192.168.0.2:5432 — the host
-pg14 DB the prod stack connects to as its owner role. TUNNEL_TOKEN_PROD is reused from the
-dc-secrets 'TUNNEL_TOKEN' when present (placeholder otherwise); ensure its
-tunnel ingress routes to the k8s FQDNs via 'cf/tunnel.py prod'. See
-deploy/k8s/TUNNEL.md.
+API_DATABASE_URL is read VERBATIM from the prod secrets layer
+(`dc-secrets export prod`); set it to the prod DSN directly:
+    scripts/dc-secrets set shared/prod API_DATABASE_URL=postgres://decent_cloud_prod:<pw>@192.168.0.2:5432/decent_cloud_prod
+TUNNEL_TOKEN_PROD is reused from the dc-secrets 'TUNNEL_TOKEN' when present
+(placeholder otherwise); ensure its tunnel ingress routes to the k8s FQDNs via
+'cf/tunnel.py prod'. See deploy/k8s/TUNNEL.md.
 
 Secret values are NEVER written to stderr — only status notes + the loud
 TUNNEL_TOKEN_PROD warning are. The Secret body goes to stdout only.
@@ -83,17 +83,6 @@ SECRET_KEYS: list[str] = [
     "LLM_API_MODEL",
 ]
 
-# Fixed prod DB coordinates (host pg14 on the NUC already hosts the DBs).
-# Prod connects as the DB owner role `decent_cloud_prod` (NOT the dc-secrets
-# `PG_USER`/play role, which lacks CREATE on the prod schema). The password is
-# `PROD_POSTGRES_PASSWORD` — a dedicated prod role password distinct from the
-# local-dev PG_PASSWORD, kept separately in dc-secrets.
-DB_HOST = "192.168.0.2"
-DB_PORT = "5432"
-DB_NAME = "decent_cloud_prod"
-DB_USER = "decent_cloud_prod"
-DB_PASSWORD_KEY = "PROD_POSTGRES_PASSWORD"
-
 _TEMPLATE_KEY_RE = re.compile(r"^  ([A-Z][A-Z0-9_]+)")
 # A template key whose value is an empty quoted scalar (`""`) is OPTIONAL; every
 # other key is a `REPLACE_WITH_*` placeholder or a real value and is REQUIRED.
@@ -144,12 +133,17 @@ def check_template_drift() -> set[str]:
 
 
 def load_dc_secrets() -> dict[str, str]:
-    """Run `scripts/dc-secrets export` once and parse KEY=VALUE lines into a dict."""
+    """Run `scripts/dc-secrets export prod` once and parse KEY=VALUE lines into a dict.
+
+    The env layer is fixed to ``prod``: the k8s Secret only ever carries prod
+    values, so reading common+prod (and nothing else) is correct and prevents a
+    stale dev/play value from leaking into the prod manifest.
+    """
     if not DC_SECRETS.exists():
         die(f"'dc-secrets' not found: {DC_SECRETS}")
     try:
         proc = subprocess.run(
-            [str(DC_SECRETS), "export"],
+            [str(DC_SECRETS), "export", "prod"],
             capture_output=True,
             text=True,
             timeout=60,
@@ -157,11 +151,11 @@ def load_dc_secrets() -> dict[str, str]:
         )
     except subprocess.CalledProcessError:
         die(
-            "'dc-secrets export' failed — is the SOPS age key available?\n"
+            "'dc-secrets export prod' failed — is the SOPS age key available?\n"
             "  (resolve via SOPS_AGE_KEY / SOPS_AGE_KEY_FILE, or dc-secrets age-key import)"
         )
     except subprocess.TimeoutExpired:
-        die("'dc-secrets export' timed out after 60s")
+        die("'dc-secrets export prod' timed out after 60s")
 
     vals: dict[str, str] = {}
     for line in proc.stdout.splitlines():
@@ -186,15 +180,17 @@ def yaml_escape(value: str) -> str:
 def resolve_value(key: str, vals: dict[str, str], tunnel_val: str, optional_keys: set[str]) -> str:
     """Return the YAML line for one secret key."""
     if key == "API_DATABASE_URL":
-        prod_pw = vals.get(DB_PASSWORD_KEY, "")
-        if not prod_pw:
+        # Read VERBATIM from the prod layer (last-wins under `export prod`).
+        # The prod DSN is stored directly so this generator stays a dumb mapper
+        # with no DB-coordinate knowledge.
+        value = vals.get("API_DATABASE_URL", "")
+        if not value:
             die(
-                f"{DB_PASSWORD_KEY} missing in dc-secrets — cannot build API_DATABASE_URL.\n"
-                f"  Set the prod role password: sudo -u postgres psql -p 5432 -c\n"
-                f"    \"ALTER ROLE {DB_USER} WITH PASSWORD '<pw>';\"\n"
-                f"  then store it: scripts/dc-secrets set shared/env {DB_PASSWORD_KEY}=<pw>"
+                "API_DATABASE_URL is MISSING in the prod secrets layer — cannot emit "
+                "the prod DB connection string.\n"
+                "  Set it: scripts/dc-secrets set shared/prod "
+                "API_DATABASE_URL=postgres://decent_cloud_prod:<pw>@192.168.0.2:5432/decent_cloud_prod"
             )
-        value = f"postgres://{DB_USER}:{prod_pw}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
     elif key == "TUNNEL_TOKEN_PROD":
         value = tunnel_val
     else:
@@ -206,7 +202,7 @@ def resolve_value(key: str, vals: dict[str, str], tunnel_val: str, optional_keys
             die(
                 f"{key} is MISSING in dc-secrets — this is a REQUIRED prod secret "
                 f"(not marked optional in {TEMPLATE.name}).\n"
-                f"  Set it: scripts/dc-secrets set shared/env {key}=<value>\n"
+                f"  Set it: scripts/dc-secrets set shared/prod {key}=<value>\n"
                 f"  If it is genuinely optional, mark it so in {TEMPLATE} (value: \"\") and re-run."
             )
     return f'  {key}: "{yaml_escape(value)}"'

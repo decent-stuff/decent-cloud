@@ -23,22 +23,22 @@ This sets up SOPS with age encryption for the repository.
 ### 2. Set Credentials
 
 ```bash
-# Set shared environment variables
-scripts/dc-secrets set shared/env GOOGLE_OAUTH_CLIENT_ID=your_client_id
-scripts/dc-secrets set shared/env GOOGLE_OAUTH_CLIENT_SECRET=your_client_secret
-scripts/dc-secrets set shared/env GOOGLE_OAUTH_REDIRECT_URL=https://api.decent-cloud.org/api/v1/oauth/google/callback
-scripts/dc-secrets set shared/env FRONTEND_URL=https://decent-cloud.org
-scripts/dc-secrets set shared/env TUNNEL_TOKEN=your_tunnel_token
+# Set production environment variables (shared/prod layer)
+scripts/dc-secrets set shared/prod GOOGLE_OAUTH_CLIENT_ID=your_client_id
+scripts/dc-secrets set shared/prod GOOGLE_OAUTH_CLIENT_SECRET=your_client_secret
+scripts/dc-secrets set shared/prod GOOGLE_OAUTH_REDIRECT_URL=https://api.decent-cloud.org/api/v1/oauth/google/callback
+scripts/dc-secrets set shared/prod FRONTEND_URL=https://decent-cloud.org
+scripts/dc-secrets set shared/prod TUNNEL_TOKEN=your_tunnel_token
 ```
 
 ### 3. View and Edit Credentials
 
 ```bash
 # List all secrets in a group
-scripts/dc-secrets list shared/env
+scripts/dc-secrets list shared/prod
 
 # Edit secrets interactively
-scripts/dc-secrets edit shared/env
+scripts/dc-secrets edit shared/prod
 ```
 
 ---
@@ -114,7 +114,7 @@ All secrets are encrypted at rest using SOPS + age. Only users with the correct 
 **Error:** Google OAuth shows redirect URI mismatch
 
 **Solution:**
-1. Check `GOOGLE_OAUTH_REDIRECT_URL` via `scripts/dc-secrets list shared/env`
+1. Check `GOOGLE_OAUTH_REDIRECT_URL` via `scripts/dc-secrets list shared/prod`
 2. Verify Google Cloud Console has the same redirect URI configured
 3. Ensure you're using the correct OAuth app (dev vs prod)
 
@@ -124,8 +124,8 @@ All secrets are encrypted at rest using SOPS + age. Only users with the correct 
 
 **Solution:** Verify `FRONTEND_URL` starts with `https://`:
 ```bash
-scripts/dc-secrets list shared/env  # check FRONTEND_URL value
-scripts/dc-secrets set shared/env FRONTEND_URL=https://decent-cloud.org
+scripts/dc-secrets list shared/prod  # check FRONTEND_URL value
+scripts/dc-secrets set shared/prod FRONTEND_URL=https://decent-cloud.org
 ```
 
 ---

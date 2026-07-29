@@ -44,8 +44,8 @@ def test_resolve_value_dies_loud_when_required_key_missing(gps, capsys):
     err = capsys.readouterr().err
     assert "CREDENTIAL_ENCRYPTION_KEY" in err
     assert "REQUIRED" in err
-    # Actionable remediation hint.
-    assert "scripts/dc-secrets set shared/env CREDENTIAL_ENCRYPTION_KEY=" in err
+    # Actionable remediation hint points at the prod layer.
+    assert "scripts/dc-secrets set shared/prod CREDENTIAL_ENCRYPTION_KEY=" in err
 
 
 def test_resolve_value_optional_key_empty_when_missing(gps, capsys):
@@ -73,6 +73,61 @@ def test_resolve_value_escapes_special_chars(gps):
     """YAML double-quote escaping still holds on the required-key path."""
     line = gps.resolve_value("SMTP_PASSWORD", {"SMTP_PASSWORD": 'p"ass\\word'}, "", set())
     assert line == '  SMTP_PASSWORD: "p\\"ass\\\\word"'
+
+
+def test_resolve_value_api_database_url_read_verbatim(gps, capsys):
+    """API_DATABASE_URL is read VERBATIM from the prod layer — no DSN building,
+    no PROD_POSTGRES_PASSWORD lookup. The generator is a dumb mapper."""
+    dsn = "postgres://decent_cloud_prod:secret@192.168.0.2:5432/decent_cloud_prod"
+    line = gps.resolve_value("API_DATABASE_URL", {"API_DATABASE_URL": dsn}, "", set())
+    assert line == f'  API_DATABASE_URL: "{dsn}"'
+    assert capsys.readouterr().err == ""
+
+
+def test_resolve_value_api_database_url_dies_loud_when_missing(gps, capsys):
+    """Missing API_DATABASE_URL in the prod layer dies loud with a remediation
+    hint that stores the DSN directly in shared/prod (not built from a password)."""
+    with pytest.raises(SystemExit) as exc:
+        gps.resolve_value("API_DATABASE_URL", {}, "", set())
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "API_DATABASE_URL" in err
+    assert "shared/prod" in err
+    # The hint must carry the verbatim-DSN shape, NOT a PROD_POSTGRES_PASSWORD build.
+    assert "PROD_POSTGRES_PASSWORD" not in err
+    assert "decent_cloud_prod" in err
+
+
+def test_resolve_value_no_db_build_constants_remain(gps):
+    """DRY: the prod-DB build constants were removed. None should exist on the module."""
+    for attr in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD_KEY"):
+        assert not hasattr(gps, attr), f"stale build constant still defined: gps.{attr}"
+
+
+# ---------------------------------------------------------------------------
+# load_dc_secrets — invokes the prod env layer (no env leakage into prod manifest)
+# ---------------------------------------------------------------------------
+
+def test_load_dc_secrets_invokes_export_prod(gps, monkeypatch):
+    """load_dc_secrets must call `dc-secrets export prod` (common+prod only) so a
+    stale dev/play value can never reach the prod manifest. Regression for the
+    flat-store leak."""
+    captured: dict = {}
+
+    class _Proc:
+        returncode = 0
+        stdout = "API_DATABASE_URL=postgres://example/db\n"
+        stderr = ""
+
+    def fake_run(argv, **kwargs):
+        captured["argv"] = list(argv)
+        return _Proc()
+
+    monkeypatch.setattr(gps.subprocess, "run", fake_run)
+    vals = gps.load_dc_secrets()
+    assert vals == {"API_DATABASE_URL": "postgres://example/db"}
+    # The env layer MUST be "prod" — never a bare export.
+    assert captured["argv"][1:] == ["export", "prod"]
 
 
 # ---------------------------------------------------------------------------

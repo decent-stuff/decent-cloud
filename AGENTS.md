@@ -52,7 +52,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ### 1. Verify Prerequisites
 - Confirm real services, credentials, env vars, and infrastructure exist before coding. YOU MUST HAVE everything you need to do your job properly.
-- Check credentials: run `scripts/dc-secrets list` and `scripts/dc-secrets export` to verify secrets are available.
+- Check credentials: run `scripts/dc-secrets list` and `scripts/dc-secrets export play` (or the env you target) to verify secrets are available.
 - **If anything is missing: STOP immediately and ask.** Do not guess, stub, or silently mock what should be real.
 
 ### 2. Build a Working PoC (NOT SKIPPABLE)
@@ -101,7 +101,7 @@ docker exec agent-postgres-1 pg_isready -U test
 ### Running The API Server Locally
 ```bash
 cargo build -p api --bin api-server
-eval "$(scripts/dc-secrets export)"
+eval "$(scripts/dc-secrets export play)"
 ./target/debug/api-server serve
 
 DATABASE_URL=postgres://test:test@postgres:5432/test \
@@ -121,11 +121,13 @@ npm run dev
 - Website defaults to API at `localhost:59011` unless overridden.
 
 ### Credentials (dc-secrets)
-All secrets are stored in SOPS-encrypted files under `secrets/`. Use `scripts/dc-secrets` to manage them:
-- `scripts/dc-secrets export` - print all credentials as key=value (used by entrypoint.sh automatically)
-- `scripts/dc-secrets set shared/env KEY=value` - add/update a credential
-- `scripts/dc-secrets edit shared/env` - interactive edit in $EDITOR
+All secrets are stored in SOPS-encrypted files under `secrets/`, layered by environment. Use `scripts/dc-secrets` to manage them:
+- `scripts/dc-secrets export <env>` - print credentials as key=value, layered: `shared/common.yaml` + `shared/<env>.yaml` (+ agents/hires). `<env>` ∈ {common, play, dev, prod}. A bare `export` (no env) is **common-only** — it never leaks another env's secrets.
+- `scripts/dc-secrets set shared/<layer> KEY=value` - add/update a credential in one layer (common/play/dev/prod)
+- `scripts/dc-secrets edit shared/<layer>` - interactive edit in $EDITOR
 - `scripts/dc-secrets list` - list all secret files
+
+Layers: `shared/common.yaml` (env-agnostic, always loaded), `shared/play.yaml` (local dev sidecar), `shared/dev.yaml` (staging deploy), `shared/prod.yaml` (production deploy).
 
 **Hire accounts** (GitHub, email credentials for new team members) are in the private parent repo under `secrets/hires/`, one file per person. Access them with:
 ```bash
@@ -208,7 +210,7 @@ otherwise; see `api/src/rate_limit.rs`.
   2. `doctor_command()` checks
   3. `api/.env.example` and `cf/.env.example` (documentation templates)
   4. docker-compose env sections
-  5. `scripts/dc-secrets set shared/env <KEY>=<value>`
+  5. `scripts/dc-secrets set shared/<layer> <KEY>=<value>`
 
 ## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION
 Stop work, file a GitHub issue describing the problem, and ask how to proceed if you find:

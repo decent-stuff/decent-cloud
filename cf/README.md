@@ -79,7 +79,7 @@ The deployment includes an optional blockchain validator service that earns DCT 
 
 ### Configuration
 
-Environment variables (set via `scripts/dc-secrets set shared/env` or docker-compose override):
+Environment variables (set via `scripts/dc-secrets set shared/<layer>` or docker-compose override):
 
 - `VALIDATION_INTERVAL_SECS`: Validation frequency in seconds (default: 600 = 10 minutes)
 - `VALIDATION_MEMO`: Optional memo for validation transactions
