@@ -45,5 +45,7 @@ ENV XDG_CACHE_HOME=/data
 # Switch to non-root user
 USER appuser
 
-# Run the application
-CMD ["api-server"]
+# Run the application (default subcommand; the k8s manifest overrides per-pod:
+# api-serve uses `serve`, api-sync uses `sync`). A bare `api-server` with no
+# subcommand exits 2 (clap requires one), so default to the primary `serve`.
+CMD ["api-server", "serve"]

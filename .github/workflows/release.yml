@@ -158,8 +158,86 @@ jobs:
           draft: false
           prerelease: false
 
+  deploy-prod:
+    needs: [upload-release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: self-hosted
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DC_REPO_WRITE }}
+          fetch-depth: 1
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build API binaries
+        env:
+          SQLX_OFFLINE: "true"
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu --bin api-server --bin dc
+
+      - name: Build website
+        env:
+          VITE_DECENT_CLOUD_API_URL: https://api.decent-cloud.org
+        run: |
+          cd website
+          npm ci
+          npm run build
+
+      - name: Build and push images
+        env:
+          FORGEJO_OWNER: ${{ secrets.FORGEJO_OWNER }}
+          FORGEJO_USER: ${{ secrets.FORGEJO_USER }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          echo "$FORGEJO_TOKEN" | docker login git.kalaj.org -u "$FORGEJO_USER" --password-stdin
+          docker build -f api/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG} .
+          docker build -f cf/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG} .
+          docker push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG}
+          docker push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG}
+
+      - name: Bump image tags in deploy/k8s/decent-cloud.yaml
+        env:
+          FORGEJO_OWNER: ${{ secrets.FORGEJO_OWNER }}
+        run: |
+          python3 - <<'PY'
+          import os, re, pathlib
+          owner, tag = os.environ["FORGEJO_OWNER"], os.environ["TAG"]
+          p = pathlib.Path("deploy/k8s/decent-cloud.yaml")
+          text = p.read_text()
+          for marker, name in (("deploy-prod:api", "decent-cloud-api"),
+                               ("deploy-prod:website", "decent-cloud-website")):
+              pat = re.compile(r"^(\s*image:\s*).*# " + re.escape(marker) + r"\s*$", re.M)
+              repl = rf"\1git.kalaj.org/{owner}/{name}:{tag}  # {marker}"
+              text, n = pat.subn(repl, text)
+              # api image is shared by the `api` + `api-sync` Deployments (2 lines);
+              # website is a single Deployment. Fail loud only if a marker vanished.
+              assert n >= 1, f"no image line tagged {marker} found — check deploy/k8s/decent-cloud.yaml"
+          p.write_text(text)
+          print(f"Bumped decent-cloud-api + decent-cloud-website to {owner}:{tag}")
+          PY
+
+      - name: Commit and push image bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/k8s/decent-cloud.yaml
+          git commit -m "deploy(decent-cloud): bump images to ${TAG}"
+          git push origin HEAD:main
+
   update-version:
-    needs: [create-release, upload-release]
+    needs: [create-release, upload-release, deploy-prod]
     runs-on: ubuntu-latest
     permissions:
       contents: write

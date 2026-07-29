@@ -2,15 +2,19 @@
 
 This directory contains Docker and Python scripts for deploying the Decent Cloud website with Cloudflare Tunnel.
 
+> Production deploys to k3s — see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md) (tunnel token generation/rotation: [`deploy/k8s/TUNNEL.md`](../deploy/k8s/TUNNEL.md)).
+
 ## Quick Start
 
 ```bash
-# 1. Setup tunnel (interactive)
-python3 setup_tunnel.py
+# 1. (one-off, from CI which holds CF_API_TOKEN/CF_ACCOUNT_ID) ensure the tunnel + DNS exist:
+python3 cf/tunnel.py dev        # prints the dev tunnel token
+python3 cf/tunnel.py prod       # prints the prod tunnel token
 
 # 2. Deploy
-python3 deploy.py deploy dev    # Development
-python3 deploy.py deploy prod   # Production
+python3 cf/deploy.py deploy dev             # Development (local; served over the dev tunnel)
+python3 cf/deploy.py deploy prod            # Production (local build; use --remote for CI → VM)
+python3 cf/deploy.py deploy prod --remote dc@host   # CI path: build locally, deploy over SSH
 ```
 
 ## Blockchain Validator (Optional)
@@ -104,9 +108,8 @@ See [docs/mining-and-validation.md](../docs/mining-and-validation.md) for more d
 
 ### Python Scripts
 
-- **setup_tunnel.py** - Interactive setup wizard for Cloudflare Tunnel configuration
-- **deploy.py** - Unified deployment script with native build support (replaces deploy_dev.py and deploy_prod.py)
-- **cf_common.py** - Shared utilities (validation, env loading, Docker operations)
+- **tunnel.py** - Idempotent Cloudflare tunnel create-or-get + DNS ingress config (CF API; run from CI). Replaces the old interactive `setup_tunnel.py` (deleted).
+- **deploy.py** - Unified deployment script (local `dev`/`prod` + `--remote` SSH deploy for CI) with native build support
 
 ### Docker Files
 

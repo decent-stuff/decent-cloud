@@ -102,14 +102,14 @@ Python scripts facilitate the automated deployment with the simplified Docker ap
 ```bash
 cd cf
 
-# 1. Run interactive setup (guides you through tunnel creation)
-python3 setup_tunnel.py
+# 1. (one-off, from CI which holds CF_API_TOKEN/CF_ACCOUNT_ID) ensure tunnel + DNS exist:
+python3 tunnel.py prod        # prints the prod tunnel token
 
-# 2. Deploy to development
+# 2. Deploy to development (local; served over the dev tunnel)
 python3 deploy.py deploy dev
 
-# Or deploy to production
-python3 deploy.py deploy prod
+# Or deploy to production (CI: build locally, deploy over SSH to the VM)
+python3 deploy.py deploy prod --remote dc@204.168.149.118
 ```
 
 The scripts will:

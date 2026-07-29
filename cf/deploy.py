@@ -23,6 +23,14 @@ def calculate_binary_hash() -> str:
     binary_path = cf_dir.parent / "target" / "x86_64-unknown-linux-gnu" / "release" / "api-server"
 
     if not binary_path.exists():
+        # The build step should have produced this. If it didn't, the Docker
+        # cache key becomes a constant ("no-binary") and stale images may ship —
+        # be loud so the operator notices the path/build mismatch instead of
+        # silently building from a stale cache.
+        print_warning(
+            f"API binary not found at {binary_path} — Docker cache key will be 'no-binary' "
+            f"(stale-cache risk). Ensure build_rust_binaries_natively() ran first."
+        )
         return "no-binary"
 
     hasher = hashlib.sha256()
@@ -281,7 +289,10 @@ def check_tunnel_status(compose_files: list[str], env_name: str) -> str:
             return "unauthorized"
         else:
             return "unclear"
-    except Exception:
+    except Exception as e:
+        # Don't swallow the cause: surface WHY the status check blew up (docker
+        # missing, compose file unreadable, etc.) so the operator can fix it.
+        print_error(f"Tunnel status check failed: {e!r}")
         return "error"
 
 
@@ -616,7 +627,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
             print("  1. Tunnel doesn't exist in Cloudflare dashboard")
             print("  2. Token is invalid or expired")
             print()
-            print(f"Fix: {BLUE}python3 setup_tunnel.py{NC}")
+            print(f"Fix: {BLUE}python3 cf/tunnel.py {'prod' if is_prod else 'dev'}{NC}")
             print()
             if is_prod:
                 return 1

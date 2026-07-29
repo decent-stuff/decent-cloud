@@ -64,8 +64,8 @@ Validator (optional)
 - `api/Dockerfile` - Build for API (assumes binary built natively and then added to the image)
 
 ### Python Scripts
-- `cf/setup_tunnel.py` - Interactive tunnel configuration wizard
-- `cf/deploy.py` - Deploy environment
+- `cf/tunnel.py` - Idempotent Cloudflare tunnel create-or-get + DNS ingress (CF API; run from CI). Replaces the deleted interactive `setup_tunnel.py`.
+- `cf/deploy.py` - Deploy environment (local `dev`/`prod` + `--remote` SSH deploy for CI)
 
 ## Cloudflare Tunnel Configuration
 
