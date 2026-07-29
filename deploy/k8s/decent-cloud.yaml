@@ -112,10 +112,8 @@ spec:
           mountPath: /data
         resources:
           requests:
-            cpu: 250m
             memory: 512Mi
           limits:
-            cpu: 2000m
             memory: 2Gi
         readinessProbe:
           httpGet:
@@ -202,10 +200,8 @@ spec:
           mountPath: /data
         resources:
           requests:
-            cpu: 100m
             memory: 256Mi
           limits:
-            cpu: 1000m
             memory: 1Gi
       volumes:
       - name: api-data
@@ -252,10 +248,8 @@ spec:
           containerPort: 59010
         resources:
           requests:
-            cpu: 50m
             memory: 64Mi
           limits:
-            cpu: 250m
             memory: 256Mi
         readinessProbe:
           httpGet:
@@ -327,10 +321,8 @@ spec:
           containerPort: 59102
         resources:
           requests:
-            cpu: 250m
             memory: 512Mi
           limits:
-            cpu: 1000m
             memory: 2Gi
         readinessProbe:
           exec:
@@ -398,10 +390,8 @@ spec:
         - {name: OPENAI_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: OPENAI_API_KEY}}}
         resources:
           requests:
-            cpu: 250m
             memory: 512Mi
           limits:
-            cpu: 1000m
             memory: 2Gi
 ---
 # ---------------------------------------------------------------------------
@@ -446,10 +436,8 @@ spec:
         - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_POSTGRES_PASSWORD}}}
         resources:
           requests:
-            cpu: 250m
             memory: 512Mi
           limits:
-            cpu: 1000m
             memory: 2Gi
 ---
 # ---------------------------------------------------------------------------
@@ -490,10 +478,8 @@ spec:
           mountPath: /data
         resources:
           requests:
-            cpu: 50m
             memory: 128Mi
           limits:
-            cpu: 500m
             memory: 512Mi
         readinessProbe:
           exec:
@@ -554,10 +540,8 @@ spec:
               key: TUNNEL_TOKEN_PROD
         resources:
           requests:
-            cpu: 50m
             memory: 64Mi
           limits:
-            cpu: 500m
             memory: 256Mi
 ---
 # ---------------------------------------------------------------------------
