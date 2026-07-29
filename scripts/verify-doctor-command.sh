@@ -26,7 +26,7 @@ if ! cargo build --bin api-server 2>&1 | grep -q "Finished"; then
     echo -e "${RED}✗ Build failed - skipping verification${NC}"
     echo "Note: There are pre-existing compilation errors in the codebase"
     echo "      that prevent building, but the doctor command implementation is complete."
-    exit 0
+    exit 1
 fi
 
 echo -e "${GREEN}✓ Build successful${NC}"

@@ -3,18 +3,20 @@
 
 import os
 import sys
-import subprocess
 import urllib.request
 import json
 import tempfile
 import shutil
 from pathlib import Path
 
+# Never bare — every GitHub/HTTP call carries this (connect + per-read bound).
+HTTP_TIMEOUT = 30
+
 def get_latest_release():
     """Get the latest release information from GitHub API."""
     url = "https://api.github.com/repos/dfinity/pocket-ic/releases/latest"
     try:
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as response:
             data = json.loads(response.read().decode())
             return data
     except Exception as e:
@@ -66,7 +68,7 @@ def download_pocket_ic():
     print(f"Downloading {asset_name}...")
     try:
         with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            with urllib.request.urlopen(asset_url) as response:
+            with urllib.request.urlopen(asset_url, timeout=HTTP_TIMEOUT) as response:
                 shutil.copyfileobj(response, tmp_file)
 
             # Make executable and move to final location

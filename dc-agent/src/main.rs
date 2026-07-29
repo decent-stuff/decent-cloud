@@ -2126,7 +2126,7 @@ async fn poll_and_provision(
 
 async fn collect_running_by_contract(provisioners: &ProvisionerMap) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    for prov in provisioners.values() {
+    for (prov_name, prov) in provisioners {
         match prov.list_running_instances().await {
             Ok(instances) => {
                 for inst in instances {
@@ -2138,7 +2138,18 @@ async fn collect_running_by_contract(provisioners: &ProvisionerMap) -> HashMap<S
                     }
                 }
             }
-            Err(_) => continue,
+            // A provisioner that cannot list its instances would otherwise drop
+            // silently out of orphan reconciliation: missing VMs could be
+            // treated as gone. Surface the backend + error so the outage is
+            // visible instead of degrading reconciliation unnoticed.
+            Err(e) => {
+                warn!(
+                    backend = %prov_name,
+                    error = %e,
+                    "Failed to list running instances during reconciliation; instances for this provisioner will be excluded this cycle"
+                );
+                continue;
+            }
         }
     }
     map
@@ -3549,6 +3560,83 @@ WantedBy=multi-user.target
         let result = collect_running_by_contract(&provisioners).await;
         assert_eq!(result.len(), 1);
         assert_eq!(result.get("abc123"), Some(&"101".to_string()));
+    }
+
+    /// Regression (silent-failure sweep): a provisioner whose
+    /// `list_running_instances` errors must not silently drop out of orphan
+    /// reconciliation. The failure must be LOUD (warn naming the backend + the
+    /// underlying error) and collection must continue for the other backends.
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn collect_running_by_contract_logs_and_continues_on_provisioner_error() {
+        use dc_agent::provisioner::{HealthStatus, Instance, RunningInstance};
+
+        struct FailingProvisioner;
+        #[async_trait::async_trait]
+        impl Provisioner for FailingProvisioner {
+            async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+                unreachable!()
+            }
+            async fn terminate(&self, _external_id: &str) -> Result<()> {
+                unreachable!()
+            }
+            async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+                unreachable!()
+            }
+            async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+                unreachable!()
+            }
+            async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+                anyhow::bail!("backend unreachable (simulated)")
+            }
+        }
+
+        struct StubProvisioner {
+            instances: Vec<RunningInstance>,
+        }
+        #[async_trait::async_trait]
+        impl Provisioner for StubProvisioner {
+            async fn provision(&self, _request: &ProvisionRequest) -> Result<Instance> {
+                anyhow::bail!("not implemented")
+            }
+            async fn terminate(&self, _external_id: &str) -> Result<()> {
+                anyhow::bail!("not implemented")
+            }
+            async fn health_check(&self, _external_id: &str) -> Result<HealthStatus> {
+                anyhow::bail!("not implemented")
+            }
+            async fn get_instance(&self, _external_id: &str) -> Result<Option<Instance>> {
+                anyhow::bail!("not implemented")
+            }
+            async fn list_running_instances(&self) -> Result<Vec<RunningInstance>> {
+                Ok(self.instances.clone())
+            }
+        }
+
+        let mut provisioners: ProvisionerMap = HashMap::new();
+        provisioners.insert("broken-backend".to_string(), Box::new(FailingProvisioner));
+        provisioners.insert(
+            "healthy-backend".to_string(),
+            Box::new(StubProvisioner {
+                instances: vec![RunningInstance {
+                    external_id: "201".to_string(),
+                    contract_id: Some("live-contract".to_string()),
+                }],
+            }),
+        );
+
+        let result = collect_running_by_contract(&provisioners).await;
+
+        // Reconciliation survived the failure and still collected the healthy
+        // backend's instance (the failing backend did not shadow it).
+        assert_eq!(result.len(), 1);
+        assert_eq!(result.get("live-contract"), Some(&"201".to_string()));
+
+        // The failure is LOUD, not silent: the warn names the failing backend
+        // and surfaces the underlying error in the captured log output.
+        assert!(logs_contain("Failed to list running instances"));
+        assert!(logs_contain("broken-backend"));
+        assert!(logs_contain("backend unreachable (simulated)"));
     }
 
     #[test]

@@ -130,10 +130,18 @@ pub async fn send_payment_receipt(
         None
     };
 
-    // Get invoice number for the email body
+    // Get invoice number for the email body. `get_invoice_metadata` creates the
+    // invoice if it is missing, so an Err here is a real DB failure — surface
+    // it instead of silently sending a receipt with no invoice number.
     let invoice_number = match invoices::get_invoice_metadata(db, contract_id).await {
         Ok(inv) => Some(inv.invoice_number),
-        Err(_) => None,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to load invoice metadata for contract {}: {e:#}",
+                contract_hex
+            );
+            None
+        }
     };
 
     // Adjust footer based on whether invoice is attached

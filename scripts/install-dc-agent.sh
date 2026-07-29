@@ -44,7 +44,7 @@ if [[ -f "${INSTALL_DIR}/dc-agent" ]]; then
 fi
 
 info "Getting latest release..."
-VERSION=$(curl -sSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
+VERSION=$(curl -sfSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name"' | cut -d'"' -f4)
 [[ -z "$VERSION" ]] && error "Failed to get latest release version"
 EXPECTED_VERSION="${VERSION#v}"  # Strip leading 'v' if present
 

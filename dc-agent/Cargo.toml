@@ -40,3 +40,4 @@ num-bigint-dig.workspace = true
 [dev-dependencies]
 mockito = "1.6"
 tempfile = "3.8"
+tracing-test = "0.2.5"

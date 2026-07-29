@@ -8,7 +8,7 @@
 # 2. Reading the token from the database (simulating email click)
 # 3. Completing recovery with a new public key
 
-set -e
+set -eo pipefail
 
 # Colors for output
 RED='\033[0;31m'
