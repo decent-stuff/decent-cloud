@@ -9,112 +9,36 @@ This directory contains Docker and Python scripts for deploying the Decent Cloud
 ```bash
 # 1. (one-off, from CI which holds CF_API_TOKEN/CF_ACCOUNT_ID) ensure the tunnel + DNS exist:
 python3 cf/tunnel.py dev        # prints the dev tunnel token
-python3 cf/tunnel.py prod       # prints the prod tunnel token
 
-# 2. Deploy
+# 2. Deploy the local dev stack
 python3 cf/deploy.py deploy dev             # Development (local; served over the dev tunnel)
-python3 cf/deploy.py deploy prod            # Production (local build; use --remote for CI → VM)
-python3 cf/deploy.py deploy prod --remote dc@host   # CI path: build locally, deploy over SSH
 ```
 
-## Blockchain Validator (Optional)
+> Production deploys via k8s — see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)
+> (tunnel token generation/rotation: [`deploy/k8s/TUNNEL.md`](../deploy/k8s/TUNNEL.md)).
+> `deploy.py` is dev-only: `deploy.py deploy prod` aborts with a pointer to the
+> k8s runbook.
 
-The deployment includes an optional blockchain validator service that earns DCT rewards by validating blocks every 10 minutes.
+## Blockchain Validator
 
-**By default, the validator is DISABLED** (using Docker Compose profiles) to prevent accidental startup without a configured identity.
-
-### Prerequisites
-
-1. **Generate or have an existing validator identity**:
-   ```bash
-   dc keygen --generate --identity my-validator
-   ```
-
-2. **Register as a provider** (requires 0.5 DCT):
-   ```bash
-   dc provider register --identity my-validator
-   ```
-
-3. **Ensure sufficient balance** (0.5 DCT per validation):
-   ```bash
-   dc account --identity my-validator --balance
-   ```
-
-### Setup
-
-1. **Locate your identity directory**
-
-   Identity directories are typically at `~/.dcc/identity/<identity-name>` and contain:
-   - `private.pem` (required for validation)
-   - `public.pem`
-
-   Example: `~/.dcc/identity/my-identity/`
-
-2. **Enable the validator** by editing `docker-compose.prod.yml`:
-
-   a. Comment out the `profiles: ["validator"]` line in the `api-validate` service
-
-   b. Add your identity mount in the volumes section:
-   ```yaml
-   api-validate:
-     # profiles: ["validator"]  # <-- Comment this out to enable
-     volumes:
-       - ../data/api-data-prod:/data
-       - ~/.dcc/identity/my-identity:/identity:ro  # <-- Add your identity mount
-   ```
-
-3. **Deploy with validator**:
-   ```bash
-   python3 deploy.py deploy prod
-   ```
-
-   **Alternative: Use profiles** (keeps base config unchanged):
-   ```bash
-   docker compose -f docker-compose.prod.yml --profile validator up -d
-   ```
-
-   > **What are profiles?** Docker Compose profiles allow services to be selectively enabled/disabled.
-   > The `profiles: ["validator"]` line means the service only starts when explicitly requested
-   > via `--profile validator` or when the profiles line is commented out.
-
-### Configuration
-
-Environment variables (set via `scripts/dc-secrets set shared/<layer>` or docker-compose override):
-
-- `VALIDATION_INTERVAL_SECS`: Validation frequency in seconds (default: 600 = 10 minutes)
-- `VALIDATION_MEMO`: Optional memo for validation transactions
-- `NETWORK`: ICP network to use (default: `ic`)
-
-### Monitoring
-
-```bash
-# Check validator logs
-docker logs decent-cloud-api-validate-prod
-
-# Check validator health
-docker ps --filter name=validate
-```
-
-### Economics
-
-- **Cost**: 0.5 DCT per validation
-- **Reward**: Share of 50 DCT block reward (divided among all validators)
-- **Frequency**: Every 10 minutes (one block time)
-- **ROI**: Depends on number of active validators
-
-See [docs/mining-and-validation.md](../docs/mining-and-validation.md) for more details.
+The optional blockchain validator (`api-validate`) was part of the now-retired
+`docker-compose.prod.yml` stack. Production runs on k8s (see
+[`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)), which currently has no
+validator Deployment; re-introducing the validator means adding it to the k8s
+manifests, not to a compose file. See
+[docs/mining-and-validation.md](../docs/mining-and-validation.md) for the
+validation concept and economics.
 
 ## Files
 
 ### Python Scripts
 
 - **tunnel.py** - Idempotent Cloudflare tunnel create-or-get + DNS ingress config (CF API; run from CI). Replaces the old interactive `setup_tunnel.py` (deleted).
-- **deploy.py** - Unified deployment script (local `dev`/`prod` + `--remote` SSH deploy for CI) with native build support
+- **deploy.py** - Local docker-compose dev-stack deployment (prod is k8s-only)
 
 ### Docker Files
 
-- **docker-compose.dev.yml** - Development configuration
-- **docker-compose.prod.yml** - Production configuration
+- **docker-compose.dev.yml** - Development configuration (the only compose file; prod runs on k8s)
 - **Dockerfile** - Builds the docker image for website (assumes native build)
 
 ### Configuration

@@ -29,35 +29,39 @@ This guide explains how to deploy Stripe payment integration to production.
 
 ### 1. Configure Environment Variables
 
-Set credentials via dc-secrets for your target environment:
+**For production:** Stripe keys are production secrets — set them directly in the
+nuc-k3s PGP-SOPS store (the sole prod secret source; the product repo's AGE store
+no longer holds a prod layer):
 
-**For production:**
-```bash
-scripts/dc-secrets set shared/prod STRIPE_SECRET_KEY=sk_live_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_YOUR_WEBHOOK_SECRET
+```sh
+cd /project/decent-cloud/third_party/nuc-k3s
+sops cluster/secrets/decent-cloud-secret.yaml   # set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET
+python3 scripts/manage-secrets.py
 ```
+See [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md#3-app-secret-decent-cloud-secret) §3.
 
 **For development:**
 ```bash
 scripts/dc-secrets set shared/dev STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY STRIPE_PUBLISHABLE_KEY=pk_test_YOUR_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET=whsec_test_secret
 ```
 
-### 2. Deploy with deploy.py
+### 2. Deploy
 
-The deploy script **automatically**:
-- Reads Stripe keys from dc-secrets
-- Embeds `VITE_STRIPE_PUBLISHABLE_KEY` into website build
-- Validates Stripe key format before building
-- Passes API keys to docker-compose
+Production runs on k8s: a `vX.Y.Z` tag triggers the `deploy-prod` CI job which
+builds + pushes images and bumps the tags in `deploy/k8s/decent-cloud.yaml`;
+ArgoCD auto-syncs the rollout. See
+[`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md#8-release--image-update-flow-repeatable) §8.
+
+For the local dev stack, `deploy.py` reads Stripe keys from dc-secrets and embeds
+`VITE_STRIPE_PUBLISHABLE_KEY` into the website build:
 
 ```bash
 cd cf
-
-# Deploy to production
-python3 deploy.py deploy prod
-
-# Or deploy to dev/staging
 python3 deploy.py deploy dev
 ```
+
+> Production is NOT deployable via `deploy.py` — `deploy.py deploy prod` aborts
+> with a pointer to the k8s runbook.
 
 **What happens**:
 1. Script reads `STRIPE_PUBLISHABLE_KEY` from dc-secrets
@@ -196,11 +200,13 @@ docker logs -f decent-cloud-api-serve-prod | grep -i "stripe\|payment"
 
 If payments fail in production:
 
-1. **Immediate**: Disable Stripe by unsetting env vars and restarting API:
-   ```bash
-   unset STRIPE_SECRET_KEY
-   unset STRIPE_WEBHOOK_SECRET
-   docker compose -f docker-compose.prod.yml restart api-serve
+1. **Immediate**: Disable Stripe by removing the keys from the prod secret and
+   restarting the API (production runs on k8s):
+   ```sh
+   cd /project/decent-cloud/third_party/nuc-k3s
+   sops cluster/secrets/decent-cloud-secret.yaml   # blank STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
+   python3 scripts/manage-secrets.py
+   kubectl -n apps rollout restart deployment/api
    ```
    This disables credit card payments; DCT payments still work.
 

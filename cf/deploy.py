@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Deployment script with dev/prod environments and management commands."""
+"""Deployment script for the local docker-compose dev stack.
+
+Production deploys via the nuc-k3s cluster (ArgoCD owns ``deploy/k8s``); this
+script is dev-only. Selecting ``prod`` on any subcommand fails loud.
+"""
 
 import os
 import subprocess
@@ -45,15 +49,24 @@ def calculate_binary_hash() -> str:
 
 
 def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
-    """Get environment-specific configuration."""
+    """Get environment-specific configuration for the local docker-compose stack.
+
+    Only ``dev`` is supported here: production deploys via the nuc-k3s cluster
+    (ArgoCD owns ``deploy/k8s``), not docker-compose. Selecting ``prod`` fails
+    loud so no subcommand (deploy/stop/logs/status/restart) silently starts a
+    retired compose-prod stack.
+    """
     cf_dir = Path(__file__).parent
 
     if environment == "prod":
-        env_vars = {"ENVIRONMENT": "prod", "NETWORK_NAME": "decent-cloud-prod"}
-        compose_files = [str(cf_dir / "docker-compose.prod.yml")]
-    else:  # dev
-        env_vars = {"ENVIRONMENT": "dev", "NETWORK_NAME": "decent-cloud-dev"}
-        compose_files = [str(cf_dir / "docker-compose.dev.yml")]
+        print_error(
+            "prod is deployed via k8s (ArgoCD owns deploy/k8s); docker-compose is dev-only. "
+            "See deploy/k8s/SETUP.md. Aborting."
+        )
+        sys.exit(1)
+
+    env_vars = {"ENVIRONMENT": "dev", "NETWORK_NAME": "decent-cloud-dev"}
+    compose_files = [str(cf_dir / "docker-compose.dev.yml")]
 
     return env_vars, compose_files
 
@@ -669,12 +682,13 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s deploy dev                 # Deploy to development
-  %(prog)s deploy prod               # Deploy to production
-  %(prog)s stop dev                  # Stop development services
-  %(prog)s logs prod -f website      # Follow production website logs
-  %(prog)s status dev                # Show development status
-  %(prog)s restart prod             # Restart production services
+  %(prog)s deploy dev                 # Deploy the local dev stack
+  %(prog)s stop dev                  # Stop dev services
+  %(prog)s logs dev -f website       # Follow dev website logs
+  %(prog)s status dev                # Show dev status
+  %(prog)s restart dev               # Restart dev services
+
+Production is deployed via k8s (ArgoCD owns deploy/k8s); see deploy/k8s/SETUP.md.
         """,
     )
 

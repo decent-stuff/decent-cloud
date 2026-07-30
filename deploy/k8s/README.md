@@ -16,7 +16,6 @@ Application CR + PGP-SOPS secrets) live in the **`nuc-k3s` repo clone** at
 ```
 deploy/k8s/                                 # owned by THIS repo (synced by ArgoCD)
 ├── decent-cloud.yaml                       # Deployments + Job + Services
-├── decent-cloud-secret.yaml.template       # documents every secret key (NO real values)
 ├── SETUP.md                                # consolidated operator runbook
 ├── TUNNEL.md                               # CF tunnel token generation + rotation
 └── README.md                               # this file
@@ -24,16 +23,16 @@ deploy/k8s/                                 # owned by THIS repo (synced by Argo
 third_party/nuc-k3s/cluster/                # operator artifacts (the nuc-k3s repo)
 ├── argocd/application-decent-cloud.yaml    # ArgoCD Application CR
 └── secrets/
-    ├── decent-cloud-secret.yaml.template           # 37 keys (docs; operator fills + encrypts)
+    ├── decent-cloud-secret.yaml.template           # prod secret keys (single source; operator fills + encrypts)
     └── forgejo-registry-secret.yaml.template       # dockerconfigjson for git.kalaj.org
 ```
 
 **Why split?** Decent-cloud owns its own manifests (`deploy/k8s/`). The nuc-k3s
 cluster repo owns cluster-wide concerns: the ArgoCD Application CR that points at
-this repo, and the PGP-SOPS-encrypted secret (the cluster's SOPS key is PGP,
-while this repo's own `secrets/` use AGE — different key types, so the live
-cluster secret must live in nuc-k3s). The secret values are generated from this
-repo's AGE-SOPS store by [`scripts/gen-prod-secret.py`](../../scripts/gen-prod-secret.py).
+this repo, and the PGP-SOPS-encrypted prod secret (the cluster's SOPS key is PGP,
+while this repo's own `secrets/` use AGE for dev/play/common — different key
+types, so the live prod secret is edited directly in the nuc-k3s store; see
+[SETUP.md §3](./SETUP.md#3-app-secret-decent-cloud-secret)).
 
 ## Services (all in namespace `apps`)
 

@@ -56,8 +56,7 @@ Validator (optional)
 ## Deployment Files
 
 ### Docker Compose
-- `cf/docker-compose.dev.yml` - Development configuration
-- `cf/docker-compose.prod.yml` - Production configuration
+- `cf/docker-compose.dev.yml` - Development configuration (prod deploys via k8s, not compose)
 
 ### Dockerfiles
 - `cf/Dockerfile` - Build for website (assumes website built natively and then added to the image)
@@ -65,7 +64,7 @@ Validator (optional)
 
 ### Python Scripts
 - `cf/tunnel.py` - Idempotent Cloudflare tunnel create-or-get + DNS ingress (CF API; run from CI). Replaces the deleted interactive `setup_tunnel.py`.
-- `cf/deploy.py` - Deploy environment (local `dev`/`prod` + `--remote` SSH deploy for CI)
+- `cf/deploy.py` - Deploy the local dev docker-compose stack (prod is k8s-only)
 
 ## Cloudflare Tunnel Configuration
 

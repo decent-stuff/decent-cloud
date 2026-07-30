@@ -36,10 +36,10 @@ TUNNELS: dict[str, dict] = {
     "prod": {
         # Matches the EXISTING live Cloudflare tunnel "decent-cloud" (connector id
         # c4e24160-...) so tunnel.py reuses it (re-points ingress) instead of
-        # creating a duplicate. The connector token for it is stored as
-        # TUNNEL_TOKEN in dc-secrets (gen-prod-secret.py reuses it as
-        # TUNNEL_TOKEN_PROD). configure_ingress() re-points the live tunnel's
-        # hostnames to the in-cluster Service FQDNs below.
+        # creating a duplicate. The connector token for it is stored as the
+        # TUNNEL_TOKEN_PROD key of decent-cloud-secret in the nuc-k3s PGP-SOPS
+        # store (see deploy/k8s/SETUP.md §3). configure_ingress() re-points the
+        # live tunnel's hostnames to the in-cluster Service FQDNs below.
         "name": "decent-cloud",
         # In-cluster Services (namespace apps). The cloudflared Deployment runs
         # in the same cluster and routes decent-cloud.org via these FQDNs.

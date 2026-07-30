@@ -77,25 +77,21 @@ Registration fee: 0.5 DCT (one-time)
 
 By running the validation command, you automatically fetch the latest ledger and sign its hash, proving you have a full, unaltered copy. The more validators that run this process, the safer the network—and the reputation system—becomes.
 
-#### Recommended: Automated Docker Deployment
+#### Automated Docker Deployment (retired)
 
-**The recommended way to validate is using the Docker deployment** which automates the entire validation process:
+The automated validator (`api-validate`) ran under the now-retired
+`docker-compose.prod.yml` stack, which has been removed — production now runs on
+k8s (see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)), and the k8s manifests
+currently have no validator Deployment. Re-introducing automated validation means
+adding a validator to the k8s manifests, not to a compose file.
 
-```bash
-# See cf/README.md for full setup instructions
-# 1. Mount your identity directory in docker-compose.prod.yml
-# 2. Deploy with validator included
-python3 cf/deploy.py deploy prod
-```
-
-**Benefits:**
+**Benefits (when it ran):**
 - ✅ Automated validation every 10 minutes
 - ✅ Runs continuously in the background
 - ✅ Includes health monitoring
-- ✅ Easy setup and maintenance
 - ✅ Shares infrastructure with sync service
 
-See [cf/README.md](../cf/README.md#blockchain-validator-optional) for complete setup instructions.
+See [cf/README.md](../cf/README.md#blockchain-validator) for context.
 
 #### Manual Validation (CLI)
 

@@ -1,6 +1,10 @@
 # Docker Deployment with Cloudflare Tunnel
 
-This guide explains how to deploy the Decent Cloud website with native build process and Cloudflare Tunnel for secure external access.
+> **Production deploys via k8s** (ArgoCD owns `deploy/k8s`); see
+> [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md). This guide covers the **local
+> docker-compose dev stack** only.
+
+This guide explains how to run the Decent Cloud dev stack with native build process and Cloudflare Tunnel for secure external access.
 
 ## Overview
 
@@ -103,13 +107,10 @@ Python scripts facilitate the automated deployment with the simplified Docker ap
 cd cf
 
 # 1. (one-off, from CI which holds CF_API_TOKEN/CF_ACCOUNT_ID) ensure tunnel + DNS exist:
-python3 tunnel.py prod        # prints the prod tunnel token
+python3 tunnel.py dev        # prints the dev tunnel token
 
-# 2. Deploy to development (local; served over the dev tunnel)
+# 2. Deploy the local dev stack (served over the dev tunnel)
 python3 deploy.py deploy dev
-
-# Or deploy to production (CI: build locally, deploy over SSH to the VM)
-python3 deploy.py deploy prod --remote dc@204.168.149.118
 ```
 
 The scripts will:
@@ -160,15 +161,15 @@ docker run cloudflare/cloudflared:latest tunnel --no-autoupdate run --token eyJh
 
 ### Step 4: Save Token via dc-secrets
 
-Set the tunnel token using dc-secrets (in the dev or prod secrets layer):
+Set the tunnel token using dc-secrets (in the dev secrets layer):
 
 ```bash
-scripts/dc-secrets set shared/prod TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
+scripts/dc-secrets set shared/dev TUNNEL_TOKEN=eyJhIjoiNWFi...your-actual-token-here
 ```
 
 Verify it was saved:
 ```bash
-scripts/dc-secrets list shared/prod
+scripts/dc-secrets list shared/dev
 ```
 
 ### Step 5: Start Services
@@ -179,9 +180,6 @@ cd cf
 
 # Development
 python3 deploy.py deploy dev
-
-# Production
-python3 deploy.py deploy prod
 ```
 
 Or manually with docker compose (deploy.py handles env loading from dc-secrets):
@@ -190,9 +188,6 @@ cd cf
 
 # Development
 docker compose -f docker-compose.dev.yml up -d
-
-# Or production
-docker compose -f docker-compose.prod.yml up -d
 ```
 
 **Note:** Manual docker compose assumes native builds completed first:
@@ -203,10 +198,10 @@ docker compose -f docker-compose.prod.yml up -d
 
 ```bash
 # Check service health
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.dev.yml ps
 
 # View logs
-docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.dev.yml logs -f
 
 # Test the website endpoint
 curl https://your-subdomain.your-domain.com/health
@@ -220,29 +215,29 @@ curl https://your-subdomain.your-domain.com/health
 
 ```bash
 # All services
-docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.dev.yml logs -f
 
 # Website only
-docker compose -f docker-compose.prod.yml logs -f website
+docker compose -f docker-compose.dev.yml logs -f website
 
 # Cloudflared only
-docker compose -f docker-compose.prod.yml logs -f cloudflared
+docker compose -f docker-compose.dev.yml logs -f cloudflared
 ```
 
 ### Restart Services
 
 ```bash
 # Restart all
-docker compose -f docker-compose.prod.yml restart
+docker compose -f docker-compose.dev.yml restart
 
 # Restart specific service
-docker compose -f docker-compose.prod.yml restart website
+docker compose -f docker-compose.dev.yml restart website
 ```
 
 ### Stop Services
 
 ```bash
-docker compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.dev.yml down
 ```
 
 ### Update and Rebuild
@@ -252,7 +247,7 @@ docker compose -f docker-compose.prod.yml down
 git pull
 
 # Rebuild and restart
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.dev.yml up -d --build
 ```
 
 ## Monitoring
@@ -262,7 +257,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 The website service includes a built-in health check that runs every 30 seconds:
 
 ```bash
-docker compose -f docker-compose.prod.yml ps  # Shows health status
+docker compose -f docker-compose.dev.yml ps  # Shows health status
 ```
 
 ### Tunnel Status
