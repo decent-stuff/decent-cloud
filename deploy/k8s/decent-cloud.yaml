@@ -11,6 +11,39 @@
 # Image tags for `api`/`website` are bumped on each release by the
 # `deploy-prod` CI job (lines tagged `# deploy-prod:<name>`).
 
+---
+# ---------------------------------------------------------------------------
+# decent-cloud-config — non-secret configuration (12-Factor: config != secret).
+# Public identifiers/URLs/model-names. Secret values stay in `decent-cloud-secret`;
+# these don't couple to secret rotation. Values mirror the prod secret at split time.
+# ---------------------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: decent-cloud-config
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: decent-cloud
+    app.kubernetes.io/component: config
+data:
+  CF_ZONE_ID: "e5376a5252efc2c724063dec96bbcba3"
+  STRIPE_PUBLISHABLE_KEY: "pk_test_51SVXwaAzc2s6kfpWRm6fHKEpLSWy6Gygo8COTYTuDIbt95yPac2Xbc470sgpw9PNMkMWovI9qp1tstWPJKd1MTO5009ZbZHAEs"
+  GOOGLE_OAUTH_CLIENT_ID: "869489035948-0el3n4dfq2dbfl795baihvrhabu32r52.apps.googleusercontent.com"
+  GOOGLE_OAUTH_REDIRECT_URL: "https://api.decent-cloud.org/api/v1/oauth/google/callback"
+  FRONTEND_URL: "https://decent-cloud.org"
+  DKIM_DOMAIN: "decent-cloud.org"
+  DKIM_SELECTOR: "mcdkim"
+  DEFAULT_ESCALATION_USER: "p7ma2"
+  TEXTBEE_DEVICE_ID: "6934d06a49a1de7856d7cbf4"
+  TEXTBEE_API_URL: ""
+  TWILIO_ACCOUNT_SID: ""
+  TWILIO_PHONE_NUMBER: ""
+  LLM_API_URL: "https://api.z.ai/api/anthropic/v1/messages"
+  LLM_API_MODEL: "GLM-5.1"
+  SMTP_ADDRESS: "smtp.mailchannels.net"
+  SMTP_USERNAME: "decentcloud"
+
+---
 # ---------------------------------------------------------------------------
 # api — Rust api-server (HTTP API on :59001)
 # ---------------------------------------------------------------------------
@@ -77,33 +110,33 @@ spec:
         - {name: DATABASE_URL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: API_DATABASE_URL}}}
         - {name: CREDENTIAL_ENCRYPTION_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CREDENTIAL_ENCRYPTION_KEY}}}
         - {name: CF_API_TOKEN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CF_API_TOKEN}}}
-        - {name: CF_ZONE_ID, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CF_ZONE_ID}}}
+        - {name: CF_ZONE_ID, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: CF_ZONE_ID}}}
         - {name: STRIPE_SECRET_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: STRIPE_SECRET_KEY}}}
-        - {name: STRIPE_PUBLISHABLE_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: STRIPE_PUBLISHABLE_KEY}}}
+        - {name: STRIPE_PUBLISHABLE_KEY, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: STRIPE_PUBLISHABLE_KEY}}}
         - {name: STRIPE_WEBHOOK_SECRET, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: STRIPE_WEBHOOK_SECRET}}}
         - {name: INVOICE_SELLER_IBAN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: INVOICE_SELLER_IBAN}}}
-        - {name: GOOGLE_OAUTH_CLIENT_ID, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: GOOGLE_OAUTH_CLIENT_ID}}}
+        - {name: GOOGLE_OAUTH_CLIENT_ID, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: GOOGLE_OAUTH_CLIENT_ID}}}
         - {name: GOOGLE_OAUTH_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: GOOGLE_OAUTH_CLIENT_SECRET}}}
-        - {name: GOOGLE_OAUTH_REDIRECT_URL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: GOOGLE_OAUTH_REDIRECT_URL}}}
-        - {name: FRONTEND_URL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: FRONTEND_URL}}}
+        - {name: GOOGLE_OAUTH_REDIRECT_URL, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: GOOGLE_OAUTH_REDIRECT_URL}}}
+        - {name: FRONTEND_URL, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: FRONTEND_URL}}}
         - {name: MAILCHANNELS_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: MAILCHANNELS_API_KEY}}}
-        - {name: DKIM_DOMAIN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: DKIM_DOMAIN}}}
-        - {name: DKIM_SELECTOR, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: DKIM_SELECTOR}}}
+        - {name: DKIM_DOMAIN, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: DKIM_DOMAIN}}}
+        - {name: DKIM_SELECTOR, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: DKIM_SELECTOR}}}
         - {name: DKIM_PRIVATE_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: DKIM_PRIVATE_KEY}}}
         - {name: CHATWOOT_API_TOKEN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_API_TOKEN}}}
         - {name: CHATWOOT_PLATFORM_API_TOKEN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_PLATFORM_API_TOKEN}}}
         - {name: CHATWOOT_HMAC_SECRET, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_HMAC_SECRET}}}
-        - {name: DEFAULT_ESCALATION_USER, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: DEFAULT_ESCALATION_USER}}}
+        - {name: DEFAULT_ESCALATION_USER, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: DEFAULT_ESCALATION_USER}}}
         - {name: TELEGRAM_BOT_TOKEN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TELEGRAM_BOT_TOKEN}}}
-        - {name: TEXTBEE_DEVICE_ID, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TEXTBEE_DEVICE_ID}}}
+        - {name: TEXTBEE_DEVICE_ID, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: TEXTBEE_DEVICE_ID}}}
         - {name: TEXTBEE_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TEXTBEE_API_KEY}}}
-        - {name: TEXTBEE_API_URL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TEXTBEE_API_URL}}}
-        - {name: TWILIO_ACCOUNT_SID, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TWILIO_ACCOUNT_SID}}}
+        - {name: TEXTBEE_API_URL, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: TEXTBEE_API_URL}}}
+        - {name: TWILIO_ACCOUNT_SID, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: TWILIO_ACCOUNT_SID}}}
         - {name: TWILIO_AUTH_TOKEN, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TWILIO_AUTH_TOKEN}}}
-        - {name: TWILIO_PHONE_NUMBER, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: TWILIO_PHONE_NUMBER}}}
+        - {name: TWILIO_PHONE_NUMBER, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: TWILIO_PHONE_NUMBER}}}
         - {name: LLM_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: LLM_API_KEY}}}
-        - {name: LLM_API_URL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: LLM_API_URL}}}
-        - {name: LLM_API_MODEL, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: LLM_API_MODEL}}}
+        - {name: LLM_API_URL, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: LLM_API_URL}}}
+        - {name: LLM_API_MODEL, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: LLM_API_MODEL}}}
         ports:
         - name: http
           containerPort: 59001
@@ -312,8 +345,8 @@ spec:
         - {name: SECRET_KEY_BASE, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_SECRET_KEY_BASE}}}
         - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_POSTGRES_PASSWORD}}}
         - {name: CHATWOOT_INBOX_HMAC_SECRET_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_HMAC_SECRET}}}
-        - {name: SMTP_ADDRESS, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_ADDRESS}}}
-        - {name: SMTP_USERNAME, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_USERNAME}}}
+        - {name: SMTP_ADDRESS, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: SMTP_ADDRESS}}}
+        - {name: SMTP_USERNAME, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: SMTP_USERNAME}}}
         - {name: SMTP_PASSWORD, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_PASSWORD}}}
         - {name: OPENAI_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: OPENAI_API_KEY}}}
         ports:
@@ -384,8 +417,8 @@ spec:
         - {name: SECRET_KEY_BASE, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_SECRET_KEY_BASE}}}
         - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_POSTGRES_PASSWORD}}}
         - {name: CHATWOOT_INBOX_HMAC_SECRET_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: CHATWOOT_HMAC_SECRET}}}
-        - {name: SMTP_ADDRESS, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_ADDRESS}}}
-        - {name: SMTP_USERNAME, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_USERNAME}}}
+        - {name: SMTP_ADDRESS, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: SMTP_ADDRESS}}}
+        - {name: SMTP_USERNAME, valueFrom: {configMapKeyRef: {name: decent-cloud-config, key: SMTP_USERNAME}}}
         - {name: SMTP_PASSWORD, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: SMTP_PASSWORD}}}
         - {name: OPENAI_API_KEY, valueFrom: {secretKeyRef: {name: decent-cloud-secret, key: OPENAI_API_KEY}}}
         resources:

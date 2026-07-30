@@ -14,6 +14,23 @@ cluster repo. Dev/local secrets are here, AGE-encrypted.
 > The `prod` layer was **removed** from this repo on purpose (it is public). Do not
 > re-add prod secrets here. Edit them in the nuc-k3s cluster store instead.
 
+## Config vs Secret (12-Factor)
+
+In prod (k8s), non-secret **configuration** is deliberately split out of the Secret
+into a `ConfigMap` (`decent-cloud-config`, defined inline in `deploy/k8s/decent-cloud.yaml`).
+True **secrets** stay in the `decent-cloud-secret` Secret. This means:
+
+- Changing a **config** value (URL, model name, zone id, Stripe *publishable* key,
+  DKIM domain/selector, SMTP host/user, Twilio/Textbee ids) = edit the ConfigMap in
+  `deploy/k8s/decent-cloud.yaml`, push to `main`, ArgoCD syncs, pod picks it up on
+  restart. **No secret re-apply/rotation needed.**
+- Changing a **secret** value (DB url, *secret* keys, tokens, passwords) = rotate in
+  the nuc-k3s PGP store + `manage-secrets.py` (see below).
+
+> Note: the Stripe **publishable** key (`pk_*`) is ALSO baked into the website image at
+> build time (Vite). Rotating it means updating the ConfigMap value AND rebuilding the
+> website image (cut a release tag) so both the api-server env and the browser bundle agree.
+
 ---
 
 ## How to rotate — PROD (k8s)
