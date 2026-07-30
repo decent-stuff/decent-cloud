@@ -1,6 +1,6 @@
 # Decent Cloud — Kubernetes deployment
 
-Production manifests for the `decent-cloud` stack on the `nuc-k3s` cluster
+Production manifests for the `decent-cloud` stack on the `k8s` cluster
 (k3s + ArgoCD + Traefik + cert-manager + SOPS).
 
 > **Operator runbook:** see **[SETUP.md](./SETUP.md)** — the single source of
@@ -10,8 +10,8 @@ Production manifests for the `decent-cloud` stack on the `nuc-k3s` cluster
 ## Layout
 
 This repo owns the app manifests. The cluster-level operator artifacts (ArgoCD
-Application CR + PGP-SOPS secrets) live in the **`nuc-k3s` repo clone** at
-`third_party/nuc-k3s/` — that is the single source for operator artifacts:
+Application CR + PGP-SOPS secrets) live in the **`k8s` repo clone** at
+`third_party/k8s/` — that is the single source for operator artifacts:
 
 ```
 deploy/k8s/                                 # owned by THIS repo (synced by ArgoCD)
@@ -20,18 +20,18 @@ deploy/k8s/                                 # owned by THIS repo (synced by Argo
 ├── TUNNEL.md                               # CF tunnel token generation + rotation
 └── README.md                               # this file
 
-third_party/nuc-k3s/cluster/                # operator artifacts (the nuc-k3s repo)
+third_party/k8s/cluster/                # operator artifacts (the k8s repo)
 ├── argocd/application-decent-cloud.yaml    # ArgoCD Application CR
 └── secrets/
     ├── decent-cloud-secret.yaml.template           # prod secret keys (single source; operator fills + encrypts)
     └── forgejo-registry-secret.yaml.template       # dockerconfigjson for git.kalaj.org
 ```
 
-**Why split?** Decent-cloud owns its own manifests (`deploy/k8s/`). The nuc-k3s
+**Why split?** Decent-cloud owns its own manifests (`deploy/k8s/`). The k8s
 cluster repo owns cluster-wide concerns: the ArgoCD Application CR that points at
 this repo, and the PGP-SOPS-encrypted prod secret (the cluster's SOPS key is PGP,
 while this repo's own `secrets/` use AGE for dev/play/common — different key
-types, so the live prod secret is edited directly in the nuc-k3s store; see
+types, so the live prod secret is edited directly in the k8s store; see
 [SETUP.md §3](./SETUP.md#3-app-secret-decent-cloud-secret)).
 
 ## Services (all in namespace `apps`)
@@ -57,7 +57,7 @@ Cloudflare API by `cf/tunnel.py prod` (see TUNNEL.md).
 ## ArgoCD wiring
 
 The Application CR
-([`third_party/nuc-k3s/cluster/argocd/application-decent-cloud.yaml`](../../../third_party/nuc-k3s/cluster/argocd/application-decent-cloud.yaml))
+([`third_party/k8s/cluster/argocd/application-decent-cloud.yaml`](../../../third_party/k8s/cluster/argocd/application-decent-cloud.yaml))
 points at `github.com/decent-stuff/decent-cloud` path `deploy/k8s`, destination
 namespace `apps`, auto-sync `selfHeal + prune`, `syncOptions:
 [CreateNamespace=true, ApplyOutOfSyncOnly=true]`, with `ignoreDifferences` for
@@ -72,7 +72,7 @@ which builds + pushes both images to Forgejo, bumps the two image lines tagged
 `# deploy-prod:api` / `# deploy-prod:website` in `deploy/k8s/decent-cloud.yaml`,
 and pushes to `main`; ArgoCD auto-syncs the new tags.
 
-## Conventions matched (nuc-k3s)
+## Conventions matched (k8s)
 
 - namespace `apps`; `enableServiceLinks: false`; labels
   `app.kubernetes.io/name` + `app.kubernetes.io/component`.

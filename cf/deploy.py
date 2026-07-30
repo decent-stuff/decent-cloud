@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deployment script for the local docker-compose dev stack.
 
-Production deploys via the nuc-k3s cluster (ArgoCD owns ``deploy/k8s``); this
+Production deploys via the k8s cluster (ArgoCD owns ``deploy/k8s``); this
 script is dev-only. Selecting ``prod`` on any subcommand fails loud.
 """
 
@@ -51,7 +51,7 @@ def calculate_binary_hash() -> str:
 def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
     """Get environment-specific configuration for the local docker-compose stack.
 
-    Only ``dev`` is supported here: production deploys via the nuc-k3s cluster
+    Only ``dev`` is supported here: production deploys via the k8s cluster
     (ArgoCD owns ``deploy/k8s``), not docker-compose. Selecting ``prod`` fails
     loud so no subcommand (deploy/stop/logs/status/restart) silently starts a
     retired compose-prod stack.

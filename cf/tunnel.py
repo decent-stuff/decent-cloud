@@ -37,7 +37,7 @@ TUNNELS: dict[str, dict] = {
         # Matches the EXISTING live Cloudflare tunnel "decent-cloud" (connector id
         # c4e24160-...) so tunnel.py reuses it (re-points ingress) instead of
         # creating a duplicate. The connector token for it is stored as the
-        # TUNNEL_TOKEN_PROD key of decent-cloud-secret in the nuc-k3s PGP-SOPS
+        # TUNNEL_TOKEN_PROD key of decent-cloud-secret in the k8s PGP-SOPS
         # store (see deploy/k8s/SETUP.md §3). configure_ingress() re-points the
         # live tunnel's hostnames to the in-cluster Service FQDNs below.
         "name": "decent-cloud",

@@ -1,17 +1,17 @@
 # Decent Cloud — k3s production setup runbook
 
-Consolidated operator runbook for bringing up `decent-cloud` on the `nuc-k3s`
+Consolidated operator runbook for bringing up `decent-cloud` on the `k8s`
 cluster (k3s + ArgoCD + SOPS) and the ongoing image-release flow. This is the
 **single source of truth**; everything else under `deploy/k8s/` is referenced
 from here.
 
 **Split of concerns.** The product repo (`decent-stuff/decent-cloud`) owns the
-app manifests under `deploy/k8s/`. The cluster repo (`nuc-k3s`) owns the
+app manifests under `deploy/k8s/`. The cluster repo (`k8s`) owns the
 cluster-level artifacts: the ArgoCD Application CR and the PGP-SOPS-encrypted
 secrets (the cluster's SOPS key is PGP
 `FA5814CF1935EE80C454C9F1660DCCF069EC9176`; the product repo's own `secrets/`
-use AGE — different key types, so the live cluster secret must live in nuc-k3s).
-Those operator artifacts are committed in `third_party/nuc-k3s/cluster/`.
+use AGE — different key types, so the live cluster secret must live in k8s).
+Those operator artifacts are committed in `third_party/k8s/cluster/`.
 
 Work through steps 1–6 once. Step 8 is the repeatable release flow.
 
@@ -30,7 +30,7 @@ pre-release placeholder.)
 
 Build the `forgejo-registry-secret` (a `kubernetes.io/dockerconfigjson` Secret)
 from the template
-[`third_party/nuc-k3s/cluster/secrets/forgejo-registry-secret.yaml.template`](../../../third_party/nuc-k3s/cluster/secrets/forgejo-registry-secret.yaml.template):
+[`third_party/k8s/cluster/secrets/forgejo-registry-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/forgejo-registry-secret.yaml.template):
 
 ```sh
 # auth = base64("<user>:<token>"); the .dockerconfigjson value is the JSON object
@@ -45,7 +45,7 @@ PY
 Paste the printed JSON as `.dockerconfigjson`, then encrypt + apply:
 
 ```sh
-cd /project/decent-cloud/third_party/nuc-k3s
+cd /project/decent-cloud/third_party/k8s
 sops --encrypt --pgp FA5814CF1935EE80C454C9F1660DCCF069EC9176 \
   --in-place cluster/secrets/forgejo-registry-secret.yaml
 python3 scripts/manage-secrets.py
@@ -71,13 +71,13 @@ printed only at creation.
 
 ## 3. App secret (`decent-cloud-secret`)
 
-Production secrets are edited **directly** in the nuc-k3s PGP-SOPS store — the
+Production secrets are edited **directly** in the k8s PGP-SOPS store — the
 same workflow every other cluster app (twenty, forgejo, authentik, …) uses. There
-is no generator/bridge script: the nuc-k3s file is the single source of truth.
+is no generator/bridge script: the k8s file is the single source of truth.
 
 The single template that documents every key to fill is
-[`third_party/nuc-k3s/cluster/secrets/decent-cloud-secret.yaml.template`](../../../third_party/nuc-k3s/cluster/secrets/decent-cloud-secret.yaml.template)
-(nuc-k3s). The keys mirror the `secretKeyRef.key` names in `decent-cloud.yaml`
+[`third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template)
+(k8s). The keys mirror the `secretKeyRef.key` names in `decent-cloud.yaml`
 1:1. Fill `TUNNEL_TOKEN_PROD` with the connector token captured in step 2.
 
 On a host that holds the cluster PGP key
@@ -85,22 +85,22 @@ On a host that holds the cluster PGP key
 then apply:
 
 ```sh
-cd /project/decent-cloud/third_party/nuc-k3s
+cd /project/decent-cloud/third_party/k8s
 sops cluster/secrets/decent-cloud-secret.yaml      # $EDITOR: fill every <FILL> key, save
 python3 scripts/manage-secrets.py                  # decrypts + applies every SOPS secret in cluster/secrets/
 # or, to also re-sync the ArgoCD apps that depend on secrets:
 scripts/apply-secrets-and-sync.sh
 ```
 
-See the nuc-k3s repo's own
-[`docs/SECRETS_MANAGEMENT_SOPS.md`](../../../third_party/nuc-k3s/docs/SECRETS_MANAGEMENT_SOPS.md)
+See the k8s repo's own
+[`docs/SECRETS_MANAGEMENT_SOPS.md`](../../../third_party/k8s/docs/SECRETS_MANAGEMENT_SOPS.md)
 for the full SOPS reference (creating/updating keys, the `.sops.yaml` config,
 troubleshooting). To **rotate** the tunnel token later see [TUNNEL.md](./TUNNEL.md#rotate-the-prod-token).
 
 ## 4. ArgoCD Application CR
 
-Commit the Application CR into the nuc-k3s repo (it already lives in the clone at
-[`third_party/nuc-k3s/cluster/argocd/application-decent-cloud.yaml`](../../../third_party/nuc-k3s/cluster/argocd/application-decent-cloud.yaml)):
+Commit the Application CR into the k8s repo (it already lives in the clone at
+[`third_party/k8s/cluster/argocd/application-decent-cloud.yaml`](../../../third_party/k8s/cluster/argocd/application-decent-cloud.yaml)):
 
 - `source.repoURL`: `https://github.com/decent-stuff/decent-cloud.git` (public → HTTPS, no deploy key)
 - `source.path`: `deploy/k8s`, `targetRevision`: `main`
@@ -189,5 +189,5 @@ check `kubectl -n apps logs deploy/cloudflared` and the tunnel ingress in
 
 - [`decent-cloud.yaml`](./decent-cloud.yaml) — the manifests ArgoCD syncs.
 - [`TUNNEL.md`](./TUNNEL.md) — tunnel token generation & rotation.
-- [nuc-k3s `decent-cloud-secret.yaml.template`](../../../third_party/nuc-k3s/cluster/secrets/decent-cloud-secret.yaml.template) — the prod secret keys (single source; no values).
+- [k8s `decent-cloud-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template) — the prod secret keys (single source; no values).
 - [`README.md`](./README.md) — layout + service/port reference.
