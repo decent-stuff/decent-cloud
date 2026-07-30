@@ -24,7 +24,7 @@ Both live in the product repo's AGE-SOPS store (`dc-secrets`), so `cf/tunnel.py`
 runs from any shell with the age key after `eval "$(scripts/dc-secrets export
 common)"`. In CI the same values come from the GitHub Actions secrets (which
 mirror the dc-secrets store). The *connector token itself* (the value `cloudflared`
-runs with) lives in the nuc-k3s PGP-SOPS store as the `TUNNEL_TOKEN_PROD` key of
+runs with) lives in the k8s PGP-SOPS store as the `TUNNEL_TOKEN_PROD` key of
 `decent-cloud-secret` (see [SETUP.md §3](./SETUP.md#3-app-secret-decent-cloud-secret)).
 You only need `cf/tunnel.py prod` to (re)configure that tunnel's **ingress** to
 route to the in-cluster k8s Services — run it once, from CI or locally with the
@@ -81,11 +81,11 @@ reused rather than creating a duplicate `decent-cloud-prod`) and:
 ### Land the token in the cluster Secret
 
 The token must end up in the `TUNNEL_TOKEN_PROD` key of the PGP-SOPS-encrypted
-`decent-cloud-secret` in the nuc-k3s repo. Edit the encrypted secret directly
+`decent-cloud-secret` in the k8s repo. Edit the encrypted secret directly
 (on a host with the cluster PGP key) and paste the captured token, then apply:
 
 ```sh
-cd /project/decent-cloud/third_party/nuc-k3s
+cd /project/decent-cloud/third_party/k8s
 sops cluster/secrets/decent-cloud-secret.yaml   # set TUNNEL_TOKEN_PROD, save
 python3 scripts/manage-secrets.py
 ```

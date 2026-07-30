@@ -30,11 +30,11 @@ This guide explains how to deploy Stripe payment integration to production.
 ### 1. Configure Environment Variables
 
 **For production:** Stripe keys are production secrets — set them directly in the
-nuc-k3s PGP-SOPS store (the sole prod secret source; the product repo's AGE store
+k8s PGP-SOPS store (the sole prod secret source; the product repo's AGE store
 no longer holds a prod layer):
 
 ```sh
-cd /project/decent-cloud/third_party/nuc-k3s
+cd /project/decent-cloud/third_party/k8s
 sops cluster/secrets/decent-cloud-secret.yaml   # set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET
 python3 scripts/manage-secrets.py
 ```
@@ -203,7 +203,7 @@ If payments fail in production:
 1. **Immediate**: Disable Stripe by removing the keys from the prod secret and
    restarting the API (production runs on k8s):
    ```sh
-   cd /project/decent-cloud/third_party/nuc-k3s
+   cd /project/decent-cloud/third_party/k8s
    sops cluster/secrets/decent-cloud-secret.yaml   # blank STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
    python3 scripts/manage-secrets.py
    kubectl -n apps rollout restart deployment/api

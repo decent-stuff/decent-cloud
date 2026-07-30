@@ -1,7 +1,7 @@
 # Decent Cloud production deployment (k3s + ArgoCD, namespace `apps`).
 #
-# Owned by this repo (deploy/k8s). The nuc-k3s operator repo only holds the
-# ArgoCD Application CR + the SOPS-encrypted secret (see ../nuc-k3s/).
+# Owned by this repo (deploy/k8s). The k8s operator repo only holds the
+# ArgoCD Application CR + the SOPS-encrypted secret (see ../k8s/).
 #
 # Public exposure is via a Cloudflare Tunnel (`cloudflared` Deployment below);
 # decent-cloud.org is a SEPARATE zone, so there are NO Traefik Ingresses here.
