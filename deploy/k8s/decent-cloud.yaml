@@ -238,7 +238,7 @@ spec:
       - name: forgejo-registry-secret
       containers:
       - name: website
-        image: git.kalaj.org/decent-stuff/decent-cloud-website:c1820a0d  # deploy-prod:website
+        image: git.kalaj.org/decent-stuff/decent-cloud-website:v0.5.4  # deploy-prod:website
         imagePullPolicy: IfNotPresent
         env:
         - name: ENVIRONMENT
