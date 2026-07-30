@@ -87,13 +87,15 @@ describe('PWA service worker', () => {
 		expect(sw.length).toBeGreaterThan(0);
 	});
 
-	it('handles install event to cache app shell', () => {
+	it('skips app-shell precache and activates immediately on install', () => {
 		const sw = readFileSync(swPath, 'utf-8');
 		expect(sw).toContain("addEventListener('install'");
-		expect(sw).toContain('cache.addAll');
+		expect(sw).toContain('skipWaiting');
+		// No app-shell precache — precaching '/' was the stale-cache vector.
+		expect(sw).not.toContain('cache.addAll');
 	});
 
-	it('handles fetch event with cache-first strategy', () => {
+	it('handles fetch event with cache routing', () => {
 		const sw = readFileSync(swPath, 'utf-8');
 		expect(sw).toContain("addEventListener('fetch'");
 		expect(sw).toContain('caches.match');

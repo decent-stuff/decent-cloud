@@ -18,6 +18,14 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # Service worker: never cache so browsers always fetch the latest version
+    # on update-check (exact match wins over the .js regex below; an immutable
+    # sw.js would freeze users on a stale worker forever).
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+        try_files \$uri =404;
+    }
+
     # Serve static assets directly - return 404 if missing
     location ~* \.(ico|png|svg|jpg|jpeg|js|css|json|txt|xml|woff|woff2|ttf|eot)$ {
         expires 1y;
