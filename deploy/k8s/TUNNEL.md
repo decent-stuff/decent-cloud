@@ -17,16 +17,18 @@ routing. It uses only the Python stdlib and talks to the Cloudflare API directly
 
 | Env var | Where it lives | Scope |
 |---|---|---|
-| `CF_API_TOKEN` | GitHub Actions secret `CF_API_TOKEN` | Cloudflare API — tunnel + DNS write on the `decent-cloud.org` zone |
-| `CF_ACCOUNT_ID` | GitHub Actions secret `CF_ACCOUNT_ID` | Cloudflare account id |
+| `CF_API_TOKEN` | `dc-secrets` `shared/common` (mirrored as a GitHub Actions secret for CI) | Cloudflare API — tunnel + DNS write on the `decent-cloud.org` zone |
+| `CF_ACCOUNT_ID` | `dc-secrets` `shared/common` (mirrored as a GitHub Actions secret for CI) | Cloudflare account id |
 
-These two are **GitHub-only secrets** — they are NOT in the product repo's
-`dc-secrets` (AGE-SOPS) store. However the *connector token itself* (the value
-`cloudflared` runs with) **is** in dc-secrets as `TUNNEL_TOKEN` — that is the
-existing, working prod tunnel token. `scripts/gen-prod-secret.py` reuses it as
-`TUNNEL_TOKEN_PROD` automatically. You only need `cf/tunnel.py prod` (which needs
-the two CF creds above) to (re)configure that tunnel's **ingress** to route to
-the in-cluster k8s Services — run it once, from CI or locally with the creds.
+Both live in the product repo's AGE-SOPS store (`dc-secrets`), so `cf/tunnel.py`
+runs from any shell with the age key after `eval "$(scripts/dc-secrets export
+common)"`. In CI the same values come from the GitHub Actions secrets (which
+mirror the dc-secrets store). The *connector token itself* (the value `cloudflared`
+runs with) is stored in dc-secrets as `TUNNEL_TOKEN` in the prod layer — that is
+the existing, working prod tunnel token. `scripts/gen-prod-secret.py` reuses it as
+`TUNNEL_TOKEN_PROD` automatically. You only need `cf/tunnel.py prod` to
+(re)configure that tunnel's **ingress** to route to the in-cluster k8s Services —
+run it once, from CI or locally with the creds.
 
 ## Generate `TUNNEL_TOKEN_PROD` (prod)
 
@@ -54,7 +56,7 @@ subsequent runs the script prints `"token": ""` — reuse the stored token.
 
 ```sh
 git clone https://github.com/decent-stuff/decent-cloud && cd decent-cloud
-CF_API_TOKEN=... CF_ACCOUNT_ID=... python3 cf/tunnel.py prod
+eval "$(scripts/dc-secrets export common)" && python3 cf/tunnel.py prod
 ```
 
 The connector token is printed to stdout (capture it). Progress/diagnostics go to
@@ -62,7 +64,8 @@ stderr.
 
 ### What the script does (idempotent)
 
-For `prod` it targets tunnel **`decent-cloud-prod`** and:
+For `prod` it targets tunnel **`decent-cloud`** (the existing live prod tunnel,
+reused rather than creating a duplicate `decent-cloud-prod`) and:
 
 1. **Creates** the tunnel if it does not exist (this is the only step that
    returns a token). Reuses it otherwise.
@@ -104,7 +107,7 @@ the k3s manifests).
 
 Connector tokens cannot be re-read after creation. To rotate:
 
-1. **Delete** the tunnel `decent-cloud-prod` (Cloudflare dashboard → Zero Trust →
+1. **Delete** the tunnel `decent-cloud` (Cloudflare dashboard → Zero Trust →
    Tunnels, or via the API). This invalidates the old token.
 2. **Re-create** it (the DNS CNAMEs and ingress are re-applied automatically):
    ```sh

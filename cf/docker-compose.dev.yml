@@ -175,7 +175,7 @@ services:
         condition: service_completed_successfully
     command: ["api-server", "doctor"]
     environment:
-      - DATABASE_URL=${API_DATABASE_URL:-postgres://${API_POSTGRES_USER}:${API_POSTGRES_PASSWORD}@${API_POSTGRES_HOST}:${API_POSTGRES_PORT}/${API_POSTGRES_DB}}
+      - DATABASE_URL=${API_DATABASE_URL:?API_DATABASE_URL is required (loaded by cf/deploy.py from dc-secrets export dev)}
       # Chatwoot integration
       - CHATWOOT_BASE_URL=http://chatwoot-web:59002
       - CHATWOOT_API_TOKEN=${CHATWOOT_API_TOKEN}
@@ -241,7 +241,7 @@ services:
       - CANISTER_ID=${CANISTER_ID:-ggi4a-wyaaa-aaaai-actqq-cai}
       - RUST_LOG=${RUST_LOG:-info}
       - API_SERVER_PORT=59001
-      - DATABASE_URL=${API_DATABASE_URL:-postgres://${API_POSTGRES_USER}:${API_POSTGRES_PASSWORD}@${API_POSTGRES_HOST}:${API_POSTGRES_PORT}/${API_POSTGRES_DB}}
+      - DATABASE_URL=${API_DATABASE_URL:?API_DATABASE_URL is required (loaded by cf/deploy.py from dc-secrets export dev)}
       - LEDGER_DIR=/data/ledger
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
@@ -320,7 +320,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
       - API_SERVER_PORT=59001
       - SYNC_INTERVAL_SECS=${SYNC_INTERVAL_SECS:-30}
-      - DATABASE_URL=${API_DATABASE_URL:-postgres://${API_POSTGRES_USER}:${API_POSTGRES_PASSWORD}@${API_POSTGRES_HOST}:${API_POSTGRES_PORT}/${API_POSTGRES_DB}}
+      - DATABASE_URL=${API_DATABASE_URL:?API_DATABASE_URL is required (loaded by cf/deploy.py from dc-secrets export dev)}
       - LEDGER_DIR=/data/ledger
     volumes:
       - ../data/api-data-dev:/data
