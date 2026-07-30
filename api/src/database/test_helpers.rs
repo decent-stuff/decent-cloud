@@ -18,7 +18,7 @@
 /// - `fsync=off`, `synchronous_commit=off` - Speed optimizations for tests
 use super::Database;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
+use sqlx::{Connection, PgConnection, PgPool};
 use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -322,199 +322,202 @@ fn migration_hash() -> String {
     format!("{:x}", hasher.finish())
 }
 
-/// Ensure template database exists and is current
+/// Fixed advisory-lock key that serializes test-template setup across concurrent test
+/// processes. Each `cargo nextest` test runs in its own process; without coordination they
+/// all race to build the shared template DB. The lock guarantees exactly one process performs
+/// the (slow) migration while the others block on the lock and then reuse the finished
+/// template. A session advisory lock is auto-released on disconnect, so a crashed builder can
+/// never wedge the lock (unlike the old fixed-timeout poll loop, which wedged forever).
+const TEMPLATE_SETUP_ADVISORY_KEY: i64 = 0x4443_5F54_454D_504C; // "DC_TMPL"
+
+/// Forcefully drop a database: terminate backends, clear the template flag, then DROP.
+/// Used for stale/incomplete template DBs (same migration hash, never marked as template) and
+/// for templates left behind by previous migration hashes. Errors are logged loudly but
+/// non-fatal: a failed cleanup of an *old* template must not abort setup of the current one.
+async fn drop_database_force(conn: &mut PgConnection, db_name: &str) {
+    // Terminate any open connections (required before DROP can succeed).
+    if let Err(e) = sqlx::query(&format!(
+        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
+        db_name
+    ))
+    .execute(&mut *conn)
+    .await
+    {
+        eprintln!(
+            "Warning: Failed to terminate connections to '{}': {:#?}",
+            db_name, e
+        );
+    }
+
+    // Clear the template flag (DROP DATABASE refuses a marked template).
+    if let Err(e) = sqlx::query(&format!(
+        "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
+        db_name
+    ))
+    .execute(&mut *conn)
+    .await
+    {
+        eprintln!(
+            "Warning: Failed to clear template flag for '{}': {:#?}",
+            db_name, e
+        );
+        return;
+    }
+
+    if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
+        .execute(&mut *conn)
+        .await
+    {
+        eprintln!("Warning: Failed to drop database '{}': {:#?}", db_name, e);
+    }
+}
+
+/// True iff a database named `template_name` exists and is marked `datistemplate = TRUE`.
+async fn is_template_ready(conn: &mut PgConnection, template_name: &str) -> bool {
+    let ready: Option<bool> =
+        sqlx::query_scalar("SELECT datistemplate FROM pg_database WHERE datname = $1")
+            .bind(template_name)
+            .fetch_optional(&mut *conn)
+            .await
+            .expect("Failed to check template readiness");
+    matches!(ready, Some(true))
+}
+
+/// Build (or rebuild) the template DB. The caller MUST hold `TEMPLATE_SETUP_ADVISORY_KEY`.
+///
+/// Cleans up templates from previous migration hashes, recovers a stale same-name
+/// non-template DB (left by a process that crashed between `CREATE DATABASE` and the
+/// mark-as-template step), creates the template, runs all migrations, and marks it.
+async fn build_template(conn: &mut PgConnection, base_url: &str, template_name: &str) {
+    // Clean up templates from previous migration hashes (only the lock-holder does this).
+    let old_templates: Vec<String> = sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .expect("Failed to query old templates");
+
+    for old_template in old_templates {
+        if old_template == template_name {
+            continue; // is_template_ready was false, so this branch is unreachable; guard anyway.
+        }
+        drop_database_force(conn, &old_template).await;
+    }
+
+    // Recover from a stale/incomplete DB with our name (datistemplate = FALSE because
+    // is_template_ready returned false above). Drop it so we recreate cleanly instead of
+    // wedging like the old fixed-timeout poll loop did.
+    let row_exists: Option<bool> =
+        sqlx::query_scalar("SELECT true FROM pg_database WHERE datname = $1")
+            .bind(template_name)
+            .fetch_optional(&mut *conn)
+            .await
+            .expect("Failed to check template existence");
+    if row_exists.is_some() {
+        eprintln!(
+            "Recovering stale/incomplete template DB '{}' (dropping + recreating)",
+            template_name
+        );
+        drop_database_force(conn, template_name).await;
+    }
+
+    // Create the fresh template database.
+    sqlx::query(&format!("CREATE DATABASE {}", template_name))
+        .execute(&mut *conn)
+        .await
+        .expect("Failed to create template database");
+
+    // Run all migrations on the template (single-connection pool to the template DB).
+    // Same macro production uses (core.rs), so the test schema matches the deployed schema and
+    // adding a migration no longer requires touching this file.
+    let template_url = format!("{}/{}", base_url, template_name);
+    let template_pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&template_url)
+        .await
+        .expect("Failed to connect to template database");
+
+    sqlx::migrate!("./migrations_pg")
+        .run(&template_pool)
+        .await
+        .expect("Template migrations failed");
+
+    template_pool.close().await;
+
+    // Mark as a template so future runs use the fast path and CREATE DATABASE ... TEMPLATE works.
+    sqlx::query(&format!(
+        "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '{}'",
+        template_name
+    ))
+    .execute(&mut *conn)
+    .await
+    .expect("Failed to mark database as template");
+}
+
+/// Ensure the shared template database exists, is migrated, and is marked as a template.
+///
+/// Concurrent-safe: a Postgres advisory lock serializes setup so exactly one process builds
+/// the template (running all migrations — slow, ~tens of seconds) while the others block on
+/// the lock and then reuse the finished template. Recovers from a stale/incomplete non-template
+/// DB instead of wedging forever. With a persistent Postgres (CI self-hosted runner), the
+/// fast path makes per-test setup ~100ms after the first run.
 async fn ensure_template_db(base_url: &str) -> String {
     let template_name = format!("template_test_db_{}", migration_hash());
 
-    // Check if already initialized in this process
+    // Process-local fast path: template already prepared earlier in this process.
     if let Some(existing) = TEMPLATE_INITIALIZED.get() {
         if existing == &template_name {
             return template_name;
         }
     }
 
-    // Connect to postgres database (limit to 2 connections to avoid exhausting PostgreSQL)
+    // Dedicated admin connection (to the `postgres` database). Held for the whole setup so the
+    // advisory lock stays on this session until we explicitly release it.
     let admin_url = format!("{}/postgres", base_url);
-    let admin_pool = PgPoolOptions::new()
-        .max_connections(2)
-        .connect(&admin_url)
+    let mut admin_conn = PgConnection::connect(&admin_url)
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
-    // Check if template exists and is properly marked
-    let template_status: Option<bool> =
-        sqlx::query_scalar("SELECT datistemplate FROM pg_database WHERE datname = $1")
-            .bind(&template_name)
-            .fetch_optional(&admin_pool)
-            .await
-            .expect("Failed to check template existence");
-
-    // Fast path: template already exists — skip cleanup and creation entirely.
-    // With persistent Postgres (container lifecycle), this is the common case on every
-    // nextest run after the first, making per-test setup ~100ms instead of ~40s.
-    if matches!(template_status, Some(true)) {
-        admin_pool.close().await;
+    // Unlocked fast path: template is already ready — skip lock contention entirely.
+    if is_template_ready(&mut admin_conn, &template_name).await {
         TEMPLATE_INITIALIZED.set(template_name.clone()).ok();
         return template_name;
     }
 
-    // Slow path: template needs creating — clean up stale versions from previous migration hash first
-    let old_templates: Vec<String> = sqlx::query_scalar(
-        "SELECT datname FROM pg_database WHERE datname LIKE 'template_test_db_%' AND datistemplate = TRUE",
-    )
-    .fetch_all(&admin_pool)
+    // Slow path: serialize setup across all concurrent test processes.
+    // pg_advisory_lock BLOCKS until acquired; auto-released on disconnect if this process dies.
+    sqlx::query(&format!(
+        "SELECT pg_advisory_lock({})",
+        TEMPLATE_SETUP_ADVISORY_KEY
+    ))
+    .execute(&mut admin_conn)
     .await
-    .expect("Failed to query old templates");
+    .expect("Failed to acquire template-setup advisory lock");
 
-    for old_template in old_templates {
-        // Skip if this is the current template
-        if old_template == template_name {
-            continue;
-        }
-
-        // Terminate connections to old template (best effort)
-        match sqlx::query(&format!(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-            old_template
-        ))
-        .execute(&admin_pool)
-        .await
-        {
-            Ok(_) => {}
-            Err(e) => eprintln!(
-                "Warning: Failed to terminate connections to old template '{}': {:#?}",
-                old_template, e
-            ),
-        }
-
-        // Unmark as template first (required before dropping)
-        if let Err(e) = sqlx::query(&format!(
-            "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
-            old_template
-        ))
-        .execute(&admin_pool)
-        .await
-        {
-            eprintln!(
-                "Warning: Failed to unmark old template '{}': {:#?}",
-                old_template, e
-            );
-            continue;
-        }
-
-        // Drop old template
-        if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", old_template))
-            .execute(&admin_pool)
-            .await
-        {
-            eprintln!(
-                "Warning: Failed to drop old template '{}': {:#?}",
-                old_template, e
-            );
-        }
+    // Re-check under the lock: another process may have finished while we waited.
+    if !is_template_ready(&mut admin_conn, &template_name).await {
+        build_template(&mut admin_conn, base_url, &template_name).await;
     }
 
-    let needs_creation = match template_status {
-        Some(true) => {
-            // Template exists and is properly marked
-            false
-        }
-        Some(false) => {
-            // Database exists but is NOT a template
-            // Another process might be setting it up - wait for it
-            true
-        }
-        None => {
-            // Database doesn't exist
-            true
-        }
-    };
-
-    if needs_creation {
-        // Try to create new template database
-        let create_result = sqlx::query(&format!("CREATE DATABASE {}", template_name))
-            .execute(&admin_pool)
-            .await;
-
-        // Handle creation - might fail if another process created it concurrently
-        let created_by_us = match create_result {
-            Ok(_) => true,
-            Err(sqlx::Error::Database(ref db_err))
-                if db_err.code().as_deref() == Some("42P04")
-                    || db_err.code().as_deref() == Some("23505") =>
-            {
-                // Database already exists or unique constraint violated (concurrent creation)
-                // Both error codes indicate another process is creating the template
-                // Wait for it to be marked as a template (with timeout)
-                for attempt in 0..100 {
-                    let is_template: Option<bool> = sqlx::query_scalar(
-                        "SELECT datistemplate FROM pg_database WHERE datname = $1",
-                    )
-                    .bind(&template_name)
-                    .fetch_optional(&admin_pool)
-                    .await
-                    .expect("Failed to query template status");
-
-                    if matches!(is_template, Some(true)) {
-                        // Template is ready!
-                        break;
-                    } else if matches!(is_template, Some(false)) {
-                        // Database exists but not yet marked as template - wait
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                    } else {
-                        // Database was dropped? Retry template creation
-                        panic!("Template database disappeared during concurrent setup");
-                    }
-
-                    if attempt == 99 {
-                        panic!(
-                            "Timeout waiting for concurrent process to finish template setup for '{}'",
-                            template_name
-                        );
-                    }
-                }
-                false // Created by another process
-            }
-            Err(e) => panic!("Failed to create template database: {:#?}", e),
-        };
-
-        // Only run migrations if we created the database
-        if created_by_us {
-            // Connect to template and run migrations (single connection sufficient)
-            let template_url = format!("{}/{}", base_url, template_name);
-            let template_pool = PgPoolOptions::new()
-                .max_connections(1)
-                .connect(&template_url)
-                .await
-                .expect("Failed to connect to template database");
-
-            // Run all migrations, auto-discovered at compile time from migrations_pg/.
-            // This is the same macro production uses (core.rs), so the test template
-            // schema is guaranteed identical to the deployed schema — and adding a new
-            // migration no longer requires touching this file.
-            sqlx::migrate!("./migrations_pg")
-                .run(&template_pool)
-                .await
-                .expect("Template migrations failed");
-
-            template_pool.close().await;
-
-            // Mark as template
-            sqlx::query(&format!(
-                "UPDATE pg_database SET datistemplate = TRUE WHERE datname = '{}'",
-                template_name
-            ))
-            .execute(&admin_pool)
-            .await
-            .expect("Failed to mark database as template");
-        }
+    // Release so the next waiting process proceeds.
+    if let Err(e) = sqlx::query(&format!(
+        "SELECT pg_advisory_unlock({})",
+        TEMPLATE_SETUP_ADVISORY_KEY
+    ))
+    .execute(&mut admin_conn)
+    .await
+    {
+        panic!("Failed to release template-setup advisory lock: {:#?}", e);
     }
 
-    admin_pool.close().await;
+    // Invariant: the template must be ready now regardless of who built it.
+    assert!(
+        is_template_ready(&mut admin_conn, &template_name).await,
+        "Template '{}' was not marked ready after setup",
+        template_name
+    );
 
-    // Cache the template name (ok if another thread already set it)
     TEMPLATE_INITIALIZED.set(template_name.clone()).ok();
-
     template_name
 }
 

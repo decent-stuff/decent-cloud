@@ -44,18 +44,39 @@ REMOTE_API_URL="https://dev-api.decent-cloud.org"
 API_BINARY="${API_BINARY:-$ROOT/target/release/api-server}"
 DEFAULT_CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai"
 
-# Source all env vars from cf/.env.dev (optional in --e2e mode if defaults work).
-if [ ! -f "$ROOT/cf/.env.dev" ]; then
-  echo "error: $ROOT/cf/.env.dev not found." >&2
-  echo "       Copy cf/.env.dev.example to cf/.env.dev and edit it:" >&2
-  echo "         cp cf/.env.dev.example cf/.env.dev" >&2
+# Source all env vars from cf/.env.dev (operator-local, gitignored). When absent
+# (e.g. fresh CI checkout, where the gitignored file is never present), fall back
+# to the tracked cf/.env.dev.example so the --e2e warm stack can boot with
+# local-loop defaults — honoring the intent above that .env.dev is optional in
+# --e2e mode. cf/.env.dev itself is never committed (operator-local secrets).
+_env_file=""
+_using_example=0
+if [ -f "$ROOT/cf/.env.dev" ]; then
+  _env_file="$ROOT/cf/.env.dev"
+elif [ -f "$ROOT/cf/.env.dev.example" ]; then
+  _env_file="$ROOT/cf/.env.dev.example"
+  _using_example=1
+  echo "warning: cf/.env.dev not found — using tracked cf/.env.dev.example." >&2
+  echo "         (CI / throwaway --e2e stack. For local dev: cp cf/.env.dev.example cf/.env.dev)" >&2
+else
+  echo "error: neither cf/.env.dev nor cf/.env.dev.example found — repo is incomplete." >&2
   exit 1
 fi
+
+# The env file's API_DATABASE_URL is a local-loop placeholder (hostname `postgres`).
+# A caller-provided DATABASE_URL (set by the Makefile website-e2e task via
+# detect-postgres.sh) names the real Postgres host, so when using the example
+# fallback prefer it over the placeholder to avoid pointing the API at the wrong DB.
+_caller_db_url="${DATABASE_URL:-}"
 # shellcheck disable=SC1090
 set -a
 # shellcheck source=/dev/null
-source "$ROOT/cf/.env.dev"
+source "$_env_file"
 set +a
+if [ "$_using_example" -eq 1 ] && [ -n "$_caller_db_url" ]; then
+  export API_DATABASE_URL="$_caller_db_url"
+fi
+unset _env_file _using_example _caller_db_url
 
 E2E_MODE=0
 for arg in "$@"; do
