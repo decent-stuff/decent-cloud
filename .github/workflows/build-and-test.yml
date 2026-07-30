@@ -29,6 +29,7 @@ jobs:
       RUSTUP_HOME: /cache/cargo/rustup
     steps:
       - uses: actions/checkout@v4
-      - run: cd website && npx playwright install --with-deps chromium
+      - run: cd website && npm ci
+      - run: cd website && npx playwright install chromium
       - run: cargo make website-e2e
 

@@ -788,16 +788,38 @@ mod tests {
         );
         assert_eq!(after.refund_amount_e9s, Some(500_000_000));
 
-        let expected_key = crate::refund::refund_idempotency_key(
-            "provisioning_failed",
-            &contract_id,
-            &format!("provisioning_failed:{}", fired_at_ns),
+        // The refund approval gate (process_gated_refund) derives its
+        // idempotency key with its OWN timestamp, so we read the ACTUAL key
+        // back from the refund_requests row it created (the authoritative
+        // record) rather than re-deriving it from fired_at_ns. This also
+        // proves the gate and the refund_audit trail share one key.
+        let key: String = sqlx::query_scalar(
+            "SELECT idempotency_key FROM refund_requests \
+             WHERE contract_id = $1 AND reason = 'provisioning_failed'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+
+        // Deterministic shape: {reason}:{contract_id_hex}:{reason}:{ts}
+        let cid_hex = hex::encode(&contract_id);
+        let ts_str = key
+            .strip_prefix(&format!("provisioning_failed:{cid_hex}:provisioning_failed:"))
+            .expect("idempotency key must follow the deterministic shape");
+        let gate_ts: i64 = ts_str.parse().expect("timestamp suffix must be an i64");
+        // The gate fires its own now_ns() after the failure timestamp, so it
+        // can never predate it.
+        assert!(
+            gate_ts >= fired_at_ns,
+            "gate timestamp ({gate_ts}) must not predate the failure timestamp ({fired_at_ns})"
         );
+
         let audit = db
-            .find_audit_by_idempotency_key(&expected_key)
+            .find_audit_by_idempotency_key(&key)
             .await
             .unwrap()
-            .expect("audit row must exist with the deterministic key");
+            .expect("audit row must exist under the gate's idempotency key");
         assert_eq!(audit.reason, "provisioning_failed");
         assert_eq!(audit.amount_cents, 50, "5e8 e9s -> 50 cents");
         // No stripe_client passed -> audit stays at `requested` (no
