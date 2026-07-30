@@ -201,11 +201,16 @@ jobs:
           FORGEJO_USER: ${{ secrets.FORGEJO_USER }}
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
         run: |
-          echo "$FORGEJO_TOKEN" | docker login git.kalaj.org -u "$FORGEJO_USER" --password-stdin
-          docker build -f api/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG} .
-          docker build -f cf/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG} .
-          docker push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG}
-          docker push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG}
+          # Self-hosted runner: prefer rootless podman (no host/docker access needed);
+          # fall back to docker if that is what is installed. Keep the local cargo cache.
+          CTR="$(command -v podman || command -v docker)"
+          [ -n "$CTR" ] || { echo "ERROR: neither podman nor docker found on runner" >&2; exit 1; }
+          echo "Using container runtime: $CTR ($("$CTR" --version))"
+          echo "$FORGEJO_TOKEN" | "$CTR" login git.kalaj.org -u "$FORGEJO_USER" --password-stdin
+          "$CTR" build -f api/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG} .
+          "$CTR" build -f cf/Dockerfile -t git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG} .
+          "$CTR" push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG}
+          "$CTR" push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG}
 
       - name: Bump image tags in deploy/k8s/decent-cloud.yaml
         env:
