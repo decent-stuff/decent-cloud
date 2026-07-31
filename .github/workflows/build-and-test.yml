@@ -30,12 +30,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cd website && npm ci
-      # Install the chromium browser binary AND its OS shared libraries
-      # (libatk1.0-0t64, libgbm1, libasound2t64, …). The self-hosted runner
-      # does NOT preinstall these; `playwright install chromium` alone downloads
-      # the binary but leaves every test failing at browserType.launch with
-      # "Host system is missing dependencies to run browsers". `--with-deps` runs
-      # apt-get (via sudo, which the runner provides) and is idempotent.
-      - run: cd website && sudo npx playwright install --with-deps chromium
+      # chromium needs OS shared libraries (libatk1.0-0t64, libgbm1, libasound2t64,
+      # …) that the self-hosted runner does NOT preinstall — without them every
+      # E2E test fails at browserType.launch: "Host system is missing dependencies
+      # to run browsers". The runner's sudoers disallows arbitrary `sudo <cmd>`
+      # (so `sudo npx …` fails with "a password is required") but permits
+      # `sudo apt-get`; install the libraries via apt-get, then fetch the browser
+      # binary as the runner user. Idempotent (apt-get is a no-op once installed).
+      - name: Install Playwright chromium + OS dependencies
+        run: |
+          set -euo pipefail
+          if ! sudo -n apt-get --version >/dev/null 2>&1; then
+            echo "ERROR: passwordless 'sudo apt-get' is unavailable on this runner." >&2
+            echo "       Grant NOPASSWD apt-get, or preinstall the chromium OS deps:" >&2
+            echo "         libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64" >&2
+            echo "         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64" >&2
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+            libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
+          cd website
+          npx playwright install chromium
       - run: cargo make website-e2e
 
