@@ -30,6 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cd website && npm ci
-      - run: cd website && npx playwright install chromium
+      # Install the chromium browser binary AND its OS shared libraries
+      # (libatk1.0-0t64, libgbm1, libasound2t64, …). The self-hosted runner
+      # does NOT preinstall these; `playwright install chromium` alone downloads
+      # the binary but leaves every test failing at browserType.launch with
+      # "Host system is missing dependencies to run browsers". `--with-deps` runs
+      # apt-get (via sudo, which the runner provides) and is idempotent.
+      - run: cd website && sudo npx playwright install --with-deps chromium
       - run: cargo make website-e2e
 
