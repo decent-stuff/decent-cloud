@@ -123,10 +123,13 @@ load_secrets_env() {
 }
 
 _wait_for() {
-  local name="$1" url="$2" deadline="$3" now deadline_s
+  # Args: <svc-key> <label> <url> <deadline-seconds>. The svc-key (api|web) names the
+  # $PIDS/<key>.log / -stderr.log files so a timeout can dump WHY the service didn't
+  # come up — a health-check timeout with no diagnostics is a blind spot.
+  local key="$1" label="$2" url="$3" deadline="$4" now deadline_s
   now=$(date +%s)
   deadline_s=$((now + deadline))
-  echo -n "Waiting for $name"
+  echo -n "Waiting for $label"
   while [ "$(date +%s)" -lt "$deadline_s" ]; do
     if curl -sf "$url" >/dev/null 2>&1; then
       echo " ready"
@@ -135,7 +138,14 @@ _wait_for() {
     echo -n "."
     sleep 1
   done
-  echo " TIMEOUT (${deadline}s)"
+  echo " TIMEOUT (${deadline}s)" >&2
+  # BE LOUD: surface the service's own startup logs so CI shows the real reason
+  # (bind error / panic / migration failure) instead of a bare timeout.
+  echo "----- $label stdout ($PIDS/$key.log) -----" >&2
+  if [ -f "$PIDS/$key.log" ]; then tail -n 50 "$PIDS/$key.log" >&2; else echo "(none)" >&2; fi
+  echo "----- $label stderr ($PIDS/$key-stderr.log) -----" >&2
+  if [ -f "$PIDS/$key-stderr.log" ]; then cat "$PIDS/$key-stderr.log" >&2; else echo "(none)" >&2; fi
+  echo "----------------------------------------------------------" >&2
   return 1
 }
 
@@ -147,6 +157,25 @@ _healthy() {
   [ -n "$pid" ] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
   curl -sf "$url" >/dev/null 2>&1
+}
+
+# Reclaim a dev-stack port from a stale occupant before binding. The api (59011) and
+# web (59010) ports are dedicated to this stack, so any process holding one that we do
+# not track is a leftover from a prior run whose detached (setsid) service escaped job
+# cleanup. Without this the new service hits EADDRINUSE, dies silently, and the health
+# check times out — the failure that wedged the E2E job. Loud by design.
+_reclaim_port() {
+  local port="$1" label="$2" pid i
+  pid=$(ss -lptnH "sport = :$port" 2>/dev/null | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1)
+  [ -n "$pid" ] || return 0
+  echo "warning: $label port $port held by stale process (pid $pid) — reclaiming." >&2
+  kill -TERM "$pid" 2>/dev/null || true
+  for i in 1 2 3 4 5; do
+    kill -0 "$pid" 2>/dev/null || return 0
+    sleep 0.5
+  done
+  echo "warning: pid $pid did not exit on TERM; sending KILL." >&2
+  kill -KILL "$pid" 2>/dev/null || true
 }
 
 # Launch a detached service. Captures the session-leader PID (== exec'd PID)
@@ -200,6 +229,7 @@ start_stack() {
       echo "API already running (pid $(cat "$PIDS/api.pid"))"
     else
       echo "Starting local API on :$API_PORT (e2e profile, rate-limit disabled)..."
+      _reclaim_port "$API_PORT" "API"
       _start_service api "$ROOT" \
         "${SECRETS_ENV[@]}" \
         "DATABASE_URL=$(effective_db_url)" \
@@ -210,7 +240,7 @@ start_stack() {
         "RATE_LIMIT_ENABLED=false" \
         "STRIPE_WEBHOOK_SECRET=whsec_test_secret" \
         "$API_BINARY" serve
-      _wait_for "local API" "http://localhost:$API_PORT/api/v1/health" 60 || return 1
+      _wait_for api "local API" "http://localhost:$API_PORT/api/v1/health" 120 || return 1
     fi
     api_url="http://localhost:$API_PORT"
   elif [ -x "$API_BINARY" ]; then
@@ -218,6 +248,7 @@ start_stack() {
       echo "API already running (pid $(cat "$PIDS/api.pid"))"
     else
       echo "Starting local API on :$API_PORT..."
+      _reclaim_port "$API_PORT" "API"
       _start_service api "$ROOT" \
         "${SECRETS_ENV[@]}" \
         "DATABASE_URL=$(effective_db_url)" \
@@ -226,7 +257,7 @@ start_stack() {
         "SQLX_OFFLINE=true" \
         "CANISTER_ID=${CANISTER_ID:-$DEFAULT_CANISTER_ID}" \
         "$API_BINARY" serve
-      _wait_for "local API" "http://localhost:$API_PORT/api/v1/health" 60 || return 1
+      _wait_for api "local API" "http://localhost:$API_PORT/api/v1/health" 120 || return 1
     fi
     api_url="http://localhost:$API_PORT"
   else
@@ -240,12 +271,13 @@ start_stack() {
     echo "Website already running (pid $(cat "$PIDS/web.pid"))"
   else
     echo "Starting website on :$WEB_PORT (API: $api_url)..."
+    _reclaim_port "$WEB_PORT" "website"
     _start_service web "$ROOT/website" \
       "VITE_DECENT_CLOUD_API_URL=$api_url" \
       "VITE_CHATWOOT_WEBSITE_TOKEN=" \
       "VITE_CHATWOOT_BASE_URL=" \
       npm run dev -- --host 127.0.0.1 --port "$WEB_PORT" --strictPort
-    _wait_for "website" "http://localhost:$WEB_PORT" 60 || return 1
+    _wait_for web "website" "http://localhost:$WEB_PORT" 60 || return 1
   fi
 
   end_time=$(date +%s)
