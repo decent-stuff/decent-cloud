@@ -33,48 +33,54 @@ jobs:
       # chromium needs OS shared libraries (libatk1.0-0t64, libgbm1, libasound2t64,
       # …) that the self-hosted runner does NOT preinstall — without them every
       # E2E test fails at browserType.launch: "Host system is missing dependencies
-      # to run browsers". The runner has NO passwordless sudo (so neither
-      # `sudo npx …` nor `sudo apt-get …` works from the workflow), but Docker is
-      # usable without sudo (the postgres-start task already relies on it). So we
-      # run apt INSIDE an ubuntu:24.04 container — which matches the runner's
-      # noble release and the t64 package names — and copy just the missing .so
-      # files into a host cache dir exposed to chromium via LD_LIBRARY_PATH.
-      # Cached across runs via a .complete marker; only GUI/audio libs live in
-      # the dir, so it does not shadow the system libc/openssl the api-server
-      # links against.
-      - name: Provision chromium OS libraries (rootless, via container)
+      # to run browsers". The runner has NO passwordless sudo and NO docker, so we
+      # cannot install packages onto the host. Instead, fetch the missing .deb
+      # packages from the Ubuntu noble archive over plain HTTP (no privileges
+      # needed) and unpack just their .so files with `dpkg-deb -x` into a cache
+      # dir, then expose that dir to chromium via LD_LIBRARY_PATH. Only GUI/audio
+      # libs live there, so the system libc/openssl the api-server links against
+      # stay authoritative. Cached across runs via a .complete marker.
+      - name: Provision chromium OS libraries (rootless)
         run: |
-          set -euo pipefail
+          set -uo pipefail
+          fetch() {
+            if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
+            elif command -v wget >/dev/null 2>&1; then wget -q -O "$2" "$1"
+            else echo "ERROR: need curl or wget on the runner." >&2; exit 1; fi
+          }
           LIBS_DIR="$HOME/.pw-chromium-libs"
+          PKGS="libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64"
           if [ -f "$LIBS_DIR/.complete" ]; then
             echo "Reusing cached chromium libs in $LIBS_DIR."
           else
-            echo "Extracting chromium OS libs into $LIBS_DIR via ubuntu:24.04 container..."
-            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR"
-            docker run --rm -v "$LIBS_DIR:/out" ubuntu:24.04 bash -c '
-              set -e
-              apt-get update -qq
-              apt-get install -y --no-install-recommends \
-                libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
-                libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
-              for pkg in libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
-                          libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64; do
-                dpkg -L "$pkg" 2>/dev/null | grep -E "/[^/]+\.so[^/]*$" |
-                  while IFS= read -r f; do cp -L "$f" /out/; done || true
-              done
-            '
+            echo "Fetching chromium OS libs from the Ubuntu noble archive…"
+            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR/debs"
+            BASE=http://archive.ubuntu.com/ubuntu
+            IDX="$(mktemp)"
+            for c in main universe; do
+              fetch "$BASE/dists/noble/$c/binary-amd64/Packages.gz" - | gzip -dc >> "$IDX" 2>/dev/null || true
+            done
+            for pkg in $PKGS; do
+              fn="$(awk -v p="$pkg" '/^Package: /{m=($2==p)} m && /^Filename: /{print $2; exit}' "$IDX")"
+              if [ -z "$fn" ]; then
+                echo "ERROR: $pkg not found in Ubuntu noble package index." >&2
+                exit 1
+              fi
+              fetch "$BASE/$fn" "$LIBS_DIR/debs/$pkg.deb"
+            done
+            rm -f "$IDX"
+            for d in "$LIBS_DIR/debs"/*.deb; do dpkg-deb -x "$d" "$LIBS_DIR"; done
+            rm -rf "$LIBS_DIR/debs"
             touch "$LIBS_DIR/.complete"
           fi
-          n="$(find "$LIBS_DIR" -maxdepth 1 -name '*.so*' | wc -l)"
-          echo "Provided $n chromium libs in $LIBS_DIR."
-          if [ "$n" -eq 0 ]; then
-            echo "ERROR: no chromium libs extracted — the ubuntu:24.04 container step failed." >&2
-            exit 1
-          fi
-          echo "LD_LIBRARY_PATH=$LIBS_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          LIBDIR="$LIBS_DIR/usr/lib/x86_64-linux-gnu"
+          n="$(find "$LIBDIR" -name '*.so*' 2>/dev/null | wc -l)"
+          echo "Provided $n chromium libs under $LIBDIR."
+          [ "$n" -gt 0 ] || { echo "ERROR: no chromium libs extracted." >&2; exit 1; }
+          echo "LD_LIBRARY_PATH=$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - run: cd website && npx playwright install chromium
-      # Fail fast: if any OS lib is still missing, surface it in seconds rather
-      # than after the multi-minute api-server build inside `cargo make website-e2e`.
+      # Fail fast: surface any still-missing OS lib in seconds, before the
+      # multi-minute api-server build inside `cargo make website-e2e`.
       - name: Verify chromium launches
         run: |
           cd website
