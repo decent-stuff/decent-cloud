@@ -44,14 +44,14 @@ jobs:
       # api-server's system libc/openssl stay authoritative. Cached across runs.
       - name: Provision chromium OS libraries (rootless, ldd-driven)
         run: |
-          set -uo pipefail
+          set +e -u  # disable errexit (GHA enables it): the ldd loop + final check handle errors explicitly
           http_get() {  # http_get URL OUTPUT  (OUTPUT "-" = stdout)
-            if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$2" "$1"
+            if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 3 -o "$2" "$1"
             elif command -v wget >/dev/null 2>&1; then wget -q -O "$2" "$1"
             else echo "ERROR: need curl or wget on the runner." >&2; exit 1; fi
           }
           LIBS_DIR="$HOME/.pw-chromium-libs"
-          ldpath() { ls -d "$LIBS_DIR"/usr/lib/x86_64-linux-gnu "$LIBS_DIR"/lib/x86_64-linux-gnu 2>/dev/null | paste -sd:; }
+          ldpath() { ls -d "$LIBS_DIR"/usr/lib/x86_64-linux-gnu "$LIBS_DIR"/lib/x86_64-linux-gnu 2>/dev/null | paste -sd: || true; }
           if [ -f "$LIBS_DIR/.complete" ]; then
             echo "Reusing cached chromium libs in $LIBS_DIR."
           else
@@ -67,7 +67,7 @@ jobs:
                          "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null)"
             [ -n "$BINS" ] || { echo "ERROR: no chromium binary found under ~/.cache/ms-playwright." >&2; exit 1; }
             export LD_LIBRARY_PATH="$(ldpath)"
-            for pass in 1 2 3 4 5; do
+            for pass in 1 2 3 4 5 6; do
               missing="$(for b in $BINS; do ldd "$b" 2>/dev/null; done | awk '/=> not found/{print $1}' | sort -u)"
               [ -z "$missing" ] && { echo "  pass $pass: all libraries resolved ✓"; break; }
               echo "  pass $pass: missing → $(echo $missing)"
@@ -76,11 +76,21 @@ jobs:
                 [ -z "$pkg" ] && { echo "    WARN: $so not in noble Contents index (skipping)" >&2; continue; }
                 fn="$(awk -v p="$pkg" '/^Package: /{m=($2==p)} m && /^Filename: /{print $2; exit}' "$PACKAGES")"
                 [ -z "$fn" ] && { echo "    WARN: no .deb found for $pkg (skipping)" >&2; continue; }
-                http_get "$BASE/$fn" "$LIBS_DIR/$pkg.deb" && dpkg-deb -x "$LIBS_DIR/$pkg.deb" "$LIBS_DIR" && rm -f "$LIBS_DIR/$pkg.deb"
+                if http_get "$BASE/$fn" "$LIBS_DIR/$pkg.deb"; then
+                  dpkg-deb -x "$LIBS_DIR/$pkg.deb" "$LIBS_DIR" && rm -f "$LIBS_DIR/$pkg.deb"
+                else
+                  echo "    WARN: download failed for $pkg (will retry next pass)" >&2
+                fi
                 export LD_LIBRARY_PATH="$(ldpath)"
               done
             done
             rm -f "$CONTENTS" "$PACKAGES"
+            # Final verification: every chromium library must now resolve.
+            still_missing="$(for b in $BINS; do ldd "$b" 2>/dev/null; done | awk '/=> not found/{print $1}' | sort -u)"
+            if [ -n "$still_missing" ]; then
+              echo "ERROR: could not resolve chromium libraries: $still_missing" >&2
+              exit 1
+            fi
             touch "$LIBS_DIR/.complete"
           fi
           final="$(ldpath)"
