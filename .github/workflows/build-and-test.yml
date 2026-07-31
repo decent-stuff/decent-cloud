@@ -30,55 +30,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cd website && npm ci
+      - run: cd website && npx playwright install chromium
       # chromium needs OS shared libraries (libatk1.0-0t64, libgbm1, libasound2t64,
-      # …) that the self-hosted runner does NOT preinstall — without them every
-      # E2E test fails at browserType.launch: "Host system is missing dependencies
-      # to run browsers". The runner has NO passwordless sudo and NO docker, so we
-      # cannot install packages onto the host. Instead, fetch the missing .deb
-      # packages from the Ubuntu noble archive over plain HTTP (no privileges
-      # needed) and unpack just their .so files with `dpkg-deb -x` into a cache
-      # dir, then expose that dir to chromium via LD_LIBRARY_PATH. Only GUI/audio
-      # libs live there, so the system libc/openssl the api-server links against
-      # stay authoritative. Cached across runs via a .complete marker.
-      - name: Provision chromium OS libraries (rootless)
+      # libwayland-server0, …) that the self-hosted runner does NOT preinstall —
+      # without them every E2E test fails at browserType.launch: "Host system is
+      # missing dependencies to run browsers". The runner has NO passwordless sudo
+      # and NO docker, so packages cannot be installed onto the host. Instead we
+      # inspect the chromium binary with ldd, resolve every missing shared library
+      # to its Ubuntu noble .deb via the archive's Contents+Packages indexes (plain
+      # HTTP, no privileges), and unpack just those .so files into a cache dir
+      # exposed to chromium via LD_LIBRARY_PATH. ldd-driven ⇒ no hardcoded package
+      # list and no guesswork; only the actually-missing libs are provided, so the
+      # api-server's system libc/openssl stay authoritative. Cached across runs.
+      - name: Provision chromium OS libraries (rootless, ldd-driven)
         run: |
           set -uo pipefail
-          fetch() {
-            if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
+          http_get() {  # http_get URL OUTPUT  (OUTPUT "-" = stdout)
+            if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$2" "$1"
             elif command -v wget >/dev/null 2>&1; then wget -q -O "$2" "$1"
             else echo "ERROR: need curl or wget on the runner." >&2; exit 1; fi
           }
           LIBS_DIR="$HOME/.pw-chromium-libs"
-          PKGS="libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64"
+          ldpath() { ls -d "$LIBS_DIR"/usr/lib/x86_64-linux-gnu "$LIBS_DIR"/lib/x86_64-linux-gnu 2>/dev/null | paste -sd:; }
           if [ -f "$LIBS_DIR/.complete" ]; then
             echo "Reusing cached chromium libs in $LIBS_DIR."
           else
-            echo "Fetching chromium OS libs from the Ubuntu noble archive…"
-            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR/debs"
+            echo "Resolving chromium's missing OS libraries via ldd…"
+            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR"
             BASE=http://archive.ubuntu.com/ubuntu
-            IDX="$(mktemp)"
+            CONTENTS="$(mktemp)"; PACKAGES="$(mktemp)"
+            http_get "$BASE/dists/noble/Contents-amd64.gz" - | gzip -dc > "$CONTENTS" 2>/dev/null || true
             for c in main universe; do
-              fetch "$BASE/dists/noble/$c/binary-amd64/Packages.gz" - | gzip -dc >> "$IDX" 2>/dev/null || true
+              http_get "$BASE/dists/noble/$c/binary-amd64/Packages.gz" - | gzip -dc >> "$PACKAGES" 2>/dev/null || true
             done
-            for pkg in $PKGS; do
-              fn="$(awk -v p="$pkg" '/^Package: /{m=($2==p)} m && /^Filename: /{print $2; exit}' "$IDX")"
-              if [ -z "$fn" ]; then
-                echo "ERROR: $pkg not found in Ubuntu noble package index." >&2
-                exit 1
-              fi
-              fetch "$BASE/$fn" "$LIBS_DIR/debs/$pkg.deb"
+            BINS="$(ls "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell \
+                         "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null)"
+            [ -n "$BINS" ] || { echo "ERROR: no chromium binary found under ~/.cache/ms-playwright." >&2; exit 1; }
+            export LD_LIBRARY_PATH="$(ldpath)"
+            for pass in 1 2 3 4 5; do
+              missing="$(for b in $BINS; do ldd "$b" 2>/dev/null; done | awk '/=> not found/{print $1}' | sort -u)"
+              [ -z "$missing" ] && { echo "  pass $pass: all libraries resolved ✓"; break; }
+              echo "  pass $pass: missing → $(echo $missing)"
+              for so in $missing; do
+                pkg="$(awk -v s="$so" '{n=split($1,a,"/"); if(a[n]==s){x=$2; sub(/,.*/,"",x); m=split(x,p,"/"); print p[m]; exit}}' "$CONTENTS")"
+                [ -z "$pkg" ] && { echo "    WARN: $so not in noble Contents index (skipping)" >&2; continue; }
+                fn="$(awk -v p="$pkg" '/^Package: /{m=($2==p)} m && /^Filename: /{print $2; exit}' "$PACKAGES")"
+                [ -z "$fn" ] && { echo "    WARN: no .deb found for $pkg (skipping)" >&2; continue; }
+                http_get "$BASE/$fn" "$LIBS_DIR/$pkg.deb" && dpkg-deb -x "$LIBS_DIR/$pkg.deb" "$LIBS_DIR" && rm -f "$LIBS_DIR/$pkg.deb"
+                export LD_LIBRARY_PATH="$(ldpath)"
+              done
             done
-            rm -f "$IDX"
-            for d in "$LIBS_DIR/debs"/*.deb; do dpkg-deb -x "$d" "$LIBS_DIR"; done
-            rm -rf "$LIBS_DIR/debs"
+            rm -f "$CONTENTS" "$PACKAGES"
             touch "$LIBS_DIR/.complete"
           fi
-          LIBDIR="$LIBS_DIR/usr/lib/x86_64-linux-gnu"
-          n="$(find "$LIBDIR" -name '*.so*' 2>/dev/null | wc -l)"
-          echo "Provided $n chromium libs under $LIBDIR."
-          [ "$n" -gt 0 ] || { echo "ERROR: no chromium libs extracted." >&2; exit 1; }
-          echo "LD_LIBRARY_PATH=$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
-      - run: cd website && npx playwright install chromium
+          final="$(ldpath)"
+          echo "Provided $(find "$LIBS_DIR" -name '*.so*' 2>/dev/null | wc -l) chromium libs (LD_LIBRARY_PATH=$final)."
+          echo "LD_LIBRARY_PATH=$final" >> "$GITHUB_ENV"
       # Fail fast: surface any still-missing OS lib in seconds, before the
       # multi-minute api-server build inside `cargo make website-e2e`.
       - name: Verify chromium launches
