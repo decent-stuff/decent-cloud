@@ -41,7 +41,11 @@ fi
 API_PORT="${API_PORT:-59011}"
 WEB_PORT="${WEB_PORT:-59010}"
 REMOTE_API_URL="https://dev-api.decent-cloud.org"
-API_BINARY="${API_BINARY:-$ROOT/target/release/api-server}"
+# Honor CARGO_TARGET_DIR: CI builds the api-server into $CARGO_TARGET_DIR (not
+# $ROOT/target), so looking only under $ROOT/target means `env` fails to exec the
+# binary with "No such file or directory" and the health check times out. Fall back
+# to $ROOT/target for local dev (where CARGO_TARGET_DIR is typically unset).
+API_BINARY="${API_BINARY:-${CARGO_TARGET_DIR:-$ROOT/target}/release/api-server}"
 DEFAULT_CANISTER_ID="ggi4a-wyaaa-aaaai-actqq-cai"
 
 # Source all env vars from cf/.env.dev (operator-local, gitignored). When absent
