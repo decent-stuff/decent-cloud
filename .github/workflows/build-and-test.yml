@@ -43,6 +43,6 @@ jobs:
       - name: Verify chromium launches
         run: |
           cd website
-          node -e 'const{chromium}=require("@playwright/test");chromium.launch().then(b=>b.close()).then(()=>console.log("chromium launch OK")).catch(e=>{console.error("chromium launch FAILED — run \'sudo npx playwright install-deps chromium\' on the runner:\n"+String(e).split("\n").slice(0,6).join("\n"));process.exit(1)})'
+          node -e 'const{chromium}=require("@playwright/test");chromium.launch().then(b=>b.close()).then(()=>console.log("chromium launch OK")).catch(e=>{console.error("chromium launch FAILED — run [sudo npx playwright install-deps chromium] on the runner:\n"+String(e).split("\n").slice(0,6).join("\n"));process.exit(1)})'
       - run: cargo make website-e2e
 
