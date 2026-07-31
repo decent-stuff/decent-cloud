@@ -33,25 +33,51 @@ jobs:
       # chromium needs OS shared libraries (libatk1.0-0t64, libgbm1, libasound2t64,
       # …) that the self-hosted runner does NOT preinstall — without them every
       # E2E test fails at browserType.launch: "Host system is missing dependencies
-      # to run browsers". The runner's sudoers disallows arbitrary `sudo <cmd>`
-      # (so `sudo npx …` fails with "a password is required") but permits
-      # `sudo apt-get`; install the libraries via apt-get, then fetch the browser
-      # binary as the runner user. Idempotent (apt-get is a no-op once installed).
-      - name: Install Playwright chromium + OS dependencies
+      # to run browsers". The runner has NO passwordless sudo (so neither
+      # `sudo npx …` nor `sudo apt-get …` works from the workflow), but Docker is
+      # usable without sudo (the postgres-start task already relies on it). So we
+      # run apt INSIDE an ubuntu:24.04 container — which matches the runner's
+      # noble release and the t64 package names — and copy just the missing .so
+      # files into a host cache dir exposed to chromium via LD_LIBRARY_PATH.
+      # Cached across runs via a .complete marker; only GUI/audio libs live in
+      # the dir, so it does not shadow the system libc/openssl the api-server
+      # links against.
+      - name: Provision chromium OS libraries (rootless, via container)
         run: |
           set -euo pipefail
-          if ! sudo -n apt-get --version >/dev/null 2>&1; then
-            echo "ERROR: passwordless 'sudo apt-get' is unavailable on this runner." >&2
-            echo "       Grant NOPASSWD apt-get, or preinstall the chromium OS deps:" >&2
-            echo "         libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64" >&2
-            echo "         libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64" >&2
+          LIBS_DIR="$HOME/.pw-chromium-libs"
+          if [ -f "$LIBS_DIR/.complete" ]; then
+            echo "Reusing cached chromium libs in $LIBS_DIR."
+          else
+            echo "Extracting chromium OS libs into $LIBS_DIR via ubuntu:24.04 container..."
+            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR"
+            docker run --rm -v "$LIBS_DIR:/out" ubuntu:24.04 bash -c '
+              set -e
+              apt-get update -qq
+              apt-get install -y --no-install-recommends \
+                libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+                libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
+              for pkg in libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
+                          libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64; do
+                dpkg -L "$pkg" 2>/dev/null | grep -E "/[^/]+\.so[^/]*$" |
+                  while IFS= read -r f; do cp -L "$f" /out/; done || true
+              done
+            '
+            touch "$LIBS_DIR/.complete"
+          fi
+          n="$(find "$LIBS_DIR" -maxdepth 1 -name '*.so*' | wc -l)"
+          echo "Provided $n chromium libs in $LIBS_DIR."
+          if [ "$n" -eq 0 ]; then
+            echo "ERROR: no chromium libs extracted — the ubuntu:24.04 container step failed." >&2
             exit 1
           fi
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libatk1.0-0t64 libatk-bridge2.0-0t64 libatspi2.0-0t64 \
-            libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2t64
+          echo "LD_LIBRARY_PATH=$LIBS_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      - run: cd website && npx playwright install chromium
+      # Fail fast: if any OS lib is still missing, surface it in seconds rather
+      # than after the multi-minute api-server build inside `cargo make website-e2e`.
+      - name: Verify chromium launches
+        run: |
           cd website
-          npx playwright install chromium
+          node -e 'const{chromium}=require("@playwright/test");chromium.launch().then(b=>b.close()).then(()=>console.log("chromium launch OK")).catch(e=>{console.error("chromium launch FAILED:\n"+String(e).split("\n").slice(0,6).join("\n"));process.exit(1)})'
       - run: cargo make website-e2e
 
