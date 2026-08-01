@@ -190,9 +190,18 @@
 		const unsubscribeError = dashboardStore.error.subscribe((value) => {
 			error = value;
 		});
+		let loadedPrincipal: string | null = null;
 		const unsubscribeAuth = authStore.currentIdentity.subscribe((value) => {
 			currentIdentity = value;
-			loadDashboard(value);
+			// During initialize(), activeIdentity emits twice per identity — first
+			// without an account (addIdentity) then with one (after loadAccount).
+			// Both share the same principal/pubkey, so /provider/dashboard returns
+			// identical data; reload only when the identity actually changes.
+			const principal = value?.principal.toString() ?? null;
+			if (principal !== loadedPrincipal) {
+				loadedPrincipal = principal;
+				loadDashboard(value);
+			}
 		});
 
 		dashboardStore.load();
