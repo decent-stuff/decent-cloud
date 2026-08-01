@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use stripe::{
     BillingPortalSession, CheckoutSession, CheckoutSessionId, CheckoutSessionMode,
     CheckoutSessionPaymentStatus, Client, CreateBillingPortalSession, CreateCheckoutSession,
@@ -32,7 +32,8 @@ impl std::fmt::Debug for StripeClient {
 impl StripeClient {
     /// Creates a new Stripe client using the API key from environment
     pub fn new() -> Result<Self> {
-        let secret_key = std::env::var("STRIPE_SECRET_KEY")?;
+        let secret_key = std::env::var("STRIPE_SECRET_KEY")
+            .context("STRIPE_SECRET_KEY is not set — Stripe payment processing is unavailable")?;
 
         let client = Client::new(secret_key);
         Ok(Self { client })
@@ -683,12 +684,15 @@ mod tests {
     #[test]
     #[serial]
     fn test_stripe_client_new_missing_key() {
-        // Clear env var to test error handling
         std::env::remove_var("STRIPE_SECRET_KEY");
 
         let result = StripeClient::new();
         assert!(result.is_err());
-        // VarError::NotPresent doesn't include var name in message, just check it's an error
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("STRIPE_SECRET_KEY"),
+            "error should name the missing var: got '{msg}'"
+        );
     }
 
     #[test]

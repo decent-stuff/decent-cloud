@@ -776,10 +776,17 @@ impl ContractsApi {
                     {
                         Ok(url) => Some(url),
                         Err(e) => {
+                            tracing::warn!(
+                                "Stripe checkout failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
                             return Json(ApiResponse {
                                 success: false,
                                 data: None,
-                                error: Some(e),
+                                error: Some(format!(
+                                    "Rental created but payment could not be initiated: {e}. You can retry payment or cancel from your rentals page."
+                                )),
                             })
                         }
                     }
