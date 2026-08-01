@@ -1,3 +1,5 @@
+#![allow(dead_code)] // see DO API response types comment below
+
 use super::{
     extract_contract_id, HealthStatus, Instance, ProvisionRequest, Provisioner, RunningInstance,
     SetupVerification,
@@ -17,6 +19,13 @@ const DC_AGENT_TAG: &str = "dc-agent";
 // ── DO API response types ───────────────────────────────────────────────────
 // These are based on the DigitalOcean API v2 specification:
 // https://docs.digitalocean.com/reference/api/api-reference/
+//
+// The structs below deserialize the full DO response shape for fidelity and so
+// the contract tests (digitalocean_tests.rs) can assert on any field. Only a
+// subset is read in production code, so clippy's dead_code lint (which does not
+// count serde `Deserialize` field writes as reads) flags unread fields. The
+// file-level `#![allow(dead_code)]` at the top silences these deliberately;
+// remove it if you add non-DTO code that should be dead-code-checked.
 
 #[derive(Debug, Deserialize)]
 struct DropletsResponse {
@@ -182,12 +191,6 @@ struct DoAction {
 #[derive(Debug, Deserialize)]
 struct Meta {
     total: i64,
-}
-
-#[derive(Debug, Deserialize)]
-struct DoErrorResponse {
-    id: String,
-    message: String,
 }
 
 // ── Create droplet request ──────────────────────────────────────────────────

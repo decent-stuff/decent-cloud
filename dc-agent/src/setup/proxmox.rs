@@ -726,11 +726,8 @@ mod tests {
         let port = listener.local_addr().expect("local_addr").port();
         tokio::spawn(async move {
             let mut held = Vec::new();
-            loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => held.push(stream),
-                    Err(_) => break,
-                }
+            while let Ok((stream, _)) = listener.accept().await {
+                held.push(stream);
             }
         });
 

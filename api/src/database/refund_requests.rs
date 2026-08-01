@@ -51,6 +51,10 @@ pub enum RefundGateOutcome {
     /// (cancel/reject) still proceeds, but `payment_status` stays unchanged.
     PendingApproval {
         refund_amount_e9s: i64,
+        /// User's latest payment, retained for the admin-approval consumer to
+        /// validate the refund against what was actually paid. Already logged
+        /// (tracing + ops alert) at the gate site in `process_gated_refund`.
+        #[allow(dead_code)]
         user_latest_payment_e9s: i64,
     },
     /// Nothing owed (refund_e9s <= 0).

@@ -319,6 +319,9 @@ impl Database {
         // our read and write. If the row is no longer in the eligible set,
         // we short-circuit with zero side effects.
         let mut tx = self.pool.begin().await?;
+        // Anonymous tuple mirrors the SELECT column list; a named Row struct adds
+        // indirection with no benefit for a single ad-hoc money-path query.
+        #[allow(clippy::type_complexity)]
         let row: Option<(String, String, String, i64, String, Option<String>, Option<String>, Vec<u8>)> = sqlx::query_as(
             r#"SELECT status,
                       payment_method,
@@ -496,6 +499,7 @@ mod tests {
     /// timestamps. Mirrors the existing `insert_contract_request` helper used
     /// elsewhere in the contracts test suite but exposes timestamp + payment
     /// knobs needed for timeout boundary tests.
+    #[allow(clippy::too_many_arguments)] // test helper: each param is a column value
     async fn insert_test_contract(
         db: &Database,
         contract_id: &[u8],

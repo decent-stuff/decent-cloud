@@ -691,6 +691,7 @@ impl Database {
 /// Exposed so callers can log it and tests can assert the exact value. Thin
 /// wrapper over the generic `refund::refund_idempotency_key` so the dispute
 /// path shares one source of truth with cancel/reject/manual paths.
+#[allow(dead_code)] // referenced only from webhooks.rs dispute tests; intentional public helper
 pub fn dispute_refund_idempotency_key(stripe_dispute_id: &str) -> String {
     // contract_id is unused for dispute keys (stripe_dispute_id is globally
     // unique); pass an empty slice to satisfy the shared signature.

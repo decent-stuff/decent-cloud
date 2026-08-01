@@ -5426,6 +5426,7 @@ async fn set_contract_created_at(db: &Database, contract_id: &[u8], ts: i64) {
 }
 
 /// Helper: insert a refund_request row directly (non-macro sqlx — SQLX_OFFLINE).
+#[allow(clippy::too_many_arguments)] // test helper: each param is a column value
 async fn insert_refund_request(
     db: &Database,
     contract_id: &[u8],
@@ -5790,10 +5791,6 @@ async fn test_refund_gate_trigger_allows_with_approved_request() {
     let contract_id = vec![208u8; 32];
     let admin_pk = vec![17u8; 32];
 
-    let now_ns = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .expect("timestamp overflow");
-
     insert_stripe_contract_with_timestamps(
         &db,
         StripeContractParams {
@@ -5854,10 +5851,6 @@ async fn test_refund_gate_trigger_rejects_declined_request() {
     let requester_pk = vec![18u8; 32];
     let provider_pk = vec![19u8; 32];
     let contract_id = vec![209u8; 32];
-
-    let now_ns = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .expect("timestamp overflow");
 
     insert_stripe_contract_with_timestamps(
         &db,

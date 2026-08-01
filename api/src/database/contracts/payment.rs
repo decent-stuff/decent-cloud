@@ -8,6 +8,7 @@ impl Database {
     /// `payment_intent_id` is the real PaymentIntent ID (`pi_*`) read from
     /// `session.payment_intent` at checkout completion. It can be `None` when
     /// the session has not yet had a PaymentIntent attached (e.g. async flows).
+    #[allow(clippy::too_many_arguments)] // each param binds 1:1 to an UPDATE column
     pub async fn update_checkout_session_payment(
         &self,
         contract_id: &[u8],
