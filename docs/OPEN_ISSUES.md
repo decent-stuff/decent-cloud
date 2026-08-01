@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-07-24. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-08-01. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -64,12 +64,15 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 | # | Title | Filed by |
 |---|-------|----------|
-| 442 | Create-offering wizard: auto-suggest monthly price from Hetzner server cost | 2026-07-24 UX-flow audit |
+| _none currently open_ | — | — |
 
-> **#442 DECISION (2026-07-25, from product):** default markup = **15%** (auto-suggest
-> `cost × 1.15`), **provider-overridable** — the input stays editable, the 15% is a starting point.
-> Decision recorded on the GH issue (comment `5078165010`). Now actionable — pre-fill
-> `#monthly-price` with `cost × 1.15` when Hetzner server cost is known, update hint copy.
+> **#442 (RESOLVED 2026-07-25, `c14cb939`):** create-offering price auto-suggest shipped —
+> pre-fill `#monthly-price` with `cost × 1.15` (15% markup, the product decision from comment
+> `5078165010`) when Hetzner server cost is known; provider-overridable via a `monthlyPriceTouched`
+> flag (never clobbers a typed value). Pure `suggestMonthlyPrice(cost)` helper + `DEFAULT_MARKUP`
+> const in `offering-wizard.ts` (10 unit tests); 2 e2e (pre-fill + override-reaches-API). Issue
+> **closed**. (Previously listed here as deferred+actionable; the resolution was recorded in the
+> 2026-07-25 GH issue sweep but this section was not updated — corrected 2026-08-01.)
 
 > **#441 (RESOLVED 2026-07-25, `b1158bff`):** trial/CTA mismatch fixed — copy now honestly reflects
 > the CTA via `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans
@@ -103,6 +106,35 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | 107 | Backlog: Dark/light mode toggle |
 
 ## Recently closed by this work
+
+### 2026-08-01 session (clippy cleanup + e2e gap verification + CLI harness + UX root-cause)
+
+Continuation of the radical-harness/UX/tech-debt mandate against the verified real baseline. All
+work TDD-first where applicable, verified against the real warm stack (api:59011 + web:59010), no
+mocks in first-party paths. **No commits made** — changes are staged in the working tree pending a
+user review/commit decision. Final gates: `cargo clippy --workspace --tests --all-targets` → **0
+warnings**; cargo lib tests **1469/0**; `npm run test:e2e:fast:smoke` 27/27; rent-flow **4/4**;
+`cargo nextest run -p decent-cloud` **63/6**.
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| Clippy: 30 → 0 warnings (DRIFT fix) | Tech debt | 10 edits across api + dc-agent. dc-agent `digitalocean.rs`: file-top `#![allow(dead_code)]` (DO API response structs deserialize full shape for fidelity + `digitalocean_tests.rs` assertions — fields read in tests, cannot drop); removed truly-dead `DoErrorResponse` (0 refs incl. tests); `proxmox.rs:729` `while_let_loop` rewrite (`while let Ok((stream,_)) = listener.accept()`). api: `dispute.rs:694` `#[allow(dead_code)]` on test-only helper; removed 2 unused `now_ns` blocks in `tests.rs`; `#[allow(clippy::too_many_arguments)]` on 3 column-binding fns; `#[allow(clippy::type_complexity)]` on money-path `query_as`; `#[allow(dead_code)]` on `RefundGateOutcome::PendingApproval.user_latest_payment_e9s` (money-path audit data, already logged at the gate site). Changed-crate tests: dc-agent 246/246, api stripe_client 18/18, api refund_gate 8/8. |
+| `#442` doc drift reconciliation | Docs | OPEN_ISSUES.md listed `#442` BOTH as "Deferred — UX" AND as RESOLVED (`c14cb939`). Reconciled: the Deferred table now reads `_none currently open_`; the deferred note now records the resolution (corrected 2026-08-01); historical session tails struck-through with CLOSED annotation. |
+| rent→pay→view→cancel e2e gap — confirmed CLOSED | Coverage | `rent-flow.spec.ts` (4 serial tests, 238L) already drives the real marketplace Rent dialog → signed POST /contracts → rentals list → detail page → signed PUT cancel against the warm stack. Re-ran: **4/4 in 24.8s**. Contract commits at `requested` (cancellable) before Stripe checkout, so drivable without STRIPE_SECRET_KEY. FLOWS.md + OPEN_ISSUES tech-debt rows updated to CLOSED. |
+| CLI harness coverage audit + 4 tests + error fix | Coverage / robustness | `cli/tests/cli_flows.rs` +141 lines: pool commands identity guard, register/check-in ghost-identity offline short-circuit, malformed `--amount-dct`/`--amount-e9s` parse rejection, pool-generate missing-pricing-file error. `cli/src/commands/account.rs` amount-parse errors upgraded from bare `ParseFloatError`/`ParseIntError` to detailed `Invalid --amount-dct '{value}': {e}. Pass a decimal number of DC tokens (e.g., --amount-dct 1.5).` (was violating the "provide failure details" rule). `cargo nextest run -p decent-cloud` → **63/6** (was 59/6). |
+| JS error "environment variable not found" — root-caused + fixed | UX / debuggable errors | **Root cause:** `api/src/stripe_client.rs:35` `std::env::var("STRIPE_SECRET_KEY")?` propagated `VarError::NotPresent` whose `.to_string()` is the stdlib string "environment variable not found" — bubbling through `create_stripe_checkout_session` → contracts.rs handler → frontend `createRentalRequest` → `RentalRequestDialog.svelte:268` catch. The contract IS created at `requested` before Stripe is called, so the bare error misled (rental succeeded, payment-init failed). Fix: `stripe_client.rs` `.context("STRIPE_SECRET_KEY is not set — Stripe payment processing is unavailable")`; contracts.rs handler now returns `"Rental created but payment could not be initiated: {e}. You can retry payment or cancel from your rentals page."` + `tracing::warn!` server log. 18/18 stripe tests, rent-flow 4/4, live-repro verified against release-mode api-server. |
+| Live UX audit (no mocks) | UX | Drove the real app via Playwright Chromium + chrome-cli against the warm stack. Homepage + marketplace: **0 console errors**. Warm-stack API config confirmed correct (`dev-server.sh:280` injects `VITE_DECENT_CLOUD_API_URL` as process env, highest priority over `.env.local`). The single console error surfaced (above) was root-caused to a backend error-message gap, not a frontend bug. |
+
+**Net-new finding (documented, NOT autonomously resolved — below the threshold per AGENTS.md
+"conflicting business-logic implementations"):**
+- **`cli/src/keygen.rs` standalone binary duplicates `cli/src/commands/keygen.rs` with DIVERGED
+  behavior.** The standalone `[[bin]] name="keygen"` is unreferenced by any script/CI/docs/dockerfile
+  and looks like a leftover dev/demo tool; it has its own `ALL_LANGUAGES`, `detect_mnemonic`,
+  `mnemonic_from_strings` (validates word count 12/15/18/21/24 — the `dc keygen` command does not,
+  relying on `bip39::Mnemonic::from_phrase` to reject bad counts). It carries genuine
+  sign/verify/mnemonic/seed unit tests. **Recommendation:** delete the standalone binary OR make it
+  delegate to the shared `commands/keygen.rs` functions. Decision parked (binary surface change + the
+  divergence is not a live bug). Filed here as a tracked finding.
 
 ### 2026-07-26 session (refund approval gate + e2e harness expansion + UX audit)
 
@@ -198,7 +230,7 @@ real site across public + authed surfaces).
 | E2E harness tail C1-C3 | Coverage / UX | `02503591` C1 offering-edit beforeAll sharing (4 tests share seed); `2d82a6d5` C2 agent-pool rename PUT + detail render (new `agent-pool-edit.spec.ts`); `d11c718d` C3 become-provider `?step=N` deep-link (pure `wizard-logic.ts` + 19 unit tests, TDD). |
 
 **Still open / deferred (unchanged):**
-- **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
+- ~~**#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).~~ → **CLOSED later in the 2026-07-25 GH issue sweep** (`c14cb939`; see above). Kept struck-through as a historical record of this session's tail state.
 - **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
 - **10 deliberate hex non-fit sites** — documented in `docs/audits/2026-07-25-code-robustness.md`.
 
@@ -225,7 +257,7 @@ parallel flake + 2 **pre-existing** recovery-flow failures unrelated to this ses
 | Smoke fast-loop tuning | Test | `64e46ef4`: demoted 5 slow non-critical specs from `@smoke` → 27 tests @ ~33s (was 32 @ ~51s); kept the authed dashboard, anonymous landing/error, verify-email, sign-in, and #441 money-path. |
 
 **Still open / deferred (deliberate):**
-- **#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).
+- ~~**#442** create-offering price auto-suggest — needs a product decision (margin/heuristics).~~ → **CLOSED** (`c14cb939`; see above). Kept struck-through as a historical record.
 - **#444** remaining large-file splits — roadmap filed (`docs/plans/2026-07-25-large-file-splits-444.md`).
 - **#436 success-screen auto-redirect bonus** — skipped at the time; filed as **#445** (now **closed** in the continuation session).
 - **`scripts/browser.js --seed`** onboarding-flag tooling note — minor test helper, documented in-repo.
@@ -374,7 +406,7 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 | Full suite 192s for 205 tests; <60s goal needs multi-stack sharding | **Empirically investigated — sharding does NOT help on this box.** Built full harness (`scripts/e2e-shard.sh`, `dev-server.sh` STACK_INDEX, `fixtures/api-base.ts`). Root cause: 3 shard stacks share ONE Postgres → competing pools = worse DB contention than single-stack's single pool (3×4w=22 fails/4m30s; 3×2w=4 flakes). **Single stack 4 workers = 205/0 green ~192s = proven optimum.** For sharding to truly help, each shard needs its own Postgres instance (future CI-runner work). As a side benefit, dev CORS now correctly allows any localhost origin and the service worker no longer masks API errors. |
 | `scripts/browser.js eval --seed <phrase>` throws "UtilityScript.evaluate" | **Minor tooling** — `authenticatePage` (browser.js:332-336) does an extra `goto`+`networkidle`+300ms after seed inject; a SvelteKit client-side redirect/WelcomeModal likely destroys the eval context. `snap`/`shot`/`errs`/`html`/`tour` all work with `--seed`; only `eval` is affected. For authed JS eval, use the e2e framework. |
 | `scripts/browser.js --seed` greedily consumes positional args | **Minor tooling** — `--seed <phrase> <url>` fails ("Got 14 words") because the parser consumes all subsequent non-flag args as seed words. Documented usage `snap <url> --seed "$SEED"` (seed last) works. One-line fix possible but it's a test helper, not product. |
-| Coverage gap: rent→pay→view→cancel happy path (UI-created contract, not DB-seeded) | **Known gap** — the primary tenant flow is only fragmented (cancel asserted on DB-seeded contracts). Payment-bound (Stripe); higher effort. Parked. |
+| Coverage gap: rent→pay→view→cancel happy path (UI-created contract, not DB-seeded) | **CLOSED (2026-08-01)** — `rent-flow.spec.ts` (4 serial tests) drives the REAL marketplace Rent dialog → signed `POST /api/v1/contracts` → rentals list → detail page → signed `PUT .../cancel`, all against the warm stack. The contract commits at `requested` (cancellable) during create, before Stripe checkout, so the flow is drivable without `STRIPE_SECRET_KEY`. Cancel asserted from BOTH the detail page and the rentals-list card, with DB verification. Only the Stripe SDK script load (external boundary) is mocked. |
 | Coverage gap: provider agent-pool mgmt `/dashboard/provider/agents/[pool_id]` | **PARTIALLY CLOSED (2026-07-25, `2d82a6d5` C2)** — pool create + rename PUT + detail-page render now covered in `agent-pool-edit.spec.ts`. Remaining gap: pool revoke/delete UI path (low priority). |
 
 ### Deferred product decisions (surfaced 2026-07-23 UX review)
