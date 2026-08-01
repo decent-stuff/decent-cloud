@@ -600,6 +600,152 @@ fn ledger_remote_push_authorize_without_identity_errors() {
     );
 }
 
+#[test]
+fn pool_commands_require_identity() {
+    // `provider pool-suggest-offerings` and `pool-generate-offerings` both require
+    // --identity at the handler level (--identity is a global, so clap cannot enforce
+    // it). This completes the identity-guard coverage: register / check-in /
+    // user-register guards are tested above, but the two pool subcommands were the
+    // only identity-guarded leaf commands without an offline test. The identity guard
+    // fires BEFORE --pricing-file is read, so a dummy path is safe.
+    let cases: &[(&[&str], &str)] = &[
+        (
+            &["provider", "pool-suggest-offerings", "--pool-id", "1"],
+            "pool-suggest-offerings",
+        ),
+        (
+            &[
+                "provider",
+                "pool-generate-offerings",
+                "--pool-id",
+                "1",
+                "--pricing-file",
+                "never-read.json",
+            ],
+            "pool-generate-offerings",
+        ),
+    ];
+
+    for (args, label) in cases {
+        let (mut cmd, _home) = dc();
+        cmd.args(*args);
+        let out = cmd.assert().failure().get_output().clone();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("Identity must be specified"),
+            "({label}) should explain the missing identity, got: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn register_and_checkin_with_nonexistent_identity_fail_offline() {
+    // `provider register`, `user register`, and `provider check-in` are all
+    // canister-bound: after loading the identity they issue an IC update call. With a
+    // ghost --identity they must fail at `DccIdentity::load_from_dir` BEFORE any
+    // network/canister round-trip — exiting non-zero and naming the missing PEM. This
+    // is the register/check-in analog of `account_balance_for_nonexistent_identity_errors`
+    // and proves those handlers short-circuit offline rather than attempting a doomed
+    // (or hanging) canister call.
+    let cases: &[&[&str]] = &[
+        &["provider", "register", "--identity", "ghost"],
+        &["user", "register", "--identity", "ghost"],
+        &["provider", "check-in", "--identity", "ghost"],
+    ];
+
+    for args in cases {
+        let (mut cmd, _home) = dc();
+        cmd.args(*args);
+        let out = cmd.assert().failure().get_output().clone();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("ghost") && stderr.contains("public.pem"),
+            "`{}` should fail naming the missing identity PEM, got: {stderr}",
+            args.join(" ")
+        );
+        // Must NOT be a Rust panic (exit 101).
+        assert_ne!(
+            out.status.code(),
+            Some(101),
+            "`{}` must fail cleanly, not panic",
+            args.join(" ")
+        );
+    }
+}
+
+#[test]
+fn account_transfer_to_with_malformed_amount_errors() {
+    // A non-numeric --amount-dct / --amount-e9s must be rejected at parse time BEFORE
+    // the canister transfer is attempted. Distinct from the "missing amount" path
+    // (covered above) and the "invalid principal" path: here principal parsing succeeds
+    // and the amount-VALUE parse trips. The two flags hit distinct parsers (f64 for
+    // --amount-dct, u64 for --amount-e9s), so both are exercised.
+    let (mut keygen, home) = dc();
+    keygen.args(["keygen", "--generate", "--identity", "sender"]);
+    keygen.assert().success();
+
+    for (flag, value) in [("--amount-dct", "notanumber"), ("--amount-e9s", "notanint")] {
+        let (mut cmd, _) = dc();
+        cmd.env("HOME", home.path());
+        cmd.args([
+            "account",
+            "--transfer-to",
+            "rrkah-fqaaa-aaaaa-aaaaq-cai",
+            "--identity",
+            "sender",
+            flag,
+            value,
+        ]);
+        let out = cmd.assert().failure().get_output().clone();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let expected = if flag.contains("dct") {
+            "Invalid --amount-dct"
+        } else {
+            "Invalid --amount-e9s"
+        };
+        assert!(
+            stderr.contains(expected),
+            "({flag} {value:?}) should surface an actionable '{expected}' error, got: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn pool_generate_offerings_missing_pricing_file_errors() {
+    // `pool-generate-offerings` reads --pricing-file BEFORE any network call. With a
+    // real (keygen'd) identity and a non-existent pricing file it must fail OFFLINE
+    // with the actionable "Failed to read pricing file '<path>'" error — distinct
+    // from the warm-stack test below, which supplies a valid file and exercises the
+    // signed POST path.
+    let (mut keygen, home) = dc();
+    keygen.args(["keygen", "--generate", "--identity", "with-id"]);
+    keygen.assert().success();
+
+    let missing = home.path().join("does-not-exist.json");
+    let (mut cmd, _) = dc();
+    cmd.env("HOME", home.path());
+    cmd.args([
+        "provider",
+        "pool-generate-offerings",
+        "--identity",
+        "with-id",
+        "--pool-id",
+        "1",
+        "--pricing-file",
+        missing.to_str().unwrap(),
+    ]);
+    let out = cmd.assert().failure().get_output().clone();
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("Failed to read pricing file"),
+        "should explain the missing pricing file, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("does-not-exist.json"),
+        "should name the offending file path, got: {stderr}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Warm-stack flows (real local API; auto-skipped if the stack is down)
 // ---------------------------------------------------------------------------

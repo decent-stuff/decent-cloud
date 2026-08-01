@@ -49,10 +49,21 @@ pub async fn handle_account_command(
 
         let transfer_amount_e9s = match &account_args.amount_dct {
             Some(value) => {
-                (value.parse::<f64>()? * (DC_TOKEN_DECIMALS_DIV as f64)).round() as TokenAmountE9s
+                let amount_dct = value.parse::<f64>().map_err(|e| {
+                    format!(
+                        "Invalid --amount-dct '{value}': {e}. \
+                         Pass a decimal number of DC tokens (e.g., --amount-dct 1.5)."
+                    )
+                })?;
+                (amount_dct * (DC_TOKEN_DECIMALS_DIV as f64)).round() as TokenAmountE9s
             }
             None => match &account_args.amount_e9s {
-                Some(value) => value.parse::<TokenAmountE9s>()?,
+                Some(value) => value.parse::<TokenAmountE9s>().map_err(|e| {
+                    format!(
+                        "Invalid --amount-e9s '{value}': {e}. \
+                         Pass a whole number of e9s, 1e9 per DC (e.g., --amount-e9s 1500000000)."
+                    )
+                })?,
                 None => {
                     return Err(
                         "Missing transfer amount: specify --amount-dct (e.g., --amount-dct 1.5) or --amount-e9s (e.g., --amount-e9s 150000000)".into(),
