@@ -31,76 +31,18 @@ jobs:
       - uses: actions/checkout@v4
       - run: cd website && npm ci
       - run: cd website && npx playwright install chromium
-      # chromium needs OS shared libraries (libatk1.0-0t64, libgbm1, libasound2t64,
-      # libwayland-server0, …) that the self-hosted runner does NOT preinstall —
-      # without them every E2E test fails at browserType.launch: "Host system is
-      # missing dependencies to run browsers". The runner has NO passwordless sudo
-      # and NO docker, so packages cannot be installed onto the host. Instead we
-      # inspect the chromium binary with ldd, resolve every missing shared library
-      # to its Ubuntu noble .deb via the archive's Contents+Packages indexes (plain
-      # HTTP, no privileges), and unpack just those .so files into a cache dir
-      # exposed to chromium via LD_LIBRARY_PATH. ldd-driven ⇒ no hardcoded package
-      # list and no guesswork; only the actually-missing libs are provided, so the
-      # api-server's system libc/openssl stay authoritative. Cached across runs.
-      - name: Provision chromium OS libraries (rootless, ldd-driven)
-        run: |
-          set +e -u  # disable errexit (GHA enables it): the ldd loop + final check handle errors explicitly
-          http_get() {  # http_get URL OUTPUT  (OUTPUT "-" = stdout)
-            if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 3 -o "$2" "$1"
-            elif command -v wget >/dev/null 2>&1; then wget -q -O "$2" "$1"
-            else echo "ERROR: need curl or wget on the runner." >&2; exit 1; fi
-          }
-          LIBS_DIR="$HOME/.pw-chromium-libs"
-          ldpath() { ls -d "$LIBS_DIR"/usr/lib/x86_64-linux-gnu "$LIBS_DIR"/lib/x86_64-linux-gnu 2>/dev/null | paste -sd: || true; }
-          if [ -f "$LIBS_DIR/.complete" ]; then
-            echo "Reusing cached chromium libs in $LIBS_DIR."
-          else
-            echo "Resolving chromium's missing OS libraries via ldd…"
-            rm -rf "$LIBS_DIR"; mkdir -p "$LIBS_DIR"
-            BASE=http://archive.ubuntu.com/ubuntu
-            CONTENTS="$(mktemp)"; PACKAGES="$(mktemp)"
-            http_get "$BASE/dists/noble/Contents-amd64.gz" - | gzip -dc > "$CONTENTS" 2>/dev/null || true
-            for c in main universe; do
-              http_get "$BASE/dists/noble/$c/binary-amd64/Packages.gz" - | gzip -dc >> "$PACKAGES" 2>/dev/null || true
-            done
-            BINS="$(ls "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell \
-                         "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux/chrome 2>/dev/null)"
-            [ -n "$BINS" ] || { echo "ERROR: no chromium binary found under ~/.cache/ms-playwright." >&2; exit 1; }
-            export LD_LIBRARY_PATH="$(ldpath)"
-            for pass in 1 2 3 4 5 6; do
-              missing="$(for b in $BINS; do ldd "$b" 2>/dev/null; done | awk '/=> not found/{print $1}' | sort -u)"
-              [ -z "$missing" ] && { echo "  pass $pass: all libraries resolved ✓"; break; }
-              echo "  pass $pass: missing → $(echo $missing)"
-              for so in $missing; do
-                pkg="$(awk -v s="$so" '{n=split($1,a,"/"); if(a[n]==s){x=$2; sub(/,.*/,"",x); m=split(x,p,"/"); print p[m]; exit}}' "$CONTENTS")"
-                [ -z "$pkg" ] && { echo "    WARN: $so not in noble Contents index (skipping)" >&2; continue; }
-                fn="$(awk -v p="$pkg" '/^Package: /{m=($2==p)} m && /^Filename: /{print $2; exit}' "$PACKAGES")"
-                [ -z "$fn" ] && { echo "    WARN: no .deb found for $pkg (skipping)" >&2; continue; }
-                if http_get "$BASE/$fn" "$LIBS_DIR/$pkg.deb"; then
-                  dpkg-deb -x "$LIBS_DIR/$pkg.deb" "$LIBS_DIR" && rm -f "$LIBS_DIR/$pkg.deb"
-                else
-                  echo "    WARN: download failed for $pkg (will retry next pass)" >&2
-                fi
-                export LD_LIBRARY_PATH="$(ldpath)"
-              done
-            done
-            rm -f "$CONTENTS" "$PACKAGES"
-            # Final verification: every chromium library must now resolve.
-            still_missing="$(for b in $BINS; do ldd "$b" 2>/dev/null; done | awk '/=> not found/{print $1}' | sort -u)"
-            if [ -n "$still_missing" ]; then
-              echo "ERROR: could not resolve chromium libraries: $still_missing" >&2
-              exit 1
-            fi
-            touch "$LIBS_DIR/.complete"
-          fi
-          final="$(ldpath)"
-          echo "Provided $(find "$LIBS_DIR" -name '*.so*' 2>/dev/null | wc -l) chromium libs (LD_LIBRARY_PATH=$final)."
-          echo "LD_LIBRARY_PATH=$final" >> "$GITHUB_ENV"
-      # Fail fast: surface any still-missing OS lib in seconds, before the
-      # multi-minute api-server build inside `cargo make website-e2e`.
+      # chromium's OS shared libraries (libwayland, libatk, libgbm, libasound, …)
+      # are installed ONCE on the runner host (persistent, system-wide via apt) by
+      # running, from a checkout of this repo's website/ dir:
+      #     sudo npx playwright install-deps chromium
+      # No sudo is needed at CI run time — the deps persist across runs. If the
+      # launch probe below ever fails with "missing dependencies to run browsers",
+      # re-run that command on the runner.
+      # Fail fast: surface any missing OS lib in seconds, before the multi-minute
+      # api-server build inside `cargo make website-e2e`.
       - name: Verify chromium launches
         run: |
           cd website
-          node -e 'const{chromium}=require("@playwright/test");chromium.launch().then(b=>b.close()).then(()=>console.log("chromium launch OK")).catch(e=>{console.error("chromium launch FAILED:\n"+String(e).split("\n").slice(0,6).join("\n"));process.exit(1)})'
+          node -e 'const{chromium}=require("@playwright/test");chromium.launch().then(b=>b.close()).then(()=>console.log("chromium launch OK")).catch(e=>{console.error("chromium launch FAILED — run [sudo npx playwright install-deps chromium] on the runner:\n"+String(e).split("\n").slice(0,6).join("\n"));process.exit(1)})'
       - run: cargo make website-e2e
 
