@@ -37,17 +37,18 @@ TUNNELS: dict[str, dict] = {
         # Matches the EXISTING live Cloudflare tunnel "decent-cloud" (connector id
         # c4e24160-...) so tunnel.py reuses it (re-points ingress) instead of
         # creating a duplicate. The connector token for it is stored as the
-        # TUNNEL_TOKEN_PROD key of decent-cloud-secret in the k8s PGP-SOPS
+        # TUNNEL_TOKEN_PROD key of dc-secret in the k8s PGP-SOPS
         # store (see deploy/k8s/SETUP.md §3). configure_ingress() re-points the
         # live tunnel's hostnames to the in-cluster Service FQDNs below.
         "name": "decent-cloud",
-        # In-cluster Services (namespace apps). The cloudflared Deployment runs
-        # in the same cluster and routes decent-cloud.org via these FQDNs.
-        # Services expose port 80 (see deploy/k8s/decent-cloud.yaml).
+        # In-cluster Services (namespace apps, all `dc-` prefixed). The
+        # cloudflared Deployment runs in the same cluster and routes
+        # decent-cloud.org via these FQDNs. Services expose port 80
+        # (see deploy/k8s/decent-cloud/).
         "ingress": [
-            ("decent-cloud.org", "http://website.apps.svc.cluster.local:80"),
-            ("api.decent-cloud.org", "http://api.apps.svc.cluster.local:80"),
-            ("support.decent-cloud.org", "http://chatwoot-web.apps.svc.cluster.local:80"),
+            ("decent-cloud.org", "http://dc-website.apps.svc.cluster.local:80"),
+            ("api.decent-cloud.org", "http://dc-api.apps.svc.cluster.local:80"),
+            ("support.decent-cloud.org", "http://dc-chatwoot-web.apps.svc.cluster.local:80"),
         ],
     },
     # dev keeps compose-style targets (docker service names + raw ports) for

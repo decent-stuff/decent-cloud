@@ -1,0 +1,75 @@
+---
+# ---------------------------------------------------------------------------
+# dc-website — nginx serving the SvelteKit static build (listens on :59010)
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dc-website
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: dc-website
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dc-website
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dc-website
+        app.kubernetes.io/component: web
+    spec:
+      enableServiceLinks: false
+      imagePullSecrets:
+      - name: forgejo-registry-secret
+      containers:
+      - name: website
+        image: git.kalaj.org/decent-stuff/decent-cloud-website:v0.5.4  # deploy-prod:website
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ENVIRONMENT
+          value: prod
+        ports:
+        - name: http
+          containerPort: 59010
+        resources:
+          requests:
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 3
+---
+# Service — ClusterIP port 80 → named targetPort (cluster convention)
+apiVersion: v1
+kind: Service
+metadata:
+  name: dc-website
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: dc-website
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dc-website
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP

@@ -174,12 +174,12 @@ def test_configure_ingress_upserts_cname_records():
 
 def test_prod_ingress_targets_in_cluster_services():
     """prod is served by the k3s cloudflared Deployment: each hostname routes to
-    a ClusterIP Service FQDN on port 80 (deploy/k8s/decent-cloud.yaml). Guards
+    a ClusterIP Service FQDN on port 80 (deploy/k8s/decent-cloud/). Guards
     against accidental regression to the old compose-style service names."""
     ingress = dict(tunnel.TUNNELS["prod"]["ingress"])
-    assert ingress["decent-cloud.org"] == "http://website.apps.svc.cluster.local:80"
-    assert ingress["api.decent-cloud.org"] == "http://api.apps.svc.cluster.local:80"
-    assert ingress["support.decent-cloud.org"] == "http://chatwoot-web.apps.svc.cluster.local:80"
+    assert ingress["decent-cloud.org"] == "http://dc-website.apps.svc.cluster.local:80"
+    assert ingress["api.decent-cloud.org"] == "http://dc-api.apps.svc.cluster.local:80"
+    assert ingress["support.decent-cloud.org"] == "http://dc-chatwoot-web.apps.svc.cluster.local:80"
     # Every prod target must be an in-cluster FQDN, not a bare compose hostname.
     for service in ingress.values():
         assert service.endswith(".apps.svc.cluster.local:80"), service

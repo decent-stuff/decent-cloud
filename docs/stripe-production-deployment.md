@@ -35,10 +35,10 @@ no longer holds a prod layer):
 
 ```sh
 cd /project/decent-cloud/third_party/k8s
-sops cluster/secrets/decent-cloud-secret.yaml   # set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET
+sops cluster/secrets/dc-secret.yaml   # set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET
 python3 scripts/manage-secrets.py
 ```
-See [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md#3-app-secret-decent-cloud-secret) §3.
+See [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md#3-app-secret-dc-secret) §3.
 
 **For development:**
 ```bash
@@ -48,7 +48,7 @@ scripts/dc-secrets set shared/dev STRIPE_SECRET_KEY=sk_test_YOUR_SECRET_KEY STRI
 ### 2. Deploy
 
 Production runs on k8s: a `vX.Y.Z` tag triggers the `deploy-prod` CI job which
-builds + pushes images and bumps the tags in `deploy/k8s/decent-cloud.yaml`;
+builds + pushes images and bumps the tags in `deploy/k8s/decent-cloud/`;
 ArgoCD auto-syncs the rollout. See
 [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md#8-release--image-update-flow-repeatable) §8.
 
@@ -204,7 +204,7 @@ If payments fail in production:
    restarting the API (production runs on k8s):
    ```sh
    cd /project/decent-cloud/third_party/k8s
-   sops cluster/secrets/decent-cloud-secret.yaml   # blank STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
+   sops cluster/secrets/dc-secret.yaml   # blank STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET
    python3 scripts/manage-secrets.py
    kubectl -n apps rollout restart deployment/api
    ```

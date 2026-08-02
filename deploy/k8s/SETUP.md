@@ -69,15 +69,15 @@ This reuses tunnel `decent-cloud` + CNAMEs (`decent-cloud.org`,
 and ingress rules to the in-cluster Services. **Capture the token** — it is
 printed only at creation.
 
-## 3. App secret (`decent-cloud-secret`)
+## 3. App secret (`dc-secret`)
 
 Production secrets are edited **directly** in the k8s PGP-SOPS store — the
 same workflow every other cluster app (twenty, forgejo, authentik, …) uses. There
 is no generator/bridge script: the k8s file is the single source of truth.
 
 The single template that documents every key to fill is
-[`third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template)
-(k8s). The keys mirror the `secretKeyRef.key` names in `decent-cloud.yaml`
+[`third_party/k8s/cluster/secrets/dc-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/dc-secret.yaml.template)
+(k8s). The keys mirror the `secretKeyRef.key` names in `decent-cloud/`
 1:1. Fill `TUNNEL_TOKEN_PROD` with the connector token captured in step 2.
 
 On a host that holds the cluster PGP key
@@ -86,7 +86,7 @@ then apply:
 
 ```sh
 cd /project/decent-cloud/third_party/k8s
-sops cluster/secrets/decent-cloud-secret.yaml      # $EDITOR: fill every <FILL> key, save
+sops cluster/secrets/dc-secret.yaml      # $EDITOR: fill every <FILL> key, save
 python3 scripts/manage-secrets.py                  # decrypts + applies every SOPS secret in cluster/secrets/
 # or, to also re-sync the ArgoCD apps that depend on secrets:
 scripts/apply-secrets-and-sync.sh
@@ -154,7 +154,7 @@ Pods reach the host directly; there is no Postgres pod.
 git tag vX.Y.Z  ──▶  release.yml  ──▶  deploy-prod job
                                         ├─ build api + website
                                         ├─ docker push git.kalaj.org/decent-stuff/...
-                                        ├─ bump image tags in deploy/k8s/decent-cloud.yaml
+                                        ├─ bump image tags in deploy/k8s/decent-cloud/
                                         └─ git push (DC_REPO_WRITE)
                                                         │
                                   ArgoCD sees new main ──▶ sync new tags ──▶ rolling update
@@ -163,14 +163,14 @@ git tag vX.Y.Z  ──▶  release.yml  ──▶  deploy-prod job
 1. Cut a `vX.Y.Z` tag.
 2. CI `deploy-prod` builds `decent-cloud-api` + `decent-cloud-website`, pushes
    them to `git.kalaj.org/decent-stuff/...`, bumps the two image lines tagged
-   `# deploy-prod:api` / `# deploy-prod:website` in `deploy/k8s/decent-cloud.yaml`,
+   `# deploy-prod:api` / `# deploy-prod:website` in `deploy/k8s/decent-cloud/`,
    and pushes to `main`.
-3. ArgoCD auto-syncs the new tags → rolling update of `api`/`api-sync`/`website`.
+3. ArgoCD auto-syncs the new tags → rolling update of `dc-api`/`dc-api-sync`/`dc-website`.
 
 ## 9. Verify
 
 ```sh
-kubectl -n apps get pods -l app.kubernetes.io/name in (api,api-sync,website,chatwoot-web,chatwoot-worker,decent-cloud-redis,cloudflared)
+kubectl -n apps get pods -l app.kubernetes.io/name in (dc-api,dc-api-sync,dc-website,dc-chatwoot-web,dc-chatwoot-worker,dc-redis,dc-cloudflared)
 # (or simply)
 kubectl -n apps get pods,svc -l app.kubernetes.io/name
 curl -i https://decent-cloud.org/health            # website (nginx) health
@@ -179,15 +179,15 @@ curl -i https://api.decent-cloud.org/api/v1/health # API health
 curl -i https://support.decent-cloud.org/api       # Chatwoot (expect 200/redirect)
 ```
 
-All three public hostnames are served by the `cloudflared` tunnel; if any 5xx,
-check `kubectl -n apps logs deploy/cloudflared` and the tunnel ingress in
+All three public hostnames are served by the `dc-cloudflared` tunnel; if any 5xx,
+check `kubectl -n apps logs deploy/dc-cloudflared` and the tunnel ingress in
 [TUNNEL.md](./TUNNEL.md).
 
 ---
 
 ## See also
 
-- [`decent-cloud.yaml`](./decent-cloud.yaml) — the manifests ArgoCD syncs.
+- [`decent-cloud/`](./decent-cloud/) — the manifests ArgoCD syncs.
 - [`TUNNEL.md`](./TUNNEL.md) — tunnel token generation & rotation.
-- [k8s `decent-cloud-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/decent-cloud-secret.yaml.template) — the prod secret keys (single source; no values).
+- [k8s `dc-secret.yaml.template`](../../../third_party/k8s/cluster/secrets/dc-secret.yaml.template) — the prod secret keys (single source; no values).
 - [`README.md`](./README.md) — layout + service/port reference.

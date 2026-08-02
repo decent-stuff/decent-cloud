@@ -1,8 +1,8 @@
 # Cloudflare Tunnel token — generation & rotation
 
-The `cloudflared` Deployment in `decent-cloud.yaml` connects out to Cloudflare
+The `dc-cloudflared` Deployment in `decent-cloud/dc-cloudflared.yaml` connects out to Cloudflare
 via a **remotely-managed** tunnel. It authenticates with a single **connector
-token** stored as the `TUNNEL_TOKEN_PROD` key of the `decent-cloud-secret`
+token** stored as the `TUNNEL_TOKEN_PROD` key of the `dc-secret`
 Secret. This doc explains how to obtain and rotate that token.
 
 `cf/tunnel.py` is the single source of truth for tunnel names + hostname→service
@@ -25,7 +25,7 @@ runs from any shell with the age key after `eval "$(scripts/dc-secrets export
 common)"`. In CI the same values come from the GitHub Actions secrets (which
 mirror the dc-secrets store). The *connector token itself* (the value `cloudflared`
 runs with) lives in the k8s PGP-SOPS store as the `TUNNEL_TOKEN_PROD` key of
-`decent-cloud-secret` (see [SETUP.md §3](./SETUP.md#3-app-secret-decent-cloud-secret)).
+`dc-secret` (see [SETUP.md §3](./SETUP.md#3-app-secret-dc-secret)).
 You only need `cf/tunnel.py prod` to (re)configure that tunnel's **ingress** to
 route to the in-cluster k8s Services — run it once, from CI or locally with the
 creds.
@@ -71,9 +71,9 @@ reused rather than creating a duplicate `decent-cloud-prod`) and:
    returns a token). Reuses it otherwise.
 2. **Applies ingress rules** routing each hostname to its in-cluster Service
    (namespace `apps`, port 80):
-   - `decent-cloud.org`        → `http://website.apps.svc.cluster.local:80`
-   - `api.decent-cloud.org`    → `http://api.apps.svc.cluster.local:80`
-   - `support.decent-cloud.org`→ `http://chatwoot-web.apps.svc.cluster.local:80`
+   - `decent-cloud.org`        → `http://dc-website.apps.svc.cluster.local:80`
+   - `api.decent-cloud.org`    → `http://dc-api.apps.svc.cluster.local:80`
+   - `support.decent-cloud.org`→ `http://dc-chatwoot-web.apps.svc.cluster.local:80`
    - catch-all → `http_status:404`
 3. **Upserts CNAME DNS records** for the three hostnames →
    `<tunnel-id>.cfargotunnel.com` (proxied), in the `decent-cloud.org` zone.
@@ -81,12 +81,12 @@ reused rather than creating a duplicate `decent-cloud-prod`) and:
 ### Land the token in the cluster Secret
 
 The token must end up in the `TUNNEL_TOKEN_PROD` key of the PGP-SOPS-encrypted
-`decent-cloud-secret` in the k8s repo. Edit the encrypted secret directly
+`dc-secret` in the k8s repo. Edit the encrypted secret directly
 (on a host with the cluster PGP key) and paste the captured token, then apply:
 
 ```sh
 cd /project/decent-cloud/third_party/k8s
-sops cluster/secrets/decent-cloud-secret.yaml   # set TUNNEL_TOKEN_PROD, save
+sops cluster/secrets/dc-secret.yaml   # set TUNNEL_TOKEN_PROD, save
 python3 scripts/manage-secrets.py
 ```
 
@@ -116,16 +116,16 @@ Connector tokens cannot be re-read after creation. To rotate:
    CF_API_TOKEN=... CF_ACCOUNT_ID=... python3 cf/tunnel.py prod
    ```
    A fresh connector token is printed — capture it.
-3. **Update `TUNNEL_TOKEN_PROD`** in the encrypted `decent-cloud-secret`
-   (`sops cluster/secrets/decent-cloud-secret.yaml`, replace the value, save) and
+3. **Update `TUNNEL_TOKEN_PROD`** in the encrypted `dc-secret`
+   (`sops cluster/secrets/dc-secret.yaml`, replace the value, save) and
    re-apply:
    ```sh
    python3 scripts/manage-secrets.py
    ```
 4. **Restart the connector** so it picks up the new token:
    ```sh
-   kubectl rollout restart deployment/cloudflared -n apps
-   kubectl -n apps rollout status deployment/cloudflared
+   kubectl rollout restart deployment/dc-cloudflared -n apps
+   kubectl -n apps rollout status deployment/dc-cloudflared
    ```
 5. Verify: `curl -I https://decent-cloud.org/health` returns 200 shortly after.
 

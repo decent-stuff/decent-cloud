@@ -1,0 +1,49 @@
+---
+# ---------------------------------------------------------------------------
+# dc-cloudflared — outbound Cloudflare Tunnel connector (decent-cloud.org zone).
+# No inbound health port: cloudflared only connects OUT to Cloudflare; if it
+# crashes, the container restarts (strategy: Recreate). TUNNEL_TOKEN is the
+# connector token captured at tunnel creation (cf/tunnel.py prod).
+#
+# The tunnel ingress mapping (hostname → in-cluster Service FQDN) is configured
+# SERVER-SIDE in Cloudflare by `cf/tunnel.py`. After renaming Services, re-run
+# `python3 cf/tunnel.py prod` to re-point the live tunnel at the dc-* FQDNs.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dc-cloudflared
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: dc-cloudflared
+    app.kubernetes.io/component: tunnel
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dc-cloudflared
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dc-cloudflared
+        app.kubernetes.io/component: tunnel
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: cloudflared
+        image: cloudflare/cloudflared:latest
+        imagePullPolicy: IfNotPresent
+        command: ["cloudflared", "tunnel", "--no-autoupdate", "run"]
+        env:
+        - name: TUNNEL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dc-secret
+              key: TUNNEL_TOKEN_PROD
+        resources:
+          requests:
+            memory: 64Mi
+          limits:
+            memory: 256Mi

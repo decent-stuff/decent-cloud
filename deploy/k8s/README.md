@@ -15,7 +15,13 @@ Application CR + PGP-SOPS secrets) live in the **`k8s` repo clone** at
 
 ```
 deploy/k8s/                                 # owned by THIS repo (synced by ArgoCD)
-├── decent-cloud.yaml                       # Deployments + Job + Services
+├── decent-cloud/                           # split manifests (all `dc-` prefixed)
+│   ├── dc-config.yaml                      # ConfigMap (non-secret config)
+│   ├── dc-api.yaml                         # dc-api + dc-api-sync Deployments + Service
+│   ├── dc-website.yaml                     # dc-website Deployment + Service
+│   ├── dc-chatwoot.yaml                    # dc-chatwoot-{web,worker} + migrate Job + Service
+│   ├── dc-redis.yaml                       # dc-redis Deployment + Service
+│   └── dc-cloudflared.yaml                 # dc-cloudflared Deployment
 ├── SETUP.md                                # consolidated operator runbook
 ├── TUNNEL.md                               # CF tunnel token generation + rotation
 └── README.md                               # this file
@@ -23,29 +29,29 @@ deploy/k8s/                                 # owned by THIS repo (synced by Argo
 third_party/k8s/cluster/                # operator artifacts (the k8s repo)
 ├── argocd/application-decent-cloud.yaml    # ArgoCD Application CR
 └── secrets/
-    ├── decent-cloud-secret.yaml.template           # prod secret keys (single source; operator fills + encrypts)
+    ├── dc-secret.yaml.template             # prod secret keys (single source; operator fills + encrypts)
     └── forgejo-registry-secret.yaml.template       # dockerconfigjson for git.kalaj.org
 ```
 
-**Why split?** Decent-cloud owns its own manifests (`deploy/k8s/`). The k8s
+**Why split?** Decent-cloud owns its own manifests (`deploy/k8s/decent-cloud/`). The k8s
 cluster repo owns cluster-wide concerns: the ArgoCD Application CR that points at
 this repo, and the PGP-SOPS-encrypted prod secret (the cluster's SOPS key is PGP,
 while this repo's own `secrets/` use AGE for dev/play/common — different key
 types, so the live prod secret is edited directly in the k8s store; see
-[SETUP.md §3](./SETUP.md#3-app-secret-decent-cloud-secret)).
+[SETUP.md §3](./SETUP.md#3-app-secret-dc-secret)).
 
 ## Services (all in namespace `apps`)
 
 | Service | Image | Listens | Service port |
 |---|---|---|---|
-| `api` | `git.kalaj.org/decent-stuff/decent-cloud-api:<tag>` | 59001 | 80 → http |
-| `api-sync` | same as api (`api-server sync`) | — | — |
-| `website` | `git.kalaj.org/decent-stuff/decent-cloud-website:<tag>` | **59010** | 80 → http |
-| `chatwoot-web` | `chatwoot/chatwoot:v4.8.0` | 59102 | 80 → http |
-| `chatwoot-worker` | `chatwoot/chatwoot:v4.8.0` (sidekiq) | — | — |
-| `chatwoot-migrate` | `chatwoot/chatwoot:v4.8.0` (Job, ArgoCD Sync hook) | — | — |
-| `decent-cloud-redis` | `redis:8-alpine` | 6379 | 6379 → redis |
-| `cloudflared` | `cloudflare/cloudflared:latest` | — (outbound) | — |
+| `dc-api` | `git.kalaj.org/decent-stuff/decent-cloud-api:<tag>` | 59001 | 80 → http |
+| `dc-api-sync` | same as dc-api (`api-server sync`) | — | — |
+| `dc-website` | `git.kalaj.org/decent-stuff/decent-cloud-website:<tag>` | **59010** | 80 → http |
+| `dc-chatwoot-web` | `chatwoot/chatwoot:v4.8.0` | 59102 | 80 → http |
+| `dc-chatwoot-worker` | `chatwoot/chatwoot:v4.8.0` (sidekiq) | — | — |
+| `dc-chatwoot-migrate` | `chatwoot/chatwoot:v4.8.0` (Job, ArgoCD Sync hook) | — | — |
+| `dc-redis` | `redis:8-alpine` | 6379 | 6379 → redis |
+| `dc-cloudflared` | `cloudflare/cloudflared:latest` | — (outbound) | — |
 
 No Postgres pod: pods reach the host directly at `192.168.0.2:5432` (DBs
 `decent_cloud_prod` + `chatwoot_prod` already exist there).
@@ -58,7 +64,7 @@ Cloudflare API by `cf/tunnel.py prod` (see TUNNEL.md).
 
 The Application CR
 ([`third_party/k8s/cluster/argocd/application-decent-cloud.yaml`](../../../third_party/k8s/cluster/argocd/application-decent-cloud.yaml))
-points at `github.com/decent-stuff/decent-cloud` path `deploy/k8s`, destination
+points at `github.com/decent-stuff/decent-cloud` path `deploy/k8s/decent-cloud`, destination
 namespace `apps`, auto-sync `selfHeal + prune`, `syncOptions:
 [CreateNamespace=true, ApplyOutOfSyncOnly=true]`, with `ignoreDifferences` for
 every Deployment `/status` and every Service `clusterIP`/`nodePort` (mimics the
@@ -69,7 +75,7 @@ other Application CRs in the cluster).
 See [SETUP.md §8](./SETUP.md#8-release--image-update-flow-repeatable). In short:
 a `vX.Y.Z` tag triggers the `deploy-prod` job in `.github/workflows/release.yml`,
 which builds + pushes both images to Forgejo, bumps the two image lines tagged
-`# deploy-prod:api` / `# deploy-prod:website` in `deploy/k8s/decent-cloud.yaml`,
+`# deploy-prod:api` / `# deploy-prod:website` in `deploy/k8s/decent-cloud/`,
 and pushes to `main`; ArgoCD auto-syncs the new tags.
 
 ## Conventions matched (k8s)
@@ -81,5 +87,5 @@ and pushes to `main`; ArgoCD auto-syncs the new tags.
 - `hostPath` volumes → `/home/sat/apps/decent-cloud/<dir>`
   (`type: DirectoryOrCreate`).
 - Services: ClusterIP, port 80 → named `targetPort`.
-- Secrets via `valueFrom.secretKeyRef` from `decent-cloud-secret`.
+- Secrets via `valueFrom.secretKeyRef` from `dc-secret`.
 - Migration as an ArgoCD `Sync` hook Job (re-runs each sync, idempotent).

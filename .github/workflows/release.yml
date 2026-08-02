@@ -212,32 +212,44 @@ jobs:
           "$CTR" push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-api:${TAG}
           "$CTR" push git.kalaj.org/${FORGEJO_OWNER}/decent-cloud-website:${TAG}
 
-      - name: Bump image tags in deploy/k8s/decent-cloud.yaml
+      - name: Bump image tags in deploy/k8s/decent-cloud/*.yaml
         env:
           FORGEJO_OWNER: ${{ secrets.FORGEJO_OWNER }}
         run: |
           python3 - <<'PY'
           import os, re, pathlib
           owner, tag = os.environ["FORGEJO_OWNER"], os.environ["TAG"]
-          p = pathlib.Path("deploy/k8s/decent-cloud.yaml")
-          text = p.read_text()
-          for marker, name in (("deploy-prod:api", "decent-cloud-api"),
-                               ("deploy-prod:website", "decent-cloud-website")):
-              pat = re.compile(r"^(\s*image:\s*).*# " + re.escape(marker) + r"\s*$", re.M)
-              repl = rf"\1git.kalaj.org/{owner}/{name}:{tag}  # {marker}"
-              text, n = pat.subn(repl, text)
-              # api image is shared by the `api` + `api-sync` Deployments (2 lines);
-              # website is a single Deployment. Fail loud only if a marker vanished.
-              assert n >= 1, f"no image line tagged {marker} found — check deploy/k8s/decent-cloud.yaml"
-          p.write_text(text)
-          print(f"Bumped decent-cloud-api + decent-cloud-website to {owner}:{tag}")
+          root = pathlib.Path("deploy/k8s/decent-cloud")
+          files = sorted(root.glob("*.yaml"))
+          assert files, "no manifests found under deploy/k8s/decent-cloud/"
+          markers = (("deploy-prod:api", "decent-cloud-api"),
+                     ("deploy-prod:website", "decent-cloud-website"))
+          totals = {m: 0 for m, _ in markers}
+          for p in files:
+              text = p.read_text()
+              for marker, name in markers:
+                  pat = re.compile(r"^(\s*image:\s*).*# " + re.escape(marker) + r"\s*$", re.M)
+                  repl = rf"\1git.kalaj.org/{owner}/{name}:{tag}  # {marker}"
+                  text, n = pat.subn(repl, text)
+                  totals[marker] += n
+              p.write_text(text)
+          # api image is shared by the dc-api + dc-api-sync Deployments (2 lines);
+          # website is a single Deployment. Fail loud only if a marker vanished.
+          assert totals["deploy-prod:api"] >= 2, (
+              f"expected >=2 deploy-prod:api markers, got {totals['deploy-prod:api']} "
+              f"— check deploy/k8s/decent-cloud/dc-api.yaml")
+          assert totals["deploy-prod:website"] >= 1, (
+              f"expected >=1 deploy-prod:website marker, got {totals['deploy-prod:website']} "
+              f"— check deploy/k8s/decent-cloud/dc-website.yaml")
+          print(f"Bumped decent-cloud-api ({totals['deploy-prod:api']} lines) "
+                f"+ decent-cloud-website ({totals['deploy-prod:website']} lines) to {owner}:{tag}")
           PY
 
       - name: Commit and push image bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add deploy/k8s/decent-cloud.yaml
+          git add deploy/k8s/decent-cloud/
           git commit -m "deploy(decent-cloud): bump images to ${TAG}"
           git push origin HEAD:main
 

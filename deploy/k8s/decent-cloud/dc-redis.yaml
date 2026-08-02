@@ -1,0 +1,79 @@
+---
+# ---------------------------------------------------------------------------
+# dc-redis — dedicated Redis for Chatwoot queues (NOT the shared cluster one).
+# The shared redis.apps.svc.cluster.local is ephemeral cache (--appendonly no);
+# Chatwoot Sidekiq needs durable AOF + a PVC, hence this dedicated instance.
+# ---------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dc-redis
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: dc-redis
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dc-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dc-redis
+        app.kubernetes.io/component: redis
+    spec:
+      enableServiceLinks: false
+      containers:
+      - name: redis
+        image: redis:8-alpine
+        imagePullPolicy: IfNotPresent
+        args: ["redis-server", "--appendonly", "yes"]
+        ports:
+        - name: redis
+          containerPort: 6379
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: 128Mi
+          limits:
+            memory: 512Mi
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 3
+      volumes:
+      - name: redis-data
+        hostPath:
+          path: /home/sat/apps/decent-cloud/redis
+          type: DirectoryOrCreate
+---
+# Service — ClusterIP port 6379 (Redis native port, not 80)
+apiVersion: v1
+kind: Service
+metadata:
+  name: dc-redis
+  namespace: apps
+  labels:
+    app.kubernetes.io/name: dc-redis
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dc-redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+    protocol: TCP

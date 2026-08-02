@@ -6,7 +6,7 @@ cluster repo. Dev/local secrets are here, AGE-encrypted.
 
 | Environment | Secret store | Encryption | Location |
 |-------------|--------------|------------|----------|
-| **prod** (k8s) | cluster store, sole source | PGP-SOPS (key `FA5814CF1935EE80C454C9F1660DCCF069EC9176`) | `k8s` repo → `cluster/secrets/decent-cloud-secret.yaml` (private) |
+| **prod** (k8s) | cluster store, sole source | PGP-SOPS (key `FA5814CF1935EE80C454C9F1660DCCF069EC9176`) | `k8s` repo → `cluster/secrets/dc-secret.yaml` (private) |
 | **dev** (docker-compose) | dc-secrets `shared/dev` layer | AGE-SOPS (repo `.age-identity`) | `secrets/shared/dev.yaml` (+ `common.yaml`) |
 | **common** (shared by dev+local) | dc-secrets `shared/common` layer | AGE-SOPS | `secrets/shared/common.yaml` |
 | **play** (local cargo/npm loop) | dc-secrets `shared/play` layer | AGE-SOPS | `secrets/shared/play.yaml` |
@@ -17,12 +17,12 @@ cluster repo. Dev/local secrets are here, AGE-encrypted.
 ## Config vs Secret (12-Factor)
 
 In prod (k8s), non-secret **configuration** is deliberately split out of the Secret
-into a `ConfigMap` (`decent-cloud-config`, defined inline in `deploy/k8s/decent-cloud.yaml`).
-True **secrets** stay in the `decent-cloud-secret` Secret. This means:
+into a `ConfigMap` (`dc-config`, defined inline in `deploy/k8s/decent-cloud/dc-config.yaml`).
+True **secrets** stay in the `dc-secret` Secret. This means:
 
 - Changing a **config** value (URL, model name, zone id, Stripe *publishable* key,
   DKIM domain/selector, SMTP host/user, Twilio/Textbee ids) = edit the ConfigMap in
-  `deploy/k8s/decent-cloud.yaml`, push to `main`, ArgoCD syncs, pod picks it up on
+  `deploy/k8s/decent-cloud/dc-config.yaml`, push to `main`, ArgoCD syncs, pod picks it up on
   restart. **No secret re-apply/rotation needed.**
 - Changing a **secret** value (DB url, *secret* keys, tokens, passwords) = rotate in
   the k8s PGP store + `manage-secrets.py` (see below).
@@ -35,19 +35,19 @@ True **secrets** stay in the `decent-cloud-secret` Secret. This means:
 
 ## How to rotate — PROD (k8s)
 
-Prod secrets live ONLY in `k8s/cluster/secrets/decent-cloud-secret.yaml`. The running
+Prod secrets live ONLY in `k8s/cluster/secrets/dc-secret.yaml`. The running
 pods read a Kubernetes `Secret` that `manage-secrets.py` materializes from that file.
 
 ```bash
 cd /project/decent-cloud/third_party/k8s
 # 1. edit the decrypted values in $EDITOR (PGP key must be unlocked)
-sops cluster/secrets/decent-cloud-secret.yaml
+sops cluster/secrets/dc-secret.yaml
 # 2. re-apply to the cluster + verify
 python3 scripts/manage-secrets.py
 # 3. restart the pods that read the changed key(s)
-kubectl -n apps rollout restart deploy/api deploy/api-sync deploy/chatwoot-web deploy/chatwoot-worker
-# (restart deploy/cloudflared too if you changed TUNNEL_TOKEN_PROD)
-kubectl -n apps rollout status deploy/api   # wait for 1/1
+kubectl -n apps rollout restart deploy/dc-api deploy/dc-api-sync deploy/dc-chatwoot-web deploy/dc-chatwoot-worker
+# (restart deploy/dc-cloudflared too if you changed TUNNEL_TOKEN_PROD)
+kubectl -n apps rollout status deploy/dc-api   # wait for 1/1
 ```
 
 > The website's publishable key (Stripe `pk_*`) is **baked at image build time**, not read
