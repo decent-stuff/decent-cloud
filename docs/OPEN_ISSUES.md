@@ -107,6 +107,28 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 ## Recently closed by this work
 
+### 2026-08-02 session (drop unused SaaS account-subscription feature)
+
+Removed the unused SaaS account-subscription feature (Free/Pro/Enterprise pricing plans for using
+Decent Cloud) FULLY across frontend + backend + DB. This was Feature A; it was confirmed unused —
+`account_has_feature` + `count_active_contracts_for_account` were both `#[allow(dead_code)]`, so
+runtime feature-gating was never enforced (free plan = unlimited rentals). The DISTINCT per-contract
+recurring billing (Feature B: `contract_sign_requests.stripe_subscription_id` /
+`.subscription_status` / `.current_period_end_ns` / `.cancel_at_period_end`,
+`provider_offerings.is_subscription` / `.subscription_interval_days`, the
+`get_subscription_item_id` + `create_usage_record` metered-billing code path in
+`cleanup_service.rs`, and the `invoice.paid` / `charge.dispute.*` webhook arms) is PRESERVED
+untouched.
+
+| Change | Area | Detail |
+|--------|------|--------|
+| Backend removal | api crate | Deleted `openapi/subscriptions.rs` (SubscriptionsApi, 5 endpoints) + `database/subscriptions.rs` (SubscriptionPlan/AccountSubscription/SubscriptionEvent + all fns/tests, 1106 LOC total). Unwired from router tuple, ApiTags enum, rate-limiter checkout path + test, and `database/mod.rs` re-exports. Removed `customer.subscription.{created,updated,deleted}` webhook arms + their now-orphaned structs (`StripeSubscription`/`Items`/`Item`/`Price`) + the 3 event registrations in `main.rs`. Trimmed `invoice.payment_failed` to parse + `tracing::warn!` only (dropped the SaaS-specific `subscription_id` inner block). Removed subscription-only `stripe_client.rs` methods (`create_subscription_checkout`, `get_subscription`, `cancel_subscription`, `create_portal_session`, `get_or_create_customer` + `SubscriptionInfo`). KEPT Feature-B `get_subscription_item_id`/`create_usage_record` (used by `cleanup_service.rs`). |
+| DB schema | migration 052 | `api/migrations_pg/052_drop_account_subscription_feature.sql`: drops `subscription_events`, `subscription_plans`, 3 accounts indexes, 6 accounts columns (`subscription_*`, `stripe_customer_id`). `contract_sign_requests.*` columns NOT dropped (Feature B). |
+| Frontend removal | website | Deleted `routes/dashboard/account/subscription/` (+page.svelte 326L + contact-sales.test.ts), `lib/utils/subscription-plans.{ts,test.ts}`, `tests/e2e/account-subscription.spec.ts`. Removed Subscription tab from `SettingsTabs` (+ test), the subscription card from `account/+page.svelte`, the Subscription API section from `api.ts` (2 interfaces + 5 fns, ~177 LOC). KEPT Contract-type subscription fields (`api.ts` L1361-1365 — Feature B). Updated `route-audit.spec.ts` + `seed-helpers.ts`. |
+| Web e2e docs | FLOWS.md | Removed subscription coverage rows + `@account` tag entry; smoke count 27→26; renumbered smoke table. |
+
+Gates: `cargo build -p api --bin api-server` clean; `cargo clippy -p api --tests --all-targets` 0 warnings; `cargo nextest run -p api` green on all touched modules (subscriptions → 0 tests, accounts 122/122, webhooks/rate_limit/stripe_client/cleanup_service 67/67); `npm run check` 0/0; `npx vitest run` 858/64 files; `npm run test:e2e:fast:smoke` 26/26 in 36.7s.
+
 ### 2026-08-01 session (clippy cleanup + e2e gap verification + CLI harness + UX root-cause)
 
 Continuation of the radical-harness/UX/tech-debt mandate against the verified real baseline. All
