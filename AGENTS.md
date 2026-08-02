@@ -52,7 +52,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ### 1. Verify Prerequisites
 - Confirm real services, credentials, env vars, and infrastructure exist before coding. YOU MUST HAVE everything you need to do your job properly.
-- Check credentials: run `scripts/dc-secrets list` and `scripts/dc-secrets export play` (or the env you target) to verify secrets are available.
+- Check credentials: the consolidated store is the outer `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS) — `sops -d` it + the outer `.age-identity` to read keys. (The legacy `repo/secrets/shared/` + `scripts/dc-secrets` are RETIRED pending the post-cutover deletion — see `docs/MIGRATION-CUTOVER.md`. Local dev needs no secrets.)
 - **If anything is missing: STOP immediately and ask.** Do not guess, stub, or silently mock what should be real.
 
 ### 2. Build a Working PoC (NOT SKIPPABLE)
@@ -89,7 +89,9 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ## LOCAL DEVELOPMENT
 ### Default Rule
-- Use local services, not `dev.decent-cloud.org`, for AI-agent development. Local stacks are under your control; staging is not.
+- Use local services, not `dev.decent-cloud.org` / `stage.decent-cloud.org`, for
+  AI-agent development. Local stacks are under your control; staging is not.
+  (Staging is `dc-stage` on k8s — see **Deployment & secrets** below + `docs/MIGRATION-CUTOVER.md`.)
 
 ### PostgreSQL
 ```bash
@@ -99,10 +101,12 @@ docker exec agent-postgres-1 pg_isready -U test
 - The compose-level local stack currently provides PostgreSQL only; Chatwoot is not part of `agent/docker-compose.yml` (in the outer workspace).
 
 ### Running The API Server Locally
+Local dev needs **no secrets** — the slim stack (`scripts/dev-server.sh`) runs on
+plaintext/test values only (DB URL, test `CREDENTIAL_ENCRYPTION_KEY`, `CANISTER_ID`,
+`RATE_LIMIT_ENABLED=false`, dummy `STRIPE_WEBHOOK_SECRET`). Optional real-tier creds
+(Stripe/OAuth/Chatwoot/SMTP) are exercised in `dc-stage`, not locally.
 ```bash
 cargo build -p api --bin api-server
-eval "$(scripts/dc-secrets export play)"
-./target/debug/api-server serve
 
 DATABASE_URL=postgres://test:test@postgres:5432/test \
 CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
@@ -120,21 +124,33 @@ npm run dev
 ```
 - Website defaults to API at `localhost:59011` unless overridden.
 
-### Credentials (dc-secrets)
-All secrets are stored in SOPS-encrypted files under `secrets/`, layered by environment. Use `scripts/dc-secrets` to manage them:
-- `scripts/dc-secrets export <env>` - print credentials as key=value, layered: `shared/common.yaml` + `shared/<env>.yaml` (+ agents/hires). `<env>` ∈ {common, play, dev, prod}. A bare `export` (no env) is **common-only** — it never leaks another env's secrets.
-- `scripts/dc-secrets set shared/<layer> KEY=value` - add/update a credential in one layer (common/play/dev/prod)
-- `scripts/dc-secrets edit shared/<layer>` - interactive edit in $EDITOR
-- `scripts/dc-secrets list` - list all secret files
+### Deployment & secrets (staging is `dc-stage` on k8s)
 
-Layers: `shared/common.yaml` (env-agnostic, always loaded), `shared/play.yaml` (local dev sidecar), `shared/dev.yaml` (staging deploy), `shared/prod.yaml` (production deploy).
+**Staging** is the k8s namespace `dc-stage` (ArgoCD-synced from the nuc-k3s repo),
+no longer the local docker-compose "dev" stack. **Production** is `dc-prod`. Both
+deploy via GitOps (push to nuc-k3s → ArgoCD auto-syncs); there is no imperative
+prod/stage deploy from this repo. **Local dev** is the slim `scripts/dev-server.sh`
+stack (api + website + postgres) — needs no secrets.
 
-**Hire accounts** (GitHub, email credentials for new team members) are in the private parent repo under `secrets/hires/`, one file per person. Access them with:
-```bash
-DC_SECRETS_DIR=secrets scripts/dc-secrets list                          # list all hire files
-DC_SECRETS_DIR=secrets scripts/dc-secrets list hires/andris-kalns       # list keys for a hire
-DC_SECRETS_DIR=secrets scripts/dc-secrets get hires/andris-kalns GITHUB_PAT  # get specific value
-```
+| env | where it runs | secrets | deploy |
+|-----|---------------|---------|--------|
+| prod | k8s `dc-prod` | nuc-k3s: `dc-secret` (PGP-SOPS) + `dc-config` ConfigMap | ArgoCD (push nuc-k3s) |
+| stage | k8s `dc-stage` | nuc-k3s: `dc-stage-secret` (PGP-SOPS) + `dc-stage-config` ConfigMap | ArgoCD (push nuc-k3s); ship the image with `python3 cf/deploy.py deploy stage` |
+| local | slim docker-compose | **none** (plaintext/test values) | `scripts/dev-server.sh` |
+
+- **Canonical secret store:** the consolidated outer
+  `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS) holds EVERY key
+  across envs. Read it with `sops -d` + the outer `.age-identity` (never paste a
+  value into chat, a commit, or a manifest).
+- **`scripts/dc-secrets` + `repo/secrets/shared/` are RETIRED** (pending
+  deletion post-cutover). Do NOT add new secrets there. They still exist only so
+  the live `dev` docker-compose host keeps serving until the operator cutover
+  completes — see `docs/MIGRATION-CUTOVER.md` (the cutover runbook; Step G deletes
+  them). Plan: `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
+- **Ship a stage image:** `python3 cf/deploy.py deploy stage` (builds api, pushes
+  `git.kalaj.org/decent-stuff/decent-cloud-api:stage`, bumps the nuc-k3s stage
+  overlay, commits nuc-k3s locally; prints the operator `git push`).
+- **Audit live config:** `python3 cf/deploy.py config {dev,prod,stage}`.
 
 ### Seeding Test Data
 ```bash
@@ -209,8 +225,7 @@ otherwise; see `api/src/rate_limit.rs`.
   1. `serve_command()` startup validation
   2. `doctor_command()` checks
   3. `api/.env.example` and `cf/.env.example` (documentation templates)
-  4. docker-compose env sections
-  5. `scripts/dc-secrets set shared/<layer> <KEY>=<value>`
+  4. the env's secret/config store: prod/stage → nuc-k3s (`sops cluster/secrets/{dc-secret,dc-stage-secret}.yaml` + the `dc-config`/`dc-stage-config` ConfigMap, applied via `scripts/manage-secrets.py`); local dev → the slim docker-compose `env:` block (plaintext). See `docs/MIGRATION-CUTOVER.md` + `cf/CONFIG.md`.
 
 ## PACKAGE REGISTRY (image builds & hotfixes)
 - Agents MAY push container images to the Forgejo registry (`git.kalaj.org`, owner `decent-stuff`) when credentials are available. The operator runs `docker login git.kalaj.org`; the token lands in `~/.docker/config.json` and must NEVER be pasted into chat, a commit, or a manifest.
@@ -286,6 +301,11 @@ api-cli contract list --identity test
 api-cli --api-url https://dev-api.decent-cloud.org contract list --identity test
 api-cli --env prod contract list --identity test
 ```
+> **Staging hostnames:** the examples use `dev-api.decent-cloud.org` (the legacy
+> "dev" host). Staging is migrating to `dc-stage` on k8s; the stage hostnames are
+> `stage-*` (`stage-api.decent-cloud.org`, …) — or `dev-*` is kept, operator's
+> choice. See `docs/MIGRATION-CUTOVER.md` § Step D. Until cutover, `dev-*` still
+> serves staging traffic.
 
 ### Contract Lifecycle
 - States: `requested -> pending -> accepted -> provisioning -> provisioned -> active`

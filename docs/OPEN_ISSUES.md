@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-08-02. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-08-03. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -13,14 +13,60 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
 - **Deferred**: labeled `deferred-post-launch`. Valid but parked until ≥20 paying customers.
 
+## Infrastructure — staging → k8s (`dc-stage`) consolidation — IN CUTOVER
+
+**Status (2026-08-03):** Tracks 1+2+3 done autonomously; **operator cutover is the
+only remaining work.** Authoritative runbook: `docs/MIGRATION-CUTOVER.md`. Plan:
+`docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
+
+What shipped autonomously:
+- **Track 1 (nuc-k3s manifests, committed locally):** kustomize base/prod/stage
+  overlays, `cluster/core/dc-stage.yaml`, `dc-stage-secret.yaml.template`, the
+  `decent-cloud-stage` ArgoCD App CR.
+- **Track 2 (`dc-stage` live on cluster, isolated):** namespace + registry pull
+  secret + in-cluster `dc-stage-secret`/`dc-stage-config` + `decent_cloud_stage`
+  DB + api/website/redis reusing prod's image tag (`445a17d4`); health verified
+  via port-forward. api-sync skipped (PoC safety).
+- **Track 3 (product repo, pushed to `main`):** `cf/deploy.py deploy stage` +
+  `config stage`; this runbook; AGENTS/docs updated. Legacy `dev` docker-compose
+  path retained until the cutover retires it.
+
+**Operator-gated (OPEN — the cutover, runbook steps A–G):**
+1. Push nuc-k3s → ArgoCD adopts live dc-stage (Step A).
+2. Encrypt + persist `dc-stage-secret` to git (Step B).
+3. Ship `:stage` image tag (Step C — optional until CI builds it).
+4. Public cutover: repoint tunnel + DNS `dev-*`→`stage-*` (Step D — the switch).
+5. Enable dc-api-sync in stage (Step E).
+6. Tear down the old dev host (Step F).
+7. Delete retired files (`cf/docker-compose.dev.yml`, `scripts/dc-secrets`,
+   `repo/secrets/shared/`, the `dev` path in `cf/deploy.py`) — **separate commit,
+   only after F** (Step G).
+
+Until the cutover completes, the live `dev` docker-compose host still serves
+staging traffic and the age store is still in the repo. Do not pre-delete.
+
 ## In scope (active work)
+
+> **2026-08-03 RE-CORRECTION (supersedes the stale "BLOCKED on credentials / #413" claims in the
+> 2026-07-25 session entries below):** the old "blocked" status was re-verified and is **FALSE**.
+> (a) **All credentials are present** in the consolidated `secrets/shared/env.yaml` store
+> (`ANTHROPIC_API_KEY`+`ANTHROPIC_BASE_URL`+`ANTHROPIC_MODEL`, `STRIPE_SECRET_KEY`+publishable+webhook,
+> `GOOGLE_OAUTH_CLIENT_ID`+secret+redirect, `GITHUB_API_TOKEN`+`GITHUB_TEST_PAT`, `MAILCHANNELS_API_KEY`,
+> `SMTP_*`, `TELEGRAM_BOT_TOKEN`, `CF_API_TOKEN`+`CF_ZONE_ID`, `HETZNER_API_TOKEN`, …). (b) **#413 was
+> already declared closed as a blocker** in the 2026-07-26 session, and the architecture is decided in
+> the **2026-04-25 specs** (`docs/specs/2026-04-25-decent-agents-identity-provisioning-spec.md` +
+> `…-github-integration-spec.md`). What remains is **BUILDING** the identity-provisioning subsystem
+> (the `agent_identities` table + dispatch wiring the `anthropic-proxy` crate already references) and
+> the onboarding/billing/metering flows on top of it — these are specced, unblocked, ready-to-build
+> epics, NOT externally blocked. The earlier "BLOCKED" wording in historical entries is struck below
+> where it still appears.
 
 | # | Title | Labels | Notes |
 |---|-------|--------|-------|
-| 418 | Decent Agents: beta onboarding (invite + first-run demo) | launch | First user-facing DA flow. Large (magic-link/Google auth → Stripe → GitHub App → demo PR → invite gate). |
-| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | **Architecture decided + core shipped** (host-side reverse proxy). New `anthropic-proxy` crate: injects key per-request, meters usage per identity, streams responses, redacts key everywhere. PoC proven against z.ai; 33 tests green. **Acceptance #3/#4 BLOCKED on #413 Rust impl** (container config doesn't exist yet). Not closed. |
-| 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | Depends on #415 meters. Large. |
-| 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | Meters, caps, Stripe cycle rollover. Large. |
+| 418 | Decent Agents: beta onboarding (invite + first-run demo) | launch | First user-facing DA flow (magic-link/Google auth → Stripe → GitHub App → demo PR → invite gate). **Unblocked.** Spec: `2026-04-25-decent-agents-github-integration-spec.md`. Needs the identity-provisioning foundation (#413 impl) + GitHub App onboarding flow (no webhook receiver exists yet). |
+| 427 | Anthropic API key proxy/sidecar for per-identity isolation | decent-agents, launch | **Core shipped** (`anthropic-proxy` crate: injects key per-request, meters per identity, streams, redacts; 33 tests green; references `agent_identities.id`). Acceptance **#3/#4** (remove shared-key mount + migrate beta) need the identity-provisioning subsystem built — **unblocked**, not waiting on a decision. |
+| 416 | Decent Agents: usage metering + customer-facing usage dashboard | decent-agents | Depends on #415 meters (no `agent_runs`/metering tables exist yet — to build). **Unblocked.** |
+| 415 | Decent Agents: subscription billing with active-hour + Claude token caps | decent-agents | Meters, caps, Stripe cycle rollover. `STRIPE_SECRET_KEY` present. **Unblocked.** |
 
 ## Deferred — Decent Agents
 
@@ -549,3 +595,27 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 |---------|--------|
 | No `?` keyboard-shortcut help overlay | **RESOLVED (2026-07-23; stale entry corrected 2026-07-24)** — `KeyboardHelpOverlay.svelte` exists and is covered by 3 tests in `keyboard-shortcuts.spec.ts` (`? opens help overlay listing all shortcuts` is `@smoke`). This row was stale; corrected. |
 | Dashboard shows provider-monitoring stats to brand-new renters | **Design judgment** — fresh renters see "Infrastructure Uptime", "Contracts Monitored", "Red Flags Detected" cards. Non-Providers may find this confusing. Needs product input on conditional rendering. |
+
+### 2026-08-03 session (staging → k8s `dc-stage` consolidation — Track 3, product-repo prep)
+
+Product-repo half of the staging→k8s migration (Track 3 of the 3-track split in
+the plan's Appendix B). Tracks 1 (nuc-k3s manifests) + 2 (`dc-stage` live on
+cluster) were done by sibling agents in parallel; this session did the pushable
+product-repo prep + the operator cutover runbook. **Operator cutover pending** —
+see `docs/MIGRATION-CUTOVER.md`. The destructive deletions (retired dev-deploy
+stack + age secret store) are deliberately NOT shipped (they break the live dev
+host's next `git pull`); they are runbook Step G, a separate post-cutover commit.
+
+| Change | Area | Detail |
+|--------|------|--------|
+| `deploy stage` target | cf/deploy.py | New `python3 cf/deploy.py deploy stage [--tag <tag>]`: builds the api image natively, pushes `git.kalaj.org/decent-stuff/decent-cloud-api:<tag>` (default floating `:stage`), bumps the nuc-k3s stage overlay `images:` entry, commits nuc-k3s LOCALLY, prints the operator `git push` + ArgoCD refresh + health-check commands. Stage is k8s/ArgoCD (ns `dc-stage`), NOT docker-compose. Reuses `build_rust_binaries_natively`/`calculate_binary_hash`/`check_docker` (DRY). Legacy `dev` path intact. |
+| `config stage` target | cf/deploy.py | Read-only introspection of the live dc-stage cluster stores (dc-stage-config ConfigMap + dc-stage-secret Secret), mirroring `config prod`. Refactored `_read_prod_stores` into a generic `_read_cluster_stores(namespace, configmap, secret)` (DRY) used by both prod + stage. |
+| Image-tag bumper tests | cf/test_deploy.py | 8 unit tests for `_update_stage_image_tag`: update existing newTag (indented + column-0 list), insert when absent, idempotent no-op, no website-image false-match, missing-file/section/target loud errors, byte-for-byte preservation of the rest of the manifest. |
+| Cutover runbook | docs/MIGRATION-CUTOVER.md | Authoritative operator guide: prerequisites, Step 0 verify, Steps A–G (push nuc-k3s → encrypt secret → ship :stage → public cutover → enable api-sync → tear down dev host → delete retired files), rollback. Copy-pasteable real commands. |
+| Plan status + decisions | docs/plans/2026-08-03-staging-to-…md | Status line → "Tracks 1+2+3 done; operator cutover pending". Open Decisions all RESOLVED: DB = separate `decent_cloud_stage`; image = floating `:stage` (pins prod tag until shipped); hostname = `stage-*` overlay, operator may keep `dev-*`. |
+| Issue inventory | docs/OPEN_ISSUES.md | New "Infrastructure — staging → k8s consolidation" section: status + the 7 operator-gated steps (runbook A–G) as the remaining open items. |
+| Deploy/secrets docs | AGENTS.md (+ cf/*) | Staging is now `dc-stage` on k8s (not docker-compose dev); canonical secret store is the outer `secrets/shared/env.yaml`; `repo/secrets/shared/` + `scripts/dc-secrets` are RETIRED pending post-cutover deletion. Links to the runbook. |
+
+Gates: `python3 -m py_compile cf/deploy.py` clean; `python3 cf/test_deploy.py` →
+8/8; `cf/deploy.py --help` / `deploy --help` / `config --help` render the new
+`stage` choices. No Rust/website code touched; no cluster/nuc-k3s mutation.

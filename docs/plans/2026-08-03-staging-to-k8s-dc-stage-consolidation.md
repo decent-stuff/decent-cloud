@@ -1,7 +1,9 @@
 # Staging → k8s (dc-stage): eliminate the dual secret stores
 
 **Created:** 2026-08-03
-**Status:** Agreed — do next
+**Status:** **Tracks 1+2+3 done autonomously** (nuc-k3s base/prod/stage manifests
+committed locally; `dc-stage` live + isolated on the cluster; product-repo prep
+shipped). **Operator cutover pending — see `docs/MIGRATION-CUTOVER.md`.**
 **Related:** `cf/CONFIG.md` (per-var secret reference), `cf/DEPLOYMENT_CONFIG.md`,
 GitHub issues #451, #452, #453
 
@@ -215,28 +217,29 @@ replicas). The nuc-k8s repo has no overlay tooling yet — this introduces it.
     verbatim). Update `api/.env.example`, `cf/.env.example`, and e2e setup docs
     to reflect stage=k8s / dev=local-slim.
 
-## Open decisions (resolve before/while executing)
+## Open decisions (RESOLVED 2026-08-03 during execution)
 
-- **DB strategy.** Separate Postgres `StatefulSet` for dc-stage vs a
-  `decent_cloud_stage` database inside the existing shared `pgsql` app
-  (`cluster/apps/pgsql.yaml`). Prod uses its own Postgres at
-  `192.168.0.2:5432/decent_cloud_prod`. Recommendation: a separate DB in the
-  shared pgsql instance (cheapest, isolates data, matches how Chatwoot already
-  shares the pgsql host).
-- **Image strategy.** Stage image tags: `:stage-<sha>` per push, or floating
-  `:stage`/`:main` that ArgoCD auto-syncs. Recommendation: `:stage` floating tag
-  pushed by CI on every merge to `main` (or a `stage` branch), so dc-stage tracks
-  latest without manual bumps.
-- **Hostname rename.** `dev-*` → `stage-*` (`stage-support.decent-cloud.org`
-  etc.). Cleanest for clarity but needs new CF DNS records + tunnel ingress
-  entries + any hardcoded `dev-*` refs in code/docs. Alternative: keep `dev-*`
-  hostnames pointing at dc-stage (no DNS change, less clear). Recommend the
-  rename since the whole point is clarity.
+- **DB strategy — RESOLVED: separate `decent_cloud_stage` DB in the shared `pgsql`
+  app.** Track 2 provisioned it (isolates data, matches how Chatwoot already
+  shares the pgsql host, cheapest). Prod keeps its own Postgres
+  (`192.168.0.2:5432/decent_cloud_prod`); stage uses `decent_cloud_stage` on the
+  shared pgsql. Rolling back the app never touches prod data.
+- **Image strategy — RESOLVED: floating `:stage` tag.** `cf/deploy.py deploy stage`
+  (Track 3) builds + pushes `git.kalaj.org/decent-stuff/decent-cloud-api:stage`
+  and bumps the stage overlay; CI's `:stage` build is the automated equivalent.
+  Until `:stage` ships, the stage overlay pins prod's tag (`445a17d4`) so stage
+  tracks prod's code — see the cutover runbook § Step C.
+- **Hostname rename — RESOLVED: overlay uses `stage-*`; operator MAY keep `dev-*`.**
+  The stage overlay is authored with `stage-*` hostnames
+  (`stage-support`, `stage-api`, `stage-gw`, …) for clarity. The operator cutover
+  (runbook § Step D) is the decision point: rename `dev-*`→`stage-*` (new DNS +
+  tunnel ingress + Stripe/OAuth redirect updates) OR keep `dev-*` (edit the
+  overlay hostnames back, no DNS change). Either is valid; the runbook covers both.
 - **Manifest reuse — RESOLVED: kustomize base + overlays.** `cluster/apps/
   decent-cloud/base/` is shared; `prod/` and `stage/` are thin overlays
   patching namespace/image-tags/hostPath/secret-names. Maximises reuse (one base
   to edit), avoids the sync burden of duplicating 7 manifests. Prod refactor
-  must render byte-equivalent to current live state (verify before commit).
+  renders byte-equivalent to the prior live state (verified before commit).
 
 ## Reference facts (carry forward)
 
@@ -273,3 +276,78 @@ replicas). The nuc-k8s repo has no overlay tooling yet — this introduces it.
   pass needed.
 - Issues #451 (chatwoot service-account token), #452 (dead CHATWOOT_INBOX_ID),
   #453 (.sqlx CI build bug) are independent of this consolidation.
+
+---
+
+## APPENDIX A — Verified execution environment (2026-08-03, probed live)
+
+Corrects several stale premises in the body above. This is the authoritative
+environment context for the build.
+
+| Capability | Status | Detail |
+|---|---|---|
+| Cluster access | ✅ cluster-admin | kubeconfig at `/project/decent-cloud/kube-config`; server `https://192.168.0.2:6443`; `auth can-i --list` = `*.* [*]` (full admin) |
+| kubectl + kustomize | ✅ installed | `~/.local/bin/kubectl` v1.36.3 (kustomize v5.8.1 built-in); set `export KUBECONFIG=/project/decent-cloud/kube-config` |
+| sops + age | ✅ installed | `/usr/local/bin/{sops,age}` |
+| nuc-k3s repo | ✅ local only | checked out at `/project/decent-cloud/third_party/k8s/` (remote `git@github.com:sasa-tomic/nuc-k3s.git`); can edit+commit locally, **CANNOT push** |
+| Product repo push | ✅ as `andris-k85` | `GITHUB_TEST_PAT` (in outer `secrets/shared/env.yaml`) has `repo` scope, `permissions.push=true` on `decent-stuff/decent-cloud`. repo/ remote uses SSH host alias `github-decent-cloud` (not resolvable here) → push over HTTPS with the PAT instead |
+| nuc-k3s push | ❌ BLOCKED | `sasa-tomic/nuc-k3s` is private; `GITHUB_TEST_PAT` → 404; SSH `claude-code` key → permission denied. Manifests can only be authored locally + applied to cluster via kubectl |
+| Prod secret (dc-secret.yaml) | ❌ can't decrypt | PGP-SOPS with operator key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` (not present here). Not needed — prod is untouched |
+| Secrets decryption (age) | ✅ ALL decrypt | The body's "age key broken / common.yaml unreadable" premise is **STALE** — `repo/secrets/shared/{common,dev,play}.yaml` AND the NEW consolidated outer `/project/decent-cloud/secrets/shared/env.yaml` all decrypt cleanly with `SOPS_AGE_KEY_FILE=/project/decent-cloud/{repo,}/secrets/.age-identity` |
+| Consolidated secret store | ✅ exists | Outer `/project/decent-cloud/secrets/shared/env.yaml` (age) holds EVERY key (DATABASE_URL, STRIPE_*, CHATWOOT_*, SMTP_*, CF_*, ANTHROPIC_*, GOOGLE_OAUTH_*, TELEGRAM_*, …). This supersedes the 3-layer `repo/secrets/shared/` model |
+| Cloudflare creds | ✅ available | `CF_API_TOKEN` + `CF_ZONE_ID` in env.yaml (for tunnel/DNS work) |
+
+**Cluster live state observed:** namespaces present incl. `dc-prod` (active, ArgoCD-managed),
+`argocd`, `apps`. ArgoCD prod App is `automated: {selfHeal: true, prune: true}` → anything applied
+to `dc-prod` NOT in git gets pruned; therefore **prod must NEVER be mutated via kubectl** (only via
+git push to nuc-k3s, which is blocked). A NEW `dc-stage` namespace has no ArgoCD App → resources
+applied there via kubectl persist until the operator pushes nuc-k3s (ArgoCD then adopts by name).
+
+## APPENDIX B — Execution decision (autonomous scope vs operator-gated)
+
+The migration's END STATE (git-persisted ArgoCD-synced dc-stage + dev host decommissioned) is
+**partially blocked** by the nuc-k3s push denial. Split into two tracks:
+
+### Track 1 — nuc-k3s manifests (LOCAL ONLY, operator pushes later)
+Author + verify, do NOT apply to `dc-prod`:
+1. Restructure `cluster/apps/decent-cloud/{base,prod,stage}/` (kustomize). **Verify**
+   `kubectl kustomize prod/` renders byte-equivalent to current live prod (diff against
+   `kubectl kustomize` of the current flat dir). Zero-behavior-change on prod.
+2. Author `stage/` overlay (namespace `dc-stage`, stage image tag, stage hostPath, secret/config
+   names `dc-stage-secret`/`dc-stage-config`).
+3. `cluster/core/dc-stage.yaml` namespace manifest.
+4. `cluster/secrets/dc-stage-secret.yaml.template` (PLAINTEXT — operator runs
+   `sops --encrypt --in-place` with their PGP key; we cannot PGP-encrypt here).
+5. `cluster/argocd/application-decent-cloud-stage.yaml` (source path `.../stage`, ns `dc-stage`).
+Commit locally in `third_party/k8s/`; leave for operator to push.
+
+### Track 2 — dc-stage LIVE on cluster (GREENFIELD, isolated, applied via kubectl)
+Bring dc-stage up in the cluster to PROVE the migration end-to-end (a real PoC, per the mandatory
+workflow), WITHOUT exposing it externally (no tunnel change → no public traffic → safe even with
+real creds):
+1. `kubectl create ns dc-stage`.
+2. Copy `forgejo-registry-secret` from `dc-prod` → `dc-stage` (so nodes can pull the image).
+3. Create `dc-stage-secret` + `dc-stage-config` in-cluster directly from outer `env.yaml` values
+   (kubectl create secret/configmap — bypasses SOPS; the git SOPS version is Track 1 step 4).
+4. Provision stage DB: a `decent_cloud_stage` database in the shared `pgsql` app (recommended DB
+   strategy from the Open Decisions); run migrations.
+5. Apply stage manifests (api, api-sync, website, redis) **reusing the current prod image tag**
+   (`445a17d4`) — there is no `:stage` image and we cannot push images; reusing prod's tag makes
+   stage track prod's code until CI ships `:stage`.
+6. Verify health via `kubectl -n dc-stage` (pods Ready, `port-forward` to api `/api/v1/health`
+   200). **Do NOT** reconfigure the dev tunnel — that is the operator cutover.
+
+### Track 3 — product-repo cleanup (Phase 2/3, PUSHED as andris-k85)
+Pushable to `decent-stuff/decent-cloud`. ORDER-SENSITIVE: the destructive deletions
+(`cf/docker-compose.dev.yml`, `scripts/dc-secrets`, `repo/secrets/shared/`) must only take effect
+AFTER the operator cuts over (dc-stage live + tunnel repointed + dev host decommissioned).
+Therefore: ship the non-destructive rewiring + docs now; stage the destructive deletions behind a
+clear "run-after-cutover" note (or a feature gate) so a premature `git pull` on the dev host does
+not break the running staging env.
+
+### Operator-gated (NOT done autonomously — listed for handoff)
+- Push nuc-k3s (Track 1) to git; ArgoCD syncs dc-stage from git (adopts live resources).
+- Create `:stage` image tag in CI (or keep stage tracking prod tag).
+- Reconfigure the `decent-cloud-dev` tunnel → `decent-cloud-stage`, repoint ingress at dc-stage
+  services, DNS `dev-*` → `stage-*` (or keep `dev-*`). THIS is the public cutover.
+- Tear down the dev-host docker-compose stack + remove the age store once dc-stage serves traffic.

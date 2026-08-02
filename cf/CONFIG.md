@@ -4,6 +4,16 @@ This is the **authoritative map** of every decent-cloud environment variable: wh
 it lives in DEV, where it lives in PROD, and the exact command to change + apply it.
 If you "can't find where to set X", start here.
 
+> **🚧 Staging migration (2026-08-03):** staging is moving off the local
+> docker-compose "dev" stack + the `repo/secrets/shared/` age store onto k8s as
+> namespace `dc-stage` (ArgoCD-synced from nuc-k3s). A third env, **stage**, now
+> exists: sources from `dc-stage-config` ConfigMap + `dc-stage-secret` Secret in
+> nuc-k3s (same model as prod). The DEV (docker-compose) + age-store content
+> below stays accurate **until the operator cutover**; the legacy `scripts/dc-secrets`
+> + `repo/secrets/shared/` are **retired pending post-cutover deletion**. Full
+> runbook: `docs/MIGRATION-CUTOVER.md`. Audit live stage config with
+> `python3 cf/deploy.py config stage`.
+
 For live introspection (what is actually set right now) run:
 ```
 python3 cf/deploy.py config dev     # or: prod
