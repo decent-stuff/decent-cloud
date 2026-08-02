@@ -1,11 +1,11 @@
 # Staging → k8s (dc-stage): eliminate the dual secret stores
 
 **Created:** 2026-08-03
-**Status:** **Tracks 1+2+3 done autonomously** (nuc-k3s base/prod/stage manifests
-committed locally; `dc-stage` live + isolated on the cluster; product-repo prep
-shipped). **Operator cutover pending — see `docs/MIGRATION-CUTOVER.md`.**
-**Related:** `cf/CONFIG.md` (per-var secret reference), `cf/DEPLOYMENT_CONFIG.md`,
-GitHub issues #451, #452, #453
+**Status:** **Tracks 1+2+3 done autonomously** (nuc-k8s manifests local + dc-stage
+verified live on cluster + product-repo prep in PR #454); **operator cutover pending
+— see `docs/MIGRATION-CUTOVER.md`** (Track 2 PoC verified HTTP 200, 52 migrations /
+86 tables, prod untouched). **Related:** `cf/CONFIG.md` (per-var secret reference),
+`cf/DEPLOYMENT_CONFIG.md`, GitHub issues #451, #452, #453
 
 ## Goal
 
@@ -321,10 +321,13 @@ Author + verify, do NOT apply to `dc-prod`:
 5. `cluster/argocd/application-decent-cloud-stage.yaml` (source path `.../stage`, ns `dc-stage`).
 Commit locally in `third_party/k8s/`; leave for operator to push.
 
-### Track 2 — dc-stage LIVE on cluster (GREENFIELD, isolated, applied via kubectl)
-Bring dc-stage up in the cluster to PROVE the migration end-to-end (a real PoC, per the mandatory
-workflow), WITHOUT exposing it externally (no tunnel change → no public traffic → safe even with
-real creds):
+### Track 2 — dc-stage LIVE on cluster (COMPLETE — VERIFIED LIVE 2026-08-03)
+
+**Status: COMPLETE.** Brought dc-stage up in the cluster to PROVE the migration
+end-to-end (a real PoC, per the mandatory workflow), WITHOUT exposing it externally
+(no tunnel change → no public traffic → safe even with real creds). Verified live.
+
+Original scope (executed):
 1. `kubectl create ns dc-stage`.
 2. Copy `forgejo-registry-secret` from `dc-prod` → `dc-stage` (so nodes can pull the image).
 3. Create `dc-stage-secret` + `dc-stage-config` in-cluster directly from outer `env.yaml` values
@@ -337,6 +340,38 @@ real creds):
 6. Verify health via `kubectl -n dc-stage` (pods Ready, `port-forward` to api `/api/v1/health`
    200). **Do NOT** reconfigure the dev tunnel — that is the operator cutover.
 
+**Verified results (2026-08-03):**
+- **Health 200.** `kubectl port-forward svc/dc-api` → `curl /api/v1/health` = HTTP 200, body
+  `{"success":true,"message":"Decent Cloud API is running","environment":"stage"}`.
+- **Shared Postgres discovered + stage DB provisioned.** Pod `pgsql-857cbb44d8-lbzw4` (ns `apps`),
+  Service `pgsql` (ClusterIP `10.43.159.212:5432`), in-cluster DNS `pgsql.apps.svc.cluster.local:5432`,
+  image `pgvector/pgvector:pg18`, superuser `postgres` — already hosting `decent_cloud_{dev,play,prod}`
+  + `chatwoot_{dev,prod}`. Created dedicated role `decent_cloud_stage` (LOGIN) + DB
+  `decent_cloud_stage` OWNER `decent_cloud_stage` with a fresh 32-char password (did NOT reuse
+  play/dev pw). api-server **auto-migrated on startup** against `API_DATABASE_URL` — **52
+  migrations applied, 86 tables** in `public` (latest: `52 | drop account subscription feature`).
+- **Namespace state.** `dc-api` 1/1 Ready, `dc-api-sync` **0/0 (scaled to 0 for PoC safety — no
+  outbound provider polling)**, `dc-redis` 1/1, `dc-website` 1/1. All Services ClusterIP-only
+  (NO public exposure — dev tunnel untouched). Stores: `dc-stage-config` (16 keys, overlay),
+  `dc-stage-secret` (17 keys, from `env.yaml`), `forgejo-registry-secret` (copied from `dc-prod`).
+  **`dc-prod` completely untouched.** `STRIPE_SECRET_KEY = sk_test_` (TEST mode) — safe regardless.
+- **Bugs found + root-cause fixed during the PoC:**
+  1. **Stage overlay apply bug** — `dc-api-patch.yaml` `SMTP_ADDRESS`/`SMTP_USERNAME`
+     `configMapKeyRef`s had no `key` → `apply` failed (`configMapKeyRef.key: Required value`). The
+     api-server doesn't read `SMTP_*` (Chatwoot-only; stage reuses prod Chatwoot). Fixed by
+     removing the two lines → nuc-k3s commit `deb4018` (alongside Track 1's `7013258`). Stage dc-api
+     env now mirrors prod's set.
+  2. **hostPath permissions** — `stage-api-data`/`stage-redis` hostPaths created root-owned
+     (`DirectoryOrCreate`) but pods run `runAsUser/runAsGroup/fsGroup=1000` → `PermissionDenied` on
+     `/data/ledger`. Fixed by `chown 1000:1000` on the stage-only dirs via a privileged one-off pod
+     on node `nuc`. Prod dirs untouched.
+- **Non-fatal warnings (api still served 200 throughout):** `CHATWOOT_PLATFORM_API_TOKEN` 401 vs
+  prod Chatwoot (env.yaml token stale — agent-bot integration disabled until reconciled);
+  `RATE LIMITING DISABLED` (expected, `ENVIRONMENT=stage ≠ production`); `CF_API_TOKEN/CF_ZONE_ID
+  not configured` in dc-api-sync (only `DATABASE_URL`+`CREDENTIAL_ENCRYPTION_KEY` wired).
+
+Full operator-facing detail + the cutover steps: `docs/MIGRATION-CUTOVER.md`.
+
 ### Track 3 — product-repo cleanup (Phase 2/3, PUSHED as andris-k85)
 Pushable to `decent-stuff/decent-cloud`. ORDER-SENSITIVE: the destructive deletions
 (`cf/docker-compose.dev.yml`, `scripts/dc-secrets`, `repo/secrets/shared/`) must only take effect
@@ -345,9 +380,49 @@ Therefore: ship the non-destructive rewiring + docs now; stage the destructive d
 clear "run-after-cutover" note (or a feature gate) so a premature `git pull` on the dev host does
 not break the running staging env.
 
-### Operator-gated (NOT done autonomously — listed for handoff)
-- Push nuc-k3s (Track 1) to git; ArgoCD syncs dc-stage from git (adopts live resources).
-- Create `:stage` image tag in CI (or keep stage tracking prod tag).
-- Reconfigure the `decent-cloud-dev` tunnel → `decent-cloud-stage`, repoint ingress at dc-stage
-  services, DNS `dev-*` → `stage-*` (or keep `dev-*`). THIS is the public cutover.
-- Tear down the dev-host docker-compose stack + remove the age store once dc-stage serves traffic.
+### Operator-gated (NOT done autonomously — the remaining open items)
+
+These are the only gates left. They are the **operator cutover** — fully specced
+with copy-pasteable commands in `docs/MIGRATION-CUTOVER.md` (runbook steps A–G + a
+minor-follow-ups section). The 8 items, in dependency order:
+
+1. **Push the nuc-k3s overlay fix WITH Track 1** — `cd third_party/k8s && git push
+   origin main`. Commits `7013258` (base/prod/stage split) + `deb4018` (SMTP
+   `configMapKeyRef` fix) MUST go together, else ArgoCD re-applies the broken patch
+   and the dc-stage sync fails. ArgoCD then syncs dc-stage from git, adopting the
+   live resources by name. (Runbook Step A.)
+2. **Persist the stage DB password to git SOPS — CRITICAL (data-loss / auth-break
+   risk).** The `decent_cloud_stage` role password currently lives ONLY in the live
+   `dc-stage-secret` (kubectl-created, not SOPS). Before ArgoCD adopts the namespace,
+   the operator must either (a) extract it
+   (`kubectl -n dc-stage get secret dc-stage-secret -o jsonpath='{.data.API_DATABASE_URL}' | base64 -d`)
+   and SOPS-encrypt that value into `cluster/secrets/dc-stage-secret.yaml` (fill the
+   template from Track 1 step 4); or (b) set their own password in SOPS and
+   `ALTER ROLE decent_cloud_stage PASSWORD '…'` to match BEFORE ArgoCD syncs.
+   Otherwise the first ArgoCD sync overwrites the live secret with the SOPS value
+   and **breaks DB auth**. (a) preserves the already-migrated DB. (Runbook Step B,
+   CRITICAL note.)
+3. **Encrypt the full `dc-stage-secret` to git** — fill
+   `cluster/secrets/dc-stage-secret.yaml.template` values,
+   `sops --encrypt --encrypted-regex '^(data|stringData)$' --in-place`,
+   commit+push nuc-k3s (PGP key `FA5814CF1935EE80C454C9F1660DCCF069EC9176`).
+   (Runbook Step B.)
+4. **Ship the `:stage` image tag** in CI; update the stage overlay image from the
+   pinned prod tag `445a17d4` to `:stage`. Until then stage tracks prod's tag.
+   (Runbook Step C.)
+5. **Public cutover** — reconfigure the `decent-cloud-dev` cloudflared tunnel →
+   dc-stage services; DNS `dev-*` → `stage-*` (or keep `dev-*`); verify
+   `https://api.stage.decent-cloud.org/api/v1/health` 200. THIS is the user-visible
+   switch. (Runbook Step D.)
+6. **Re-enable `dc-api-sync`** (cutover Step E) —
+   `kubectl -n dc-stage scale deployment dc-api-sync --replicas=1`. hostPath perms
+   are already fixed, so it should start cleanly — verify Ready + no `PermissionDenied`.
+7. **Tear down dev host + delete retired files** (cutover Steps F/G) — stop the
+   docker-compose dev stack, `git pull` main on the dev host, then
+   `git rm cf/docker-compose.dev.yml scripts/dc-secrets/ repo/secrets/shared/` +
+   remove the `dev` path from `cf/deploy.py` (separate commit, only after F).
+8. **Minor** — populate `TWILIO_AUTH_TOKEN` in `env.yaml` (currently empty — SMS
+   escalation disabled in stage); reconcile `CHATWOOT_PLATFORM_API_TOKEN` (stale →
+   401); optionally drop `SMTP_PASSWORD` from the api secret (unused — the api sends
+   via MailChannels `MAILCHANNELS_API_KEY`+`DKIM`, `SMTP_*` is Chatwoot-only).
+   (Runbook "Minor follow-ups" section.)
