@@ -90,10 +90,13 @@ impl SignedClient {
         let response = self
             .http
             .get(&url)
-            .header("X-Public-Key", &self.public_key_hex)
-            .header("X-Signature", &signature)
-            .header("X-Timestamp", &timestamp)
-            .header("X-Nonce", &nonce)
+            .header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                &self.public_key_hex,
+            )
+            .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
+            .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+            .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
             .send()
             .await
             .with_context(|| format!("Failed to send GET request to {}", url))?;
@@ -126,10 +129,13 @@ impl SignedClient {
         let response = self
             .http
             .post(&url)
-            .header("X-Public-Key", &self.public_key_hex)
-            .header("X-Signature", &signature)
-            .header("X-Timestamp", &timestamp)
-            .header("X-Nonce", &nonce)
+            .header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                &self.public_key_hex,
+            )
+            .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
+            .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+            .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
             .header("Content-Type", "application/json")
             .body(body_bytes)
             .send()
@@ -168,10 +174,13 @@ impl SignedClient {
         let response = self
             .http
             .put(&url)
-            .header("X-Public-Key", &self.public_key_hex)
-            .header("X-Signature", &signature)
-            .header("X-Timestamp", &timestamp)
-            .header("X-Nonce", &nonce)
+            .header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                &self.public_key_hex,
+            )
+            .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
+            .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+            .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
             .header("Content-Type", "application/json")
             .body(body_bytes)
             .send()
@@ -209,10 +218,13 @@ impl SignedClient {
         let response = self
             .http
             .delete(&url)
-            .header("X-Public-Key", &self.public_key_hex)
-            .header("X-Signature", &signature)
-            .header("X-Timestamp", &timestamp)
-            .header("X-Nonce", &nonce)
+            .header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                &self.public_key_hex,
+            )
+            .header(dcc_common::api_auth::HEADER_SIGNATURE, &signature)
+            .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp)
+            .header(dcc_common::api_auth::HEADER_NONCE, &nonce)
             .send()
             .await
             .with_context(|| format!("Failed to send DELETE request to {}", url))?;
@@ -297,5 +309,47 @@ mod tests {
         };
         let err = response.into_result().unwrap_err();
         assert!(err.to_string().contains("no data"));
+    }
+
+    /// Guard against drift back to hand-typed header-name literals: the real
+    /// `get()` path must send all four canonical signed-request headers under
+    /// the exact names from `dcc_common::api_auth::HEADER_*`. If any is
+    /// renamed, removed, or typo'd (the historical `X-DC-*` bug), mockito's
+    /// header matchers fail to match and `mock.assert_async()` fails.
+    #[tokio::test]
+    async fn test_signed_request_sends_canonical_auth_headers() {
+        let mut server = mockito::Server::new_async().await;
+
+        let identity = dcc_common::DccIdentity::new_signing_from_bytes(&[9u8; 32])
+            .expect("valid test signing key");
+        let client =
+            SignedClient::from_dcc_identity(identity, &server.url()).expect("client from identity");
+        // The mock ONLY matches when all four canonical auth headers are
+        // present; X-Public-Key must additionally carry this client's pubkey.
+        let expected_pubkey = client.public_key_hex().to_string();
+        let mock = server
+            .mock("GET", "/api/v1/health")
+            .match_header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                mockito::Matcher::Exact(expected_pubkey),
+            )
+            .match_header(
+                dcc_common::api_auth::HEADER_SIGNATURE,
+                mockito::Matcher::Any,
+            )
+            .match_header(
+                dcc_common::api_auth::HEADER_TIMESTAMP,
+                mockito::Matcher::Any,
+            )
+            .match_header(dcc_common::api_auth::HEADER_NONCE, mockito::Matcher::Any)
+            .with_status(200)
+            .with_body(r#"{"success":true,"data":{"ok":true}}"#)
+            .create_async()
+            .await;
+
+        let result: ApiResponse<serde_json::Value> = client.get("/health").await.unwrap();
+        assert!(result.success);
+        // Fails if any canonical header was missing or carried the wrong name.
+        mock.assert_async().await;
     }
 }
