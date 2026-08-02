@@ -8,6 +8,7 @@ pub mod chatwoot;
 pub mod cloud;
 pub mod common;
 pub mod contracts;
+pub mod email_verification;
 pub mod invoices;
 pub mod notifications;
 pub mod offerings;
@@ -37,6 +38,7 @@ pub use auth::AuthApi;
 pub use chatwoot::ChatwootApi;
 pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
+pub use email_verification::EmailVerificationApi;
 pub use invoices::InvoicesApi;
 pub use notifications::NotificationsApi;
 pub use offering_csv::OfferingCsvApi;
@@ -89,6 +91,7 @@ pub fn create_combined_api() -> impl OpenApi {
             ProviderStatsApi,
             TotpApi,
             RecoveryApi,
+            EmailVerificationApi,
         ),
     )
 }
