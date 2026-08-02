@@ -17,7 +17,11 @@ test.describe('Provider Support - Notification Settings', () => {
 		// Provider setup wizard persists its step in localStorage and defaults to step 1
 		// (Support Portal). The Notifications section is rendered only on step 2
 		// ("Contacts & Notifications"), so land there before each test navigates.
-		await page.evaluate(() =>
+		// Use addInitScript (not page.evaluate) so the key is set on the real
+		// origin of every navigation — the page fixture no longer pre-navigates
+		// to /dashboard, so an evaluate would run against about:blank and the
+		// cross-origin test goto would drop it (see fixtures/test-account.ts).
+		await page.addInitScript(() =>
 			localStorage.setItem('provider-setup-wizard-step', '2'),
 		);
 	});

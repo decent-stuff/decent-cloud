@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 
 /**
  * The CommandPalette (Cmd/Ctrl+K) is a powerful quick-nav, but on desktop it
@@ -8,6 +8,14 @@ import { test, expect } from './fixtures/test-account';
  * the desktop sidebar so the feature is discoverable without guessing keys.
  */
 test.describe('command palette desktop trigger', () => {
+	// The page fixture no longer pre-navigates (see fixtures/test-account.ts),
+	// so land on /dashboard explicitly. The palette trigger lives in the
+	// dashboard sidebar, which only renders once auth has settled.
+	test.beforeEach(async ({ page }) => {
+		await page.goto('/dashboard');
+		await waitForAuthReady(page);
+	});
+
 	test('@smoke sidebar shows a clickable command-palette trigger on desktop', async ({ page }) => {
 		// The trigger is an always-visible button in the dashboard sidebar.
 		const trigger = page.getByRole('button', { name: /search|command/i }).first();

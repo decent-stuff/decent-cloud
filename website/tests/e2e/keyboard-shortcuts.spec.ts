@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/test-account';
+import { test, expect, waitForAuthReady } from './fixtures/test-account';
 
 test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	test('@smoke / focuses marketplace search input', async ({ page }) => {
@@ -40,10 +40,17 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	});
 
 	test.describe('? keyboard help overlay', () => {
+		// The '?' handler binds via <svelte:window onkeydown> on the dashboard
+		// layout, which only hydrates after auth settles. Land on /dashboard
+		// and gate on the Logout button (the auth/hydration signal) before the
+		// keypress. (The page fixture no longer pre-navigates — see
+		// fixtures/test-account.ts.)
+		test.beforeEach(async ({ page }) => {
+			await page.goto('/dashboard');
+			await waitForAuthReady(page);
+		});
+
 		test('@smoke ? opens help overlay listing all shortcuts', async ({ page }) => {
-			// The page fixture lands on /dashboard and waits for the Logout
-			// button, which is the dashboard-layout hydration signal — the
-			// <svelte:window onkeydown> handler for '?' binds at that point.
 			await page.keyboard.press('?');
 
 			const overlay = page.getByTestId('keyboard-help');

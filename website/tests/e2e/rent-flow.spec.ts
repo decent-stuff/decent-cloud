@@ -39,8 +39,8 @@ import {
 
 // Extend the fast-auth fixture: install the Stripe SDK mock (the one allowed
 // external-boundary mock) so RentalRequestDialog's loadStripe() does not fetch
-// real js.stripe.com. addInitScript applies to every navigation after the base
-// page fixture lands on /dashboard, so it is active when the dialog mounts.
+// real js.stripe.com. addInitScript applies to every navigation the test
+// performs, so it is active when the Rent dialog mounts.
 const test = accountTest.extend({
 	page: async ({ page }, use) => {
 		await page.context().addInitScript(stripeMockScript);

@@ -90,6 +90,14 @@ test.describe('NotificationBell unread-count', () => {
 	});
 
 	test('client-side navigation between dashboard pages does not re-fetch', async ({ page }) => {
+		// Land on /dashboard first — the page fixture no longer pre-navigates
+		// (see fixtures/test-account.ts), and this test reloads the current URL
+		// to trigger a fresh initialize() cycle.
+		await page.goto('/dashboard');
+		await page
+			.getByRole('button', { name: 'Logout' })
+			.waitFor({ state: 'visible', timeout: 15000 });
+
 		// Reload to trigger a fresh initialize() cycle, then wait for the
 		// unread-count response to land. After this, the initial fetch storm
 		// is complete and the counter starts clean (replaces a 2s fixed sleep).

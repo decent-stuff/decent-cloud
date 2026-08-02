@@ -53,7 +53,10 @@ test.describe('Account Settings Page', () => {
 	});
 
 	test('account page: sidebar link navigates to account page', async ({ page }) => {
-		// Fixture already leaves us on /dashboard, just ensure page is ready
+		// Land on /dashboard so the sidebar (with the Account link) is present.
+		// (The page fixture no longer pre-navigates — see fixtures/test-account.ts.)
+		await page.goto('/dashboard');
+		await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible({ timeout: 15000 });
 
 		// Verify the "Account" link exists in the sidebar (exact match — the
 		// dashboard cards use longer text like "Profile Account settings").

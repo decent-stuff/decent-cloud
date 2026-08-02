@@ -49,13 +49,16 @@ const baseFixtures = base.extend<{}, { testAccount: AuthCredentials }>({
 
 /**
  * Test fixture for authenticated tests.
- * Creates account once per worker. Each test starts on /dashboard with the
- * session pre-seeded via localStorage — no per-test UI sign-in flow.
+ * Creates account once per worker. Auth is pre-seeded via a context-level
+ * `addInitScript` (localStorage) — NO per-test UI sign-in flow.
  *
- * The fast path (addInitScript + goto /dashboard) replaces ~5s of UI clicks
- * per test ("Sign in with seed phrase instead" → "Import Existing" → fill →
- * "Continue" → "Go to Dashboard") with a single navigation. Under 16 parallel
- * workers this is the difference between a 4-minute suite and a 1-minute one.
+ * The `page` fixture deliberately does NOT navigate: ~40 specs already call
+ * `page.goto('/their/target')` in the body, so an implicit `goto('/dashboard')`
+ * here would be a wasted second page load per test (a double navigation that
+ * inflated the smoke sum from ~40s toward 54s). Each test navigates exactly
+ * where it needs and waits on a page-specific (auth-dependent) element, which
+ * doubles as the auth-ready gate. Specs that need an explicit auth signal call
+ * `waitForAuthReady(page)` (the Logout button) after their goto.
  */
 export const test = baseFixtures.extend({
 	// Override context: pre-seed seed_phrases in localStorage before any page
@@ -72,13 +75,11 @@ export const test = baseFixtures.extend({
 		await use(context);
 	},
 
-	// Override page: skip UI sign-in; land directly on /dashboard authenticated.
+	// Override page: set up console logging only. Auth is established by the
+	// context-level addInitScript on whatever navigation each test performs —
+	// do NOT pre-navigate here (see the doc comment above for why).
 	page: async ({ page }, use) => {
 		setupConsoleLogging(page);
-		await page.goto('/dashboard');
-		// Logout button visibility IS the auth-ready signal; do not wait for
-		// networkidle (vite HMR keeps the network busy and tanks parallel runs).
-		await page.getByRole('button', { name: 'Logout' }).waitFor({ state: 'visible', timeout: 15000 });
 		await use(page);
 	},
 });
