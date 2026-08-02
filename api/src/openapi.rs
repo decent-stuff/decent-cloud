@@ -15,6 +15,7 @@ pub mod offering_csv;
 pub mod pools;
 pub mod provider_stats;
 pub mod providers;
+pub mod recovery;
 pub mod resellers;
 pub mod signature;
 pub mod sla;
@@ -43,6 +44,7 @@ pub use offerings::OfferingsApi;
 pub use pools::PoolsApi;
 pub use provider_stats::ProviderStatsApi;
 pub use providers::{contract_status_events, password_reset_events, ProvidersApi};
+pub use recovery::RecoveryApi;
 pub use resellers::ResellersApi;
 pub use sla::SlaApi;
 pub use stats::StatsApi;
@@ -86,6 +88,7 @@ pub fn create_combined_api() -> impl OpenApi {
             OfferingCsvApi,
             ProviderStatsApi,
             TotpApi,
+            RecoveryApi,
         ),
     )
 }
