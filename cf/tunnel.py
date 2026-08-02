@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Idempotent Cloudflare tunnel create-or-get + DNS ingress configuration.
+"""Idempotent Cloudflare tunnel create-or-get + DNS ingress configuration (DEV only).
+
+PROD is now a LOCAL-MANAGED tunnel: its ingress lives in the k8s ConfigMap
+`dc-cloudflared-config` (third_party/k8s repo), NOT in the Cloudflare API, so
+no imperative script is needed there. This tool only manages the DEV tunnel,
+which is still remote-managed (docker-compose stack). See cf/CONFIG.md § tunnel.
 
 Runs from CI (holds CF_API_TOKEN + CF_ACCOUNT_ID). Single source of truth for
-tunnel names and hostname→service routing. Uses stdlib urllib only — the repo
-is zero-Python-dependency (no `requests`).
+the dev tunnel name + hostname→service routing. Uses stdlib urllib only — the
+repo is zero-Python-dependency (no `requests`).
 
 Usage:
-    python3 cf/tunnel.py prod            # prints connector token to stdout
-    python3 cf/tunnel.py prod --json     # prints {"id":..., "token":...}
+    python3 cf/tunnel.py dev             # prints connector token to stdout (first creation only)
+    python3 cf/tunnel.py dev --json      # prints {"id":..., "token":...}
 
 Connector tokens are issued ONLY at tunnel creation. If the tunnel already
 exists, the script re-applies DNS/config (idempotent) and prints an empty
 token — the token was captured on first creation and lives in the GitHub
-secret TUNNEL_TOKEN_PROD/TUNNEL_TOKEN_DEV.
+secret TUNNEL_TOKEN_DEV.
 """
 
 import argparse
@@ -24,35 +29,17 @@ import urllib.parse
 import urllib.request
 
 # ---------------------------------------------------------------------------
-# Single source of truth: tunnel names + hostname→service routing.
+# Single source of truth: DEV tunnel name + hostname→service routing.
+# (PROD routing lives in the k8s ConfigMap dc-cloudflared-config — see cf/CONFIG.md.)
 # ---------------------------------------------------------------------------
 
 ZONE_NAME = "decent-cloud.org"
 CF_API_BASE = "https://api.cloudflare.com/client/v4"
 HTTP_TIMEOUT = 30  # never bare — every HTTP call carries this
 
-# (hostname, in-network service URL) tuples per environment.
+# (hostname, in-network service URL) tuples. Compose-style targets (docker
+# service names + raw ports) for the local docker-compose dev stack.
 TUNNELS: dict[str, dict] = {
-    "prod": {
-        # Matches the EXISTING live Cloudflare tunnel "decent-cloud" (connector id
-        # c4e24160-...) so tunnel.py reuses it (re-points ingress) instead of
-        # creating a duplicate. The connector token for it is stored as the
-        # TUNNEL_TOKEN_PROD key of dc-secret in the k8s PGP-SOPS
-        # store (see deploy/k8s/SETUP.md §3). configure_ingress() re-points the
-        # live tunnel's hostnames to the in-cluster Service FQDNs below.
-        "name": "decent-cloud",
-        # In-cluster Services (namespace apps, all `dc-` prefixed). The
-        # cloudflared Deployment runs in the same cluster and routes
-        # decent-cloud.org via these FQDNs. Services expose port 80
-        # (see deploy/k8s/decent-cloud/).
-        "ingress": [
-            ("decent-cloud.org", "http://dc-website.apps.svc.cluster.local:80"),
-            ("api.decent-cloud.org", "http://dc-api.apps.svc.cluster.local:80"),
-            ("support.decent-cloud.org", "http://dc-chatwoot-web.apps.svc.cluster.local:80"),
-        ],
-    },
-    # dev keeps compose-style targets (docker service names + raw ports) for
-    # the local docker-compose dev stack.
     "dev": {
         "name": "decent-cloud-dev",
         "ingress": [
@@ -233,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Create-or-get a Cloudflare tunnel and configure DNS ingress (idempotent).",
     )
-    parser.add_argument("env", choices=["prod", "dev"], help="Target environment")
+    parser.add_argument("env", choices=["dev"], help="Target environment (prod is local-managed in k8s)")
     parser.add_argument("--json", action="store_true", help='Emit {"id","token"} JSON instead of just the token')
     args = parser.parse_args(argv)
 

@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Deployment script for the local docker-compose dev stack.
+"""Deployment + config tooling for decent-cloud.
 
-Production deploys via the k8s cluster (ArgoCD owns ``deploy/k8s``); this
-script is dev-only. Selecting ``prod`` on any subcommand fails loud.
+DEV runs as a local docker-compose stack managed by this script (deploy/stop/
+logs/status/restart). PROD deploys via the k8s cluster (ArgoCD GitOps in the
+nuc-k3s repo, namespace dc-prod) — those deploy subcommands fail loud on prod.
+
+`config <env>` (read-only introspection) works for BOTH envs: it shows every
+config var, its source, and loudly flags any critical var missing/empty. See
+cf/CONFIG.md for the authoritative per-var source map + edit/apply recipes.
 """
 
 import os
@@ -52,16 +57,16 @@ def get_env_config(environment: str) -> tuple[dict[str, str], list[str]]:
     """Get environment-specific configuration for the local docker-compose stack.
 
     Only ``dev`` is supported here: production deploys via the k8s cluster
-    (ArgoCD owns ``deploy/k8s``), not docker-compose. Selecting ``prod`` fails
-    loud so no subcommand (deploy/stop/logs/status/restart) silently starts a
-    retired compose-prod stack.
+    (ArgoCD, namespace dc-prod), not docker-compose. Selecting ``prod`` fails
+    loud so no deploy subcommand silently starts a retired compose-prod stack.
+    (Read-only `config prod` is handled separately by show_config.)
     """
     cf_dir = Path(__file__).parent
 
     if environment == "prod":
         print_error(
-            "prod is deployed via k8s (ArgoCD owns deploy/k8s); docker-compose is dev-only. "
-            "See deploy/k8s/SETUP.md. Aborting."
+            "prod is deployed via k8s (ArgoCD, namespace dc-prod); docker-compose is dev-only. "
+            "Inspect prod config with `python3 cf/deploy.py config prod`. See cf/CONFIG.md. Aborting."
         )
         sys.exit(1)
 
@@ -261,6 +266,144 @@ def load_secrets_from_sops(environment: str) -> Optional[dict[str, str]]:
         return None
 
     return env_vars
+
+
+# ---------------------------------------------------------------------------
+# `config <env>` — read-only config introspection. See cf/CONFIG.md.
+# ---------------------------------------------------------------------------
+
+# Critical vars that MUST be non-empty for the env to serve. These are present
+# in BOTH dev dc-secrets and the prod stores (ConfigMap+Secret) — no inline
+# manifest literals, so no false positives. Missing/empty => loud fail.
+CRITICAL_VARS: list[str] = [
+    "API_DATABASE_URL", "CREDENTIAL_ENCRYPTION_KEY",
+    "CF_API_TOKEN", "CF_ZONE_ID",
+    "STRIPE_SECRET_KEY", "STRIPE_PUBLISHABLE_KEY", "STRIPE_WEBHOOK_SECRET",
+    "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_REDIRECT_URL",
+    "FRONTEND_URL",
+    "MAILCHANNELS_API_KEY", "DKIM_DOMAIN", "DKIM_SELECTOR", "DKIM_PRIVATE_KEY",
+    "CHATWOOT_API_TOKEN", "CHATWOOT_PLATFORM_API_TOKEN", "CHATWOOT_HMAC_SECRET",
+    "TELEGRAM_BOT_TOKEN",
+    "LLM_API_KEY", "LLM_API_URL", "LLM_API_MODEL",
+    "SMTP_ADDRESS", "SMTP_USERNAME", "DEFAULT_ESCALATION_USER",
+]
+
+# Non-secret (public identifiers / URLs / model names) — value printed verbatim.
+# Everything else is masked to presence+length. Mirrors the prod 12-factor split
+# (dc-config ConfigMap = plaintext vs dc-secret Secret).
+NON_SECRET_VARS: set[str] = {
+    "CF_ZONE_ID", "CF_ACCOUNT_ID", "CF_DOMAIN", "CF_GW_PREFIX",
+    "STRIPE_PUBLISHABLE_KEY", "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_REDIRECT_URL",
+    "FRONTEND_URL", "API_PUBLIC_URL", "API_SERVER_PORT",
+    "DKIM_DOMAIN", "DKIM_SELECTOR", "DEFAULT_ESCALATION_USER",
+    "TEXTBEE_DEVICE_ID", "TEXTBEE_API_URL",
+    "TWILIO_ACCOUNT_SID", "TWILIO_PHONE_NUMBER",
+    "LLM_API_URL", "LLM_API_MODEL",
+    "SMTP_ADDRESS", "SMTP_USERNAME",
+    "CHATWOOT_BASE_URL", "CHATWOOT_FRONTEND_URL", "CHATWOOT_ACCOUNT_ID", "CHATWOOT_INBOX_ID",
+    "CANISTER_ID", "TELEGRAM_BOT_USERNAME", "ENVIRONMENT", "RUST_LOG", "LEDGER_DIR",
+}
+
+
+def _render_value(name: str, value: str) -> str:
+    """Print non-secret values verbatim; mask secrets to presence+length."""
+    if value == "":
+        return "EMPTY"
+    if name in NON_SECRET_VARS:
+        return value
+    return f"<set, {len(value)} chars>"
+
+
+def _print_var_table(title: str, items: dict[str, str]) -> None:
+    """Print a sorted KEY → value table."""
+    print(f"\n  {title} ({len(items)}):")
+    if not items:
+        print("    (none)")
+        return
+    width = max(len(k) for k in items)
+    for name in sorted(items):
+        print(f"    {name.ljust(width)}  {_render_value(name, items[name])}")
+
+
+def _read_prod_stores() -> tuple[dict[str, str], dict[str, str]]:
+    """Read live prod config from the cluster via kubectl (namespace dc-prod).
+
+    Returns (configmap_vars, secret_vars). Raises RuntimeError with an
+    actionable message if kubectl is missing or the resources can't be read.
+    """
+    import base64
+    import json
+
+    def _kubectl(args: list[str]) -> dict:
+        try:
+            r = subprocess.run(["kubectl", "-n", "dc-prod", *args],
+                               capture_output=True, text=True, check=True)
+        except FileNotFoundError as e:
+            raise RuntimeError("kubectl not found on PATH") from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"kubectl failed: {(e.stderr or e.stdout).strip()}") from e
+        try:
+            return json.loads(r.stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"kubectl returned non-JSON: {r.stdout[:200]!r}") from e
+
+    cm = _kubectl(["get", "configmap", "dc-config", "-o", "json"])
+    cm_vars = dict(cm.get("data") or {})
+
+    sec = _kubectl(["get", "secret", "dc-secret", "-o", "json"])
+    sec_raw = dict(sec.get("data") or {})
+    # Secret data values are base64-encoded; decode to measure length (never printed).
+    sec_vars: dict[str, str] = {}
+    for k, v in sec_raw.items():
+        try:
+            sec_vars[k] = base64.b64decode(v).decode("utf-8", errors="replace")
+        except Exception:
+            sec_vars[k] = ""
+    return cm_vars, sec_vars
+
+
+def show_config(environment: str) -> int:
+    """Print every config var for `environment` with its source + current value,
+    and loudly flag any critical var that is missing/empty. Read-only.
+
+    dev  → dc-secrets (common+dev merged, AGE-SOPS) consumed by docker-compose.
+    prod → live cluster (kubectl: dc-config ConfigMap + dc-secret Secret).
+    See cf/CONFIG.md for the authoritative per-var source map + edit/apply recipes.
+    """
+    print_header(f"Configuration audit — {environment}")
+    print_info("Where each var lives + how to change it: cf/CONFIG.md")
+
+    if environment == "dev":
+        store = load_secrets_from_sops("dev")
+        if store is None:
+            return 1
+        _print_var_table("dc-secrets (common+dev)", store)
+        all_vars = dict(store)
+        print(f"\n  source: dc-secrets (repo/secrets/shared/{{common,dev}}.yaml)")
+    else:  # prod
+        try:
+            cm_vars, sec_vars = _read_prod_stores()
+        except RuntimeError as e:
+            print_error(f"Could not read live prod config: {e}")
+            print_info("Prod config lives in the nuc-k3s repo (third_party/k8s):")
+            print_info("  cluster/apps/decent-cloud/dc-config.yaml   (ConfigMap, non-secret)")
+            print_info("  cluster/secrets/dc-secret.yaml             (SOPS Secret)")
+            print_info("Edit + apply via `sops` + `kubectl` — see cf/CONFIG.md § PROD.")
+            return 1
+        _print_var_table("dc-config ConfigMap (non-secret)", cm_vars)
+        _print_var_table("dc-secret Secret", sec_vars)
+        all_vars = {**cm_vars, **sec_vars}
+        print("\n  source: live cluster (kubectl -n dc-prod get cm/dc-config secret/dc-secret)")
+
+    missing = [v for v in CRITICAL_VARS if not all_vars.get(v)]
+    if missing:
+        print_error(f"{len(missing)} critical var(s) missing/empty:")
+        for v in missing:
+            print(f"      - {v}")
+        print_info("Set these before deploying — see cf/CONFIG.md for the per-var source.")
+        return 1
+    print_success(f"all {len(CRITICAL_VARS)} critical vars present")
+    return 0
 
 
 def run_docker_compose(
@@ -645,7 +788,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
             print("  1. Tunnel doesn't exist in Cloudflare dashboard")
             print("  2. Token is invalid or expired")
             print()
-            print(f"Fix: {BLUE}python3 cf/tunnel.py {'prod' if is_prod else 'dev'}{NC}")
+            print(f"Fix: {BLUE}python3 cf/tunnel.py dev{NC}")
             print()
             if is_prod:
                 return 1
@@ -687,8 +830,10 @@ Examples:
   %(prog)s logs dev -f website       # Follow dev website logs
   %(prog)s status dev                # Show dev status
   %(prog)s restart dev               # Restart dev services
+  %(prog)s config dev                # Audit dev config vars + sources (read-only)
+  %(prog)s config prod               # Audit prod config (reads live cluster)
 
-Production is deployed via k8s (ArgoCD owns deploy/k8s); see deploy/k8s/SETUP.md.
+Production deploys via k8s (ArgoCD, namespace dc-prod); see cf/CONFIG.md.
         """,
     )
 
@@ -721,6 +866,10 @@ Production is deployed via k8s (ArgoCD owns deploy/k8s); see deploy/k8s/SETUP.md
     restart_parser = subparsers.add_parser("restart", help="Restart environment services")
     restart_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
 
+    # Config command (read-only introspection; works for dev AND prod)
+    config_parser = subparsers.add_parser("config", help="Show config vars + sources for an env (read-only audit)")
+    config_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -743,6 +892,8 @@ Production is deployed via k8s (ArgoCD owns deploy/k8s); see deploy/k8s/SETUP.md
             return show_status(environment)
         elif args.command == "restart":
             return restart_environment(environment)
+        elif args.command == "config":
+            return show_config(environment)
         else:
             print_error(f"Unknown command: {args.command}")
             return 1

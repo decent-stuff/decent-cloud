@@ -101,7 +101,7 @@ def test_ensure_tunnel_creates_when_absent():
     """Absent => create_tunnel called exactly once; connector token returned."""
     with mock.patch.object(tunnel, "find_tunnel", return_value=None), \
          mock.patch.object(tunnel, "create_tunnel", return_value=("tun-abc", "connector-token")) as cr:
-        result = tunnel.ensure_tunnel("tk", "acc", "prod")
+        result = tunnel.ensure_tunnel("tk", "acc", "dev")
     assert result == "connector-token"
     assert cr.call_count == 1
 
@@ -110,7 +110,7 @@ def test_ensure_tunnel_reuses_when_present():
     """Present => create_tunnel NEVER called (idempotency — no duplicate POST)."""
     with mock.patch.object(tunnel, "find_tunnel", return_value="tun-abc"), \
          mock.patch.object(tunnel, "create_tunnel") as cr:
-        tunnel.ensure_tunnel("tk", "acc", "prod")
+        tunnel.ensure_tunnel("tk", "acc", "dev")
     assert cr.call_count == 0
 
 
@@ -154,7 +154,7 @@ def test_configure_ingress_upserts_cname_records():
         {"success": True, "result": {"id": "rec-new-c"}},         # POST support.decent-cloud.org
     ]
     with mock.patch.object(tunnel, "cf_request", side_effect=responses) as cr:
-        tunnel.configure_ingress("tk", "acc", "zone-1", "prod")
+        tunnel.configure_ingress("tk", "acc", "zone-1", "dev")
 
     posts = [c for c in cr.call_args_list if c.args[0] == "POST"]
     patches = [c for c in cr.call_args_list if c.args[0] == "PATCH"]
@@ -169,28 +169,8 @@ def test_configure_ingress_upserts_cname_records():
 
 
 # ---------------------------------------------------------------------------
-# TUNNELS routing table — prod routes to in-cluster k8s FQDNs, dev to compose
+# TUNNELS routing table — dev routes to docker-compose service names
 # ---------------------------------------------------------------------------
-
-def test_prod_ingress_targets_in_cluster_services():
-    """prod is served by the k3s cloudflared Deployment: each hostname routes to
-    a ClusterIP Service FQDN on port 80 (deploy/k8s/decent-cloud/). Guards
-    against accidental regression to the old compose-style service names."""
-    ingress = dict(tunnel.TUNNELS["prod"]["ingress"])
-    assert ingress["decent-cloud.org"] == "http://dc-website.apps.svc.cluster.local:80"
-    assert ingress["api.decent-cloud.org"] == "http://dc-api.apps.svc.cluster.local:80"
-    assert ingress["support.decent-cloud.org"] == "http://dc-chatwoot-web.apps.svc.cluster.local:80"
-    # Every prod target must be an in-cluster FQDN, not a bare compose hostname.
-    for service in ingress.values():
-        assert service.endswith(".apps.svc.cluster.local:80"), service
-
-
-def test_prod_tunnel_name_matches_live_tunnel():
-    """prod MUST reuse the existing live tunnel named 'decent-cloud' (connector id
-    c4e24160-...). If this name drifts, tunnel.py creates a DUPLICATE tunnel and the
-    live CNAME records (-> c4e24160.cfargotunnel.com) stop matching, breaking prod."""
-    assert tunnel.TUNNELS["prod"]["name"] == "decent-cloud"
-
 
 def test_dev_ingress_targets_compose_services():
     """dev keeps docker-compose service names + raw ports (local dev stack)."""
@@ -213,7 +193,7 @@ def test_main_missing_cf_credentials_exits_nonzero(monkeypatch):
     monkeypatch.delenv("CF_API_TOKEN", raising=False)
     monkeypatch.delenv("CF_ACCOUNT_ID", raising=False)
     with pytest.raises(SystemExit) as exc:
-        tunnel.main(["prod"])
+        tunnel.main(["dev"])
     assert exc.value.code == 1
 
 
@@ -224,7 +204,7 @@ def test_main_auth_error_is_clean_and_actionable(monkeypatch, capsys):
     monkeypatch.setenv("CF_ACCOUNT_ID", "acc-1")
     with mock.patch.object(tunnel, "ensure_tunnel",
                            side_effect=RuntimeError("Cloudflare API GET /x -> HTTP 401: Authentication error")):
-        rc = tunnel.main(["prod"])
+        rc = tunnel.main(["dev"])
     assert rc == 1
     err = capsys.readouterr().err
     assert "HTTP 401" in err
