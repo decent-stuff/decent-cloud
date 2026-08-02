@@ -189,7 +189,12 @@ jobs:
 
       - name: Build website
         env:
+          # Pin VITE_* vars explicitly so the prod bundle is deterministic and never
+          # inherits dev values from a stray local website/.env.local (which Vite would
+          # otherwise pick up via `npm run build`). All VITE_ vars are public/client-side.
           VITE_DECENT_CLOUD_API_URL: https://api.decent-cloud.org
+          VITE_CHATWOOT_BASE_URL: https://support.decent-cloud.org
+          VITE_TELEGRAM_BOT_USERNAME: DecentCloudBot
         run: |
           cd website
           npm ci
