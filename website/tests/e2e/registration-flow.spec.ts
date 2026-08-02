@@ -131,6 +131,16 @@ test.describe('Account Registration Flow', () => {
 		// via event.respondWith(); once active it intercepts the API requests
 		// before Playwright's page.route can, which makes request mocking no-ops.
 		// Stub navigator.serviceWorker so no SW is registered for this test.
+		//
+		// SANCTIONED EXCEPTION (mock policy, website/AGENTS.md): the page.route
+		// below fulfills POST /api/v1/accounts with 500. This is a first-party
+		// fetch mock, NOT an external-boundary mock. It is permitted because the
+		// registration error-surfacing branch cannot be induced deterministically
+		// any other way: the wizard pre-validates username availability + email
+		// format client-side, so no real API error can be SUBMITTED through the
+		// UI; and a server 500 can't be induced without taking the API down. The
+		// mock is scoped to the single create URL; the availability check + every
+		// other fetch still hit the real API.
 		await context.addInitScript(() => {
 			Object.defineProperty(navigator, 'serviceWorker', {
 				value: {
@@ -141,7 +151,8 @@ test.describe('Account Registration Flow', () => {
 			});
 		});
 
-		// Intercept API calls and return error
+		// Intercept the create call only and return a 500 to exercise the
+		// client-side error-surfacing branch.
 		await page.route('**/api/v1/accounts', (route) => {
 			route.fulfill({
 				status: 500,

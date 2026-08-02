@@ -215,6 +215,24 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 > (full registration, sign-out, add-device, profile-edit, rentals cancel-action)
 > to bring the loop from ~51s/32 back to ~33s/26. They remain full-suite tests.
 
+## Mock inventory
+
+The mock policy (website/AGENTS.md): only the Stripe SDK and outbound external
+HTTP may be mocked; never first-party API code. Error-path injection must be
+done DB-side or as a documented exception. Every mock in the suite, classified:
+
+| Mock | File | Boundary | Classification |
+|------|------|----------|----------------|
+| Stripe SDK (`loadStripe`) script | `fixtures/stripe-mock.ts` (used by `rent-flow.spec.ts`) | External (js.stripe.com) | ✅ sanctioned external-boundary mock (the canonical one) |
+| Stripe Checkout redirect | `rent-flow.spec.ts` (`page.route('https://checkout.stripe.com/**')`) | External (checkout.stripe.com) | ✅ external-boundary; robustness guard, currently never fires (Stripe unconfigured) |
+| Hetzner server catalog | `offering-create.spec.ts` (`page.route('**/api/v1/cloud-accounts/*/catalog')`) | External (proxied Hetzner API; needs a real Hetzner token unavailable in tests) | ✅ sanctioned external-boundary exception — the create submit + every other call hit the real API |
+| Account-lookup 500 | `account.spec.ts` (patches `window.fetch` for `/api/v1/accounts?publicKey=`) | First-party | ⚠️ **documented exception** — the error-recovery card fires only on a thrown fetch (500/network), which can't be induced DB-side (a deleted row returns null → identity silently dropped, no card); scoped to the one URL |
+| Registration create 500 | `registration-flow.spec.ts` (`page.route('**/api/v1/accounts')`) | First-party | ⚠️ **documented exception** — the wizard pre-validates username/email client-side so no real API error can be submitted; a 500 can't be induced without taking the API down; scoped to the one create URL |
+
+No undocumented first-party mocks remain. The two first-party mocks above are
+client error-UI tests for branches unreachable without fault injection; they
+are scoped to a single URL and every other fetch hits the real API.
+
 ## Keeping this file current
 
 This is a **living document**. When you change the suite:

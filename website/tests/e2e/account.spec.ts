@@ -21,6 +21,18 @@ import { seedAccountDirect, deleteAccountByUsername } from './fixtures/seed-help
  * addInitScript, which runs at document_start before any app code (and
  * before the SW can claim the page). The patched fetch returns 500 only
  * for the account-lookup URL; everything else passes through unchanged.
+ *
+ * SANCTIONED EXCEPTION (mock policy, website/AGENTS.md): this is a
+ * first-party fetch mock, NOT an external-boundary mock. It is permitted
+ * because the error-recovery branch it exercises CANNOT be induced
+ * deterministically any other way: getAccountByPublicKey returns null
+ * (not throws) on `{success:false}`/404, and authStore only sets
+ * accountLoadFailed=true inside the catch — so a deleted/soft-deleted row
+ * (DB-side induction) silently drops the identity instead of showing the
+ * error card. The error card fires ONLY on a thrown fetch (500/network
+ * failure), which would require taking the API server down mid-test. The
+ * mock is scoped to the single account-lookup URL; all other fetches pass
+ * through to the real API.
  */
 
 test.describe('/dashboard/account error recovery', () => {
