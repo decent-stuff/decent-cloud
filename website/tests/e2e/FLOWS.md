@@ -199,8 +199,8 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 19 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
 | 20 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
 | 21 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 22 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint reports google_oauth=false on the e2e stack @smoke` |
-| 23 | Login default seed-phrase form (#436) | `auth-capabilities.spec.ts` › `login page defaults to the seed-phrase form when OAuth is off (no extra click) @smoke` |
+| 22 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint returns a well-formed boolean @smoke` |
+| 23 | Login default surface matches server (#436) | `auth-capabilities.spec.ts` › `login page default surface matches the server capability @smoke` |
 | 24 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
 | 25 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
 | 26 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
@@ -214,6 +214,12 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 > **2026-07-25 tuning.** 5 slow non-critical specs were demoted from `@smoke`
 > (full registration, sign-out, add-device, profile-edit, rentals cancel-action)
 > to bring the loop from ~51s/32 back to ~33s/26. They remain full-suite tests.
+>
+> **2026-08-02 speed pass.** The authed `page` fixture stopped pre-navigating to
+> `/dashboard` — ~40 specs already `page.goto()` to their own target in the body,
+> so the implicit landing was a wasted second page load per test. Each test now
+> navigates exactly where it needs and gates on a page-specific element. Smoke
+> dropped from ~40s to a reliable ~27s (6 clean runs at 26–28s), still 26/26.
 
 ## Mock inventory
 
