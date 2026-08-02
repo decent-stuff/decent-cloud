@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from './Icons.svelte';
 	import type { IconName } from './Icons.svelte';
+	import { marketplaceIsEmpty } from '$lib/utils/marketplace-empty';
 
 	interface Props {
 		dashboardData: {
@@ -16,6 +17,11 @@
 	}
 
 	let { dashboardData, error = null }: Props = $props();
+
+	// Genuine emptiness = no fetch error AND no providers/contracts. On a fetch
+	// error we don't know whether the marketplace is empty, so we keep showing
+	// the stats grid (prior behavior) rather than claiming emptiness.
+	const empty = $derived(!error && marketplaceIsEmpty(dashboardData));
 
 	const stats: {
 		label: string;
@@ -47,7 +53,9 @@
 				Marketplace Statistics
 			</h2>
 			<p class="text-neutral-500 text-base">
-				Real-time marketplace activity and growth
+				{empty
+					? 'Metrics will populate here as soon as the first providers list offerings'
+					: 'Real-time marketplace activity and growth'}
 			</p>
 		</div>
 
@@ -58,27 +66,44 @@
 			</div>
 		{/if}
 
-		<!-- Stats grid -->
-		<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-			{#each stats as stat, i}
-				<div
-					class="metric-card text-center"
-					style="animation: slide-up 0.5s ease-out {i * 0.06}s both"
-				>
-					<div class="flex justify-center mb-3">
-						<div class="icon-box">
-							<Icon name={stat.icon} size={20} />
-						</div>
-					</div>
-					<div class="metric-value mb-1">
-						{stat.format ? stat.format(dashboardData[stat.key]) : dashboardData[stat.key].toLocaleString()}
-					</div>
-					<div class="text-[10px] uppercase tracking-label text-neutral-500">
-						{stat.label}
+		{#if empty}
+			<!-- Empty marketplace: honest early-access reframe instead of a misleading all-zero grid. -->
+			<div class="max-w-2xl mx-auto border border-neutral-800 bg-surface p-10 text-center">
+				<div class="flex justify-center mb-4">
+					<div class="icon-box">
+						<Icon name="sparkles" size={24} />
 					</div>
 				</div>
-			{/each}
-		</div>
+				<h3 class="text-xl font-semibold text-white mb-2">Be Among the First Providers</h3>
+				<p class="text-neutral-400 text-sm leading-relaxed max-w-md mx-auto">
+					The Decent Cloud marketplace is open and accepting early providers. These
+					statistics are computed from real rental activity, so they will appear here as
+					soon as offerings are listed and the first contracts complete.
+				</p>
+			</div>
+		{:else}
+			<!-- Stats grid -->
+			<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+				{#each stats as stat, i}
+					<div
+						class="metric-card text-center"
+						style="animation: slide-up 0.5s ease-out {i * 0.06}s both"
+					>
+						<div class="flex justify-center mb-3">
+							<div class="icon-box">
+								<Icon name={stat.icon} size={20} />
+							</div>
+						</div>
+						<div class="metric-value mb-1">
+							{stat.format ? stat.format(dashboardData[stat.key]) : dashboardData[stat.key].toLocaleString()}
+						</div>
+						<div class="text-[10px] uppercase tracking-label text-neutral-500">
+							{stat.label}
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- CTA -->
 		<div class="mt-12 text-center">
