@@ -594,7 +594,6 @@ const AUTHED_STATIC = [
 	'/dashboard/account/billing',
 	'/dashboard/account/notifications',
 	'/dashboard/account/security',
-	'/dashboard/account/subscription',
 	'/dashboard/admin',
 	'/dashboard/cloud/accounts',
 	'/dashboard/cloud/resources',

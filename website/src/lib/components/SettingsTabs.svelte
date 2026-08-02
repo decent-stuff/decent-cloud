@@ -5,7 +5,6 @@
 		{ href: "/dashboard/account", label: "Overview", icon: "⚙️" },
 		{ href: "/dashboard/account/profile", label: "Profile", icon: "👤" },
 		{ href: "/dashboard/account/security", label: "Security", icon: "🔐" },
-		{ href: "/dashboard/account/subscription", label: "Subscription", icon: "⭐" },
 		{ href: "/dashboard/account/billing", label: "Billing", icon: "💳" },
 		{ href: "/dashboard/account/notifications", label: "Notifications", icon: "🔔" },
 	];

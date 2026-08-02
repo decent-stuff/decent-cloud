@@ -191,17 +191,15 @@ export async function seedAccountDirect(
  *
  * Most child tables (account_public_keys, billing_settings, etc.) have
  * ON DELETE CASCADE and are removed automatically when the accounts row is
- * deleted. Three tables have NO ACTION FKs and must be cleaned explicitly
+ * deleted. Two tables have NO ACTION FKs and must be cleaned explicitly
  * first, or the accounts DELETE will fail:
  *   - signature_audit (account_id)
- *   - subscription_events (account_id)
  *   - reseller_commissions_mapping (referred_account_id)
  */
 export async function deleteAccountByUsername(username: string): Promise<void> {
 	const safeName = username.replace(/'/g, "''");
 	await sql(`
 		DELETE FROM signature_audit WHERE account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
-		DELETE FROM subscription_events WHERE account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
 		DELETE FROM reseller_commissions_mapping WHERE referred_account_id = (SELECT id FROM accounts WHERE username = '${safeName}');
 		DELETE FROM accounts WHERE username = '${safeName}';
 	`);

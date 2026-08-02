@@ -10,7 +10,6 @@ const tabs: Tab[] = [
 	{ href: "/dashboard/account", label: "Overview", icon: "⚙️" },
 	{ href: "/dashboard/account/profile", label: "Profile", icon: "👤" },
 	{ href: "/dashboard/account/security", label: "Security", icon: "🔐" },
-	{ href: "/dashboard/account/subscription", label: "Subscription", icon: "⭐" },
 	{ href: "/dashboard/account/billing", label: "Billing", icon: "💳" },
 	{ href: "/dashboard/account/notifications", label: "Notifications", icon: "🔔" },
 ];
@@ -26,7 +25,7 @@ function isActive(currentPath: string, tabHref: string): boolean {
 describe('SettingsTabs', () => {
 	describe('tab structure', () => {
 		it('contains all expected tabs', () => {
-			expect(tabs).toHaveLength(6);
+			expect(tabs).toHaveLength(5);
 		});
 
 		it('has Overview as first tab linking to account root', () => {
@@ -42,11 +41,6 @@ describe('SettingsTabs', () => {
 		it('has Security tab with correct href', () => {
 			const securityTab = tabs.find((t) => t.label === 'Security');
 			expect(securityTab?.href).toBe('/dashboard/account/security');
-		});
-
-		it('has Subscription tab with correct href', () => {
-			const subTab = tabs.find((t) => t.label === 'Subscription');
-			expect(subTab?.href).toBe('/dashboard/account/subscription');
 		});
 
 		it('has Billing tab with correct href', () => {
@@ -82,11 +76,6 @@ describe('SettingsTabs', () => {
 			expect(getActiveTab('/dashboard/account/security')?.label).toBe('Security');
 		});
 
-		it('identifies Subscription as active on subscription page', () => {
-			expect(isActive('/dashboard/account/subscription', '/dashboard/account/subscription')).toBe(true);
-			expect(getActiveTab('/dashboard/account/subscription')?.label).toBe('Subscription');
-		});
-
 		it('identifies Billing as active on billing page', () => {
 			expect(isActive('/dashboard/account/billing', '/dashboard/account/billing')).toBe(true);
 			expect(getActiveTab('/dashboard/account/billing')?.label).toBe('Billing');
@@ -102,7 +91,6 @@ describe('SettingsTabs', () => {
 				'/dashboard/account',
 				'/dashboard/account/profile',
 				'/dashboard/account/security',
-				'/dashboard/account/subscription',
 				'/dashboard/account/billing',
 				'/dashboard/account/notifications',
 			];

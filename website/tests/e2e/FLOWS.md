@@ -30,7 +30,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
 | `@provider` | Provider dashboard: become provider, create/edit offering, status/stock/visibility, requests, earnings, agent pools, SLA. |
-| `@account` | Account: profile, devices/security, notifications, saved offerings, cloud accounts, subscription. |
+| `@account` | Account: profile, devices/security, notifications, saved offerings, cloud accounts. |
 | `@billing` | Billing: invoices, transfers, billing settings, payment flows. |
 | `@admin` | Admin dashboard + access control. |
 
@@ -108,8 +108,6 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Manage devices / security | ✅ | `@smoke` `@account` | `account-add-device.spec.ts` · `account-page.spec.ts` | `@smoke links a generated device key and raises the device count from 1 to 2` |
 | Account overview / settings nav | ✅ | `@account` | `account-page.spec.ts` | `account page: overview renders correctly via direct URL` |
 | Account error recovery | ✅ | `@account` | `account.spec.ts` | `shows error card with Retry and Logout when account fetch fails (#6)` |
-| Subscription / plan | ✅ | `@account` | `account-subscription.spec.ts` | `renders current free plan plus the upgrade catalog with paid tiers` |
-| Subscription trial copy honesty (#441) | ✅ | `@smoke` `@account` | `account-subscription.spec.ts` | `@smoke does not advertise a trial on contact-sales-only plans (#441)` — copy gated on `shouldShowTrialCopy(plan)` = `trialDays>0 && stripePriceId`; contact-sales-only plans no longer claim a trial |
 | Billing settings (address/VAT) | ✅ | `@billing` `@account` | `billing-settings.spec.ts` | `billing settings: save billing address` (+spending alerts) |
 | Invoices | ✅ | `@billing` | `invoices.spec.ts` | `populated state: shows invoice table with one row per invoiceable contract` |
 | Transfers | ✅ | `@billing` | `transfers.spec.ts` | `populated state: shows sent and received transfers with direction icons` |
@@ -161,11 +159,11 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~27 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~26 tests,
 **<35s** against the warm stack). Selection rules:
 
 - **Critical path only** — landing/anonymous browse, dashboard overview, sign-in,
-  verify-email, onboarding, provider create + SLA, subscription trial honesty,
+  verify-email, onboarding, provider create + SLA,
   keyboard shortcuts, auth modal. (Full registration, sign-out, profile edit,
   add-device, and rent/cancel actions are full-suite-only — too slow for the loop.)
 - **Fast** — each test <5s. Exclude anything that drives a slow multi-step flow
@@ -199,13 +197,12 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 18 | Rentals list (empty state) | `rentals.spec.ts` › `@smoke empty state...` |
 | 19 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
 | 20 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
-| 21 | Subscription trial copy honesty (#441) | `account-subscription.spec.ts` › `@smoke does not advertise a trial on contact-sales-only plans (#441)` |
-| 22 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 23 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint reports google_oauth=false on the e2e stack @smoke` |
-| 24 | Login default seed-phrase form (#436) | `auth-capabilities.spec.ts` › `login page defaults to the seed-phrase form when OAuth is off (no extra click) @smoke` |
-| 25 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
-| 26 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
-| 27 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
+| 21 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
+| 22 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint reports google_oauth=false on the e2e stack @smoke` |
+| 23 | Login default seed-phrase form (#436) | `auth-capabilities.spec.ts` › `login page defaults to the seed-phrase form when OAuth is off (no extra click) @smoke` |
+| 24 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
+| 25 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
+| 26 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
@@ -215,7 +212,7 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 >
 > **2026-07-25 tuning.** 5 slow non-critical specs were demoted from `@smoke`
 > (full registration, sign-out, add-device, profile-edit, rentals cancel-action)
-> to bring the loop from ~51s/32 back to ~33s/27. They remain full-suite tests.
+> to bring the loop from ~51s/32 back to ~33s/26. They remain full-suite tests.
 
 ## Keeping this file current
 
