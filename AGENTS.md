@@ -212,6 +212,14 @@ otherwise; see `api/src/rate_limit.rs`.
   4. docker-compose env sections
   5. `scripts/dc-secrets set shared/<layer> <KEY>=<value>`
 
+## PACKAGE REGISTRY (image builds & hotfixes)
+- Agents MAY push container images to the Forgejo registry (`git.kalaj.org`, owner `decent-stuff`) when credentials are available. The operator runs `docker login git.kalaj.org`; the token lands in `~/.docker/config.json` and must NEVER be pasted into chat, a commit, or a manifest.
+- For ANY off-CI / hotfix / agent-initiated push, use a DISTINCT build version that CANNOT collide with a future release git-tag (`v*` triggers `release.yml`):
+  - **API images**: tag by commit SHA (e.g. `decent-cloud-api:<short-sha>`). SHA-tagging is the established convention and is what release CI already uses.
+  - **Website / other versioned images**: append a hotfix suffix — e.g. `decent-cloud-website:v0.5.5-hotfix.<short-sha>` — NEVER reuse a clean `vX.Y.Z`. A colliding tag either fails to push or silently overwrites a release image; both break future releases.
+- After pushing, bump the manifest in the nuc-k3s repo (`third_party/k8s/cluster/apps/decent-cloud/*.yaml`). For a SINGLE-COMPONENT hotfix, edit the matching `# deploy-prod:<component>` `image:` line directly — do NOT use `scripts/bump_app_images.py`, which applies one tag to ALL markers (api+website). Then commit, push, force an ArgoCD refresh (`kubectl -n argocd patch application decent-cloud --type=merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"normal"}}}'`), and verify the rollout reaches Ready + public health 200.
+- The pull secret `forgejo-registry-secret` (ns `dc-prod`) must be valid. If pulls return 401, the token is expired: re-create the live secret from `~/.docker/config.json` AND update the SOPS-managed `cluster/secrets/forgejo-registry-secret.yaml` so `manage-secrets.py` does not revert it. Leaving the SOPS file stale silently breaks pulls on the next secret re-apply.
+
 ## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION
 Stop work, file a GitHub issue describing the problem, and ask how to proceed if you find:
 - duplicate/conflicting API endpoints
