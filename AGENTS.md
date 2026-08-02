@@ -463,6 +463,8 @@ Lean, normative patterns future agents MUST follow. (Source: fresh-sweep session
   `cli/src/commands/provider.rs`) delegate to it. Never hand-roll the signed message, header names
   (`X-Public-Key`/`X-Signature`/`X-Timestamp`/`X-Nonce`), timestamp unit (nanoseconds), or nonce
   (UUID v4) — use the shared module. Drift between any of these silently breaks every signed call.
+  **(Now enforced across ALL clients incl. dc-agent (`dc-agent/src/api_client.rs`) + api-cli,
+  2026-08-02 — no outlier remains.)**
 - **CLI e2e harness:** `cli/tests/cli_flows.rs` drives the real `dc` binary (distinct from the
   single-command `cli_smoke.rs`). Three tiers: **offline** (default, deterministic, isolated HOME
   via tempfile — keygen/ledger/account-listings/subcommand-help), **warm-stack** (auto-run when

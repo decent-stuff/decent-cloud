@@ -181,6 +181,42 @@ evidence.
 Gates: docs-only — no code touched. `rg -n "try_trigger_hetzner_provisioning|#373|#382" docs/OPEN_ISSUES.md`
 records #382/#373 as closed.
 
+### 2026-08-02 session (e2e harness radicalization + UX slop fix + #444 Wave 9/10 + auth single-source)
+
+Continuation of the radical-overhaul mandate (harness + UX + tech debt + robustness) against a
+verified-green baseline. 17 commits (`9657dee8`→`749cf876`), TDD-first where applicable, verified
+against the real warm stack (api:59011 + web:59010), no first-party mocks. Final gates: smoke
+**26/26 in ~28s** (<30s target), clippy **0**, vitest **862**, svelte-check **0/0**.
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| Smoke speed: 39.6s → ~28s | E2E harness | `9657dee8`: the `testAccount` authed page fixture did a wasteful double-navigation (logged in, then re-navigated to the same page). Dropped the redundant navigation → smoke **39.6s → ~28s**, zero coverage loss; all 26 smokes green + reliable. |
+| Coverage gap: `/dashboard/reputation/[identifier]/trust` | E2E coverage | `9e437e45`: new `reputation-trust.spec.ts` — the reputation trust-report route was an undocumented coverage gap; now driven against the warm stack. |
+| No-mock invariant documented | E2E discipline | `41ee69b8`: FLOWS.md now records the 2 first-party fetch mocks as **sanctioned exceptions** (a Mock inventory added) — both are outbound-HTTP-boundary stubs, not first-party-logic mocks. The no-mock invariant holds. |
+| Stale smoke-table titles + count drift | Docs | `445a17d4` + `3178799d`: fixed stale smoke-table titles in FLOWS.md; corrected smoke-count drift (27→26 after the SaaS-removal session dropped the subscription spec). |
+| Stale-issue reconciliation | Docs | `e775492d` (+ the WAVE-0 pass): #382, #373, #344, #214, #212, #107 all verified **CLOSED** against code evidence; the open tech-debt table went **8→3 rows** (#444, #387, #334 remain). Per-issue evidence is in the WAVE-0 entry above. |
+| #444 Wave 9 — `TotpApi` split | Tech debt | `1729e7c6` + `8c6dd37c`: extracted `TotpApi` from `api/src/openapi/accounts.rs` (**2903→2594 lines**). Byte-identical OpenAPI verified via spare-port instance diff (**187 paths / 327 schemas**, empty canonical diff). clippy 0, nextest **44/44**. |
+| #444 Wave 10 — `RecoveryApi` split | Tech debt | `f041a121` + `d9e51a58`: extracted `RecoveryApi` from `accounts.rs` (**2594→2442 lines**). Byte-identical OpenAPI; clippy 0, nextest **39/39**. Next candidate: the email-verification cluster (8/10 readiness). |
+| UX U1: hero trust card was fake data | UX (slop) | `50fb8a15`: (no-mock UX audit) the landing hero "trust card" was a **hardcoded fake** (`provider_alpha` with a deceptive "Updated 2m ago" liveness stamp). Now honestly labeled **"Illustrative example"**; the fake liveness text removed. No misleading data on the landing page. |
+| UX U2: all-zero "Marketplace Statistics" | UX (empty state) | `d719df71`: "Marketplace Statistics" rendered all-zeros unconditionally — dishonest on a fresh marketplace. New pure `marketplaceIsEmpty(stats)` helper (4 unit tests, TDD RED→GREEN) gates an honest **"Be Among the First Providers"** early-access reframe instead of showing 0/0/0. vitest 862; zai-vision-verified on the real app. |
+| Auth single-source-of-truth fully enforced | Robustness / DRY | `d34e11fb` + `749cf876`: (code-robustness audit R1/R2) dc-agent `api_client.rs` hand-rolled the signed-message layout + header-name literals → now delegates to the canonical `dcc_common::api_auth::{sign_request, HEADER_*}`; api-cli header literals → `HEADER_*` consts. Wire format proven **byte-identical** field-by-field (timestamp unit, nonce, header names, message byte-layout); the unchanged dc-agent auth-guard test stayed green. No outlier remains — the "Signed-request auth — single source" convention is now fully enforced. |
+
+**Net-new findings (documented / tracked):**
+- **Code-robustness audit:** most categories CLEAN (timeouts, hex, stale refs, dead code, DB
+  defaults, money-path/refund-gate, unwrap/expect, `api.ts`, `danger_accept_invalid_certs`). One
+  finding **shipped** (R1/R2 auth single-source, above). One finding **documented, NOT shipped:**
+  **R3** — `StripeClient::new().ok()` silently swallows Stripe misconfig at 6 sites
+  (`admin.rs`/`providers.rs`/`webhooks.rs`/`contracts.rs`/`main.rs`×2). It is money-safe (returns
+  `None` → handlers return `Ok(None)` = "refund not performed"), but **invisible** — no warning is
+  logged. Mitigated by the existing `require_stripe_in_prod()` boot-gate (production refuses to
+  start without `STRIPE_SECRET_KEY`); the gap is dev/staging only. Tracked for a dedicated **"BE LOUD
+  about Stripe misconfig"** pass (replace `.ok()` with a `tracing::warn!`-on-failure constructor). No
+  matching commit in `git log` → not yet shipped.
+- **UX audit Low findings (NOT shipped — below/over threshold):** **U3** validators-zeros (an
+  environment artifact, not a bug); **U4** provider-gate button hierarchy (confidence 5, below the
+  6/10 ship threshold — skipped); **U5** "Welcome back" greeting for first-time users (confidence 6,
+  needs a first-visit detection state — parked).
+
 ### 2026-08-02 session (drop unused SaaS account-subscription feature)
 
 Removed the unused SaaS account-subscription feature (Free/Pro/Enterprise pricing plans for using
