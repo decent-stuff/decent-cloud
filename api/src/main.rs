@@ -1434,7 +1434,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .unwrap_or(180);
 
     let db_for_cleanup = ctx.database.clone();
-    let cleanup_stripe = crate::stripe_client::StripeClient::new().ok().map(Arc::new);
+    let cleanup_stripe = crate::stripe_client::stripe_client_or_warn().map(Arc::new);
     let cleanup_shutdown = shutdown_tx.subscribe();
     let cleanup_task = tokio::spawn(async move {
         let cleanup_service = CleanupService::new(
@@ -1456,7 +1456,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // Stripe client (when configured) is reused so the auto-refund path
     // hits the real network; pure-DB tests pass `None`.
     let db_for_timeout = ctx.database.clone();
-    let timeout_stripe = crate::stripe_client::StripeClient::new().ok().map(Arc::new);
+    let timeout_stripe = crate::stripe_client::stripe_client_or_warn().map(Arc::new);
     let timeout_shutdown = shutdown_tx.subscribe();
     let timeout_cleanup_task = tokio::spawn(async move {
         let timeout_service = TimeoutCleanupService::new(

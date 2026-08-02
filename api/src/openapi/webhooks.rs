@@ -826,7 +826,7 @@ async fn handle_dispute_closed(
             // Best-effort prorated refund. The Phase 1 helper handles
             // idempotency (key = `dispute:<id>`) so replays collapse onto
             // the same Stripe Refund record.
-            let stripe_client = crate::stripe_client::StripeClient::new().ok();
+            let stripe_client = crate::stripe_client::stripe_client_or_warn();
             if let Err(e) = db
                 .process_dispute_lost_refund(&cid, &dispute.id, stripe_client.as_ref())
                 .await

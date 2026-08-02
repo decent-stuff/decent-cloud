@@ -1025,7 +1025,7 @@ impl AdminApi {
         id: Path<i64>,
         req: Json<AdminRefundReviewRequest>,
     ) -> Json<ApiResponse<AdminRefundRequestInfo>> {
-        let stripe_client = crate::stripe_client::StripeClient::new().ok();
+        let stripe_client = crate::stripe_client::stripe_client_or_warn();
         let row = match db
             .approve_refund_request(
                 id.0,

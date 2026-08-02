@@ -907,7 +907,7 @@ impl ContractsApi {
         };
 
         // Create Stripe client for potential refund processing
-        let stripe_client = crate::stripe_client::StripeClient::new().ok();
+        let stripe_client = crate::stripe_client::stripe_client_or_warn();
 
         match db
             .cancel_contract(

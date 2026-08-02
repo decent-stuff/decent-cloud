@@ -1822,7 +1822,7 @@ impl ProvidersApi {
             }
         } else {
             // Reject: trigger full refund since user never got the service
-            let stripe_client = crate::stripe_client::StripeClient::new().ok();
+            let stripe_client = crate::stripe_client::stripe_client_or_warn();
 
             match db
                 .reject_contract(

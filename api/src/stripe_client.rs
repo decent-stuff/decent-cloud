@@ -398,6 +398,36 @@ impl StripeClient {
     }
 }
 
+/// Construct a `StripeClient`, logging a loud actionable warning on misconfig
+/// instead of silently returning `None`.
+///
+/// Replaces every call site of `StripeClient::new()` that appended `.ok()`,
+/// which swallowed the construction error (missing/malformed
+/// `STRIPE_SECRET_KEY`) with no log, turning a Stripe misconfiguration into a
+/// silent no-op. The sharpest case is the admin refund-approval path: an admin
+/// approves a refund, the endpoint returns success, but no refund is issued and
+/// nothing explains why (`issue_audited_refund` sees `None` and returns
+/// `Ok(None)` = "not performed").
+///
+/// This helper preserves the money-safe behavior (returns `None`, so callers
+/// keep their existing "refund NOT performed" path) but emits a `tracing::warn!`
+/// that names the missing var and includes the underlying error. Mirrors the
+/// `email_processor.rs` pattern at lines 363-371.
+///
+/// Returns `Some(client)` when `STRIPE_SECRET_KEY` is set, `None` (with a
+/// warning) otherwise.
+pub fn stripe_client_or_warn() -> Option<StripeClient> {
+    match StripeClient::new() {
+        Ok(c) => Some(c),
+        Err(e) => {
+            tracing::warn!(
+                "STRIPE_SECRET_KEY not set or malformed — Stripe payment/refund processing is unavailable; refunds, checkout, and dispute processing will be skipped. Set STRIPE_SECRET_KEY to enable. Error: {e:#}"
+            );
+            None
+        }
+    }
+}
+
 /// Result from creating a usage record
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -472,6 +502,25 @@ mod tests {
         assert!(result.is_ok());
 
         // Clean up
+        std::env::remove_var("STRIPE_SECRET_KEY");
+    }
+
+    #[test]
+    #[serial]
+    fn test_stripe_client_or_warn_missing_key_returns_none() {
+        // Missing STRIPE_SECRET_KEY must yield None (money-safe "refund not
+        // performed" path) rather than propagating an error. The warning is
+        // emitted as a side effect; asserting log output is hard, so this
+        // asserts the observable return value only.
+        std::env::remove_var("STRIPE_SECRET_KEY");
+        assert!(stripe_client_or_warn().is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn test_stripe_client_or_warn_with_key_returns_some() {
+        std::env::set_var("STRIPE_SECRET_KEY", "sk_test_dummy");
+        assert!(stripe_client_or_warn().is_some());
         std::env::remove_var("STRIPE_SECRET_KEY");
     }
 
