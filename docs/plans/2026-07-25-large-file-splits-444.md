@@ -249,3 +249,65 @@ scores ≥9/10, and a tuple slot is free.
 
 **Next mechanical wave (≥9/10):** `accounts.rs` recovery cluster → `RecoveryApi`.
 
+## Wave 10 (2026-08-02) — accounts.rs recovery cluster → `RecoveryApi` (`recovery.rs`)
+
+`api/src/openapi/accounts.rs` (2594 → 2442 lines, **−152**) — extracted the
+**account-recovery** cluster (2 handlers under `ApiTags::Accounts`, both
+`/accounts/recovery/*`: `request_account_recovery`, `complete_account_recovery`)
+plus their 2 DTO-deserialization tests into a new `RecoveryApi` type in
+`api/src/openapi/recovery.rs` (178 lines). Wired into the **second** inner tuple
+of `create_combined_api` (tuple 2: 12 → 13 entries; 3 slots still free within the
+arity-16 cap). Commit `f041a121`.
+
+**Why this cluster (≥9/10):**
+- **Cohesive + fully decoupled:** the 2 handlers depend only on
+  `Database::create_recovery_token` / `complete_recovery` / `queue_email_safe`
+  (`api/src/database/recovery.rs` + `email.rs`), `crate::validation::validate_email`,
+  and the shared recovery DTOs/helpers in `openapi::common`
+  (`RequestRecoveryRequest`, `CompleteRecoveryRequest`, `decode_hex_path`,
+  `decode_pubkey`, `EmailType`). **Zero** references to accounts.rs-private
+  helpers or local types — verified pre-extraction.
+- **Clean contiguous boundary:** a `/// Request account recovery` doc comment
+  marks the start, and the cluster ends at the closing `}` of
+  `complete_account_recovery` (the next handler `verify_email` starts with its
+  own `///` comment). Not a tail-extraction (unlike TOTP in Wave 9), but the
+  handler-to-handler boundary is equally clean — poem-openapi doesn't care about
+  ordering within an impl block.
+
+**Verification (definitive, byte-identical OpenAPI):** fresh debug builds of the
+pre-split source (spare api-server on `:59017`, `spec-before`) and post-split
+source (spare api-server on `:59017`, `spec-after`), both against the same
+`postgres:5432`:
+
+- `spec-before`: 187 paths, 327 schemas, 474433 bytes.
+- `spec-after`: 187 paths, 327 schemas, 474433 bytes.
+- Recursive key-sort canonicalization → deep-equal (full doc): **TRUE**.
+- Raw `diff` of the two canonicalized JSONs → **empty (exit 0)**.
+- Both recovery paths present after the split (`/accounts/recovery/request`,
+  `/accounts/recovery/complete`).
+
+This is the strongest-possible result: after canonicalization the two specs are
+byte-identical (empty raw diff), not merely deep-equal.
+
+- `cargo clippy -p api --tests --all-targets` → **0 warnings, 0 errors**.
+- `cargo nextest run -p api openapi::recovery openapi::accounts` → **39/39 pass**
+  (2 recovery tests now in `openapi::recovery::tests`; 37 remaining in
+  `openapi::accounts::tests`). The warm stack (`:59011`/`:59010`) was never
+  restarted.
+
+**Headroom after this wave:** tuple 1 = 13/16 (3 free), tuple 2 = 13/16
+(3 free). `accounts.rs` is now 2442 lines.
+
+### Candidate analysis recorded this wave (top-3, per the #444 roadmap)
+
+| Candidate | Cluster | Boundary | Tuple slot | Confidence | Outcome |
+|-----------|---------|----------|------------|-----------:|---------|
+| `openapi/accounts.rs` (2594) | account recovery (2 handlers) | doc-comment-bounded middle chunk; 0 private-helper deps | tuple 2 free | **9/10** | **DONE** (`RecoveryApi`, `f041a121`) |
+| `openapi/accounts.rs` (2442) | email verification (`verify_email` + `resend_verification_email`, 2 handlers) | same shape — doc-comment-bounded, depends on `Database` + shared DTOs + `crate::validation` | tuple 2 free | **8/10** | next candidate — slightly lower confidence (shares the email-queue path with billing/profile clusters, but still decoupled) |
+| `openapi/accounts.rs` (2442) | contacts/socials/external-keys CRUD | interwoven with the account-resolution + auth flow that anchors `AccountsApi` | tuple 2 free | 5/10 | not mechanical — the cluster is cohesive but several handlers share `ApiAuthenticatedUser`-gated helpers that would need careful pub-splitting |
+
+**Next mechanical wave (≥8/10):** `accounts.rs` email-verification cluster →
+`EmailVerificationApi`. This is the last clean ≥8/10 extraction from accounts.rs
+before it requires touching the auth-gated core. After that, accounts.rs is
+effectively exhausted for mechanical splits.
+
