@@ -306,8 +306,65 @@ byte-identical (empty raw diff), not merely deep-equal.
 | `openapi/accounts.rs` (2442) | email verification (`verify_email` + `resend_verification_email`, 2 handlers) | same shape — doc-comment-bounded, depends on `Database` + shared DTOs + `crate::validation` | tuple 2 free | **8/10** | next candidate — slightly lower confidence (shares the email-queue path with billing/profile clusters, but still decoupled) |
 | `openapi/accounts.rs` (2442) | contacts/socials/external-keys CRUD | interwoven with the account-resolution + auth flow that anchors `AccountsApi` | tuple 2 free | 5/10 | not mechanical — the cluster is cohesive but several handlers share `ApiAuthenticatedUser`-gated helpers that would need careful pub-splitting |
 
-**Next mechanical wave (≥8/10):** `accounts.rs` email-verification cluster →
-`EmailVerificationApi`. This is the last clean ≥8/10 extraction from accounts.rs
-before it requires touching the auth-gated core. After that, accounts.rs is
-effectively exhausted for mechanical splits.
+## Wave 11 (2026-08-02) — accounts.rs email-verification cluster → `EmailVerificationApi` (`email_verification.rs`)
+
+`api/src/openapi/accounts.rs` (2442 → 2230 lines, **−212**) — extracted the
+**email-verification** cluster (2 handlers under `ApiTags::Accounts`:
+`verify_email` (`POST /accounts/verify-email`, public) and
+`resend_verification_email` (`POST /accounts/resend-verification`, authed)) plus
+their 1 DTO-deserialization test into a new `EmailVerificationApi` type in
+`api/src/openapi/email_verification.rs` (235 lines). Wired into the **second**
+inner tuple of `create_combined_api` (tuple 2: 13 → 14 entries; 2 slots still
+free within the arity-16 cap). Commit `24ccacb7`.
+
+**Why this cluster (≥8/10):**
+- **Cohesive + fully decoupled:** the 2 handlers depend only on
+  `Database::verify_email_token` / `get_account_id_by_public_key` / `get_account`
+  / `get_latest_verification_token_time` / `create_email_verification_token` /
+  `queue_email_safe` (account + email modules), `crate::now_ns()`, `hex::encode`,
+  `EmailType`, and the shared `VerifyEmailRequest` DTO + `decode_hex_path` helper
+  in `openapi::common`. **Zero** references to accounts.rs-private helpers or
+  local types — verified pre-extraction.
+- **Clean contiguous boundary:** a `/// Verify email address` doc comment marks
+  the start, and the cluster ends at the closing `}` of `resend_verification_email`
+  (the next handler `get_billing_settings` starts with its own `///` comment).
+  Same doc-comment-bounded shape as Waves 9/10.
+
+**Verification (definitive, byte-identical OpenAPI):** BEFORE captured from the
+running warm stack (release api-server on `:59011`, untouched), AFTER from a
+fresh debug build (spare api-server on `:59018`), both against the same
+`postgres:5432`:
+
+- `spec-before`: 187 paths, 327 schemas, 474375 bytes.
+- `spec-after`: 187 paths, 327 schemas, 474375 bytes.
+- Recursive key-sort canonicalization → deep-equal (full doc): **TRUE**.
+- Raw `diff` of the two canonicalized JSONs → **empty (exit 0)** (prints IDENTICAL).
+- Both verification paths present after the split (`/accounts/verify-email`,
+  `/accounts/resend-verification`).
+
+This is the strongest-possible result: after canonicalization the two specs are
+byte-identical (empty raw diff), not merely deep-equal.
+
+- `cargo clippy -p api --tests --all-targets` → **0 warnings, 0 errors**.
+- `cargo nextest run -p api openapi::email_verification openapi::accounts` →
+  **37/37 pass** (1 verification test now in
+  `openapi::email_verification::tests`; 36 remaining in
+  `openapi::accounts::tests`). The warm stack (`:59011`/`:59010`) was never
+  restarted; health confirmed 200 throughout.
+
+**Headroom after this wave:** tuple 1 = 13/16 (3 free), tuple 2 = 14/16
+(2 free). `accounts.rs` is now 2230 lines.
+
+### accounts.rs is now exhausted for mechanical splits
+
+With TOTP (Wave 9), recovery (Wave 10), and email-verification (Wave 11)
+extracted, the remaining handlers in `accounts.rs` (registration,
+profile/email/device-name/contact/social/external-key CRUD, key management,
+billing settings) are interwoven with the `ApiAuthenticatedUser`-gated
+account-resolution + auth core that anchors `AccountsApi`. Extracting them would
+require pub-splitting shared private helpers and the account-resolution preamble
+— that is no longer a mechanical, byte-identical-guaranteed refactor. Further
+accounts.rs shrinkage belongs to a focused design pass, not the #444 wave
+cadence. The three clean tail/middle extractions forecast in the roadmap are
+complete.
 
