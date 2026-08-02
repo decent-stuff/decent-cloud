@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-08-01. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-08-02. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -90,22 +90,96 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 | # | Title |
 |---|-------|
 | 444 | Tech debt: split large source files (>2000 lines) into logical modules |
-
-> **#444 progress (2026-07-25):** three safe extractions shipped — `PoolsApi` (`74fb9248`, −957),
-> `NotificationsApi` (`b4259194`, −282), `SlaApi` (`ae97cd8f`, −169). providers.rs 6739→**5331**
-> (−1408). Live OpenAPI spec verified byte-identical after each. Decomposition roadmap for the
-> remaining files at `docs/plans/2026-07-25-large-file-splits-444.md`. GH #444 stays **open**
-> (partial; ongoing — 3 more providers.rs clusters + accounts.rs + offerings.rs + api-cli.rs).
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
-| 382 | dc-agent: remove `try_trigger_hetzner_provisioning` backward-compat alias |
-| 373 | DRY refactor: `extract_contract_id()` shared across 3 provisioners |
-| 344 | dc-agent: additional MOCK tests for Docker provisioner (P2) |
 | 334 | Code: Add tests for database modules without dedicated test files |
-| 214 | dc-agent: `verify_setup()` check for default_image existence (P2) |
-| 212 | dc-agent: pre-built Docker image with openssh-server (P2) |
-| 107 | Backlog: Dark/light mode toggle |
+
+> **#444 progress (updated 2026-08-02):** 6 providers.rs splits shipped (`PoolsApi` `74fb9248`,
+> `NotificationsApi` `b4259194`, `SlaApi` `ae97cd8f`, `AllowlistApi` `290a218f`, `OfferingCsvApi`
+> `d94d29af`, `ProviderStatsApi` `b5aa9acb`) + the `api-cli.rs` → dir-bin split (`c7dbf962`);
+> providers.rs 6739→**4280** (−2459), each verified byte-identical OpenAPI. Decomposition roadmap at
+> `docs/plans/2026-07-25-large-file-splits-444.md`. Current largest **source** files (>2000 lines,
+> `wc -l` 2026-08-02, excluding `target/`/`third_party/` and `*_tests.rs`/`tests.rs`):
+> `api/src/openapi/providers.rs` **4280**, `dc-agent/src/main.rs` **3674**, `api/src/openapi/accounts.rs`
+> **2903**, `api/src/database/offerings.rs` **2865**, `api/src/openapi/webhooks.rs` **2504**,
+> `api/src/database/cloud_resources.rs` **2444**, `api/src/openapi/contracts.rs` **2251** (7 files).
+> (The largest **test** files — `database/contracts/tests.rs` 5952, `database/offerings/tests.rs` 5368,
+> `database/stats/tests.rs` 3141 — are out of #444's "source files" scope.) Further *handler* splits
+> are blocked on a poem-openapi tuple restructure (the 16-max was hit on the 2nd inner tuple). GH #444
+> stays **open** (partial; ongoing).
+
+> **#387 status (verified 2026-08-02):** still **open** — no implementation found.
+> `rg "multiprocessing|worktree|concurrent\.futures|ProcessPool"` = 0 hits across dc-agent/api/cli.
+> The dc-agent ticket loop is single-threaded async (`poll_and_provision` driven by one tokio
+> `interval` in `dc-agent/src/main.rs:1456`); tickets are processed serially per poll tick. No git
+> worktrees. Parked — would need a deliberate design (per-ticket worktree + process pool) before work.
+
+> **#334 status (verified 2026-08-02):** largely addressed, kept **open**. Audited
+> `api/src/database/*.rs`: nearly every logic module now has in-file `#[cfg(test)]` coverage
+> (`acme_dns`, `agent_*`, `api_tokens`, `bandwidth`, `chatwoot`, `cloud_accounts`, `cloud_resources`,
+> `handlers`, `notification_config`, `offering_sla`, `offerings`, `recovery`, `refund_audit`,
+> `reputation`, `reseller`, `rewards`, `spending_alerts`, `stats`, `telegram_tracking`, `tokens`,
+> `totp`, `user_notifications`, `users`, `visibility_allowlist`) or a dedicated subdir `tests.rs`
+> (`accounts`, `contracts`, `email`, `offerings`, `stats`, `tokens`, `users`). The only logic module
+> with neither is `refund_requests.rs` — but its `process_gated_refund` path is covered cross-module
+> by the 9 refund-gate integration tests in `api/src/database/contracts/tests.rs`. Meta files
+> (`migration_tests.rs`, `test_helpers.rs`, `tests.rs`, `types.rs`) need no tests. Kept open per the
+> literal "without dedicated test files" reading.
+
+> **Closed 2026-08-02 (verified against the actual code; moved out of the open table above):**
+> - **#382** `try_trigger_hetzner_provisioning` backward-compat alias — `rg` = 0 matches in
+>   dc-agent/api/cli. STALE entry, marked closed.
+> - **#373** DRY `extract_contract_id()` shared across 3 provisioners — single shared fn at
+>   `dc-agent/src/provisioner/mod.rs:12`, imported by `digitalocean.rs`, `docker.rs`,
+>   `proxmox_tests.rs`. STALE entry, marked closed.
+> - **#344** additional MOCK tests for the Docker provisioner — `dc-agent/src/provisioner/docker_tests.rs`
+>   = 995 lines, 87 mockito-based test fns (image pull, create/inspect/start, verify_setup image
+>   found/not-found/custom, network/ipv6 warnings, error paths). Substantially done.
+> - **#214** `verify_setup()` check for default_image existence — ships in `docker.rs:638` (compares
+>   `config.default_image` against `/images/json` tags), `digitalocean.rs:758` (queries
+>   `/v2/images?slug=`), and `proxmox.rs:1138` (template-VM existence, the Proxmox equivalent).
+>   3 dedicated docker tests (`test_verify_setup_image_found` / `_not_found` /
+>   `_not_found_custom_image`).
+> - **#212** pre-built Docker image with openssh-server — `dc-agent/container/` ships `Dockerfile`
+>   (ubuntu:22.04 + openssh-server + `PermitRootLogin yes` + sshd ENTRYPOINT), `build.sh`,
+>   `publish.sh`; the default image is `ghcr.io/decent-stuff/dc-agent-ssh:latest`
+>   (`config.rs::default_docker_image`); tests assert the container CMD no longer runs apt-get.
+>   (Note: `container/README.md` header still reads "Ticket 348" — a stale number; the implementation
+>   matches #212. README edit out of scope for this docs pass.)
+> - **#107** Dark/light mode toggle — `website/src/lib/stores/theme.ts` (dark/light store: system
+>   preference, `localStorage` persistence, toggle/set, `matchMedia` live-sync) + `ThemeToggle.svelte`
+>   rendered in `routes/dashboard/+layout.svelte` and `DashboardSidebar.svelte` + `theme.test.ts` +
+>   extensive `:root[data-theme='light']` rules in `app.css`. Fully shipped.
 
 ## Recently closed by this work
+
+### 2026-08-02 session (WAVE-0: prior-session WIP + stale-issue reconciliation)
+
+Reconciled the `docs/OPEN_ISSUES.md` "Deferred — Tech debt / low-value" table against the actual
+code (a code-verification pass — no behavior changes), and recorded the 3 prior-session WIP commits
+that had landed but were not yet logged.
+
+**Prior-session WIP shipped (3 commits):**
+
+| Commit | Area | Detail |
+|--------|------|--------|
+| `f186c0d9` | api / chatwoot | **fix(api): chatwoot create_portal must not claim a shared custom_domain.** `create_portal` was sending the shared frontend host as `custom_domain` for every provider — Chatwoot's `custom_domain` is globally unique, so only the FIRST provider could onboard a Help Center; every later one 422'd "Custom domain has already been taken". Fix: send `custom_domain=""` (empty string dodges `URI.parse(nil)` TypeError; a `before_validation` hook normalizes `""→nil` so it passes `allow_nil` uniqueness). TDD regression test added. |
+| `e5a1f08e` | docs | **AGENTS.md canonical-source note** — records GitHub Issues as the canonical live source and the in-repo inventory as a categorized snapshot, with the reconcile-before-acting rule. |
+| `897a90e5` | ops / secrets | **chore(secrets): re-encrypt common.yaml** — sops 3.9.4 → 3.11.0 (tooling bump; no secret-value changes). |
+
+**Stale-issue reconciliation (code-verified, docs-only):** audited every row of the
+"Deferred — Tech debt / low-value" table with `rg` / `find` / `wc -l` against the working tree.
+Confirmed **6 stale entries already done in code** and moved them out of the open table: **#382** and
+**#373** (backward-compat alias + DRY refactor — 0 matches / single shared fn), **#344** (Docker MOCK
+tests — 995-line `docker_tests.rs`, 87 fns), **#214** (`verify_setup` default_image check — ships in
+all 3 provisioners + 3 tests), **#212** (pre-built openssh image — `dc-agent/container/` + default
+image), **#107** (dark/light toggle — `theme.ts` + `ThemeToggle.svelte` + tests). Kept open with
+current evidence: **#444** (partial; progress note refreshed with the real largest-file counts),
+**#387** (no implementation found; single-threaded poll loop), **#334** (largely addressed inline;
+kept open on the literal "dedicated test files" reading). See the table notes above for per-issue
+evidence.
+
+Gates: docs-only — no code touched. `rg -n "try_trigger_hetzner_provisioning|#373|#382" docs/OPEN_ISSUES.md`
+records #382/#373 as closed.
 
 ### 2026-08-02 session (drop unused SaaS account-subscription feature)
 
