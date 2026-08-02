@@ -111,7 +111,8 @@
 
 		<!-- Visual -->
 		<div class="hidden lg:block relative">
-			<!-- Main visual: Trust score card mockup -->
+			<!-- Illustrative trust-score card (not live data).
+			     TODO: populate from real top-provider via public API once marketplace has activity. -->
 			<div class="relative bg-surface border border-neutral-800 p-6 space-y-5 shadow-layered">
 				<!-- Header -->
 				<div class="flex items-center justify-between pb-4 border-b border-neutral-800/80">
@@ -119,9 +120,12 @@
 						<div class="icon-box">
 							<Icon name="server" size={20} />
 						</div>
-						<div>
+						<div class="min-w-0">
 							<div class="font-semibold text-white text-sm">provider_alpha</div>
-							<div class="text-[10px] text-neutral-500 uppercase tracking-label">Verified Provider</div>
+							<div class="flex items-center gap-1.5 mt-0.5">
+								<span class="text-[10px] text-neutral-500 uppercase tracking-label">Verified Provider</span>
+								<span class="inline-flex items-center px-1.5 py-0.5 border border-neutral-700 bg-neutral-900 text-neutral-400 text-[9px] uppercase tracking-label">Illustrative example</span>
+							</div>
 						</div>
 					</div>
 					<div class="text-right">
@@ -162,13 +166,10 @@
 					</div>
 				</div>
 
-				<!-- Status -->
-				<div class="flex items-center justify-between pt-4 border-t border-neutral-800/80">
-					<div class="flex items-center gap-2">
-						<span class="status-dot status-dot-success"></span>
-						<span class="text-xs text-neutral-400">No red flags detected</span>
-					</div>
-					<span class="text-[10px] text-neutral-600 uppercase tracking-label">Updated 2m ago</span>
+			<!-- Status -->
+				<div class="flex items-center gap-2 pt-4 border-t border-neutral-800/80">
+					<span class="status-dot status-dot-success"></span>
+					<span class="text-xs text-neutral-400">No red flags detected</span>
 				</div>
 			</div>
 		</div>
