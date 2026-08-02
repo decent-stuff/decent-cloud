@@ -627,6 +627,7 @@ const AUTHED_DYNAMIC: { title: string; url: () => string }[] = [
 	{ title: '/dashboard/providers/[identifier]', url: () => `/dashboard/providers/${ctx.pubkey}` },
 	{ title: '/dashboard/rentals/[contract_id]', url: () => `/dashboard/rentals/${ctx.contractId}` },
 	{ title: '/dashboard/reputation/[identifier]', url: () => `/dashboard/reputation/${ctx.pubkey}` },
+	{ title: '/dashboard/reputation/[identifier]/trust', url: () => `/dashboard/reputation/${ctx.pubkey}/trust` },
 	{ title: '/dashboard/user/[identifier]', url: () => `/dashboard/user/${ctx.username}` },
 ];
 
