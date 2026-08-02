@@ -687,20 +687,24 @@ impl ChatwootClient {
     }
 
     /// Create a Help Center portal for a provider.
-    /// Uses `frontend_url` as the custom domain for the portal.
+    ///
+    /// Created *without* a custom domain: provider help centers are served at the
+    /// default `{frontend_url}/hc/{slug}` route, so they must not claim one.
+    /// `custom_domain` is globally unique (`uniqueness: true, allow_nil: true`),
+    /// so reusing a shared domain across providers lets only the first provider
+    /// onboard and 422s every subsequent one with "Custom domain has already been
+    /// taken".
+    ///
+    /// An empty string (not omission) is sent because Chatwoot's
+    /// `Api::V1::Accounts::PortalsController#create` unconditionally runs
+    /// `URI.parse(custom_domain)`, which raises `TypeError` on `nil`; a
+    /// `before_validation` hook then normalizes `""` back to `nil` so it passes the
+    /// uniqueness check. Verified against live Chatwoot.
     pub async fn create_portal(&self, name: &str, slug: &str) -> Result<PortalResponse> {
         let url = format!(
             "{}/api/v1/accounts/{}/portals",
             self.base_url, self.account_id
         );
-
-        // Extract domain from frontend_url (e.g., "https://support.decent-cloud.org" -> "support.decent-cloud.org")
-        // Chatwoot has a bug where it always calls URI.parse on custom_domain even when nil
-        let custom_domain = self
-            .frontend_url
-            .strip_prefix("https://")
-            .or_else(|| self.frontend_url.strip_prefix("http://"))
-            .unwrap_or(&self.frontend_url);
 
         // Chatwoot expects nested `portal` object
         #[derive(Serialize)]
@@ -723,7 +727,7 @@ impl ChatwootClient {
                 portal: PortalData {
                     name,
                     slug,
-                    custom_domain,
+                    custom_domain: "",
                 },
             })
             .send()

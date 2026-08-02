@@ -641,6 +641,39 @@ async fn test_list_portals_filters_archived() {
 }
 
 #[tokio::test]
+async fn test_create_portal_sends_empty_custom_domain() {
+    // Regression: create_portal must send custom_domain="" (never the shared
+    // frontend host). Chatwoot's custom_domain is globally unique, so a shared
+    // value lets only the first provider onboard and 422s every later one with
+    // "Custom domain has already been taken". Empty string dodges the
+    // URI.parse(nil) TypeError in PortalsController#create and normalizes to nil
+    // at save (allow_nil uniqueness).
+    let mut server = mockito::Server::new_async().await;
+    let mock = server
+        .mock("POST", "/api/v1/accounts/1/portals")
+        .match_header("api_access_token", "tok")
+        .match_body(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::Regex(r#""custom_domain":""#.to_string()),
+            mockito::Matcher::Regex(r#""slug":"prov-1""#.to_string()),
+            // Guard against regressing to a real host: the char right after the
+            // empty value must be a struct delimiter (`,` or `}`), not a domain.
+            mockito::Matcher::Regex(r#""custom_domain":""[,}]"#.to_string()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"id":7,"name":"Prov Help Center","slug":"prov-1"}"#)
+        .create_async()
+        .await;
+
+    let client = ChatwootClient::new_for_test(server.url(), "tok".into(), 1);
+    let portal = client.create_portal("Prov Help Center", "prov-1").await.unwrap();
+
+    assert_eq!(portal.id, 7);
+    assert_eq!(portal.slug, "prov-1");
+    mock.assert_async().await;
+}
+
+#[tokio::test]
 async fn test_update_conversation_status_success() {
     let mut server = mockito::Server::new_async().await;
     let mock = server
