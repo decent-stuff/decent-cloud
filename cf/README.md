@@ -2,7 +2,7 @@
 
 This directory contains Docker and Python scripts for deploying the Decent Cloud website with Cloudflare Tunnel.
 
-> Production deploys to k3s — see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md) (tunnel token generation/rotation: [`deploy/k8s/TUNNEL.md`](../deploy/k8s/TUNNEL.md)).
+> Production deploys to k3s (ArgoCD, namespace `dc-prod`) — see [`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md) and [`CONFIG.md`](./CONFIG.md). The prod tunnel is local-managed (its routing lives in a ConfigMap in the nuc-k3s repo, not the Cloudflare API).
 
 ## Quick Start
 
@@ -14,16 +14,15 @@ python3 cf/tunnel.py dev        # prints the dev tunnel token
 python3 cf/deploy.py deploy dev             # Development (local; served over the dev tunnel)
 ```
 
-> Production deploys via k8s — see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)
-> (tunnel token generation/rotation: [`deploy/k8s/TUNNEL.md`](../deploy/k8s/TUNNEL.md)).
-> `deploy.py` is dev-only: `deploy.py deploy prod` aborts with a pointer to the
-> k8s runbook.
+> Production deploys via k8s (ArgoCD, namespace `dc-prod`) — see
+> [`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md). `deploy.py deploy` is dev-only
+> (aborts on `prod`); use `deploy.py config <env>` to inspect either env's config.
 
 ## Blockchain Validator
 
 The optional blockchain validator (`api-validate`) was part of the now-retired
 `docker-compose.prod.yml` stack. Production runs on k8s (see
-[`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)), which currently has no
+[`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md)), which currently has no
 validator Deployment; re-introducing the validator means adding it to the k8s
 manifests, not to a compose file. See
 [docs/mining-and-validation.md](../docs/mining-and-validation.md) for the

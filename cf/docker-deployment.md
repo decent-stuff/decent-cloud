@@ -1,7 +1,8 @@
 # Docker Deployment with Cloudflare Tunnel
 
-> **Production deploys via k8s** (ArgoCD owns `deploy/k8s`); see
-> [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md). This guide covers the **local
+> **Production deploys via k8s** (ArgoCD owns `cluster/apps/decent-cloud` in the
+> `sasa-tomic/nuc-k3s` repo, namespace `dc-prod`); see
+> [`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md). This guide covers the **local
 > docker-compose dev stack** only.
 
 This guide explains how to run the Decent Cloud dev stack with native build process and Cloudflare Tunnel for secure external access.

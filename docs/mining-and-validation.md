@@ -81,7 +81,7 @@ By running the validation command, you automatically fetch the latest ledger and
 
 The automated validator (`api-validate`) ran under the now-retired
 `docker-compose.prod.yml` stack, which has been removed — production now runs on
-k8s (see [`deploy/k8s/SETUP.md`](../deploy/k8s/SETUP.md)), and the k8s manifests
+k8s (see [`cf/DEPLOYMENT_CONFIG.md`](../cf/DEPLOYMENT_CONFIG.md#prod)), and the k8s manifests
 currently have no validator Deployment. Re-introducing automated validation means
 adding a validator to the k8s manifests, not to a compose file.
 
