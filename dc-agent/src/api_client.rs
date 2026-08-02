@@ -2,7 +2,6 @@ use anyhow::{bail, Context, Result};
 use dcc_common::DccIdentity;
 use reqwest::Client;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::config::ApiConfig;
 use crate::provisioner::{HealthStatus, Instance, RunningInstance};
@@ -230,42 +229,6 @@ impl Method {
     }
 }
 
-/// Build the `(timestamp, nonce, signature_hex)` auth triple for an API
-/// request signed with `identity`.
-///
-/// Centralizes the dc-agent request-signing convention (timestamp + nonce +
-/// method + path + body) so that both the `ApiClient::build_auth_headers`
-/// method (which has a full `ApiConfig`) and standalone setup-time helpers
-/// like `register_gateway` (which only have a raw `DccIdentity`) sign
-/// identically.
-fn build_signed_headers(
-    identity: &DccIdentity,
-    method: &str,
-    path: &str,
-    body: &[u8],
-) -> Result<(String, String, String)> {
-    let timestamp = chrono::Utc::now()
-        .timestamp_nanos_opt()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get timestamp in nanoseconds"))?;
-    let nonce = Uuid::new_v4();
-    let timestamp_str = timestamp.to_string();
-    let nonce_str = nonce.to_string();
-
-    let mut sign_message = Vec::new();
-    sign_message.extend_from_slice(timestamp_str.as_bytes());
-    sign_message.extend_from_slice(nonce_str.as_bytes());
-    sign_message.extend_from_slice(method.as_bytes());
-    sign_message.extend_from_slice(path.as_bytes());
-    sign_message.extend_from_slice(body);
-
-    let signature = identity
-        .sign(&sign_message)
-        .map_err(|e| anyhow::anyhow!("Failed to sign message: {}", e))?;
-    let signature_hex = hex::encode(signature.to_bytes());
-
-    Ok((timestamp_str, nonce_str, signature_hex))
-}
-
 impl ApiClient {
     pub fn new(config: &ApiConfig) -> Result<Self> {
         let (identity, auth_mode) = if let Some(agent_key) = &config.agent_secret_key {
@@ -320,14 +283,18 @@ impl ApiClient {
             .map_err(|e| anyhow::anyhow!("Failed to create identity from key file: {}", e))
     }
 
-    /// Build authentication headers for API requests.
+    /// Build authentication headers for API requests. Delegates to the shared
+    /// signer in `dcc_common::api_auth` (single source of truth for the signed
+    /// message layout, so dc-agent and the API verifier can never drift).
     fn build_auth_headers(
         &self,
         method: &str,
         path: &str,
         body: &[u8],
     ) -> Result<(String, String, String)> {
-        build_signed_headers(&self.identity, method, path, body)
+        let signed = dcc_common::api_auth::sign_request(&self.identity, method, path, body)
+            .map_err(|e| anyhow::anyhow!("Failed to sign request: {}", e))?;
+        Ok((signed.timestamp, signed.nonce, signed.signature_hex))
     }
 
     /// Execute an HTTP request with authentication.
@@ -351,16 +318,19 @@ impl ApiClient {
 
         // Add auth headers
         request_builder = request_builder
-            .header("X-Timestamp", &timestamp_str)
-            .header("X-Nonce", &nonce_str)
-            .header("X-Signature", signature);
+            .header(dcc_common::api_auth::HEADER_TIMESTAMP, &timestamp_str)
+            .header(dcc_common::api_auth::HEADER_NONCE, &nonce_str)
+            .header(dcc_common::api_auth::HEADER_SIGNATURE, signature);
 
         // Set identity header based on auth mode
         request_builder = match &self.auth_mode {
             AuthMode::Agent { agent_pubkey } => {
                 request_builder.header("X-Agent-Pubkey", agent_pubkey)
             }
-            AuthMode::Provider => request_builder.header("X-Public-Key", &self.provider_pubkey),
+            AuthMode::Provider => request_builder.header(
+                dcc_common::api_auth::HEADER_PUBLIC_KEY,
+                &self.provider_pubkey,
+            ),
         };
 
         // Add body if present
@@ -798,17 +768,20 @@ pub async fn register_gateway(
     let body = serde_json::json!({ "dcId": dc_id });
     let body_bytes = serde_json::to_vec(&body)?;
 
-    // Build auth headers using the shared signing convention.
-    let (timestamp_str, nonce_str, signature_hex) =
-        build_signed_headers(&identity, "POST", path, &body_bytes)?;
+    // Build auth headers using the shared signer (single source of truth).
+    let signed = dcc_common::api_auth::sign_request(&identity, "POST", path, &body_bytes)
+        .map_err(|e| anyhow::anyhow!("Failed to sign request: {}", e))?;
 
     let url = format!("{}{}", api_endpoint, path);
     let response = client
         .post(&url)
         .header("Content-Type", "application/json")
-        .header("X-Timestamp", &timestamp_str)
-        .header("X-Nonce", &nonce_str)
-        .header("X-Signature", &signature_hex)
+        .header(dcc_common::api_auth::HEADER_TIMESTAMP, &signed.timestamp)
+        .header(dcc_common::api_auth::HEADER_NONCE, &signed.nonce)
+        .header(
+            dcc_common::api_auth::HEADER_SIGNATURE,
+            &signed.signature_hex,
+        )
         .header("X-Agent-Pubkey", &agent_pubkey)
         .body(body_bytes)
         .send()
