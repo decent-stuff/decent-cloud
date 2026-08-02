@@ -99,13 +99,14 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > providers.rs 6739→**4280** (−2459), each verified byte-identical OpenAPI. Decomposition roadmap at
 > `docs/plans/2026-07-25-large-file-splits-444.md`. Current largest **source** files (>2000 lines,
 > `wc -l` 2026-08-02, excluding `target/`/`third_party/` and `*_tests.rs`/`tests.rs`):
-> `api/src/openapi/providers.rs` **4280**, `dc-agent/src/main.rs` **3674**, `api/src/openapi/accounts.rs`
-> **2903**, `api/src/database/offerings.rs` **2865**, `api/src/openapi/webhooks.rs` **2504**,
-> `api/src/database/cloud_resources.rs` **2444**, `api/src/openapi/contracts.rs` **2251** (7 files).
+> `api/src/openapi/providers.rs` **4280**, `dc-agent/src/main.rs` **3674**, `api/src/database/offerings.rs`
+> **2865**, `api/src/openapi/webhooks.rs` **2504**, `api/src/database/cloud_resources.rs` **2444**,
+> `api/src/openapi/contracts.rs` **2251**, `api/src/openapi/accounts.rs` **2230** (7 files).
 > (The largest **test** files — `database/contracts/tests.rs` 5952, `database/offerings/tests.rs` 5368,
-> `database/stats/tests.rs` 3141 — are out of #444's "source files" scope.) Further *handler* splits
-> are blocked on a poem-openapi tuple restructure (the 16-max was hit on the 2nd inner tuple). GH #444
-> stays **open** (partial; ongoing).
+> `database/stats/tests.rs` 3141 — are out of #444's "source files" scope.) `accounts.rs`'s three clean
+> `#[OpenApi]` clusters (TOTP/recovery/email-verification) were split in Waves 9/10/11 using free slots
+> in the 2nd inner tuple (now 14/16 used) — further accounts.rs shrinkage needs a design pass (remaining
+> handlers share `ApiAuthenticatedUser`-gated core). GH #444 stays **open** (partial; ongoing).
 
 > **#387 status (verified 2026-08-02):** still **open** — no implementation found.
 > `rg "multiprocessing|worktree|concurrent\.futures|ProcessPool"` = 0 hits across dc-agent/api/cli.
@@ -197,6 +198,7 @@ against the real warm stack (api:59011 + web:59010), no first-party mocks. Final
 | Stale-issue reconciliation | Docs | `e775492d` (+ the WAVE-0 pass): #382, #373, #344, #214, #212, #107 all verified **CLOSED** against code evidence; the open tech-debt table went **8→3 rows** (#444, #387, #334 remain). Per-issue evidence is in the WAVE-0 entry above. |
 | #444 Wave 9 — `TotpApi` split | Tech debt | `1729e7c6` + `8c6dd37c`: extracted `TotpApi` from `api/src/openapi/accounts.rs` (**2903→2594 lines**). Byte-identical OpenAPI verified via spare-port instance diff (**187 paths / 327 schemas**, empty canonical diff). clippy 0, nextest **44/44**. |
 | #444 Wave 10 — `RecoveryApi` split | Tech debt | `f041a121` + `d9e51a58`: extracted `RecoveryApi` from `accounts.rs` (**2594→2442 lines**). Byte-identical OpenAPI; clippy 0, nextest **39/39**. Next candidate: the email-verification cluster (8/10 readiness). |
+| #444 Wave 11 — `EmailVerificationApi` split | Tech debt | `24ccacb7` + `5e4c38b9`: extracted `EmailVerificationApi` from `accounts.rs` (**2442→2230 lines**). Byte-identical OpenAPI (187 paths / 327 schemas, empty canonical diff); clippy 0, nextest **37/37**. **accounts.rs is now exhausted for mechanical splits** — the three clean clusters (TOTP/recovery/email-verification, all `#[OpenApi]` handler groups) are done; remaining handlers are interwoven with the `ApiAuthenticatedUser`-gated core and need a focused design pass, not the wave cadence. |
 | UX U1: hero trust card was fake data | UX (slop) | `50fb8a15`: (no-mock UX audit) the landing hero "trust card" was a **hardcoded fake** (`provider_alpha` with a deceptive "Updated 2m ago" liveness stamp). Now honestly labeled **"Illustrative example"**; the fake liveness text removed. No misleading data on the landing page. |
 | UX U2: all-zero "Marketplace Statistics" | UX (empty state) | `d719df71`: "Marketplace Statistics" rendered all-zeros unconditionally — dishonest on a fresh marketplace. New pure `marketplaceIsEmpty(stats)` helper (4 unit tests, TDD RED→GREEN) gates an honest **"Be Among the First Providers"** early-access reframe instead of showing 0/0/0. vitest 862; zai-vision-verified on the real app. |
 | Auth single-source-of-truth fully enforced | Robustness / DRY | `d34e11fb` + `749cf876`: (code-robustness audit R1/R2) dc-agent `api_client.rs` hand-rolled the signed-message layout + header-name literals → now delegates to the canonical `dcc_common::api_auth::{sign_request, HEADER_*}`; api-cli header literals → `HEADER_*` consts. Wire format proven **byte-identical** field-by-field (timestamp unit, nonce, header names, message byte-layout); the unchanged dc-agent auth-guard test stayed green. No outlier remains — the "Signed-request auth — single source" convention is now fully enforced. |
