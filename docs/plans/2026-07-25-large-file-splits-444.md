@@ -183,3 +183,69 @@ api-server` is clean (only the 2 pre-existing `dead_code` warnings in
 the `accounts.rs` recovery and TOTP cluster types without a further restructure.
 
 **Commit:** `refactor: rebalance OpenAPI tuple (9,16)→(13,12) to unblock #444 splits`
+
+## Wave 9 (2026-08-02) — accounts.rs TOTP cluster → `TotpApi` (`totp.rs`)
+
+`api/src/openapi/accounts.rs` (2903 → 2594 lines, **−309**) — extracted the
+**TOTP 2FA** cluster (5 handlers under `ApiTags::Accounts`, all
+`/accounts/me/totp/*`: `get_totp_status`, `setup_totp`, `enable_totp`,
+`disable_totp`, `regenerate_backup_codes`) plus their 5 DTO-serialization
+tests into a new `TotpApi` type in `api/src/openapi/totp.rs` (334 lines).
+Wired into the **second** inner tuple of `create_combined_api` (tuple 2:
+12 → 13 entries; 3 slots still free within the arity-16 cap). Commit
+`1729e7c6`.
+
+**Why this cluster first (the highest-confidence ≥9/10 candidate):**
+- **Cohesive + fully decoupled:** the 5 handlers depend only on `Database`
+  methods in `api/src/database/totp.rs` (`totp_status`/`setup_totp`/…/
+  `regenerate_backup_codes`) + `get_account_id_by_public_key`, and the 5
+  shared TOTP DTOs in `openapi::common`. **Zero** references to
+  accounts.rs-private helpers or local types — verified pre-extraction.
+- **Clean spatial boundary:** a `// ── TOTP 2FA endpoints (ticket #80) ──`
+  section comment marks the start, and the cluster ends exactly at the
+  `impl AccountsApi` block's closing `}`. A pure tail-extraction.
+- **Tuple slot available:** Wave 8's rebalance left tuple 2 at 12/16, so no
+  restructure was needed — `TotpApi` takes the 13th slot directly.
+
+**Verification (definitive, byte-identical OpenAPI):** fresh debug build of
+the post-split source (in an isolated `CARGO_TARGET_DIR=/tmp/.../target-after`
+to avoid stale incremental artifacts + lock contention with the warm stack)
+→ spare api-server on `:59016` → `spec_after`. Compared against the warm
+release server on `:59011` (current source, `spec_before`), both against the
+same `postgres:5432`:
+
+- `spec_before`: 187 paths, 327 schemas, 474433 bytes.
+- `spec_after`: 187 paths, 327 schemas, 474433 bytes.
+- Deep-equal after recursive key-sort canonicalization (order-independent
+  for objects, order-sensitive for `parameters`/`tags` arrays): **TRUE**.
+- Raw `diff` of the two canonicalized JSONs → **empty (exit 0)**.
+- All 4 TOTP paths present after the split (`/accounts/me/totp` [GET+DELETE],
+  `/accounts/me/totp/backup-codes`, `/accounts/me/totp/enable`,
+  `/accounts/me/totp/setup`).
+
+As in prior waves, a raw byte-`diff` of the *serialized* JSON is non-empty
+only because poem-openapi emits `paths` keys in tuple-registration order;
+deep-dict equality is the authoritative check and passes.
+
+- `cargo clippy -p api --tests --all-targets` → **0 warnings, 0 errors**.
+- `cargo nextest run -p api openapi::totp openapi::accounts` → **44/44 pass**
+  (5 TOTP tests now in `openapi::totp::tests`; 39 remaining in
+  `openapi::accounts::tests`). The warm stack (`:59011`/`:59010`) was never
+  restarted.
+
+**Headroom after this wave:** tuple 1 = 13/16 (3 free), tuple 2 = 13/16
+(3 free). The `accounts.rs` **recovery** cluster (2 handlers,
+`request_account_recovery` + `complete_account_recovery`) is the next
+clean boundary — same shape (section-comment-bounded tail, decoupled),
+scores ≥9/10, and a tuple slot is free.
+
+### Candidate analysis recorded this wave (top-3, per the #444 roadmap)
+
+| Candidate | Cluster | Boundary | Tuple slot | Confidence | Outcome |
+|-----------|---------|----------|------------|-----------:|---------|
+| `openapi/accounts.rs` (2903) | TOTP 2FA (5 handlers) | section-comment tail, ends at impl close; 0 private-helper deps | tuple 2 free | **9/10** | **DONE** (`TotpApi`, `1729e7c6`) |
+| `database/offerings.rs` (2865) | recommendations (`impl Database` block #3) | **scattered** — 4 non-contiguous regions (private `SignalOffering` L240, methods L2311–2629, free engine fns, inline `mod recommendation_tests`) | N/A (DB layer) | 4/10 | deferred — dedicated PR with query-level test coverage, not mechanical |
+| `openapi/webhooks.rs` (2504) | dispute handling (L545–920) | cohesive (helpers used only within the cluster) BUT free functions, not `#[OpenApi]` — registered as routes in `main.rs`, no spec safety net; tests DB-coupled | N/A (routes) | 6/10 | deferred — lower-confidence than TOTP; no byte-identical-OpenAPI verification path |
+
+**Next mechanical wave (≥9/10):** `accounts.rs` recovery cluster → `RecoveryApi`.
+
