@@ -19,7 +19,6 @@ pub mod resellers;
 pub mod signature;
 pub mod sla;
 pub mod stats;
-pub mod subscriptions;
 pub mod system;
 pub mod transfers;
 pub mod users;
@@ -46,7 +45,6 @@ pub use providers::{contract_status_events, password_reset_events, ProvidersApi}
 pub use resellers::ResellersApi;
 pub use sla::SlaApi;
 pub use stats::StatsApi;
-pub use subscriptions::SubscriptionsApi;
 pub use system::SystemApi;
 pub use transfers::TransfersApi;
 pub use users::UsersApi;
@@ -81,7 +79,6 @@ pub fn create_combined_api() -> impl OpenApi {
             TransfersApi,
             StatsApi,
             ResellersApi,
-            SubscriptionsApi,
             VatApi,
             AgentsWaitlistApi,
             OfferingCsvApi,

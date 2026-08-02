@@ -3379,8 +3379,6 @@ async fn test_get_provider_health_summary_all_status_types() {
     assert!((summary.uptime_percent - 33.33).abs() < 0.1);
 }
 
-// === Subscription Management Tests ===
-
 // === Cloud Resource Provisioning Bridge Tests ===
 
 #[tokio::test]

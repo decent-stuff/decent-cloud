@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use stripe::{
-    BillingPortalSession, CheckoutSession, CheckoutSessionId, CheckoutSessionMode,
-    CheckoutSessionPaymentStatus, Client, CreateBillingPortalSession, CreateCheckoutSession,
+    CheckoutSession, CheckoutSessionId, CheckoutSessionMode,
+    CheckoutSessionPaymentStatus, Client, CreateCheckoutSession,
     CreateCheckoutSessionInvoiceCreation, CreateCheckoutSessionLineItems,
     CreateCheckoutSessionLineItemsPriceData, CreateCheckoutSessionLineItemsPriceDataProductData,
-    CreateCheckoutSessionSubscriptionData, CreateCustomer, CreateRefund, Currency, Customer,
-    CustomerId, Expandable, Invoice, InvoiceId, PaymentIntentId, Refund, RequestStrategy,
-    Subscription, SubscriptionId, UpdateSubscription,
+    CreateRefund, Currency,
+    Expandable, Invoice, InvoiceId, PaymentIntentId, Refund, RequestStrategy,
+    Subscription, SubscriptionId,
 };
 
 /// Base URL for the raw Stripe REST API. The official `stripe::Client` used
@@ -305,185 +305,6 @@ impl StripeClient {
         Ok(None)
     }
 
-    /// Creates or retrieves a Stripe customer for an account
-    ///
-    /// # Arguments
-    /// * `account_id` - Hex-encoded account ID for metadata
-    /// * `email` - Customer email (optional)
-    /// * `name` - Customer name (optional)
-    ///
-    /// # Returns
-    /// Stripe Customer ID
-    pub async fn get_or_create_customer(
-        &self,
-        account_id: &str,
-        email: Option<&str>,
-        name: Option<&str>,
-    ) -> Result<String> {
-        // First try to find existing customer by metadata
-        let params = stripe::ListCustomers {
-            ..Default::default()
-        };
-        let customers = Customer::list(&self.client, &params).await?;
-
-        for customer in customers.data {
-            if let Some(metadata) = &customer.metadata {
-                if metadata.get("account_id").map(|s| s.as_str()) == Some(account_id) {
-                    return Ok(customer.id.to_string());
-                }
-            }
-        }
-
-        // Create new customer
-        let mut params = CreateCustomer::new();
-        params.email = email;
-        params.name = name;
-        params.metadata = Some(
-            [("account_id".to_string(), account_id.to_string())]
-                .into_iter()
-                .collect(),
-        );
-
-        let customer = Customer::create(&self.client, params).await?;
-        Ok(customer.id.to_string())
-    }
-
-    /// Creates a Stripe Checkout Session for subscription
-    ///
-    /// # Arguments
-    /// * `customer_id` - Stripe Customer ID
-    /// * `price_id` - Stripe Price ID for the subscription plan
-    /// * `trial_days` - Number of trial days (0 = no trial)
-    /// * `account_id` - Hex-encoded account ID for metadata
-    ///
-    /// # Returns
-    /// Checkout Session URL for redirect
-    pub async fn create_subscription_checkout(
-        &self,
-        customer_id: &str,
-        price_id: &str,
-        trial_days: u32,
-        account_id: &str,
-    ) -> Result<String> {
-        let frontend_url =
-            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
-
-        let success_url = format!(
-            "{}/dashboard/account/subscription?success=1&session_id={{CHECKOUT_SESSION_ID}}",
-            frontend_url
-        );
-        let cancel_url = format!("{}/dashboard/account/subscription?canceled=1", frontend_url);
-
-        let customer_id: CustomerId = customer_id.parse()?;
-
-        let mut params = CreateCheckoutSession::new();
-        params.mode = Some(CheckoutSessionMode::Subscription);
-        params.customer = Some(customer_id);
-        params.line_items = Some(vec![CreateCheckoutSessionLineItems {
-            price: Some(price_id.to_string()),
-            quantity: Some(1),
-            ..Default::default()
-        }]);
-
-        // Add trial period if specified
-        if trial_days > 0 {
-            params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
-                trial_period_days: Some(trial_days),
-                metadata: Some(
-                    [("account_id".to_string(), account_id.to_string())]
-                        .into_iter()
-                        .collect(),
-                ),
-                ..Default::default()
-            });
-        } else {
-            params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
-                metadata: Some(
-                    [("account_id".to_string(), account_id.to_string())]
-                        .into_iter()
-                        .collect(),
-                ),
-                ..Default::default()
-            });
-        }
-
-        // Enable automatic tax if configured
-        if std::env::var("STRIPE_AUTOMATIC_TAX").is_ok() {
-            params.automatic_tax = Some(stripe::CreateCheckoutSessionAutomaticTax {
-                enabled: true,
-                liability: None,
-            });
-            params.tax_id_collection =
-                Some(stripe::CreateCheckoutSessionTaxIdCollection { enabled: true });
-        }
-
-        params.success_url = Some(&success_url);
-        params.cancel_url = Some(&cancel_url);
-        params.metadata = Some(
-            [("account_id".to_string(), account_id.to_string())]
-                .into_iter()
-                .collect(),
-        );
-
-        let session = CheckoutSession::create(&self.client, params).await?;
-
-        session
-            .url
-            .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
-    }
-
-    /// Creates a Stripe Billing Portal session for subscription management
-    ///
-    /// # Arguments
-    /// * `customer_id` - Stripe Customer ID
-    /// * `return_url` - URL to return to after portal session
-    ///
-    /// # Returns
-    /// Billing Portal URL
-    pub async fn create_portal_session(
-        &self,
-        customer_id: &str,
-        return_url: &str,
-    ) -> Result<String> {
-        let customer_id: CustomerId = customer_id.parse()?;
-
-        let mut params = CreateBillingPortalSession::new(customer_id);
-        params.return_url = Some(return_url);
-
-        let session = BillingPortalSession::create(&self.client, params).await?;
-
-        Ok(session.url)
-    }
-
-    /// Retrieves subscription details from Stripe
-    ///
-    /// # Arguments
-    /// * `subscription_id` - Stripe Subscription ID (sub_...)
-    ///
-    /// # Returns
-    /// Subscription details
-    #[allow(dead_code)]
-    pub async fn get_subscription(&self, subscription_id: &str) -> Result<SubscriptionInfo> {
-        let sub_id: SubscriptionId = subscription_id.parse()?;
-        let subscription = Subscription::retrieve(&self.client, &sub_id, &[]).await?;
-
-        // Extract price ID from items
-        let price_id = subscription
-            .items
-            .data
-            .first()
-            .and_then(|item| item.price.as_ref())
-            .map(|price| price.id.to_string());
-
-        Ok(SubscriptionInfo {
-            id: subscription.id.to_string(),
-            status: format!("{:?}", subscription.status),
-            current_period_end: subscription.current_period_end,
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            price_id,
-        })
-    }
-
     /// Finds the subscription item ID matching a specific metered price
     ///
     /// When a Stripe subscription contains metered pricing, we need the subscription
@@ -517,49 +338,6 @@ impl StripeClient {
             metered_price_id,
             subscription_id
         )
-    }
-
-    /// Cancels a subscription
-    ///
-    /// # Arguments
-    /// * `subscription_id` - Stripe Subscription ID
-    /// * `at_period_end` - If true, cancel at end of billing period; if false, cancel immediately
-    ///
-    /// # Returns
-    /// Updated subscription info
-    pub async fn cancel_subscription(
-        &self,
-        subscription_id: &str,
-        at_period_end: bool,
-    ) -> Result<SubscriptionInfo> {
-        let sub_id: SubscriptionId = subscription_id.parse()?;
-
-        if at_period_end {
-            // Cancel at period end
-            let mut params = UpdateSubscription::new();
-            params.cancel_at_period_end = Some(true);
-            let subscription = Subscription::update(&self.client, &sub_id, params).await?;
-
-            Ok(SubscriptionInfo {
-                id: subscription.id.to_string(),
-                status: format!("{:?}", subscription.status),
-                current_period_end: subscription.current_period_end,
-                cancel_at_period_end: subscription.cancel_at_period_end,
-                price_id: None,
-            })
-        } else {
-            // Cancel immediately
-            let subscription =
-                Subscription::cancel(&self.client, &sub_id, Default::default()).await?;
-
-            Ok(SubscriptionInfo {
-                id: subscription.id.to_string(),
-                status: format!("{:?}", subscription.status),
-                current_period_end: subscription.current_period_end,
-                cancel_at_period_end: subscription.cancel_at_period_end,
-                price_id: None,
-            })
-        }
     }
 
     /// Create a usage record for metered billing
@@ -627,17 +405,6 @@ pub struct UsageRecordResult {
     pub id: String,
     pub quantity: i64,
     pub timestamp: i64,
-}
-
-/// Subscription information returned from Stripe
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct SubscriptionInfo {
-    pub id: String,
-    pub status: String,
-    pub current_period_end: i64,
-    pub cancel_at_period_end: bool,
-    pub price_id: Option<String>,
 }
 
 /// Result from retrieving a paid checkout session

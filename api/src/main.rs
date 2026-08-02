@@ -464,9 +464,6 @@ async fn setup_stripe_webhooks(custom_url: Option<String>) -> Result<(), std::io
         "checkout.session.completed",
         "invoice.paid",
         "invoice.payment_failed",
-        "customer.subscription.created",
-        "customer.subscription.updated",
-        "customer.subscription.deleted",
     ];
 
     println!("Events: {:?}", events);

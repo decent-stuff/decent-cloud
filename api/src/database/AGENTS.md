@@ -9,7 +9,7 @@
 | Module registry / exports | `mod.rs` | Public DB surface and test modules |
 | Contracts lifecycle data | `contracts.rs` | One of the largest modules |
 | Marketplace inventory | `offerings.rs`, `providers.rs` | Offerings + provider metadata |
-| Account/billing data | `accounts.rs`, `subscriptions.rs` | User-facing account state |
+| Account/billing data | `accounts.rs` | User-facing account state |
 | Infra/resource state | `cloud_resources.rs`, `agent_pools.rs` | Provisioning-facing records |
 | Shared DB tests | `test_helpers.rs` | Ephemeral PostgreSQL helpers |
 

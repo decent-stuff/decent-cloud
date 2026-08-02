@@ -860,8 +860,6 @@ pub enum ApiTags {
     Resellers,
     /// Agent pool operations endpoints
     Pools,
-    /// Subscription management endpoints
-    Subscriptions,
     /// Cloud self-provisioning endpoints
     Cloud,
 }

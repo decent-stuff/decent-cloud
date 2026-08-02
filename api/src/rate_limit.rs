@@ -250,9 +250,6 @@ fn is_strict_path(path: &str) -> bool {
     if p == "/oauth/register" {
         return true;
     }
-    if p.starts_with("/subscriptions/checkout") {
-        return true;
-    }
     if p == "/agents-waitlist" {
         return true;
     }
@@ -302,10 +299,6 @@ mod tests {
         ));
         assert!(matches!(
             classify("/api/v1/oauth/register", "POST"),
-            Tier::Strict
-        ));
-        assert!(matches!(
-            classify("/api/v1/subscriptions/checkout", "POST"),
             Tier::Strict
         ));
         assert!(matches!(

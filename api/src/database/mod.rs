@@ -27,7 +27,6 @@ pub mod reseller;
 pub mod rewards;
 pub mod spending_alerts;
 pub mod stats;
-pub mod subscriptions;
 pub mod telegram_tracking;
 pub mod tokens;
 pub mod totp;
@@ -43,7 +42,6 @@ pub use cloud_accounts::CloudAccount;
 pub use cloud_resources::CloudResourceWithDetails;
 pub use contracts::ContractDisputeUpsert;
 pub use notification_config::UserNotificationConfig;
-pub use subscriptions::{AccountSubscription, SubscriptionEventInput, SubscriptionPlan};
 pub use types::{Database, LedgerEntryData};
 
 // Import all handler implementations
