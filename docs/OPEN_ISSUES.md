@@ -204,14 +204,14 @@ against the real warm stack (api:59011 + web:59010), no first-party mocks. Final
 **Net-new findings (documented / tracked):**
 - **Code-robustness audit:** most categories CLEAN (timeouts, hex, stale refs, dead code, DB
   defaults, money-path/refund-gate, unwrap/expect, `api.ts`, `danger_accept_invalid_certs`). One
-  finding **shipped** (R1/R2 auth single-source, above). One finding **documented, NOT shipped:**
-  **R3** — `StripeClient::new().ok()` silently swallows Stripe misconfig at 6 sites
-  (`admin.rs`/`providers.rs`/`webhooks.rs`/`contracts.rs`/`main.rs`×2). It is money-safe (returns
-  `None` → handlers return `Ok(None)` = "refund not performed"), but **invisible** — no warning is
-  logged. Mitigated by the existing `require_stripe_in_prod()` boot-gate (production refuses to
-  start without `STRIPE_SECRET_KEY`); the gap is dev/staging only. Tracked for a dedicated **"BE LOUD
-  about Stripe misconfig"** pass (replace `.ok()` with a `tracing::warn!`-on-failure constructor). No
-  matching commit in `git log` → not yet shipped.
+  finding **shipped** (R1/R2 auth single-source, above). One finding **shipped (R3):**
+  `StripeClient::new().ok()` silently swallowed Stripe misconfig at 6 sites
+  (`admin.rs`/`providers.rs`/`webhooks.rs`/`contracts.rs`/`main.rs`×2). It was money-safe (returned
+  `None` → handlers return `Ok(None)` = "refund not performed"), but **invisible** — no warning was
+  logged. **Fixed in `b7016c40`** via a DRY `stripe_client_or_warn()` helper (next to `StripeClient`)
+  that emits an actionable `tracing::warn!` (names `STRIPE_SECRET_KEY`, lists what is skipped,
+  includes the error chain) before returning the same `None` — zero money-behavior change, all
+  refund-path tests green. `rg "StripeClient::new().ok()"` now 0.
 - **UX audit Low findings (NOT shipped — below/over threshold):** **U3** validators-zeros (an
   environment artifact, not a bug); **U4** provider-gate button hierarchy (confidence 5, below the
   6/10 ship threshold — skipped); **U5** "Welcome back" greeting for first-time users (confidence 6,
