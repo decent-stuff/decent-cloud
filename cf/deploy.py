@@ -5,7 +5,14 @@ DEV runs as a local docker-compose stack managed by this script (deploy/stop/
 logs/status/restart). PROD deploys via the k8s cluster (ArgoCD GitOps in the
 nuc-k3s repo, namespace dc-prod) — those deploy subcommands fail loud on prod.
 
-`config <env>` (read-only introspection) works for BOTH envs: it shows every
+STAGE (the shared staging env, formerly "dev") deploys via k8s too: namespace
+``dc-stage``, ArgoCD-synced from the nuc-k3s stage overlay.
+``deploy stage`` builds + pushes the api image as the floating ``:stage`` tag
+and bumps the stage overlay image (local nuc-k3s commit — the operator pushes;
+ArgoCD then auto-syncs). See ``docs/MIGRATION-CUTOVER.md`` for the full cutover.
+The legacy ``dev`` docker-compose path stays intact until the cutover retires it.
+
+`config <env>` (read-only introspection) works for ALL envs: it shows every
 config var, its source, and loudly flags any critical var missing/empty. See
 cf/CONFIG.md for the authoritative per-var source map + edit/apply recipes.
 """
@@ -325,18 +332,21 @@ def _print_var_table(title: str, items: dict[str, str]) -> None:
         print(f"    {name.ljust(width)}  {_render_value(name, items[name])}")
 
 
-def _read_prod_stores() -> tuple[dict[str, str], dict[str, str]]:
-    """Read live prod config from the cluster via kubectl (namespace dc-prod).
+def _read_cluster_stores(
+    namespace: str, configmap: str, secret: str
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Read live config from the cluster via kubectl for one namespace.
 
     Returns (configmap_vars, secret_vars). Raises RuntimeError with an
     actionable message if kubectl is missing or the resources can't be read.
+    Used by ``config prod`` (dc-prod) and ``config stage`` (dc-stage).
     """
     import base64
     import json
 
     def _kubectl(args: list[str]) -> dict:
         try:
-            r = subprocess.run(["kubectl", "-n", "dc-prod", *args],
+            r = subprocess.run(["kubectl", "-n", namespace, *args],
                                capture_output=True, text=True, check=True)
         except FileNotFoundError as e:
             raise RuntimeError("kubectl not found on PATH") from e
@@ -347,10 +357,10 @@ def _read_prod_stores() -> tuple[dict[str, str], dict[str, str]]:
         except json.JSONDecodeError as e:
             raise RuntimeError(f"kubectl returned non-JSON: {r.stdout[:200]!r}") from e
 
-    cm = _kubectl(["get", "configmap", "dc-config", "-o", "json"])
+    cm = _kubectl(["get", "configmap", configmap, "-o", "json"])
     cm_vars = dict(cm.get("data") or {})
 
-    sec = _kubectl(["get", "secret", "dc-secret", "-o", "json"])
+    sec = _kubectl(["get", "secret", secret, "-o", "json"])
     sec_raw = dict(sec.get("data") or {})
     # Secret data values are base64-encoded; decode to measure length (never printed).
     sec_vars: dict[str, str] = {}
@@ -366,8 +376,9 @@ def show_config(environment: str) -> int:
     """Print every config var for `environment` with its source + current value,
     and loudly flag any critical var that is missing/empty. Read-only.
 
-    dev  → dc-secrets (common+dev merged, AGE-SOPS) consumed by docker-compose.
-    prod → live cluster (kubectl: dc-config ConfigMap + dc-secret Secret).
+    dev   → dc-secrets (common+dev merged, AGE-SOPS) consumed by docker-compose.
+    prod  → live cluster (kubectl: dc-config ConfigMap + dc-secret Secret).
+    stage → live cluster (kubectl: dc-stage-config ConfigMap + dc-stage-secret Secret).
     See cf/CONFIG.md for the authoritative per-var source map + edit/apply recipes.
     """
     print_header(f"Configuration audit — {environment}")
@@ -380,20 +391,27 @@ def show_config(environment: str) -> int:
         _print_var_table("dc-secrets (common+dev)", store)
         all_vars = dict(store)
         print(f"\n  source: dc-secrets (repo/secrets/shared/{{common,dev}}.yaml)")
-    else:  # prod
+    else:
+        # prod + stage both read live k8s stores (namespace + names differ).
+        if environment == "stage":
+            ns, cm_name, sec_name = "dc-stage", "dc-stage-config", "dc-stage-secret"
+            overlay = "cluster/apps/decent-cloud/stage/"
+        else:
+            ns, cm_name, sec_name = "dc-prod", "dc-config", "dc-secret"
+            overlay = "cluster/apps/decent-cloud/"
         try:
-            cm_vars, sec_vars = _read_prod_stores()
+            cm_vars, sec_vars = _read_cluster_stores(ns, cm_name, sec_name)
         except RuntimeError as e:
-            print_error(f"Could not read live prod config: {e}")
-            print_info("Prod config lives in the nuc-k3s repo (third_party/k8s):")
-            print_info("  cluster/apps/decent-cloud/dc-config.yaml   (ConfigMap, non-secret)")
-            print_info("  cluster/secrets/dc-secret.yaml             (SOPS Secret)")
-            print_info("Edit + apply via `sops` + `kubectl` — see cf/CONFIG.md § PROD.")
+            print_error(f"Could not read live {environment} config: {e}")
+            print_info(f"{environment} config lives in the nuc-k3s repo (third_party/k8s):")
+            print_info(f"  {overlay}  (kustomize overlay → ConfigMap, non-secret)")
+            print_info(f"  cluster/secrets/{sec_name}.yaml   (SOPS Secret)")
+            print_info("Edit + apply via `sops` + `kubectl` — see cf/CONFIG.md.")
             return 1
-        _print_var_table("dc-config ConfigMap (non-secret)", cm_vars)
-        _print_var_table("dc-secret Secret", sec_vars)
+        _print_var_table(f"{cm_name} ConfigMap (non-secret)", cm_vars)
+        _print_var_table(f"{sec_name} Secret", sec_vars)
         all_vars = {**cm_vars, **sec_vars}
-        print("\n  source: live cluster (kubectl -n dc-prod get cm/dc-config secret/dc-secret)")
+        print(f"\n  source: live cluster (kubectl -n {ns} get cm/{cm_name} secret/{sec_name})")
 
     missing = [v for v in CRITICAL_VARS if not all_vars.get(v)]
     if missing:
@@ -818,6 +836,261 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
     return 0
 
 
+# ---------------------------------------------------------------------------
+# `deploy stage` — k8s/ArgoCD (namespace dc-stage), NOT docker-compose.
+# Post-cutover flow (see docs/MIGRATION-CUTOVER.md): build the api image, push it
+# as the floating :stage tag, bump the stage overlay image in the nuc-k3s repo
+# (local commit — operator pushes; ArgoCD then auto-syncs dc-stage). The legacy
+# `dev` docker-compose path stays intact until the cutover runbook retires it.
+# ---------------------------------------------------------------------------
+
+# Forgejo registry (git.kalaj.org, owner decent-stuff) — same registry prod uses.
+# The api-serve + api-sync Deployments share this one image.
+STAGE_API_IMAGE = "git.kalaj.org/decent-stuff/decent-cloud-api"
+# Floating tag this command (and CI) push on every stage update. Until :stage
+# ships, the stage overlay pins prod's tag — see docs/MIGRATION-CUTOVER.md §C.
+STAGE_DEFAULT_TAG = "stage"
+
+
+def _nuc_k3s_dir() -> Path:
+    """Resolve the nuc-k3s checkout (the GitOps source for dc-prod/dc-stage).
+
+    Default: ``<outer-workspace>/third_party/k8s`` (``repo/`` is a submodule of
+    the outer workspace, so ``cf/../..`` is the outer workspace). Override with
+    ``NUC_K3S_DIR`` for non-standard layouts. Returns the resolved path; does
+    NOT verify it exists (callers check the specific file they need).
+    """
+    override = os.environ.get("NUC_K3S_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    cf_dir = Path(__file__).resolve().parent
+    return (cf_dir.parent.parent / "third_party" / "k8s").resolve()
+
+
+def _update_stage_image_tag(kustomization_path: Path, new_tag: str) -> bool:
+    """Set the dc-stage api image tag in the stage kustomization overlay.
+
+    Edits the ``images:`` block in-place, preserving the rest of the file
+    byte-for-byte (operators read/diff this manifest). Updates the
+    ``decent-cloud-api`` target's ``newTag`` (inserts one if absent).
+
+    Returns True if the file changed, False if it already pinned ``new_tag``.
+    Raises RuntimeError with context if the file, the ``images:`` section, or
+    the api target is missing — never silently no-ops (a missing target means
+    the overlay drifted from the expected shape and the bump would be a lie).
+    """
+    if not kustomization_path.exists():
+        raise RuntimeError(
+            f"stage overlay not found at {kustomization_path}. Track 1 "
+            f"(nuc-k3s base/prod/stage manifests) must land first — see "
+            f"docs/MIGRATION-CUTOVER.md § Prerequisites."
+        )
+
+    lines = kustomization_path.read_text().splitlines(keepends=True)
+
+    # Locate the top-level `images:` mapping key (column 0).
+    images_idx: Optional[int] = None
+    for i, ln in enumerate(lines):
+        if ln.startswith("images:"):
+            images_idx = i
+            break
+    if images_idx is None:
+        raise RuntimeError(
+            f"{kustomization_path} has no top-level `images:` field — the stage "
+            f"overlay cannot set an image tag. Reconcile with Track 1's overlay."
+        )
+
+    # The images: block runs until the next top-level mapping key. List items
+    # (even at column 0) and comments stay part of the block.
+    block_end = len(lines)
+    for i in range(images_idx + 1, len(lines)):
+        s = lines[i]
+        if not s.strip():
+            continue
+        if s[0].isspace():
+            continue  # indented continuation
+        first = s.lstrip()
+        if first.startswith("#") or first.startswith("-"):
+            continue  # comment or list item belongs to images:
+        block_end = i  # next top-level key
+        break
+
+    # Find the api image target entry, then its existing newTag (if any).
+    target = "decent-cloud-api"  # substring of the api image; NOT the website image
+    target_start: Optional[int] = None
+    target_newtag: Optional[int] = None
+    newtag_indent = "    "
+    i = images_idx + 1
+    while i < block_end:
+        stripped = lines[i].strip()
+        if stripped.startswith("- name:") and target in stripped:
+            target_start = i
+            newtag_indent = " " * (lines[i].index("-") + 2)
+            j = i + 1
+            while j < block_end:
+                s = lines[j].strip()
+                if s.startswith("- name:"):
+                    break  # next entry began without a newTag
+                if s.startswith("newTag:"):
+                    target_newtag = j
+                    break
+                j += 1
+            break
+        i += 1
+
+    if target_start is None:
+        raise RuntimeError(
+            f"{kustomization_path}: no `images:` entry whose name contains "
+            f"'{target}'. Expected `git.kalaj.org/decent-stuff/decent-cloud-api`."
+        )
+
+    if target_newtag is not None:
+        current = lines[target_newtag].split("newTag:", 1)[1].strip()
+        if current == new_tag:
+            return False  # already pinned — idempotent no-op
+        lines[target_newtag] = f"{newtag_indent}newTag: {new_tag}\n"
+    else:
+        lines.insert(target_start + 1, f"{newtag_indent}newTag: {new_tag}\n")
+
+    kustomization_path.write_text("".join(lines))
+    return True
+
+
+def deploy_stage(tag: str) -> int:
+    """Build + push the dc-stage api image, then bump the stage overlay (nuc-k3s).
+
+    Stage deploys via k8s (ArgoCD, namespace dc-stage), NOT docker-compose. This
+    command is the manual ship-image flow (CI's ``:stage`` build is the automated
+    equivalent — see docs/MIGRATION-CUTOVER.md § Step C). Steps:
+
+      1. Build the api binary natively (reuses the dev build path).
+      2. ``docker build`` the api image from ``api/Dockerfile``.
+      3. Tag + push it as ``<STAGE_API_IMAGE>:<tag>`` (default ``:stage``).
+      4. Bump the ``images:`` entry in the nuc-k3s stage overlay to ``<tag>``.
+      5. Commit the nuc-k3s change LOCALLY (we cannot push nuc-k3s from here);
+         print the exact ``git push`` the operator must run so ArgoCD auto-syncs.
+
+    Returns 0 on success, 1 on any failure (each step fails loud with context).
+    """
+    print_header(f"Decent Cloud — stage deploy (tag: {tag})")
+    print_info("stage runs on k8s (namespace dc-stage, ArgoCD-synced from nuc-k3s)")
+    print_info("this ships the api image + bumps the overlay; see docs/MIGRATION-CUTOVER.md")
+    print()
+
+    # 0. Docker must be present (build + push).
+    if not check_docker():
+        return 1
+    print()
+
+    # 1. Build the api binary natively (also yields the hash for cache-busting).
+    if not build_rust_binaries_natively():
+        print_error("API binary build failed — cannot proceed")
+        return 1
+    binary_hash = calculate_binary_hash()
+    print_info(f"API binary hash: {binary_hash}")
+    print()
+
+    project_root = Path(__file__).resolve().parent.parent
+    full_image = f"{STAGE_API_IMAGE}:{tag}"
+
+    # 2-3. docker build directly to the registry tag (BINARY_HASH busts the
+    # layer cache when the binary changes for any reason).
+    print_header(f"Building + tagging {full_image}")
+    build_cmd = [
+        "docker", "build",
+        "-f", "api/Dockerfile",
+        "-t", full_image,
+        "--build-arg", f"USER_ID={os.getuid()}",
+        "--build-arg", f"GROUP_ID={os.getgid()}",
+        "--build-arg", f"BINARY_HASH={binary_hash}",
+        ".",
+    ]
+    print_info(f"$ {' '.join(shlex.quote(c) for c in build_cmd)}")
+    try:
+        subprocess.run(build_cmd, check=True, cwd=project_root)
+    except subprocess.CalledProcessError as e:
+        print_error(f"docker build failed (rc={e.returncode})")
+        return 1
+    except FileNotFoundError:
+        print_error("docker not found on PATH")
+        return 1
+    print_success(f"Built {full_image}")
+    print()
+
+    # 3b. push to the Forgejo registry.
+    print_header(f"Pushing {full_image}")
+    push_cmd = ["docker", "push", full_image]
+    print_info(f"$ {' '.join(shlex.quote(c) for c in push_cmd)}")
+    try:
+        subprocess.run(push_cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print_error(f"docker push failed (rc={e.returncode})")
+        print_info("If 401/unauthorized: run `docker login git.kalaj.org` (operator token).")
+        return 1
+    except FileNotFoundError:
+        print_error("docker not found on PATH")
+        return 1
+    print_success(f"Pushed {full_image}")
+    print()
+
+    # 4. bump the nuc-k3s stage overlay image tag.
+    nuc_k3s = _nuc_k3s_dir()
+    overlay = nuc_k3s / "cluster" / "apps" / "decent-cloud" / "stage" / "kustomization.yaml"
+    print_header(f"Bumping stage overlay: {overlay}")
+    try:
+        changed = _update_stage_image_tag(overlay, tag)
+    except RuntimeError as e:
+        print_error(f"Could not bump stage overlay: {e}")
+        print_info("Track 1 (nuc-k3s stage manifests) must land first — see docs/MIGRATION-CUTOVER.md")
+        return 1
+    if changed:
+        print_success(f"Stage overlay api image → :{tag}")
+    else:
+        print_success(f"Stage overlay already pins :{tag} (no manifest change)")
+    print()
+
+    # 5. commit nuc-k3s LOCALLY (operator pushes; we cannot — see plan APPENDIX A).
+    rel_overlay = "cluster/apps/decent-cloud/stage/kustomization.yaml"
+    if changed:
+        print_header("Committing nuc-k3s change (local only)")
+        try:
+            subprocess.run(["git", "-C", str(nuc_k3s), "add", rel_overlay], check=True)
+            subprocess.run(
+                ["git", "-C", str(nuc_k3s), "commit", "-m",
+                 f"deploy(stage): bump dc-stage api image to {tag}"],
+                check=True, capture_output=True, text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            err = (e.stderr or e.stdout or str(e)).strip()
+            print_error(f"git commit in nuc-k3s failed: {err}")
+            print_info(f"The overlay edit is on disk at {overlay} — commit + push it manually.")
+            return 1
+        print_success("Committed locally in nuc-k3s")
+        print()
+    else:
+        print_info("No nuc-k3s commit needed (overlay unchanged)")
+
+    # Operator handoff — the one step this command cannot do (nuc-k3s push).
+    print(f"{GREEN}========================================")
+    print(f"Stage image shipped ({full_image})")
+    print(f"========================================{NC}")
+    print()
+    if changed:
+        print("The nuc-k3s change is committed LOCALLY. Push it so ArgoCD auto-syncs dc-stage:")
+        print(f"  {BLUE}cd {nuc_k3s} && git push origin main{NC}")
+        print()
+    print("Force an ArgoCD refresh + roll dc-stage so it picks up the new image:")
+    print(f"  {BLUE}kubectl -n argocd patch application decent-cloud-stage \\{NC}")
+    print(f"    {BLUE}--type=merge -p '{{\"metadata\":{{\"annotations\":{{\"argocd.argoproj.io/refresh\":\"normal\"}}}}}}'{NC}")
+    print(f"  {BLUE}kubectl -n dc-stage rollout restart deploy/dc-api{NC}")
+    print()
+    print("Verify stage health:")
+    print(f"  {BLUE}kubectl -n dc-stage get pods -l app=dc-api{NC}")
+    print(f"  {BLUE}curl -fsS https://api.stage.decent-cloud.org/api/v1/health{NC}")
+    print()
+    return 0
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -825,23 +1098,31 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s deploy dev                 # Deploy the local dev stack
+  %(prog)s deploy dev                 # Deploy the local dev stack (docker-compose)
+  %(prog)s deploy stage               # Ship the stage api image + bump nuc-k3s overlay (k8s)
+  %(prog)s deploy stage --tag <sha>   # Ship a pinned stage image instead of the floating :stage
   %(prog)s stop dev                  # Stop dev services
   %(prog)s logs dev -f website       # Follow dev website logs
   %(prog)s status dev                # Show dev status
   %(prog)s restart dev               # Restart dev services
   %(prog)s config dev                # Audit dev config vars + sources (read-only)
   %(prog)s config prod               # Audit prod config (reads live cluster)
+  %(prog)s config stage              # Audit stage config (reads live dc-stage cluster)
 
-Production deploys via k8s (ArgoCD, namespace dc-prod); see cf/CONFIG.md.
+Prod + stage deploy via k8s (ArgoCD, namespaces dc-prod / dc-stage); see cf/CONFIG.md
+and docs/MIGRATION-CUTOVER.md. `deploy dev` is the legacy local docker-compose stack,
+retained until the stage cutover retires it.
         """,
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Deploy command
+    # Deploy command. `dev` = local docker-compose; `stage` = build+push image +
+    # bump the nuc-k3s overlay (k8s/ArgoCD); `prod` fails loud (GitOps-only).
     deploy_parser = subparsers.add_parser("deploy", aliases=["start", "up"], help="Deploy to environment")
-    deploy_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
+    deploy_parser.add_argument("environment", choices=["dev", "development", "prod", "production", "stage"], help="Target environment")
+    deploy_parser.add_argument("--tag", default=STAGE_DEFAULT_TAG,
+                               help=f"Image tag for `deploy stage` (default: {STAGE_DEFAULT_TAG}, the floating tag)")
 
     # Stop command
     stop_parser = subparsers.add_parser("stop", help="Stop environment services")
@@ -866,9 +1147,9 @@ Production deploys via k8s (ArgoCD, namespace dc-prod); see cf/CONFIG.md.
     restart_parser = subparsers.add_parser("restart", help="Restart environment services")
     restart_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
 
-    # Config command (read-only introspection; works for dev AND prod)
+    # Config command (read-only introspection; works for dev, prod, AND stage)
     config_parser = subparsers.add_parser("config", help="Show config vars + sources for an env (read-only audit)")
-    config_parser.add_argument("environment", choices=["dev", "development", "prod", "production"], help="Target environment")
+    config_parser.add_argument("environment", choices=["dev", "development", "prod", "production", "stage"], help="Target environment")
 
     args = parser.parse_args()
 
@@ -877,12 +1158,14 @@ Production deploys via k8s (ArgoCD, namespace dc-prod); see cf/CONFIG.md.
         return 1
 
     # Normalize environment names
-    env_map = {"dev": "dev", "development": "dev", "prod": "prod", "production": "prod"}
+    env_map = {"dev": "dev", "development": "dev", "prod": "prod", "production": "prod", "stage": "stage"}
     environment = env_map[args.environment]
 
     # Execute command
     try:
         if args.command in ("deploy", "start", "up"):
+            if environment == "stage":
+                return deploy_stage(args.tag)
             return deploy_environment(environment)
         elif args.command == "stop":
             return stop_environment(environment)
