@@ -407,8 +407,15 @@ ssh root@proxmox-host dc-agent doctor --no-test-provision
 | `MAILCHANNELS_API_KEY` | api-cli health | Email verification |
 
 ## KNOWN ISSUES
+- **Canonical live source:** GitHub Issues in `decent-stuff/decent-cloud` — check these (in addition to
+  the in-repo inventory below) whenever you are asked to review open tasks.
+  ```bash
+  gh issue list --repo decent-stuff/decent-cloud
+  ```
+  If `gh` is not authenticated, fall back to the in-repo inventory and note the limitation.
 - **In-repo issue inventory:** `docs/OPEN_ISSUES.md` — categorized list of open issues, deferred
   product decisions, and e2e coverage gaps. Updated each session. Read it before starting work.
+  Reconcile any drift between it and GitHub before acting.
 - **E2e flow catalog:** `website/tests/e2e/FLOWS.md` — single-source-of-truth mapping of all user
   flows → test coverage status. Update when adding tests or closing coverage gaps.
 - DNS propagation can delay Let's Encrypt visibility after record creation.
