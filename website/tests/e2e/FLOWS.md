@@ -25,7 +25,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 | Tag | Meaning |
 |-----|---------|
-| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~27 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~26 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~27 critical-path tests, <35s (dev loop)
+npm run test:e2e:fast:smoke                 # ~26 critical-path tests, <35s (dev loop)
 npm run test:e2e:fast -- --grep @rental     # every flow in a category
 npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
 ```
