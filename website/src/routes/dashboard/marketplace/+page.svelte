@@ -12,7 +12,7 @@
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
-	import { truncatePubkey } from "$lib/utils/identity";
+	import { providerDisplayName } from "$lib/utils/provider-display";
 	import { addToComparison, removeFromComparison, COMPARE_MAX_ERROR } from "$lib/utils/compare";
 	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
 	import { buildQuickPillClass, buildRowActionButtonClass } from "$lib/utils/marketplace-ui";
@@ -1419,14 +1419,8 @@
 											href="/dashboard/providers/{offering.owner_username ||
 												offering.pubkey}"
 											onclick={(e) => e.stopPropagation()}
-											class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
-												? ''
-												: 'font-mono'}"
-											>{offering.owner_username
-												? `@${offering.owner_username}`
-												: truncatePubkey(
-														offering.pubkey,
-													)}</a
+											class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username ||
+											offering.provider_name ? '' : 'font-mono'}">{providerDisplayName(offering)}</a
 										>
 									</td>
 									<td class="py-3 pr-4">
@@ -1738,14 +1732,11 @@
 										href="/dashboard/providers/{offering.owner_username ||
 											offering.pubkey}"
 										onclick={(e) => e.stopPropagation()}
-										class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username
+										class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username ||
+										offering.provider_name
 											? ''
 											: 'font-mono'}"
-										>{offering.owner_username
-											? `@${offering.owner_username}`
-											: truncatePubkey(
-													offering.pubkey,
-												)}</a
+										>{providerDisplayName(offering)}</a
 									>
 								</div>
 								<div class="flex items-center gap-2 shrink-0">

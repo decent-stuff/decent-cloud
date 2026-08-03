@@ -29,7 +29,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import { signRequest } from '$lib/services/auth-api';
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
-	import { truncatePubkey } from '$lib/utils/identity';
+	import { providerDisplayName } from '$lib/utils/provider-display';
 	import { recordView } from '$lib/utils/recently-viewed';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import SlaBreachTimeline from '$lib/components/SlaBreachTimeline.svelte';
@@ -432,12 +432,12 @@
 						<Icon name={getTypeIcon(offering.product_type)} size={16} />
 						{offering.product_type}
 					</span>
-					<a
-						href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
-						class="text-sm text-neutral-500 hover:text-primary-400 {offering.owner_username ? '' : 'font-mono'}"
-					>
-						{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
-					</a>
+				<a
+					href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+					class="text-sm text-neutral-500 hover:text-primary-400 {offering.owner_username || offering.provider_name ? '' : 'font-mono'}"
+				>
+					{providerDisplayName(offering)}
+				</a>
 					<a href="/dashboard/marketplace?provider={offering.pubkey}" class="text-xs text-neutral-500 hover:text-primary-400 transition-colors">
 						View all offerings →
 					</a>
@@ -805,8 +805,8 @@
 					<div class="h-8 w-8 rounded-full bg-primary-500/20 flex items-center justify-center shrink-0">
 						<Icon name="user" size={16} class="text-primary-400" />
 					</div>
-					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors {offering.owner_username ? '' : 'font-mono truncate'}">
-						{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
+				<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors {offering.owner_username || offering.provider_name ? '' : 'font-mono truncate'}">
+					{providerDisplayName(offering)}
 					</span>
 				</a>
 

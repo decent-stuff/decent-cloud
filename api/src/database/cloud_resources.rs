@@ -1897,6 +1897,7 @@ mod tests {
             reseller_name: None,
             reseller_commission_percent: None,
             owner_username: None,
+            provider_name: None,
             provisioner_type: None,
             provisioner_config: None,
             template_name: None,

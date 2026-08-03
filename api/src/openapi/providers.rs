@@ -3132,6 +3132,7 @@ impl ProvidersApi {
                 reseller_name: None,
                 reseller_commission_percent: None,
                 owner_username: None,
+                provider_name: None,
                 provisioner_type: Some(pool.provisioner_type.clone()),
                 provisioner_config: None,
                 template_name: capabilities.available_templates.first().cloned(),
