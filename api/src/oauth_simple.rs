@@ -33,11 +33,61 @@ struct OAuthState {
     created_at: std::time::Instant,
 }
 
-/// Query parameters for OAuth callback
+/// Query parameters for OAuth callback.
+///
+/// All fields are optional so the extractor never fails deserialization: Google
+/// redirects back with `?code=...&state=...` on success but `?error=...[&error_description=...]`
+/// when the user denies consent (or neither, on a malformed/direct hit). A
+/// required `code` field produced a bare 400 "missing field code" on the error
+/// branch — poor UX and a real prod symptom (smoke finding 2026-08-03). The
+/// handler now consults [`oauth_callback_error_redirect`] to redirect those
+/// cases to the frontend gracefully.
 #[derive(Debug, Deserialize)]
 pub struct OAuthCallbackQuery {
-    code: String,
-    state: String,
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
+}
+
+/// Decide whether an OAuth callback should redirect to the frontend with a
+/// user-facing error instead of proceeding with token exchange.
+///
+/// Returns `Some(redirect_url)` when the callback lacks a usable `code`/`state`
+/// or carries an `error` (consent denial, provider outage, etc.). Returns `None`
+/// for the success path (valid `code` + `state`, no `error`) so the caller can
+/// proceed. `frontend_url` may carry a trailing slash.
+///
+/// This is split out as a pure function so the redirect-decision logic is
+/// testable without standing up the full handler + OAuth client + DB.
+pub(crate) fn oauth_callback_error_redirect(
+    frontend_url: &str,
+    code: Option<&str>,
+    state: Option<&str>,
+    error: Option<&str>,
+    error_description: Option<&str>,
+) -> Option<String> {
+    // Success path: both code and state present and no error from the provider.
+    if error.is_none() && code.is_some() && state.is_some() {
+        return None;
+    }
+
+    // Build a short user-facing message.
+    let message = match (error, error_description) {
+        (Some("access_denied"), _) => "Google sign-in was cancelled.".to_string(),
+        (Some(e), Some(d)) => format!("Google sign-in failed: {e} ({d})"),
+        (Some(e), None) => format!("Google sign-in failed: {e}"),
+        (None, _) if code.is_none() => {
+            "Google sign-in failed: no authorization code received.".to_string()
+        }
+        (None, _) => "Google sign-in failed: session expired (no state).".to_string(),
+    };
+
+    Some(format!(
+        "{}/login?oauth_error={}",
+        frontend_url.trim_end_matches('/'),
+        urlencoding::encode(&message)
+    ))
 }
 
 /// Request body for OAuth account registration
@@ -150,9 +200,38 @@ pub async fn google_callback(
     cookie_jar: &CookieJar,
     db: Data<&Arc<Database>>,
 ) -> PoemResult<Response> {
+    // Consent-denial / malformed-callback handling. Google redirects back with
+    // ?error=access_denied when the user denies consent, or with neither code
+    // nor error on a malformed hit. Redirect those to the frontend with a
+    // user-facing message instead of returning a bare 400 "missing field code"
+    // (smoke finding 2026-08-03: a real user hit this 4× in rapid succession).
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
+    if let Some(redirect_url) = oauth_callback_error_redirect(
+        &frontend_url,
+        params.code.as_deref(),
+        params.state.as_deref(),
+        params.error.as_deref(),
+        params.error_description.as_deref(),
+    ) {
+        tracing::info!(
+            "oauth google callback redirecting to frontend: {}",
+            params.error.as_deref().unwrap_or("missing code/state")
+        );
+        return Ok(Response::builder()
+            .status(StatusCode::FOUND)
+            .header("Location", redirect_url)
+            .finish());
+    }
+
+    // Safe to unwrap: oauth_callback_error_redirect returned None only when
+    // both code and state are present and no error was reported.
+    let code = params.code.as_deref().unwrap();
+    let state = params.state.as_deref().unwrap();
+
     // Verify CSRF token and retrieve PKCE verifier
     let mut states = OAUTH_STATES.write().await;
-    let oauth_state = states.remove(&params.state).ok_or_else(|| {
+    let oauth_state = states.remove(state).ok_or_else(|| {
         poem::Error::from_string("Invalid or expired OAuth state", StatusCode::BAD_REQUEST)
     })?;
 
@@ -172,7 +251,7 @@ pub async fn google_callback(
     let pkce_verifier = oauth2::PkceCodeVerifier::new(oauth_state.pkce_verifier_secret);
 
     let token_response = client
-        .exchange_code(AuthorizationCode::new(params.code))
+        .exchange_code(AuthorizationCode::new(code.to_string()))
         .set_pkce_verifier(pkce_verifier)
         .request_async(async_http_client)
         .await
@@ -357,9 +436,6 @@ pub async fn google_callback(
         oauth_info_cookie.set_max_age(std::time::Duration::from_secs(15 * 60)); // 15 minutes
         cookie_jar.add(oauth_info_cookie);
     }
-
-    let frontend_url =
-        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
 
     let redirect_path = if username.is_some() {
         "/dashboard/marketplace"
@@ -630,6 +706,70 @@ pub async fn oauth_register(
 mod tests {
     use super::*;
     use dcc_common::DccIdentity;
+
+    #[test]
+    fn test_oauth_callback_error_redirect_consent_denied() {
+        // Google redirects back with ?error=access_denied when the user denies
+        // consent. Must produce a graceful frontend redirect, NOT a bare 400.
+        let url = oauth_callback_error_redirect(
+            "http://localhost:59010",
+            None,
+            Some("some-state"),
+            Some("access_denied"),
+            None,
+        )
+        .expect("consent-denied must redirect, not 400");
+        assert!(url.starts_with("http://localhost:59010/login?oauth_error="));
+        // The user-facing message is URL-encoded into the query string.
+        assert!(
+            url.contains("cancelled") || url.contains("denied"),
+            "redirect should carry a user-facing denial message: {url}"
+        );
+    }
+
+    #[test]
+    fn test_oauth_callback_error_redirect_no_params() {
+        // No params at all (e.g. the callback was hit directly, or Google sent
+        // neither code nor error). Must still redirect gracefully, not 400 with
+        // "missing field code".
+        let url = oauth_callback_error_redirect(
+            "https://decent-cloud.org",
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("missing-code must redirect, not 400");
+        assert!(url.starts_with("https://decent-cloud.org/login?oauth_error="));
+    }
+
+    #[test]
+    fn test_oauth_callback_error_redirect_success_proceeds() {
+        // Valid success params: code + state present, no error -> None (handler
+        // proceeds with token exchange). Trailing slash on frontend URL is fine.
+        let res = oauth_callback_error_redirect(
+            "https://decent-cloud.org/",
+            Some("4/0AxK..."),
+            Some("csrf-state"),
+            None,
+            None,
+        );
+        assert!(res.is_none(), "success params must NOT redirect");
+    }
+
+    #[test]
+    fn test_oauth_callback_error_redirect_generic_error_carries_reason() {
+        // A non-access_denied error surfaces the provider's reason.
+        let url = oauth_callback_error_redirect(
+            "http://localhost:59010",
+            None,
+            Some("st"),
+            Some("temporarily_unavailable"),
+            Some("Google is down"),
+        )
+        .expect("error must redirect");
+        assert!(url.starts_with("http://localhost:59010/login?oauth_error="));
+    }
 
     #[test]
     fn test_generate_ed25519_keypair() {
