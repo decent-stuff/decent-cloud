@@ -287,13 +287,18 @@
 		{/key}
 		{/if}
 
-		<!-- Always reachable: jump straight to seed generation to register. -->
+	<!-- "Create an account" jumps straight to seed generation. It is the PRIMARY
+	create path when the seed-phrase chooser is hidden (OAuth on), but redundant
+	with the "Generate New" card when the chooser is already visible (OAuth off,
+	choose mode) — F8 collapses to a single create path, so hide it then. -->
+	{#if !effectiveShowSeed || initialSeedMode !== 'choose'}
 		<p class="text-center text-sm text-neutral-500 pt-1">
 			New here?
 			<button type="button" onclick={showRegistration} class="text-primary-400 hover:text-primary-300 font-medium underline">
 				Create an account
 			</button>
 		</p>
+	{/if}
 	</div>
 {/if}
 
