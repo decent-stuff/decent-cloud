@@ -254,10 +254,15 @@ start_stack() {
   # ── API server ───────────────────────────────────────────────────────────
   local api_url
   if [ "$E2E_MODE" -eq 1 ]; then
-    if [ ! -x "$API_BINARY" ]; then
-      echo "E2E mode: $API_BINARY missing — building (cargo build -p api --bin api-server --release)..."
-      (cd "$ROOT" && cargo build -p api --bin api-server --release)
-    fi
+    # E2E MUST run against current source. cargo's fingerprinting makes the
+    # build below a fast no-op when nothing changed and a correct rebuild when
+    # it did. Do NOT "optimize" this back to a build-only-if-missing guard: on
+    # persistent CARGO_TARGET_DIR caches (e.g. the self-hosted CI runner) that
+    # silently serves a stale pre-merge binary and tests pass/fail against the
+    # wrong code (seen 2026-08-03: PR #456 e2e ran against the merged-#455
+    # binary, so only the newest-commit-dependent spec failed).
+    echo "E2E mode: ensuring $API_BINARY is up to date (cargo build -p api --bin api-server --release)..."
+    (cd "$ROOT" && cargo build -p api --bin api-server --release)
     if _healthy api "http://localhost:$API_PORT/api/v1/health"; then
       echo "API already running (pid $(cat "$PIDS/api.pid"))"
     else

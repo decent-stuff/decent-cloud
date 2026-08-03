@@ -3,6 +3,7 @@ pub mod cloud;
 pub mod crypto;
 pub mod database;
 pub mod helpcenter;
+pub mod environment;
 pub mod http_util;
 pub mod invoice_storage;
 pub mod invoices;

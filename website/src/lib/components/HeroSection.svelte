@@ -84,12 +84,12 @@
 					<span>Open Marketplace</span>
 					<Icon name="arrow-right" size={20} />
 				</a>
-				<a
-					href="/dashboard/provider/support"
-					class="inline-flex items-center gap-2.5 px-5 py-2.5 border border-neutral-700 text-neutral-300 text-sm font-medium hover:border-neutral-500 hover:text-white hover:bg-surface-hover transition-all"
-				>
-					<span>Become a Provider</span>
-				</a>
+			<a
+				href="/dashboard/provider/start"
+				class="inline-flex items-center gap-2.5 px-5 py-2.5 border border-neutral-700 text-neutral-300 text-sm font-medium hover:border-neutral-500 hover:text-white hover:bg-surface-hover transition-all"
+			>
+				<span>Become a Provider</span>
+			</a>
 			</div>
 
 			<!-- Stats row -->

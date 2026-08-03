@@ -21,7 +21,9 @@ htmlcov/
 
 # Rust/Cargo
 .cargo/
-Cargo.lock
+# Note: Cargo.lock IS tracked (operator decision 2026-08-03). The OpenAPI
+# spec_snapshot hash is dep-version-sensitive, so the lockfile must be
+# committed for reproducible builds across environments. Do NOT re-add it here.
 .rustup/
 
 # Package Manager

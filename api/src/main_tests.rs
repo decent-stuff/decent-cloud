@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::{check_schema_applied, parse_positive_u64};
+    use crate::{
+        check_schema_applied, cloudflare_gateway_dns_warning, parse_positive_u64,
+    };
     use std::env;
 
     #[tokio::test]
@@ -90,5 +92,42 @@ mod tests {
         assert!(parse_positive_u64("X", "99999999999999999999999").is_err());
         // Empty / whitespace-only is rejected.
         assert!(parse_positive_u64("X", "   ").is_err());
+    }
+
+    #[test]
+    fn test_cloudflare_warning_serve_without_config_warns() {
+        // serve manages gateway DNS — an unconfigured Cloudflare MUST warn.
+        let msg = cloudflare_gateway_dns_warning("serve", false);
+        assert!(msg.is_some(), "serve + CF unset must warn");
+        let msg = msg.unwrap();
+        assert!(msg.contains("Cloudflare DNS not configured"));
+        assert!(msg.contains("gateway DNS will NOT work"));
+    }
+
+    #[test]
+    fn test_cloudflare_warning_sync_does_not_warn() {
+        // sync only runs the ledger sync service — it never touches gateway DNS,
+        // so the gateway-DNS warning is misleading there (smoke finding
+        // 2026-08-03). Must stay silent regardless of CF config state.
+        assert_eq!(
+            cloudflare_gateway_dns_warning("sync", false),
+            None,
+            "sync must NOT emit the gateway-DNS warning"
+        );
+        assert_eq!(
+            cloudflare_gateway_dns_warning("sync", true),
+            None,
+            "sync must NOT emit the gateway-DNS warning even when CF is set"
+        );
+    }
+
+    #[test]
+    fn test_cloudflare_warning_serve_with_config_silent() {
+        // serve with CF configured: no warning (everything is fine).
+        assert_eq!(
+            cloudflare_gateway_dns_warning("serve", true),
+            None,
+            "serve + CF configured must not warn"
+        );
     }
 }

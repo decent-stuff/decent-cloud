@@ -455,10 +455,12 @@ pub struct CheckoutSessionResult {
 /// contract is marked `refunded` with no money returned). Without
 /// `STRIPE_WEBHOOK_SECRET`, payment-confirmation webhooks cannot be verified.
 /// Refuse to start rather than boot into a state where refunds silently
-/// no-op. In non-prod the keys stay optional (dev / test / dry-run). The
-/// `"prod"` literal matches the existing CORS gate (`main.rs`).
+/// no-op. In non-prod the keys stay optional (dev / test / dry-run). Production
+/// detection uses the shared [`crate::environment::is_production`] so the gating
+/// matches the prod manifest value (`prod`) consistently across rate-limiter,
+/// CORS, and this check.
 pub fn require_stripe_in_prod(environment: &str) -> Result<()> {
-    if environment == "prod" {
+    if crate::environment::is_production(environment) {
         if std::env::var("STRIPE_SECRET_KEY").is_err() {
             return Err(anyhow::anyhow!(
                 "STRIPE_SECRET_KEY is required when ENVIRONMENT=prod; without it refunds/payments silently no-op. Set STRIPE_SECRET_KEY or run with ENVIRONMENT != prod."

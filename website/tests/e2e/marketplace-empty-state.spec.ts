@@ -1,4 +1,8 @@
 import { test, expect } from './fixtures/test-account';
+import {
+	seedMarketplaceOffering,
+	deleteOfferingById,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the marketplace default-hide empty state.
@@ -9,11 +13,32 @@ import { test, expect } from './fixtures/test-account';
  * one-click "Show N offerings" reveal action — distinct from "Clear all
  * filters", which only appears when user filters are narrowing the results.
  *
- * In the warm stack every seed offering comes from the example provider
- * (is_example=true), so the default-hide empty state appears on a fresh visit
- * with no filters applied — no fixture seeding needed.
+ * After the drop-demos pivot (migration 053) the catalog is honestly empty, so
+ * this spec self-seeds an is_example (demo) offering to reproduce the
+ * default-hide empty state — the very condition the reveal action exists for.
+ * The offering is self_provisioned (so it clears the marketplace query's
+ * pool/self-provisioned filter) and under the example provider pubkey (so
+ * is_example=true → hidden by the default showDemoOfferings=false filter). It is
+ * NOT testing a totally empty catalog (that would have no hidden rows and thus
+ * no reveal button).
  */
 test.describe('Marketplace default-hide empty state', () => {
+	let seededId: string | undefined;
+	test.beforeAll(async () => {
+		// is_example + self_provisioned → hidden by the default demo filter
+		// (showDemoOfferings=false), so it counts toward defaultHiddenCount
+		// without appearing in the default view.
+		const handle = await seedMarketplaceOffering({
+			isExample: true,
+			online: true,
+			name: 'E2E Hidden Demo Offering',
+		});
+		seededId = handle.offeringNumericId;
+	});
+	test.afterAll(async () => {
+		if (seededId) await deleteOfferingById(seededId);
+	});
+
 	test('offers a reveal action when all offerings are hidden by default', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 

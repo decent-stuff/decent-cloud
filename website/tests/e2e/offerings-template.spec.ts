@@ -1,5 +1,9 @@
 import { test, expect } from './fixtures/test-account';
 import { setupConsoleLogging } from './fixtures/auth-helpers';
+import {
+	seedMarketplaceOffering,
+	deleteOfferingById,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E Tests for Offerings Template Download
@@ -8,11 +12,35 @@ import { setupConsoleLogging } from './fixtures/auth-helpers';
  * in one test; dialog interactions (Cancel + CSV download) are in a second.
  * Two navigations total instead of five.
  *
+ * The template dialog's product-type options come from
+ * `GET /api/v1/offerings/product-types`, which derives its types from
+ * example-provider offerings. Migration 053 dropped those, so this spec
+ * self-seeds two example offerings (compute + gpu) to populate the dialog
+ * deterministically instead of relying on ambient demo data.
+ *
  * Prerequisites:
  * - Warm stack: api at http://localhost:59011, web at http://localhost:59010
  */
 
 test.describe('Offerings Template Download', () => {
+	const seededIds: string[] = [];
+	test.beforeAll(async () => {
+		// Seed two distinct product types under the example provider pubkey so
+		// /offerings/product-types returns a non-empty list and the dialog has
+		// real "Download template" buttons to interact with.
+		for (const productType of ['compute', 'gpu']) {
+			const handle = await seedMarketplaceOffering({
+				isExample: true,
+				productType,
+				name: `E2E Template ${productType}`,
+			});
+			seededIds.push(handle.offeringNumericId);
+		}
+	});
+	test.afterAll(async () => {
+		await Promise.all(seededIds.map((id) => deleteOfferingById(id)));
+	});
+
 	test.beforeEach(async ({ page }) => {
 		setupConsoleLogging(page);
 	});

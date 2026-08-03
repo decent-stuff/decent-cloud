@@ -92,6 +92,8 @@ impl RateLimiter {
 
 /// Pure decision rule so tests can cover it without touching process env.
 /// Enabled by default only in production; explicit `RATE_LIMIT_ENABLED` wins.
+/// Production detection goes through [`crate::environment::is_production`] so the
+/// gating matches the prod manifest value (`prod`) — see smoke finding 2026-08-03.
 fn enabled_from_env(environment: &str, rate_limit_enabled: Option<&str>) -> bool {
     match rate_limit_enabled {
         Some("true") => true,
@@ -102,9 +104,9 @@ fn enabled_from_env(environment: &str, rate_limit_enabled: Option<&str>) -> bool
                 "Invalid RATE_LIMIT_ENABLED value; expected 'true' or 'false'. \
                  Falling back to ENVIRONMENT-based default."
             );
-            environment == "production"
+            crate::environment::is_production(environment)
         }
-        None => environment == "production",
+        None => crate::environment::is_production(environment),
     }
 }
 
@@ -424,25 +426,34 @@ mod tests {
     #[test]
     fn test_enabled_from_env_defaults_to_environment() {
         // Unset RATE_LIMIT_ENABLED: enabled only in production.
-        assert!(enabled_from_env("production", None));
+        // The prod manifest sets ENVIRONMENT=prod (NOT "production"); the canonical
+        // production value is `prod` (see environment::is_production, also used by
+        // the CORS gate and the Stripe-required-in-prod check). Rate limiting MUST
+        // be on when ENVIRONMENT=prod or the limiter is silently off in prod
+        // (smoke finding 2026-08-03).
+        assert!(enabled_from_env("prod", None));
         assert!(!enabled_from_env("dev", None));
         assert!(!enabled_from_env("test", None));
-        assert!(!enabled_from_env("staging", None));
+        assert!(!enabled_from_env("stage", None));
+        assert!(!enabled_from_env("play", None));
+        // The literal "production" is NOT a value any manifest emits; rate limiting
+        // must not silently enable only on a misspelled value.
+        assert!(!enabled_from_env("production", None));
     }
 
     #[test]
     fn test_enabled_from_env_explicit_override() {
         // Explicit values win regardless of environment.
         assert!(enabled_from_env("dev", Some("true")));
-        assert!(enabled_from_env("production", Some("true")));
-        assert!(!enabled_from_env("production", Some("false")));
+        assert!(enabled_from_env("prod", Some("true")));
+        assert!(!enabled_from_env("prod", Some("false")));
         assert!(!enabled_from_env("dev", Some("false")));
     }
 
     #[test]
     fn test_enabled_from_env_invalid_value_falls_back_to_environment() {
-        // Garbage values fall back to environment-based default.
-        assert!(enabled_from_env("production", Some("yes")));
+        // Garbage values fall back to environment-based default (prod → on).
+        assert!(enabled_from_env("prod", Some("yes")));
         assert!(!enabled_from_env("dev", Some("1")));
         assert!(!enabled_from_env("test", Some("")));
     }

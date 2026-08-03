@@ -300,16 +300,19 @@ kubectl -n dc-stage rollout restart deploy/dc-api
 ## Step D — Public cutover (the user-visible switch)
 
 This is the only step the public sees. Two parts: repoint the tunnel at dc-stage,
-then DNS. **Decide the hostname strategy first** (Open Decision, resolved:
-overlay uses `stage-*`; operator MAY keep `dev-*` to avoid DNS churn — adjust the
-tunnel ingress + any `dev-*` refs in code/docs accordingly).
+then DNS.
 
-**Hostname choice (pick one):**
-- **Rename `dev-*` → `stage-*`** (cleanest; the overlay already uses `stage-*`):
+> **Decision (locked by operator 2026-08-03): rename `dev-*` → `stage-*`.** Use
+> the `stage-*` hostnames the stage overlay already defines — `stage.decent-cloud.org`,
+> `stage-api.decent-cloud.org`, `stage-support.decent-cloud.org`, `stage-gw.decent-cloud.org`,
+> … (new CF DNS records + tunnel ingress entries). The "keep `dev-*`" alternative
+> is **not** chosen; any remaining `dev-*` refs in code/docs are adjusted to `stage-*`.
+
+**Hostname choice (DECIDED — `stage-*`):**
+- ✅ **Rename `dev-*` → `stage-*`** (cleanest; the overlay already uses `stage-*`):
   new CF DNS records + tunnel ingress entries — `stage-support.decent-cloud.org`,
   `stage-api.decent-cloud.org`, `stage-gw.decent-cloud.org`, …
-- **Keep `dev-*`** (no DNS change): edit the stage overlay's hostnames/tunnel
-  ingress back to `dev-*`. Less churn, less clear.
+- ⬜ ~~**Keep `dev-*`** (no DNS change)~~ — **rejected** by the operator 2026-08-03.
 
 ### D.1 — Repoint the tunnel
 
@@ -336,7 +339,7 @@ cd /project/decent-cloud/third_party/k8s && git commit -am "tunnel(stage): route
 
 ### D.2 — DNS
 
-Create the `stage-*` (or keep `dev-*`) CNAME records → the tunnel's
+Create the `stage-*` CNAME records → the tunnel's
 `<tunnel-id>.cfargotunnel.com`. Verify propagation:
 
 ```bash
@@ -345,11 +348,10 @@ curl -fsS https://stage-api.decent-cloud.org/api/v1/health && echo  # 200
 curl -fsS https://stage.decent-cloud.org/ >/dev/null && echo "web OK"
 ```
 
-> **Stripe / OAuth redirect URIs:** if you renamed to `stage-*`, add the new
+> **Stripe / OAuth redirect URIs (rename is locked):** add the new `stage-*`
 > callback URLs in the Stripe dashboard + Google Cloud Console
 > (`https://stage-api.decent-cloud.org/api/v1/oauth/google/callback`) and update
-> `GOOGLE_OAUTH_REDIRECT_URL` / `FRONTEND_URL` in `dc-stage-config`. If you kept
-> `dev-*`, no change.
+> `GOOGLE_OAUTH_REDIRECT_URL` / `FRONTEND_URL` in `dc-stage-config`.
 
 ---
 
@@ -506,4 +508,5 @@ How to revert each step if something goes wrong (in reverse order):
   - **DB strategy** → separate `decent_cloud_stage` DB in the shared `pgsql` app.
   - **Image strategy** → floating `:stage` tag (shipped by `cf/deploy.py deploy stage`
     or CI); until then stage pins prod's tag.
-  - **Hostname rename** → overlay uses `stage-*`; operator MAY keep `dev-*` (Step D).
+  - **Hostname rename** → **DECIDED (operator 2026-08-03): rename `dev-*` → `stage-*`**;
+    use the `stage-*` hostnames the stage overlay already defines (Step D).

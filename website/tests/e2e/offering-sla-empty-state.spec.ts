@@ -1,41 +1,52 @@
 import { test, expect } from './fixtures/test-account';
-import { sql, nowNs, seedOffering } from './fixtures/seed-helpers';
-
-// Demo provider pubkey (already in provider_registrations) — reuse so we don't
-// have to seed a registration row just to satisfy the SLA-target FK.
-const DEMO_PROVIDER_PUBKEY_HEX =
-	'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572';
+import {
+	sql,
+	nowNs,
+	randomHex,
+	seedOffering,
+	seedProviderRegistration,
+} from './fixtures/seed-helpers';
 
 /**
- * Seed a fresh public offering owned by the demo provider, WITH an SLA target
- * (99.5%) but NO SLI reports. Returns the numeric BIGSERIAL id.
+ * Seed a fresh public offering under a THROWAWAY provider pubkey, WITH an SLA
+ * target (99.5%) but NO SLI reports. Returns the numeric BIGSERIAL id.
  *
  * This is exactly the state that triggers #435: the SLA card renders (because
  * slaTargetPercent !== undefined) but the SlaBreachTimeline chart shows 30
  * empty gray bars — visually indistinguishable from broken data.
+ *
+ * The drop-demos pivot (migration 053) deleted the example provider's
+ * `provider_registrations` row, which `provider_offering_sla_targets` FKs on
+ * `provider_pubkey`. So this spec now seeds its OWN registration row under a
+ * fresh random pubkey instead of reusing the (gone) demo provider — fully
+ * self-contained, no collision with other specs.
  */
-async function seedOfferingWithSlaTarget(): Promise<number> {
-	const numericId = await seedOffering(DEMO_PROVIDER_PUBKEY_HEX, {
+async function seedOfferingWithSlaTarget(): Promise<{ id: number; providerPubkeyHex: string }> {
+	const providerPubkeyHex = randomHex(32);
+	await seedProviderRegistration(providerPubkeyHex);
+
+	const numericId = await seedOffering(providerPubkeyHex, {
 		name: 'SLA Empty State Test',
 	});
 
 	await sql(
 		`INSERT INTO provider_offering_sla_targets (offering_id, provider_pubkey, sla_target_percent, updated_at_ns)
-		 VALUES (${numericId}, decode('${DEMO_PROVIDER_PUBKEY_HEX}', 'hex'), 99.5, ${nowNs()})`
+		 VALUES (${numericId}, decode('${providerPubkeyHex}', 'hex'), 99.5, ${nowNs()})`
 	);
-	return Number(numericId);
+	return { id: Number(numericId), providerPubkeyHex };
 }
 
-async function cleanupOffering(numericId: number): Promise<void> {
+async function cleanupOffering(id: number, providerPubkeyHex: string): Promise<void> {
 	// DELETE on provider_offerings cascades to provider_offering_sla_targets.
-	await sql(`DELETE FROM provider_offerings WHERE id = ${numericId}`);
+	await sql(`DELETE FROM provider_offerings WHERE id = ${id}`);
+	await sql(`DELETE FROM provider_registrations WHERE pubkey = decode('${providerPubkeyHex}', 'hex')`);
 }
 
 test.describe('Offering detail SLA card — empty state (#435)', () => {
 	test("shows friendly empty state instead of empty gray bars when provider set an SLA target but has no SLI reports", async ({
 		page
 	}) => {
-		const offeringId = await seedOfferingWithSlaTarget();
+		const { id: offeringId, providerPubkeyHex } = await seedOfferingWithSlaTarget();
 		try {
 			await page.goto(`/dashboard/marketplace/${offeringId}`);
 
@@ -53,7 +64,7 @@ test.describe('Offering detail SLA card — empty state (#435)', () => {
 			// chart component, so its absence proves the chart was replaced.
 			await expect(page.getByText('No report', { exact: true })).not.toBeVisible();
 		} finally {
-			await cleanupOffering(offeringId);
+			await cleanupOffering(offeringId, providerPubkeyHex);
 		}
 	});
 });

@@ -798,7 +798,7 @@
 			<div class="flex items-center gap-3">
 				<Icon name="server" size={20} class="text-primary-400 shrink-0" />
 				<p class="text-sm text-neutral-300">
-					Have infrastructure to share? <a href="/dashboard/provider/support" class="text-primary-400 hover:text-primary-300 font-medium">Become a provider</a> and earn by renting out your resources.
+					Have infrastructure to share? <a href="/dashboard/provider/start" class="text-primary-400 hover:text-primary-300 font-medium">Become a provider</a> and earn by renting out your resources.
 				</p>
 			</div>
 			<button

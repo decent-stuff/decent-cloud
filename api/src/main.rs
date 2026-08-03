@@ -10,6 +10,7 @@ mod crypto;
 mod database;
 mod email_processor;
 mod email_service;
+mod environment;
 mod helpcenter;
 mod http_util;
 mod invoice_storage;
@@ -87,6 +88,31 @@ fn parse_env_u64(name: &str, default: u64) -> Result<u64, std::io::Error> {
     match env::var(name) {
         Err(_) => Ok(default),
         Ok(raw) => parse_positive_u64(name, &raw),
+    }
+}
+
+/// Decide whether to warn about missing Cloudflare DNS config at startup.
+///
+/// Gateway DNS management (creating the `*.gw.decent-cloud.org` records that
+/// route to provider gateways) is a `serve`-only responsibility — the gateway
+/// DNS endpoints live in the running server. `sync` only runs the ledger
+/// sync service and never touches gateway DNS, so emitting the gateway-DNS
+/// warning there is misleading (smoke finding 2026-08-03: the manifest wires
+/// CF_API_TOKEN/CF_ZONE_ID only into the server pod, so dc-api-sync always
+/// logged a noisy false alarm).
+///
+/// Returns the warning text when `serve` is running without Cloudflare
+/// configured; `None` otherwise (including all `sync` invocations).
+pub(crate) fn cloudflare_gateway_dns_warning(
+    command: &str,
+    cloudflare_configured: bool,
+) -> Option<&'static str> {
+    match (command, cloudflare_configured) {
+        ("serve", false) => Some(
+            "Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work. \
+             Set CF_API_TOKEN + CF_ZONE_ID to enable gateway provisioning.",
+        ),
+        _ => None,
     }
 }
 
@@ -175,7 +201,7 @@ struct AppContext {
     cloudflare_dns: Option<Arc<cloudflare_dns::CloudflareDns>>,
 }
 
-async fn setup_app_context() -> Result<AppContext, std::io::Error> {
+async fn setup_app_context(command: &str) -> Result<AppContext, std::io::Error> {
     // Database setup
     // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url = env::var("DATABASE_URL")
@@ -268,14 +294,15 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         ))
     });
 
-    // Cloudflare DNS setup (optional - for gateway DNS management)
+    // Cloudflare DNS setup (optional - for gateway DNS management).
+    // The "gateway DNS will NOT work" warning is `serve`-only: `sync` does not
+    // manage gateway DNS (smoke finding 2026-08-03).
     let cloudflare_dns = cloudflare_dns::CloudflareDns::from_env();
-    if cloudflare_dns.is_some() {
+    let cloudflare_configured = cloudflare_dns.is_some();
+    if cloudflare_configured {
         tracing::info!("Cloudflare DNS client initialized for gateway management");
-    } else {
-        tracing::info!(
-            "Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work"
-        );
+    } else if let Some(warning) = cloudflare_gateway_dns_warning(command, cloudflare_configured) {
+        tracing::warn!("{warning}");
     }
 
     Ok(AppContext {
@@ -1199,7 +1226,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         }
     }
 
-    let ctx = setup_app_context().await?;
+    let ctx = setup_app_context("serve").await?;
 
     // Configure Chatwoot Agent Bot
     // Step 1: Use Platform API for bot CRUD (requires CHATWOOT_PLATFORM_API_TOKEN)
@@ -1291,6 +1318,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
         Ok(_) => {} // Production URL is set, all good
     }
 
+    // SMS notifications are optional but, per AGENTS.md ("BE LOUD ABOUT
+    // MISCONFIGURATIONS"), must warn at boot like every other optional subsystem.
+    // Without TWILIO_* or TEXTBEE_* keys, SMS notifications silently no-op at
+    // send-time (sms.rs only errors lazily); surface it now so the operator
+    // knows SMS is off (smoke finding 2026-08-03).
+    if !notifications::sms::is_sms_configured() {
+        tracing::warn!(
+            "SMS not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER and \
+             TEXTBEE_DEVICE_ID/TEXTBEE_API_KEY all empty) — SMS notifications will NOT work. \
+             Set either the TWILIO_* or TEXTBEE_* group to enable."
+        );
+    }
+
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     // Set up OpenAPI service with Swagger UI
@@ -1301,7 +1341,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     // Configure CORS based on environment
     let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
-    let cors = if environment == "prod" {
+    let cors = if crate::environment::is_production(&environment) {
         Cors::new()
             .allow_origin("https://decent-cloud.org")
             .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -1638,7 +1678,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
 }
 
 async fn sync_command() -> Result<(), std::io::Error> {
-    let ctx = setup_app_context().await?;
+    let ctx = setup_app_context("sync").await?;
 
     // Run sync service
     let sync_service = SyncService::new(

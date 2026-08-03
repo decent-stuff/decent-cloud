@@ -356,22 +356,33 @@
 				</span>
 				<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.provider ? '-rotate-90' : ''}" />
 			</button>
-			{#if !sectionCollapsed.provider}
-				<!-- Provider Setup -->
-				{@const setupActive =
-					currentPath === providerSetupItem.href ||
-					currentPath.startsWith(providerSetupItem.href)}
-				<a
-					href={providerSetupItem.href}
-					onclick={closeSidebar}
-					class="nav-item {setupActive ? 'nav-item-active' : ''}"
-				>
-					<Icon name={providerSetupItem.icon} size={20} />
-					<span class="text-sm">{providerSetupItem.label}</span>
-					{#if hasOfferings && !onboardingCompleted}
-						<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
-					{/if}
-				</a>
+		{#if !sectionCollapsed.provider}
+			<!-- Become a Provider — the technical-onboarding start page -->
+			{@const startActive = currentPath === '/dashboard/provider/start'}
+			<a
+				href="/dashboard/provider/start"
+				onclick={closeSidebar}
+				class="nav-item {startActive ? 'nav-item-active' : ''}"
+			>
+				<Icon name="zap" size={20} />
+				<span class="text-sm">Become a Provider</span>
+			</a>
+
+			<!-- Provider Setup -->
+			{@const setupActive =
+				currentPath === providerSetupItem.href ||
+				currentPath.startsWith(providerSetupItem.href)}
+			<a
+				href={providerSetupItem.href}
+				onclick={closeSidebar}
+				class="nav-item {setupActive ? 'nav-item-active' : ''}"
+			>
+				<Icon name={providerSetupItem.icon} size={20} />
+				<span class="text-sm">{providerSetupItem.label}</span>
+				{#if hasOfferings && !onboardingCompleted}
+					<span class="ml-auto status-dot status-dot-warning" title="Setup incomplete"></span>
+				{/if}
+			</a>
 
 				<!-- My Offerings - always visible -->
 				{@const offeringsActive =

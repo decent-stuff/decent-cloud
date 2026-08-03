@@ -15,12 +15,21 @@
 	const REGISTRATION_DEFAULT_RETURN_URL = '/dashboard';
 	let returnUrl = $state<string>(DEFAULT_RETURN_URL);
 	let hasExplicitReturnUrl = $state(false);
+	// User-facing OAuth error surfaced by the backend callback redirect
+	// (e.g. Google consent denied -> /login?oauth_error=...). Empty when absent.
+	let oauthError = $state<string | null>(null);
 
 	onMount(() => {
 		const urlReturnUrl = $page.url.searchParams.get('returnUrl');
 		if (urlReturnUrl) {
 			returnUrl = urlReturnUrl;
 			hasExplicitReturnUrl = true;
+		}
+
+		// OAuth callback errors arrive URL-encoded in the query string.
+		const urlOauthError = $page.url.searchParams.get('oauth_error');
+		if (urlOauthError) {
+			oauthError = urlOauthError;
 		}
 
 		const currentlyAuthenticated = get(authStore.isAuthenticated);
@@ -58,6 +67,14 @@
 
 		<!-- Auth Flow Card -->
 		<div class="card p-6 md:p-8">
+			{#if oauthError}
+				<div
+					class="mb-4 rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+					role="alert"
+				>
+					{oauthError}
+				</div>
+			{/if}
 			<AuthFlow onSuccess={handleSuccess} />
 		</div>
 
