@@ -124,6 +124,26 @@ npm run dev
 ```
 - Website defaults to API at `localhost:59011` unless overridden.
 
+### sqlx Offline Cache (single source of truth)
+The committed query-plan cache is the **workspace-root** `.sqlx/`. sqlx walks up
+from the `api/` package dir to find it, and `SQLX_OFFLINE=true` (set in
+`.cargo/config.toml`) makes every `query!`/`query_scalar!` macro read from it at
+compile time — no live DB needed to build.
+
+**To regenerate the cache after editing any SQL:** run `scripts/sqlx-prepare.sh`
+(from anywhere). It self-locates the repo root and runs `cargo make sqlx-prepare`,
+which creates an ephemeral DB, applies migrations, and runs
+`cargo sqlx prepare --workspace -- -p api --tests` — the ONLY incantation that
+writes to the committed root `.sqlx/`. Then commit the resulting `.sqlx/` changes.
+
+**Never** run a bare `cargo sqlx prepare` from `api/` — it writes to the
+gitignored per-package `api/.sqlx/`, which the build reads *preferentially* while
+the committed root cache silently goes stale; fresh CI clones then fail with
+`error: no cached data for query`. `scripts/sqlx-prepare.sh` deletes any stray
+`api/.sqlx/` before regenerating, and the
+`sqlx_cache_check::sqlx_offline_cache_has_single_committed_source` test fails
+loudly (locally and in CI) the instant `api/.sqlx/` appears.
+
 ### Deployment & secrets (staging is `dc-stage` on k8s)
 
 **Staging** is the k8s namespace `dc-stage` (ArgoCD-synced from the nuc-k3s repo),

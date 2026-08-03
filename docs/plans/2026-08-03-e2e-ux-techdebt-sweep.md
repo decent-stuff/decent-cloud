@@ -1,17 +1,36 @@
 # Plan: 2026-08-03 — Fresh e2e/UX/tech-debt sweep
 
-**Created:** 2026-08-03. **Baseline:** `d3378074` (clean tree; verified green: smoke 26/26, vitest 862/862, warm stack healthy).
+**Status: DONE (autonomous portion).** All of §1–§5 executed and committed on branch
+`sweep-e2e-ux-techdebt` (15 commits ahead of `origin/main 31483130`); PR opened for review.
+Unshipped items (F2/F6/F9 product forks + flagged tech-debt) are tracked as deferred in
+`docs/OPEN_ISSUES.md`. k8s migration (the other 2026-08-03 plan) is DONE separately (PR #454).
+
+**Created:** 2026-08-03. **Baseline:** `origin/main 31483130` (last merged commit incl. 2026-08-02 Wave 11; the earlier-stated `d3378074` was a local migration-branch HEAD, NOT the clean baseline). Verified green at session start: smoke 26/26 (slow, see Finding B), warm stack healthy. This sweep runs on dedicated branch **`sweep-e2e-ux-techdebt`** (reset from origin/main + cherry-picked this plan doc), isolated from k8s PR #454.
 
 ## Context
 
 - The 2026-08-02 mandate (e2e radicalization + UX slop + #444 Wave 9/10/11 + auth single-source) is
   COMPLETE and committed. Baseline re-verified green at session start.
-- A separate, larger plan (`2026-08-03-staging-to-k8s-dc-stage-consolidation.md`) consolidates the
-  two secret stores onto k8s. It has **3 forks** (DB strategy, image strategy, hostname rename) AND
-  requires live cluster / external nuc-k3s repo / Cloudflare access — infra/ops risk. **POSTPONED**;
-  forks batched to the user at session end (touching live prod k8s autonomously is not safe).
+- **k8s consolidation (`2026-08-03-staging-to-k8s-dc-stage-consolidation.md`) is DONE — autonomous
+  portion.** Tracks 1+2+3 complete: nuc-k3s base/prod/stage split (byte-identical prod), dc-stage
+  LIVE on cluster (`/api/v1/health` HTTP 200, 52 migrations/86 tables, prod untouched), product-repo
+  Phase 2/3 in PR #454. Only **operator cutover** remains (push nuc-k3s, persist stage DB pw to
+  SOPS, ship `:stage` image, repoint tunnel, tear down dev host) — documented in
+  `docs/MIGRATION-CUTOVER.md`. No longer a blocker for this sweep.
 - `gh` is unauthenticated in this environment → GitHub Issues fall back to the in-repo inventory at
-  `docs/OPEN_ISSUES.md` (AGENTS.md notes this limitation).
+  `docs/OPEN_ISSUES.md` (AGENTS.md notes this limitation). Product-repo pushes use the
+  `GITHUB_TEST_PAT` (user `andris-k85`) over HTTPS; main is branch-protected → open a PR.
+
+## Baseline findings (recorded 2026-08-03)
+
+- **Finding A (reliability):** `invoices.spec.ts @smoke empty state` FAILED under full parallel
+  smoke (25/26) but PASSES in isolation — flaky under parallel load (timing timeout at
+  invoices.spec.ts:35:82), NOT a real regression (snapshot confirmed the empty state rendered
+  correctly). §4 to harden.
+- **Finding B (speed):** smoke 26/26 green but **80s wall vs the <35s target** (FLOWS.md says
+  2026-08-02 achieved ~27s). Individual slow tests: signin 9.9s, rentals-empty 6.5s, transfers 4.8s.
+  Vite HMR `[vite] connecting...connected` debug lines fire between every test (per-context browser
+  launch overhead). §4 to root-cause + fix.
 
 ## Scope (this session — fully autonomous, local, no external creds needed)
 
@@ -70,7 +89,8 @@ link from AGENTS.md is already present.
 
 ## Blockers / forks (carried over — NOT autonomously resolvable)
 
-- **k8s consolidation plan** (`2026-08-03-staging-to-k8s...`): 3 forks (DB strategy, image strategy,
-  hostname rename) + live cluster / nuc-k3s / Cloudflare access. POSTPONED → batched user question.
+- **k8s consolidation — OPERATOR CUTOVER ONLY remains** (push nuc-k3s, persist stage DB pw to
+  SOPS before ArgoCD first sync, ship `:stage` image, public tunnel/DNS cutover, tear down dev host).
+  See `docs/MIGRATION-CUTOVER.md`. Autonomous code work is DONE (PR #454).
 - **Decent-Agents cluster** (#418/#415/#416/#427-3,4/#429-432): blocked on credentials + #413 infra.
 - **#447** money-path retroactive refund replay: needs operator sign-off.

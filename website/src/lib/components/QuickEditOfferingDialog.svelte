@@ -217,6 +217,7 @@
 				reseller_name: undefined,
 				reseller_commission_percent: undefined,
 				owner_username: undefined,
+				provider_name: undefined,
 				provisioner_type: offering.provisioner_type || undefined,
 				provisioner_config: offering.provisioner_config || undefined,
 				template_name: templateName.trim() || undefined,

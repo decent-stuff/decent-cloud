@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ProviderTrustMetrics, ProviderResponseMetrics, ProviderHealthSummary } from '$lib/services/api';
 	import { formatDuration } from '$lib/utils/contract-format';
+	import { hasEnoughTrustData } from '$lib/utils/trust-score';
 
 	interface Props {
 		metrics: ProviderTrustMetrics;
@@ -46,6 +47,13 @@
 
 	// Convert trust_score from bigint to number safely
 	const trustScore = $derived(Number(metrics.trust_score));
+
+	// A brand-new provider has no behavioural track record (the backend scoring
+	// starts at 100 and only deducts for observed negative signals), so a near-100
+	// score would otherwise render as a dishonest green "Reliable" verdict. Gate
+	// the numeric verdict behind at least one contract; render N/A + a neutral
+	// "Not enough data" label otherwise.
+	const scoreHasData = $derived(hasEnoughTrustData(metrics));
 
 	// Provider tenure badge helpers
 	function getTenureBadgeColor(tenure: string): string {
@@ -114,12 +122,20 @@
 	<div class="flex items-center justify-between mb-6">
 		<h3 class="text-xl font-bold">Trust Score</h3>
 		<div
-			class="flex items-center gap-3 px-4 py-2 rounded-full border {getScoreBgColor(trustScore)}"
+			class="flex items-center gap-3 px-4 py-2 rounded-full border {scoreHasData
+				? getScoreBgColor(trustScore)
+				: 'bg-neutral-500/10 border-neutral-600'}"
 		>
-			<span class="text-3xl font-bold {getScoreColor(trustScore)}">{trustScore}</span>
-			<span class="text-sm text-neutral-400">/100</span>
-			<span class="text-sm font-medium {getScoreColor(trustScore)}">{getScoreLabel(trustScore)}</span
-			>
+			{#if scoreHasData}
+				<span class="text-3xl font-bold {getScoreColor(trustScore)}">{trustScore}</span>
+				<span class="text-sm text-neutral-400">/100</span>
+				<span class="text-sm font-medium {getScoreColor(trustScore)}"
+					>{getScoreLabel(trustScore)}</span
+				>
+			{:else}
+				<span class="text-3xl font-bold text-neutral-400">N/A</span>
+				<span class="text-sm font-medium text-neutral-400">Not enough data</span>
+			{/if}
 		</div>
 	</div>
 

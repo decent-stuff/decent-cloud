@@ -97,6 +97,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Sidebar navigation | ✅ | `@smoke` `@account` | `anonymous-browsing.spec.ts` | `@smoke should show sidebar for anonymous users with all navigation items` |
 | Browse marketplace (authed) | ✅ | `@smoke` `@marketplace` | (see Public — marketplace browse) | — |
 | Rent an offering (dialog → contract) | ⚠️ | `@rental` | `rent-flow.spec.ts` | `rent an offering → contract appears on the rentals list with a Cancel button` — covered in the **full suite** only; excluded from smoke (6s + complex seeding) |
+| Email verification gate on rent (F3) | ✅ | `@rental` `@account` | `rent-email-verification-gate.spec.ts` | `offering detail shows "Verify email to rent" for an unverified user` — serial spec (shared testAccount pubkey, middle test flips email_verified DB-side): unverified detail label, dialog Submit locked + notice, then verified detail label. Covers the inline surfacing of the rental create prerequisite (offering-detail button relabel + redirect, rentals empty-state note, RentalRequestDialog Submit gate). |
 | View rentals list | ✅ | `@smoke` `@rental` | `rentals.spec.ts` | `@smoke empty state: fresh user sees onboarding steps and marketplace CTAs` |
 | Rentals: populated state / tabs / search | ✅ | `@rental` | `rentals.spec.ts` | `populated state: shows contract cards with status tabs and counts` |
 | Cancel a rental | ✅ | `@smoke` `@rental` | `rentals.spec.ts` · `rent-flow.spec.ts` | `@smoke action: Cancel a requested contract moves it to Cancelled tab` |

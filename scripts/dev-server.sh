@@ -153,6 +153,35 @@ _wait_for() {
   return 1
 }
 
+# Loudly announce which API binary is being served. The RELEASE binary is the
+# deliberate default (debug Ed25519 is ~150x slower, distorting e2e timing), but
+# the choice is easy to miss — a sibling agent once rebuilt the DEBUG binary
+# thinking it would affect the already-running RELEASE server (it does not: a
+# running server keeps the old mapped binary until restarted). Make it unmissable.
+_announce_api_binary() {
+  local kind
+  case "$API_BINARY" in
+    */release/*) kind="RELEASE" ;;
+    */debug/*)   kind="DEBUG" ;;
+    *)           kind="custom path" ;;
+  esac
+  echo "▶ API binary: $API_BINARY  [$kind]"
+  case "$kind" in
+    RELEASE)
+      echo "  Release binary (default). A running server KEEPS the old binary until"
+      echo "  restarted — rebuilding does NOT hot-swap it. Rebuild after Rust edits:"
+      echo "    cargo build -p api --bin api-server --release"
+      echo "  (then: scripts/dev-server.sh restart). For fast Rust iteration without"
+      echo "   the ~6min release rebuild: API_BINARY=$ROOT/target/debug/api-server"
+      ;;
+    DEBUG)
+      echo "  Debug binary — Ed25519 is ~150x slower; e2e timing is distorted and"
+      echo "  does not reflect production. Rebuild after Rust edits:"
+      echo "    cargo build -p api --bin api-server"
+      ;;
+  esac
+}
+
 # Is a service healthy? pid alive AND port responds.
 _healthy() {
   local svc="$1" url="$2" pid
@@ -233,6 +262,7 @@ start_stack() {
       echo "API already running (pid $(cat "$PIDS/api.pid"))"
     else
       echo "Starting local API on :$API_PORT (e2e profile, rate-limit disabled)..."
+      _announce_api_binary
       _reclaim_port "$API_PORT" "API"
       _start_service api "$ROOT" \
         "${SECRETS_ENV[@]}" \
@@ -252,6 +282,7 @@ start_stack() {
       echo "API already running (pid $(cat "$PIDS/api.pid"))"
     else
       echo "Starting local API on :$API_PORT..."
+      _announce_api_binary
       _reclaim_port "$API_PORT" "API"
       _start_service api "$ROOT" \
         "${SECRETS_ENV[@]}" \

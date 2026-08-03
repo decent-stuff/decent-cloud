@@ -368,3 +368,71 @@ accounts.rs shrinkage belongs to a focused design pass, not the #444 wave
 cadence. The three clean tail/middle extractions forecast in the roadmap are
 complete.
 
+## Wave 12 (2026-08-03) — webhooks.rs Stripe-dispute cluster → `webhooks_disputes.rs`
+
+`api/src/openapi/webhooks.rs` (2504 → 1277 lines, **−1227**) — extracted the
+**Stripe `charge.dispute.*`** cluster into a new
+`api/src/openapi/webhooks_disputes.rs` (1251 lines). This is the dispute
+cluster that Wave 9's candidate analysis had scored 6/10 and deferred — it is
+fully cohesive and decoupled (verified again this wave), so the deferral was
+purely about the verification path, which is now solved (see below).
+
+What moved:
+- 2 types: `StripeDispute`, `StripeDisputeEvidenceDetails`.
+- 5 helpers: `parse_dispute`, `map_db_err`, `lookup_contract_for_charge`,
+  `evidence_due_by_ns`, `upsert_input`.
+- 4 handlers: `handle_dispute_created` / `_updated` / `_closed` /
+  `_funds_withdrawn` — now `pub(super)` so the sibling `webhooks` module's
+  `stripe_webhook` still calls them via `use super::webhooks_disputes::{…}`.
+- 10 `#[tokio::test]` DB-coupled end-to-end tests + their 6 test helpers, now
+  in `openapi::webhooks_disputes::tests`.
+
+What stays in `webhooks.rs`: the three route-registered `#[handler]` fns
+(`stripe_webhook`, `chatwoot_webhook`, `telegram_webhook` — referenced from
+`main.rs` as raw `Route::at(..)` registrations), `verify_signature`, and the
+non-dispute types/tests.
+
+**This is a "Path B" split (no OpenAPI tuple touched).** Wave 9 correctly
+flagged that `webhooks.rs` has **no `#[OpenApi]` impl** — its handlers are
+free `#[handler]` fns wired as raw routes in `main.rs`, so they never appear
+in the `/api/v1/openapi` spec. Extracting their internal dispute helpers is a
+pure module relocation: `create_combined_api` is **unchanged**, so no tuple
+slot was consumed (headroom stays at tuple 1 = 13/16, tuple 2 = 14/16). This
+is the same shape as Wave 7's `api-cli` per-subcommand split.
+
+**Verification (definitive, byte-identical OpenAPI):** a new committed guard
+`api/src/openapi/spec_snapshot.rs` renders `create_combined_api()` to JSON,
+canonicalizes it (recursive key sort so `paths` emission order is irrelevant),
+and asserts a stable SHA-256 hash + path/schema counts (187 paths, 327
+schemas). Captured before and after the extraction with
+`DC_OPENAPI_SPEC_DUMP`:
+
+- `spec-before`: 187 paths, 327 schemas, 472132 bytes,
+  hash `4549fcf2…9ef84`.
+- `spec-after`: 187 paths, 327 schemas, 472132 bytes,
+  hash `4549fcf2…9ef84`.
+- Raw `diff spec-before spec-after` → **empty (exit 0)**.
+
+The spec_snapshot test is the **TDD gate**: written first (RED with a
+placeholder hash), turned GREEN by capturing the real baseline, then re-run
+post-extraction to prove the hash is unchanged. It stays in the repo as a
+permanent invariant guard for all future `*Api` splits.
+
+- `cargo clippy -p api --tests --all-targets` → **0 warnings, 0 errors**.
+- `cargo nextest run -p api` for `openapi::webhooks` +
+  `openapi::webhooks_disputes` + `openapi::spec_snapshot` → **30/30 pass**
+  (19 remaining webhooks tests + 10 moved dispute tests, all DB-coupled and
+  run against the real `postgres:5432`, + 1 spec_snapshot). The warm stack
+  (`:59011`/`:59010`) was never restarted.
+
+### Follow-up notes for the roadmap
+
+- `webhooks.rs` (1277 lines) still has three cohesive clusters that *could*
+  be split the same Path-B way if it ever needs to shrink further: the Stripe
+  checkout/invoice arms of `stripe_webhook`, the Chatwoot handler, and the
+  Telegram handler. None is a priority at 1277 lines; recorded for completeness.
+- The `spec_snapshot` guard now makes every future `*Api` split's
+  byte-identical claim **a one-line `cargo nextest` check** instead of an
+  ad-hoc spare-port capture — Waves 5–11's manual method is superseded.
+
+

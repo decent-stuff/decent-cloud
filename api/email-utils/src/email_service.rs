@@ -1,8 +1,18 @@
 use anyhow::{bail, Context, Result};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 const MAILCHANNELS_API_URL: &str = "https://api.mailchannels.net/tx/v1/send";
+
+/// Request timeout for the MailChannels API client, in seconds.
+///
+/// Mirrors the project-wide convention (api `http_util::HTTP_TIMEOUT_SECS`,
+/// cli `utils::http::HTTP_TIMEOUT_SECS`, dc-agent provisioners): every
+/// outbound HTTP client MUST carry a timeout so a slow/stuck MailChannels
+/// endpoint cannot hang the email sender (which runs inside the API's
+/// background queue processor) indefinitely. Bump here to change it.
+const MAILCHANNELS_TIMEOUT_SECS: u64 = 30;
 
 /// Email attachment
 #[derive(Debug, Clone)]
@@ -129,7 +139,10 @@ impl EmailService {
     ) -> Self {
         Self {
             api_key,
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(MAILCHANNELS_TIMEOUT_SECS))
+                .build()
+                .expect("reqwest client with default config is always buildable"),
             dkim_domain,
             dkim_selector,
             dkim_private_key,

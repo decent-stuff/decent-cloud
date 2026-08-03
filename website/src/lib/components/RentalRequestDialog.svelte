@@ -10,7 +10,7 @@
 	import { bytesToHex } from "$lib/utils/identity";
 	import { get } from "svelte/store";
 	import type { Ed25519KeyIdentity } from "@dfinity/identity";
-	import { onMount } from "svelte";
+	import { onMount, onDestroy } from "svelte";
 	import type { AccountExternalKey } from "$lib/types/generated/AccountExternalKey";
 	import { generateSshKeyPair, downloadPrivateKey } from "$lib/utils/ssh-keygen";
 
@@ -105,6 +105,17 @@
 	let error = $state<string | null>(null);
 	let sshKeyError = $state<string | null>(null);
 	let saveKeyToProfile = $state(false);
+
+	// Email verification is a hard prerequisite for creating a rental. The dialog
+	// is the shared choke point for every rent entry (marketplace card, offering
+	// detail), so enforce the gate here too: show a notice and lock Submit rather
+	// than letting an unverified user hit the backend "Email verification
+	// required" error only after filling in the form.
+	let emailVerified = $state(false);
+	const unsubscribeEmail = authStore.activeIdentity.subscribe((identity) => {
+		emailVerified = identity?.account?.emailVerified ?? false;
+	});
+	onDestroy(() => unsubscribeEmail());
 
 	// OS selection from offering
 	let selectedOperatingSystem = $state("");
@@ -215,6 +226,14 @@
 			return;
 		}
 
+		// Defense in depth: the Submit button is disabled while unverified, but
+		// fail with the actionable message instead of letting the request reach
+		// the backend guard if this is ever reached.
+		if (!emailVerified) {
+			error = "Email verification is required to rent. Verify your email, then try again.";
+			return;
+		}
+
 		// SSH key is required for server access - validate format
 		const sshValidationError = validateSshKey(sshKey);
 		if (sshValidationError) {
@@ -316,9 +335,24 @@
 				</button>
 			</div>
 
-			<!-- Content -->
-			<div class="p-6 space-y-6">
-				<!-- Trust Warning -->
+		<!-- Content -->
+		<div class="p-6 space-y-6">
+			<!-- Email Verification Gate -->
+			{#if !emailVerified}
+				<div class="bg-amber-500/15 border border-amber-500/40 p-4">
+					<div class="flex items-start gap-3">
+						<span class="text-2xl shrink-0">&#x26A0;</span>
+						<div>
+							<h4 class="text-amber-300 font-semibold">Email verification required</h4>
+							<p class="text-amber-200/80 text-sm mt-1">
+								You must verify your email address before you can rent.
+								<a href="/dashboard/account" class="underline font-medium hover:text-amber-100">Verify your email</a>
+							</p>
+						</div>
+					</div>
+				</div>
+			{/if}
+			<!-- Trust Warning -->
 				{#if offering.has_critical_flags || (offering.trust_score !== undefined && offering.trust_score < 50)}
 					<div
 						class="bg-red-500/20 border border-red-500/30  p-4"
@@ -790,11 +824,11 @@
 				>
 					Cancel
 				</button>
-				<button
-					onclick={handleSubmit}
-					disabled={loading || (generatedPrivateKey !== null && !privateKeyDownloaded)}
-					class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-				>
+			<button
+				onclick={handleSubmit}
+				disabled={loading || !emailVerified || (generatedPrivateKey !== null && !privateKeyDownloaded)}
+				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+			>
 					{#if loading}
 						<span class="flex items-center justify-center gap-2">
 							<span

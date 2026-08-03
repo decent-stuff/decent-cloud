@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::check_schema_applied;
+    use crate::{check_schema_applied, parse_positive_u64};
     use std::env;
 
     #[tokio::test]
@@ -63,5 +63,32 @@ mod tests {
         if let Some(val) = original {
             env::set_var("DATABASE_URL", val);
         }
+    }
+
+    #[test]
+    fn test_parse_positive_u64_accepts_valid_values() {
+        // Pure helper — no env mutation, so it is safe under parallel test exec.
+        assert_eq!(parse_positive_u64("X", "3600").unwrap(), 3600);
+        // Whitespace is trimmed (env values often carry trailing newlines).
+        assert_eq!(parse_positive_u64("X", "  30  ").unwrap(), 30);
+        assert_eq!(parse_positive_u64("X", "1").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_parse_positive_u64_rejects_malformed_and_non_positive() {
+        // Malformed value must FAIL FAST (not silently fall back): the error
+        // names the env var and echoes the bad value so an operator can fix it.
+        let err = parse_positive_u64("MY_INTERVAL", "soon").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("MY_INTERVAL"), "error must name the var: {msg}");
+        assert!(msg.contains("soon"), "error must echo the bad value: {msg}");
+
+        // Zero is rejected — a zero interval/timeout breaks the background loop.
+        assert!(parse_positive_u64("X", "0").is_err());
+        // Negative / overflow are rejected by u64 parse.
+        assert!(parse_positive_u64("X", "-5").is_err());
+        assert!(parse_positive_u64("X", "99999999999999999999999").is_err());
+        // Empty / whitespace-only is rejected.
+        assert!(parse_positive_u64("X", "   ").is_err());
     }
 }

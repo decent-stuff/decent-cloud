@@ -501,10 +501,7 @@ impl ContractsApi {
             });
         }
 
-        let ssh_key_pattern =
-            regex::Regex::new(r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$")
-                .unwrap();
-        if !ssh_key_pattern.is_match(&new_key) {
+        if !crate::validation::is_valid_ssh_pubkey_format(&new_key) {
             return Json(ApiResponse {
                 success: false,
                 data: None,
@@ -609,11 +606,7 @@ impl ContractsApi {
             }
             Some(key) => {
                 // Validate SSH key format: ssh-(rsa|ed25519|ecdsa|dss) <base64data> [optional comment]
-                let ssh_key_pattern = regex::Regex::new(
-                    r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$",
-                )
-                .expect("valid regex");
-                if !ssh_key_pattern.is_match(key.trim()) {
+                if !crate::validation::is_valid_ssh_pubkey_format(key.trim()) {
                     return Json(ApiResponse {
                         success: false,
                         data: None,

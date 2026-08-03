@@ -54,24 +54,39 @@ fn now_ns() -> anyhow::Result<i64> {
 /// is set but malformed (non-numeric, zero, negative). Used for the
 /// timeout-cleanup feature flags (issues #409, #410) per project rule
 /// "Validate all feature configuration at startup, NEVER at request time."
-fn parse_env_seconds(name: &str, default: u64) -> Result<u64, std::io::Error> {
+/// Parse a positive `u64` from a raw env value, with a descriptive error.
+///
+/// Extracted from [`parse_env_u64`] so it can be unit-tested without env-var
+/// mutation (which is racy under parallel test execution).
+fn parse_positive_u64(name: &str, raw: &str) -> Result<u64, std::io::Error> {
+    let parsed: u64 = raw.trim().parse().map_err(|e| {
+        std::io::Error::other(format!(
+            "{} is set but not a valid u64: {:?} ({})",
+            name, raw, e
+        ))
+    })?;
+    if parsed == 0 {
+        return Err(std::io::Error::other(format!(
+            "{} must be > 0 (got 0); refusing to start with a zero value",
+            name
+        )));
+    }
+    Ok(parsed)
+}
+
+/// Fail-fast env-var parser for a positive `u64` (intervals, timeouts, batch
+/// sizes, retention counts).
+///
+/// Missing var → `default`. Present but malformed or zero → hard error so a
+/// misconfigured deploy refuses to start instead of silently falling back to
+/// the default. Per AGENTS.md ("BE LOUD ABOUT MISCONFIGURATIONS" +
+/// deploy-time-validation), every startup numeric config MUST go through here
+/// — NOT the silent `env::var(...).ok().and_then(|s| s.parse().ok())
+/// .unwrap_or(default)` pattern, which hides typos from operators.
+fn parse_env_u64(name: &str, default: u64) -> Result<u64, std::io::Error> {
     match env::var(name) {
         Err(_) => Ok(default),
-        Ok(raw) => {
-            let parsed: u64 = raw.trim().parse().map_err(|e| {
-                std::io::Error::other(format!(
-                    "{} is set but not a valid u64: {:?} ({})",
-                    name, raw, e
-                ))
-            })?;
-            if parsed == 0 {
-                return Err(std::io::Error::other(format!(
-                    "{} must be > 0 (got 0); refusing to start with a zero timeout",
-                    name
-                )));
-            }
-            Ok(parsed)
-        }
+        Ok(raw) => parse_positive_u64(name, &raw),
     }
 }
 
@@ -224,16 +239,10 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
     tracing::info!("Ledger client initialized for canister {}", canister_id);
 
     // Sync interval setup
-    let sync_interval_secs = env::var("SYNC_INTERVAL_SECS")
-        .unwrap_or_else(|_| "30".to_string())
-        .parse::<u64>()
-        .unwrap_or(30);
+    let sync_interval_secs = parse_env_u64("SYNC_INTERVAL_SECS", 30)?;
 
     // Metadata cache setup
-    let metadata_refresh_interval = env::var("METADATA_REFRESH_INTERVAL_SECS")
-        .unwrap_or_else(|_| "60".to_string())
-        .parse::<u64>()
-        .unwrap_or(60);
+    let metadata_refresh_interval = parse_env_u64("METADATA_REFRESH_INTERVAL_SECS", 60)?;
     let metadata_cache = Arc::new(MetadataCache::new(
         ledger_client.clone(),
         metadata_refresh_interval,
@@ -1400,10 +1409,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // finish their current work cycle before exiting.
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
-    let drain_timeout_secs: u64 = env::var("GRACEFUL_SHUTDOWN_TIMEOUT_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(30);
+    let drain_timeout_secs: u64 = parse_env_u64("GRACEFUL_SHUTDOWN_TIMEOUT_SECS", 30)?;
 
     // Start metadata cache service in background
     let cache_for_task = ctx.metadata_cache.clone();
@@ -1415,23 +1421,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // malformed values so a malformed deploy refuses to start instead of
     // silently falling back to a default that masks the misconfiguration.
     let requested_timeout_secs =
-        parse_env_seconds("REQUESTED_TIMEOUT_SECONDS", 3600)?;
+        parse_env_u64("REQUESTED_TIMEOUT_SECONDS", 3600)?;
     let pending_timeout_secs =
-        parse_env_seconds("PENDING_TIMEOUT_SECONDS", 3600)?;
+        parse_env_u64("PENDING_TIMEOUT_SECONDS", 3600)?;
     let provisioning_timeout_secs =
-        parse_env_seconds("PROVISIONING_TIMEOUT_SECONDS", 3600)?;
+        parse_env_u64("PROVISIONING_TIMEOUT_SECONDS", 3600)?;
     let timeout_cleanup_interval_secs =
-        parse_env_seconds("TIMEOUT_CLEANUP_INTERVAL_SECONDS", 300)?;
+        parse_env_u64("TIMEOUT_CLEANUP_INTERVAL_SECONDS", 300)?;
 
     // Start cleanup service in background (runs every 24 hours, 180-day retention)
-    let cleanup_interval_hours = env::var("CLEANUP_INTERVAL_HOURS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(24);
-    let cleanup_retention_days = env::var("CLEANUP_RETENTION_DAYS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(180);
+    let cleanup_interval_hours = parse_env_u64("CLEANUP_INTERVAL_HOURS", 24)?;
+    // CLEANUP_RETENTION_DAYS feeds SQLx (i64); guard overflow fail-fast.
+    let cleanup_retention_days = i64::try_from(parse_env_u64("CLEANUP_RETENTION_DAYS", 180)?)
+        .map_err(|_| std::io::Error::other("CLEANUP_RETENTION_DAYS exceeds i64 range"))?;
 
     let db_for_cleanup = ctx.database.clone();
     let cleanup_stripe = crate::stripe_client::stripe_client_or_warn().map(Arc::new);
@@ -1479,14 +1481,10 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     // Start email processor in background if email service is configured
     let email_processor_task = if let Some(email_svc) = ctx.email_service.clone() {
-        let email_interval_secs = env::var("EMAIL_PROCESSOR_INTERVAL_SECS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(30);
-        let email_batch_size = env::var("EMAIL_BATCH_SIZE")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10);
+        let email_interval_secs = parse_env_u64("EMAIL_PROCESSOR_INTERVAL_SECS", 30)?;
+        // EMAIL_BATCH_SIZE feeds SQLx LIMIT (i64); guard overflow fail-fast.
+        let email_batch_size = i64::try_from(parse_env_u64("EMAIL_BATCH_SIZE", 10)?)
+            .map_err(|_| std::io::Error::other("EMAIL_BATCH_SIZE exceeds i64 range"))?;
 
         let db_for_email = ctx.database.clone();
         let email_shutdown = shutdown_tx.subscribe();
@@ -1510,10 +1508,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     };
 
     // Start auto-renewal service in background (runs every 6 hours)
-    let auto_renewal_interval_hours = env::var("AUTO_RENEWAL_INTERVAL_HOURS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(6);
+    let auto_renewal_interval_hours = parse_env_u64("AUTO_RENEWAL_INTERVAL_HOURS", 6)?;
 
     let db_for_renewal = ctx.database.clone();
     let renewal_shutdown = shutdown_tx.subscribe();
@@ -1528,10 +1523,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
     });
 
     // Start SLA alert service in background (runs every 1 hour)
-    let sla_alert_interval_hours = env::var("SLA_ALERT_INTERVAL_HOURS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1u64);
+    let sla_alert_interval_hours = parse_env_u64("SLA_ALERT_INTERVAL_HOURS", 1)?;
 
     let db_for_sla = ctx.database.clone();
     let email_svc_for_sla = ctx.email_service.clone();
@@ -1557,15 +1549,9 @@ async fn serve_command() -> Result<(), std::io::Error> {
     });
 
     // Start cloud provisioning service in background
-    let cloud_provisioning_interval_secs = env::var("CLOUD_PROVISIONING_INTERVAL_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(10);
+    let cloud_provisioning_interval_secs = parse_env_u64("CLOUD_PROVISIONING_INTERVAL_SECS", 10)?;
 
-    let cloud_termination_interval_secs = env::var("CLOUD_TERMINATION_INTERVAL_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(60);
+    let cloud_termination_interval_secs = parse_env_u64("CLOUD_TERMINATION_INTERVAL_SECS", 60)?;
 
     let db_for_cloud = ctx.database.clone();
     let email_svc_for_cloud = ctx.email_service.clone();

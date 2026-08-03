@@ -4,21 +4,17 @@ use crate::cache_transactions::RecentCache;
 use crate::{
     account_balance_add, account_balance_sub, account_balances_clear, dcc_identity, error,
     reputations_apply_aging, reputations_apply_changes, reputations_clear, set_num_providers,
-    set_num_users, AHashMap, CheckInPayload, DccIdentity, ReputationAge, ReputationChange,
-    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER, LABEL_NP_CHECK_IN, LABEL_NP_REGISTER,
-    LABEL_PROV_CHECK_IN, LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
-    LABEL_REWARD_DISTRIBUTION, LABEL_USER_REGISTER, PRINCIPAL_MAP,
+    set_num_users, AHashMap, ReputationAge, ReputationChange,
+    LABEL_DC_TOKEN_APPROVAL, LABEL_DC_TOKEN_TRANSFER,
+    LABEL_PROV_REGISTER, LABEL_REPUTATION_AGE, LABEL_REPUTATION_CHANGE,
+    LABEL_USER_REGISTER, PRINCIPAL_MAP,
 };
-use base64::engine::general_purpose::STANDARD as BASE64;
-use base64::Engine;
 use borsh::BorshDeserialize;
 use candid::Principal;
 #[cfg(all(target_arch = "wasm32", feature = "ic"))]
 #[allow(unused_imports)]
 use ic_cdk::println;
-use ledger_map::{debug, LedgerBlock, LedgerEntry, LedgerMap};
-use serde::Serialize;
-use serde_json::Value;
+use ledger_map::{debug, LedgerEntry, LedgerMap};
 use std::collections::HashMap;
 
 fn process_entry_for_caches(
@@ -128,166 +124,12 @@ pub fn refresh_ledger_and_caches(ledger: &mut LedgerMap) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Serialize)]
-pub struct WasmLedgerEntry {
-    pub label: String,
-    pub key: Value,
-    pub value: Value,
-    pub description: String,
-}
-
-impl WasmLedgerEntry {
-    fn from_dc_token_approval(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_DC_TOKEN_APPROVAL.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: serde_json::to_value(
-                FundsTransferApproval::try_from_slice(entry.value()).unwrap(),
-            )
-            .unwrap(),
-            description: "ICRC2 FundsTransferApproval".to_string(),
-        }
-    }
-
-    fn from_dc_token_transfer(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_DC_TOKEN_TRANSFER.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: serde_json::to_value(FundsTransfer::try_from_slice(entry.value()).unwrap())
-                .unwrap(),
-            description: "ICRC1 FundsTransfer".to_string(),
-        }
-    }
-
-    fn from_provider_check_in(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        WasmLedgerEntry {
-            label: LABEL_PROV_CHECK_IN.to_string(),
-            key: Value::String(dcc_id.to_string()),
-            value: match CheckInPayload::try_from_slice(entry.value()) {
-                Ok(payload) => serde_json::json!({
-                    "parent_hash": BASE64.encode(parent_hash),
-                    "signature": BASE64.encode(payload.nonce_signature()),
-                    "verified": match dcc_id.verify_bytes(parent_hash, payload.nonce_signature()) {
-                        Ok(()) => "verified".into(),
-                        Err(e) => {
-                            format!("Signature verification failed: {}", e)
-                        }
-                    },
-                    "memo": payload.memo(),
-                }),
-                Err(e) => {
-                    serde_json::json!(format!(
-                        "Failed to deserialize check in payload: {} ({})",
-                        BASE64.encode(entry.value()),
-                        e
-                    ))
-                }
-            },
-            description: "Provider CheckIn".to_string(),
-        }
-    }
-
-    fn from_account_register(entry: &LedgerEntry, parent_hash: &[u8]) -> Self {
-        let dcc_id = DccIdentity::new_verifying_from_bytes(entry.key()).unwrap();
-        WasmLedgerEntry {
-            label: entry.label().to_string(),
-            key: Value::String(dcc_id.to_string()),
-            value: serde_json::json!({
-                "parent_hash": BASE64.encode(parent_hash),
-                "signature": BASE64.encode(entry.value()),
-                "verified": match dcc_id.verify_bytes(entry.key(), entry.value()) {
-                    Ok(()) => "verified".into(),
-                    Err(e) => {
-                        format!("Signature verification failed: {}", e)
-                    }
-                },
-            }),
-            description: "Account Register".to_string(),
-        }
-    }
-
-    fn from_reputation_age(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_REPUTATION_AGE.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: serde_json::to_value(ReputationAge::try_from_slice(entry.value()).unwrap())
-                .unwrap(),
-            description: "ReputationAge".to_string(),
-        }
-    }
-
-    fn from_reputation_change(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_REPUTATION_CHANGE.to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: serde_json::to_value(ReputationChange::try_from_slice(entry.value()).unwrap())
-                .unwrap(),
-            description: "ReputationChange".to_string(),
-        }
-    }
-
-    fn from_reward_distribution(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: LABEL_REWARD_DISTRIBUTION.to_string(),
-            key: Value::String(match std::str::from_utf8(entry.key()) {
-                Ok(s) => s.to_string(),
-                Err(_) => BASE64.encode(entry.key()),
-            }),
-            value: serde_json::to_value(u64::from_le_bytes(
-                <[u8; 8]>::try_from_slice(entry.value())
-                    .map_err(|e| {
-                        format!(
-                            "Failed to deserialize reward distribution value: {} ({})",
-                            BASE64.encode(entry.value()),
-                            e
-                        )
-                    })
-                    .unwrap(),
-            ))
-            .unwrap(),
-            description: "RewardDistribution".to_string(),
-        }
-    }
-
-    fn from_generic(entry: &LedgerEntry) -> Self {
-        WasmLedgerEntry {
-            label: entry.label().to_string(),
-            key: Value::String(BASE64.encode(entry.key())),
-            value: serde_json::to_value(BASE64.encode(entry.value())).unwrap(),
-            description: "Generic".to_string(),
-        }
-    }
-}
-
-pub fn ledger_block_parse_entries(block: &LedgerBlock) -> Vec<WasmLedgerEntry> {
-    let mut entries = vec![];
-    for entry in block.entries() {
-        entries.push(match entry.label() {
-            LABEL_DC_TOKEN_APPROVAL => WasmLedgerEntry::from_dc_token_approval(entry),
-            LABEL_DC_TOKEN_TRANSFER => WasmLedgerEntry::from_dc_token_transfer(entry),
-            LABEL_PROV_CHECK_IN | LABEL_NP_CHECK_IN => {
-                WasmLedgerEntry::from_provider_check_in(entry, block.parent_hash())
-            }
-            LABEL_PROV_REGISTER | LABEL_NP_REGISTER => {
-                WasmLedgerEntry::from_account_register(entry, block.parent_hash())
-            }
-            LABEL_REPUTATION_AGE => WasmLedgerEntry::from_reputation_age(entry),
-            LABEL_REPUTATION_CHANGE => WasmLedgerEntry::from_reputation_change(entry),
-            LABEL_REWARD_DISTRIBUTION => WasmLedgerEntry::from_reward_distribution(entry),
-            LABEL_USER_REGISTER => {
-                WasmLedgerEntry::from_account_register(entry, block.parent_hash())
-            }
-            _ => WasmLedgerEntry::from_generic(entry),
-        })
-    }
-    entries
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{account_balance_get, reputations_clear, IcrcCompatibleAccount, MINTING_ACCOUNT};
+    use crate::{
+        account_balance_get, reputations_clear, DccIdentity, IcrcCompatibleAccount, MINTING_ACCOUNT,
+    };
     use candid::Principal;
     use icrc_ledger_types::icrc1::account::Account;
     use ledger_map::{LedgerEntry, LedgerMap, Operation};

@@ -76,23 +76,28 @@
 		}
 	}
 
-	const isCheckoutOrMarketplacePage = $derived(
-		$page.url.pathname.startsWith('/dashboard/marketplace') ||
-		$page.url.pathname.startsWith('/dashboard/rentals')
+	// F4: confine the full-width verify-email + seed-backup banners to the
+	// dashboard landing and the account pages. They are actionable there (verify
+	// email / back up seed) but consumed vertical space and nagged on every
+	// /dashboard/* sub-route. Contextual notices now surface the prerequisite
+	// where it blocks action (e.g. the F3 rent-flow gate), so the global banner
+	// no longer needs to dominate every screen.
+	const isBannerSurface = $derived(
+		$page.url.pathname === '/dashboard' ||
+		$page.url.pathname.startsWith('/dashboard/account')
 	);
 
 	const showEmailVerificationBanner = $derived(
-		isAuthenticated && account && !account.emailVerified && !isCheckoutOrMarketplacePage && !emailBannerDismissed
+		isAuthenticated && account && !account.emailVerified && isBannerSurface && !emailBannerDismissed
 	);
 	// #438: previously gated on `!showEmailVerificationBanner`, which meant a
 	// seed-phrase user with an unverified email NEVER saw the backup warning —
 	// exactly the high-risk account that needs it most. The two banners now
 	// stack independently inside a single fixed container; each has its own
 	// dismissal path (seed banner via localStorage flag, email banner via
-	// verification). The marketplace/rentals exclusion mirrors the email banner
-	// so focus-critical flows stay unobstructed.
+	// verification). Both are confined to the banner surfaces (F4).
 	const showSeedPhraseBackupBanner = $derived(
-		isAuthenticated && !isCheckoutOrMarketplacePage && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
+		isAuthenticated && isBannerSurface && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
 	);
 
 	// <main> top padding must clear the fixed banner stack. Mobile sits under

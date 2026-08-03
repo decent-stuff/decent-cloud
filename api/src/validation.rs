@@ -7,6 +7,7 @@ pub use email_utils::validate_email;
 
 static URL_REGEX: OnceLock<Regex> = OnceLock::new();
 static USERNAME_REGEX: OnceLock<Regex> = OnceLock::new();
+static SSH_PUBKEY_REGEX: OnceLock<Regex> = OnceLock::new();
 
 const RESERVED_USERNAMES: &[&str] = &[
     "admin",
@@ -30,6 +31,29 @@ fn url_regex() -> &'static Regex {
 fn username_regex() -> &'static Regex {
     USERNAME_REGEX
         .get_or_init(|| Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._@-]{1,62}[a-zA-Z0-9]$").unwrap())
+}
+
+/// SSH public key format: `ssh-(rsa|ed25519|ecdsa|dss) <base64data> [optional comment]`.
+///
+/// Single source of truth for the SSH-pubkey textual format used by the
+/// contract SSH-key flows (rotate / update). Compiled once via [`OnceLock`]
+/// instead of recompiling a fresh `Regex` on every request. The hardcoded
+/// pattern is valid by construction, so init is infallible.
+fn ssh_pubkey_regex() -> &'static Regex {
+    SSH_PUBKEY_REGEX.get_or_init(|| {
+        Regex::new(r"^ssh-(rsa|ed25519|ecdsa|dss)\s+[A-Za-z0-9+/]+={0,3}(\s+.*)?$")
+            .expect("hardcoded SSH pubkey regex is valid")
+    })
+}
+
+/// Validate the textual format of an SSH public key string.
+///
+/// Returns `true` for keys of the form
+/// `ssh-(rsa|ed25519|ecdsa|dss) <base64> [comment]`. The caller is responsible
+/// for any trimming. (Account public-key onboarding uses [`validate_public_key`]
+/// instead, which also checks key type + length.)
+pub fn is_valid_ssh_pubkey_format(key: &str) -> bool {
+    ssh_pubkey_regex().is_match(key)
 }
 
 pub fn validate_url(url: &str) -> Result<()> {

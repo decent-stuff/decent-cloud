@@ -8,6 +8,7 @@
 |------|----------|-------|
 | Browser smoke checks | `browser.js` | Fresh browser per invocation; preferred UI verification tool |
 | Auth/session bootstrap | `dc-auth.js` | Creates accounts, injects seed phrases, seeds UX data |
+| sqlx offline cache regen | `sqlx-prepare.sh` | The ONLY correct way to regenerate the committed root `.sqlx/`; uses `--workspace` (see repo `AGENTS.md`) |
 | API/CLI helpers | `*.js`, `*.sh` | One-off local tooling; inspect before adding new scripts |
 
 ## BROWSER COMMANDS

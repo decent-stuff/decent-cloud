@@ -243,7 +243,7 @@ impl ApiClient {
         };
 
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(crate::HTTP_TIMEOUT_SECS)
             .build()
             .context("Failed to build HTTP client")?;
 
@@ -692,7 +692,7 @@ pub async fn setup_agent(
     agent_pubkey: &str,
 ) -> Result<SetupResponse> {
     let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(crate::HTTP_TIMEOUT_SECS)
         .build()
         .context("Failed to build HTTP client")?;
 
@@ -760,7 +760,7 @@ pub async fn register_gateway(
     let agent_pubkey = hex::encode(identity.to_bytes_verifying());
 
     let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(crate::HTTP_TIMEOUT_SECS)
         .build()
         .context("Failed to build HTTP client")?;
 

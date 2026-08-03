@@ -9,7 +9,7 @@
 		copyCompareShareUrl,
 		normalizeCompareIds,
 	} from '$lib/utils/compare-share';
-	import { truncatePubkey } from '$lib/utils/identity';
+	import { providerDisplayName } from '$lib/utils/provider-display';
 	import RentalRequestDialog from '$lib/components/RentalRequestDialog.svelte';
 	import AuthPromptModal from '$lib/components/AuthPromptModal.svelte';
 	import TrustBadge from '$lib/components/TrustBadge.svelte';
@@ -245,12 +245,12 @@
 											href="/dashboard/marketplace/{offering.id}"
 											class="font-semibold text-white hover:text-primary-400 transition-colors block leading-snug"
 										>{offering.offer_name}</a>
-										<a
-											href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
-											class="text-xs text-neutral-500 hover:text-primary-400 transition-colors mt-0.5 block {offering.owner_username ? '' : 'font-mono truncate'}"
-										>
-											{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
-										</a>
+									<a
+										href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+										class="text-xs text-neutral-500 hover:text-primary-400 transition-colors mt-0.5 block {offering.owner_username || offering.provider_name ? '' : 'font-mono truncate'}"
+									>
+										{providerDisplayName(offering)}
+									</a>
 									</div>
 									<button
 										onclick={() => offering.id !== undefined && removeOffering(offering.id)}
@@ -422,12 +422,12 @@
 						<td class="px-4 py-3 text-neutral-500">Provider</td>
 						{#each offerings as offering}
 							<td class="px-4 py-3">
-								<a
-									href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
-									class="text-primary-400 hover:text-primary-300 transition-colors text-xs {offering.owner_username ? '' : 'font-mono'}"
-								>
-									{offering.owner_username ? `@${offering.owner_username}` : truncatePubkey(offering.pubkey)}
-								</a>
+							<a
+								href="/dashboard/providers/{offering.owner_username || offering.pubkey}"
+								class="text-primary-400 hover:text-primary-300 transition-colors text-xs {offering.owner_username || offering.provider_name ? '' : 'font-mono'}"
+							>
+								{providerDisplayName(offering)}
+							</a>
 							</td>
 						{/each}
 					</tr>
