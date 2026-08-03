@@ -79,12 +79,14 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-03 (Wave 12; spec state == post-Wave-11
-    // EmailVerificationApi split, confirmed byte-identical before/after the
-    // webhooks dispute extraction).
+    // Capture date: 2026-08-03. Refreshed after UX F7 (`bc9caf05`, which added
+    // `provider_name` to the `Offering` response schema) — that intentional field
+    // addition changed the canonical hash without altering path/schema counts
+    // (still 187/327). The previous hash (`4549fcf2…`, post-Wave-12 capture) had
+    // gone stale because F7 did not refresh it, leaving this guard red.
     const EXPECTED_PATHS: usize = 187;
     const EXPECTED_SCHEMAS: usize = 327;
-    const EXPECTED_HASH: &str = "4549fcf263c1337d989e43dc546b8edaece9326c7dccd7b29b6e8c048939ef84";
+    const EXPECTED_HASH: &str = "de6529560b1cc2bd9be65b44c0789b0a2368da52f167da8bc6f495c915faffdc";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");
