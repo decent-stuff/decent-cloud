@@ -6,7 +6,7 @@ serves HTTP 200, DB migrated, prod untouched); **operator cutover pending** (the
 **Plan:** `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`
 **Goal:** Move the shared staging env (today called "dev") off the local
 docker-compose stack + the `repo/secrets/shared/` age-SOPS store onto the k8s
-cluster as namespace `dc-stage` (ArgoCD-synced from the nuc-k3s repo), then retire
+cluster as namespace `dc-stage` (ArgoCD-synced from the k8s repo), then retire
 the old dev-deploy stack + the age secret store.
 
 This is the **single source of truth** for the operator cutover. Steps are
@@ -47,7 +47,7 @@ is now a quick re-confirmation, not a green-field check.
      `configMapKeyRef`s without a `key` → `apply` failed
      (`configMapKeyRef.key: Required value`). Root cause: api-server doesn't read
      `SMTP_*` (those are Chatwoot-only; stage reuses prod Chatwoot). Fixed by removing
-     the two lines (nuc-k3s commit `deb4018`, alongside Track 1). Stage dc-api env now
+     the two lines (k8s repo commit `deb4018`, alongside Track 1). Stage dc-api env now
      mirrors prod's set.
   2. **hostPath permissions** — `stage-api-data`/`stage-redis` hostPaths were created
      root-owned (`DirectoryOrCreate`) but pods run
@@ -69,7 +69,7 @@ is now a quick re-confirmation, not a green-field check.
 
 1. **Verify** the pre-cutover state (Step 0) — confirm Tracks 1+2+3 landed
    (Track 2 PoC is **VERIFIED LIVE** — see Pre-cutover status above).
-2. **Push nuc-k3s** (Step A) — ArgoCD syncs `dc-stage` from git. **Push BOTH
+2. **Push the k8s repo** (Step A) — ArgoCD syncs `dc-stage` from git. **Push BOTH
    commits `7013258` + `deb4018` together.**
 3. **Encrypt + persist** the stage secret to git (Step B) — ⚠️ **reconcile the
    stage DB password FIRST or the first ArgoCD sync breaks DB auth** (see the
@@ -92,7 +92,7 @@ is now a quick re-confirmation, not a green-field check.
 
 | Capability | Detail |
 |---|---|
-| nuc-k3s push access | `git@github.com:sasa-tomic/nuc-k3s.git` (checked out at `/project/decent-cloud/third_party/k8s`). The SOPS PGP key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` to edit `cluster/secrets/*.yaml`. |
+| k8s repo push access | `git@github.com:sasa-tomic/nuc-k3s.git` (checked out at `/project/decent-cloud/third_party/k8s`). The SOPS PGP key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` to edit `cluster/secrets/*.yaml`. |
 | Registry push access | Forgejo `git.kalaj.org` (owner `decent-stuff`). `docker login git.kalaj.org` first; the token lives in `~/.docker/config.json` (never paste into chat / a commit / a manifest). |
 | Cloudflare tunnel + DNS access | Cloudflare dashboard / API token with Tunnel + DNS edit on the `decent-cloud.org` zone. The `decent-cloud-dev` tunnel is currently **remote-managed** (`config_src=cloudflare`). |
 | kubectl + kustomize | `export KUBECONFIG=/project/decent-cloud/kubeconfig` (or wherever the cluster kubeconfig lives). cluster-admin on `https://192.168.0.2:6443`. |
@@ -105,7 +105,7 @@ is now a quick re-confirmation, not a green-field check.
 These were done by Tracks 1/2/3 in the autonomous session. **Step 0 verifies them.**
 They need operator push/adopt before they take effect.
 
-- **Track 1 — nuc-k3s manifests (committed LOCALLY, NOT pushed).**
+- **Track 1 — k8s manifests (committed LOCALLY, NOT pushed).**
   - `cluster/apps/decent-cloud/{base,prod,stage}/` restructured into a kustomize
     base + thin overlays. `prod/` renders byte-equivalent to the prior live prod
     (zero behavior change). `stage/` overlays namespace `dc-stage`, stage image
@@ -132,7 +132,7 @@ They need operator push/adopt before they take effect.
     The dev tunnel was NOT touched → stage is invisible to the public internet.
 - **Track 3 — product-repo prep (PUSHED to `main` as `andris-k85`).**
   - `cf/deploy.py` gained `deploy stage` (build + push `:stage` image + bump the
-    nuc-k3s overlay) and `config stage` (read dc-stage cluster stores). The
+    k8s overlay) and `config stage` (read dc-stage cluster stores). The
     legacy `dev` docker-compose path is intact (Step G retires it).
   - This runbook.
 
@@ -143,7 +143,7 @@ step is a quick re-confirmation that the cluster state is still as left. Run the
 a machine with cluster + repo access; stop and fix before proceeding if any check fails.
 
 ```bash
-# Track 1: nuc-k3s has the stage manifests committed locally.
+# Track 1: the k8s repo has the stage manifests committed locally.
 cd /project/decent-cloud/third_party/k8s
 git log --oneline -5                                # expect stage/overlay commits
 ls cluster/apps/decent-cloud/{base,prod,stage}/     # all three dirs present
@@ -168,10 +168,10 @@ python3 cf/deploy.py deploy --help | grep stage       # expect `stage` in choice
 
 ---
 
-## Step A — Push nuc-k3s (ArgoCD adopts the live dc-stage)
+## Step A — Push the k8s repo (ArgoCD adopts the live dc-stage)
 
 Track 1 left the manifests committed **locally** (the autonomous session could not
-push the private nuc-k3s repo). Pushing makes ArgoCD sync `dc-stage` from git and
+push the private k8s repo). Pushing makes ArgoCD sync `dc-stage` from git and
 **adopt the live resources by name** (Track 2 created them via kubectl; once the
 App exists, ArgoCD manages them).
 
@@ -277,10 +277,10 @@ cd /project/decent-cloud/repo
 docker login git.kalaj.org                                   # operator token
 python3 cf/deploy.py deploy stage                            # default tag = floating :stage
 # → builds api image, pushes git.kalaj.org/decent-stuff/decent-cloud-api:stage,
-#   bumps cluster/apps/decent-cloud/stage/kustomization.yaml, commits nuc-k3s LOCALLY.
+#   bumps cluster/apps/decent-cloud/stage/kustomization.yaml, commits the k8s repo LOCALLY.
 ```
 
-The command prints the exact `git push` to run (it commits nuc-k3s locally and
+The command prints the exact `git push` to run (it commits the k8s repo locally and
 cannot push from the autonomous session). Push it and let ArgoCD sync:
 
 ```bash
@@ -483,7 +483,7 @@ How to revert each step if something goes wrong (in reverse order):
   still be running (don't run Step F until Step D is stable for a watch period).
 - **ArgoCD:** `kubectl -n argocd app history decent-cloud-stage` →
   `kubectl -n argocd app rollback decent-cloud-stage <revision-id>`. Or revert the
-  nuc-k3s commit and push.
+  k8s repo commit and push.
 - **Stage DB:** `decent_cloud_stage` is a separate DB — rolling back the app does
   NOT touch prod's `decent_cloud_prod`. Drop the stage DB only if you want a
   clean slate: `kubectl -n pgsql exec -it <pgsql-pod> -- psql -c 'DROP DATABASE decent_cloud_stage;'`.

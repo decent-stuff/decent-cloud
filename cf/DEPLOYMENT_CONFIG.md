@@ -20,13 +20,13 @@ python3 cf/deploy.py config prod   # prod: reads live k8s dc-config ConfigMap + 
 | Runtime | docker-compose (this repo, `cf/`) | k8s cluster (NUC), namespace `dc-prod` |
 | Owner of deploy | `cf/deploy.py` (this repo) | ArgoCD GitOps (auto-sync, selfHeal+prune) |
 | Manifests | `cf/docker-compose*.yml` (this repo) | `cluster/apps/decent-cloud/` in **`sasa-tomic/nuc-k3s`** repo |
-| Secrets store | `secrets/shared/*.yaml` (this repo, SOPS **age**) | `cluster/secrets/dc-secret.yaml` (nuc-k3s repo, SOPS **PGP**) + `dc-config` ConfigMap |
+| Secrets store | `secrets/shared/*.yaml` (this repo, SOPS **age**) | `cluster/secrets/dc-secret.yaml` (k8s repo, SOPS **PGP**) + `dc-config` ConfigMap |
 | Secrets tool | `scripts/dc-secrets` (set/edit/export/list) | `sops` + `python3 scripts/manage-secrets.py` |
-| Tunnel | remote-managed via `cf/tunnel.py dev` | local-managed (`dc-cloudflared-config` ConfigMap in nuc-k3s) |
+| Tunnel | remote-managed via `cf/tunnel.py dev` | local-managed (`dc-cloudflared-config` ConfigMap in the k8s repo) |
 
 Dev and prod use **different** secret backends on purpose: the cluster's SOPS key
 is PGP; this repo's own `secrets/` use age. Prod credentials live **only** in the
-private nuc-k3s cluster repo and are never committed to this public repo.
+private k8s cluster repo and are never committed to this public repo.
 
 ---
 
@@ -66,7 +66,7 @@ repo at path `cluster/apps/decent-cloud/` and reconciles into namespace `dc-prod
 Non-secret values (public ids, URLs, model names) → `dc-config` ConfigMap:
 
 ```bash
-# in the nuc-k3s repo checkout:
+# in the k8s repo checkout:
 $EDITOR cluster/apps/decent-cloud/dc-config.yaml     # edit values directly (plaintext)
 kubectl -n dc-prod apply -f cluster/apps/decent-cloud/dc-config.yaml
 ```
@@ -104,13 +104,13 @@ in the `dc-cloudflared-config` ConfigMap (`cluster/apps/decent-cloud/dc-cloudfla
 
 Releases are tagged (`vX.Y.Z`). The `release.yml` workflow builds the api +
 website images, pushes them to the Forgejo registry, then bumps the image tags in
-the nuc-k3s repo manifests:
+the k8s repo manifests:
 
 - **CI (automatic):** clones `sasa-tomic/nuc-k3s` and runs
   `scripts/bump_app_images.py --app decent-cloud --tag vX.Y.Z --push`. Requires
-  the `NUC_K3S_REPO_WRITE` GitHub secret (PAT with write access to nuc-k3s). If
+  the `NUC_K3S_REPO_WRITE` GitHub secret (PAT with write access to the k8s repo). If
   the secret is absent, the step fails loudly with the manual fallback below.
-- **Manual (operator):** from a nuc-k3s checkout —
+- **Manual (operator):** from a k8s repo checkout —
 
   ```bash
   python3 scripts/bump_app_images.py --app decent-cloud --tag vX.Y.Z --push
@@ -169,4 +169,4 @@ cluster PGP key. Encrypted files are safe to commit to their respective repos.
 - [CONFIG.md](./CONFIG.md) — authoritative per-variable reference (dev + prod sources)
 - [OAuth Authentication Guide](../docs/OAUTH_AUTHENTICATION.md)
 - `api/.env.example`, `cf/.env.example` — variable documentation templates
-- nuc-k3s repo: `cluster/apps/decent-cloud/` (manifests), `cluster/secrets/dc-secret.yaml` (prod secrets), `docs/SECRETS_MANAGEMENT_SOPS.md` (SOPS reference)
+- k8s repo: `cluster/apps/decent-cloud/` (manifests), `cluster/secrets/dc-secret.yaml` (prod secrets), `docs/SECRETS_MANAGEMENT_SOPS.md` (SOPS reference)

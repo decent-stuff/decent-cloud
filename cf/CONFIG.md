@@ -6,9 +6,9 @@ If you "can't find where to set X", start here.
 
 > **🚧 Staging migration (2026-08-03):** staging is moving off the local
 > docker-compose "dev" stack + the `repo/secrets/shared/` age store onto k8s as
-> namespace `dc-stage` (ArgoCD-synced from nuc-k3s). A third env, **stage**, now
+> namespace `dc-stage` (ArgoCD-synced from the k8s repo). A third env, **stage**, now
 > exists: sources from `dc-stage-config` ConfigMap + `dc-stage-secret` Secret in
-> nuc-k3s (same model as prod). The DEV (docker-compose) + age-store content
+> the k8s repo (same model as prod). The DEV (docker-compose) + age-store content
 > below stays accurate **until the operator cutover**; the legacy `scripts/dc-secrets`
 > + `repo/secrets/shared/` are **retired pending post-cutover deletion**. Full
 > runbook: `docs/MIGRATION-CUTOVER.md`. Audit live stage config with
@@ -83,7 +83,7 @@ reference**, and `deploy.py config <env>` reads the live store for whichever env
 | Env | Secret store | Non-secret config | Deploy mechanism | Edit tool |
 |-----|--------------|-------------------|------------------|-----------|
 | dev | `repo/secrets/shared/{common,dev}.yaml` (AGE-SOPS) | same (env vars) | `python3 cf/deploy.py deploy dev` | `scripts/dc-secrets` |
-| prod | `third_party/k8s/cluster/secrets/dc-secret.yaml` (PGP-SOPS) | `third_party/k8s/cluster/apps/decent-cloud/dc-config.yaml` (ConfigMap) | ArgoCD GitOps (push to nuc-k3s) | `sops` + `kubectl` |
+| prod | `third_party/k8s/cluster/secrets/dc-secret.yaml` (PGP-SOPS) | `third_party/k8s/cluster/apps/decent-cloud/dc-config.yaml` (ConfigMap) | ArgoCD GitOps (push to the k8s repo) | `sops` + `kubectl` |
 
 > **Two different SOPS key types.** Dev uses AGE; prod (the k8s repo) uses PGP key
 > `FA5814CF1935EE80C454C9F1660DCCF069EC9176` (`encrypted_regex: ^(data|stringData)$`).
@@ -248,7 +248,7 @@ kubectl -n dc-prod rollout restart deploy/dc-api deploy/dc-api-sync deploy/dc-ch
 ```
 
 `manage-secrets.py` discovers secrets by globbing `cluster/secrets/*.yaml` (filename
-agnostic). Committing + pushing the nuc-k3s repo lets ArgoCD reconcile `dc-config` /
+agnostic). Committing + pushing the k8s repo lets ArgoCD reconcile `dc-config` /
 the manifests; `dc-secret` itself is applied manually (out-of-band) and never stored
 in plaintext in git.
 

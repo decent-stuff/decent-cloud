@@ -126,16 +126,16 @@ npm run dev
 
 ### Deployment & secrets (staging is `dc-stage` on k8s)
 
-**Staging** is the k8s namespace `dc-stage` (ArgoCD-synced from the nuc-k3s repo),
+**Staging** is the k8s namespace `dc-stage` (ArgoCD-synced from the k8s repo),
 no longer the local docker-compose "dev" stack. **Production** is `dc-prod`. Both
-deploy via GitOps (push to nuc-k3s → ArgoCD auto-syncs); there is no imperative
+deploy via GitOps (push to the k8s repo → ArgoCD auto-syncs); there is no imperative
 prod/stage deploy from this repo. **Local dev** is the slim `scripts/dev-server.sh`
 stack (api + website + postgres) — needs no secrets.
 
 | env | where it runs | secrets | deploy |
 |-----|---------------|---------|--------|
-| prod | k8s `dc-prod` | nuc-k3s: `dc-secret` (PGP-SOPS) + `dc-config` ConfigMap | ArgoCD (push nuc-k3s) |
-| stage | k8s `dc-stage` | nuc-k3s: `dc-stage-secret` (PGP-SOPS) + `dc-stage-config` ConfigMap | ArgoCD (push nuc-k3s); ship the image with `python3 cf/deploy.py deploy stage` |
+| prod | k8s `dc-prod` | k8s repo: `dc-secret` (PGP-SOPS) + `dc-config` ConfigMap | ArgoCD (push k8s repo) |
+| stage | k8s `dc-stage` | k8s repo: `dc-stage-secret` (PGP-SOPS) + `dc-stage-config` ConfigMap | ArgoCD (push k8s repo); ship the image with `python3 cf/deploy.py deploy stage` |
 | local | slim docker-compose | **none** (plaintext/test values) | `scripts/dev-server.sh` |
 
 - **Canonical secret store:** the consolidated outer
@@ -148,8 +148,8 @@ stack (api + website + postgres) — needs no secrets.
   completes — see `docs/MIGRATION-CUTOVER.md` (the cutover runbook; Step G deletes
   them). Plan: `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
 - **Ship a stage image:** `python3 cf/deploy.py deploy stage` (builds api, pushes
-  `git.kalaj.org/decent-stuff/decent-cloud-api:stage`, bumps the nuc-k3s stage
-  overlay, commits nuc-k3s locally; prints the operator `git push`).
+  `git.kalaj.org/decent-stuff/decent-cloud-api:stage`, bumps the k8s stage
+  overlay, commits the k8s repo locally; prints the operator `git push`).
 - **Audit live config:** `python3 cf/deploy.py config {dev,prod,stage}`.
 
 ### Seeding Test Data
@@ -225,14 +225,14 @@ otherwise; see `api/src/rate_limit.rs`.
   1. `serve_command()` startup validation
   2. `doctor_command()` checks
   3. `api/.env.example` and `cf/.env.example` (documentation templates)
-  4. the env's secret/config store: prod/stage → nuc-k3s (`sops cluster/secrets/{dc-secret,dc-stage-secret}.yaml` + the `dc-config`/`dc-stage-config` ConfigMap, applied via `scripts/manage-secrets.py`); local dev → the slim docker-compose `env:` block (plaintext). See `docs/MIGRATION-CUTOVER.md` + `cf/CONFIG.md`.
+  4. the env's secret/config store: prod/stage → the k8s repo (`sops cluster/secrets/{dc-secret,dc-stage-secret}.yaml` + the `dc-config`/`dc-stage-config` ConfigMap, applied via `scripts/manage-secrets.py`); local dev → the slim docker-compose `env:` block (plaintext). See `docs/MIGRATION-CUTOVER.md` + `cf/CONFIG.md`.
 
 ## PACKAGE REGISTRY (image builds & hotfixes)
 - Agents MAY push container images to the Forgejo registry (`git.kalaj.org`, owner `decent-stuff`) when credentials are available. The operator runs `docker login git.kalaj.org`; the token lands in `~/.docker/config.json` and must NEVER be pasted into chat, a commit, or a manifest.
 - For ANY off-CI / hotfix / agent-initiated push, use a DISTINCT build version that CANNOT collide with a future release git-tag (`v*` triggers `release.yml`):
   - **API images**: tag by commit SHA (e.g. `decent-cloud-api:<short-sha>`). SHA-tagging is the established convention and is what release CI already uses.
   - **Website / other versioned images**: append a hotfix suffix — e.g. `decent-cloud-website:v0.5.5-hotfix.<short-sha>` — NEVER reuse a clean `vX.Y.Z`. A colliding tag either fails to push or silently overwrites a release image; both break future releases.
- - After pushing, bump the manifest in the nuc-k3s repo. Post-restructure the `# deploy-prod:<component>` markers live under `third_party/k8s/cluster/apps/decent-cloud/base/dc-*.yaml` (the kustomize base; prod/stage are overlays). For a SINGLE-COMPONENT hotfix, edit the matching `image:` line directly in `base/dc-<component>.yaml` — `scripts/bump_app_images.py` applies one tag to ALL markers (api+website), so avoid it for single-component hotfixes (it does now scan `base/` correctly for full bumps). Then commit, push, force an ArgoCD refresh (`kubectl -n argocd patch application decent-cloud --type=merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"normal"}}}'`), and verify the rollout reaches Ready + public health 200.
+ - After pushing, bump the manifest in the k8s repo. Post-restructure the `# deploy-prod:<component>` markers live under `third_party/k8s/cluster/apps/decent-cloud/base/dc-*.yaml` (the kustomize base; prod/stage are overlays). For a SINGLE-COMPONENT hotfix, edit the matching `image:` line directly in `base/dc-<component>.yaml` — `scripts/bump_app_images.py` applies one tag to ALL markers (api+website), so avoid it for single-component hotfixes (it does now scan `base/` correctly for full bumps). Then commit, push, force an ArgoCD refresh (`kubectl -n argocd patch application decent-cloud --type=merge -p '{"metadata":{"annotations":{"argocd.argoproj.io/refresh":"normal"}}}'`), and verify the rollout reaches Ready + public health 200.
 - The pull secret `forgejo-registry-secret` (ns `dc-prod`) must be valid. If pulls return 401, the token is expired: re-create the live secret from `~/.docker/config.json` AND update the SOPS-managed `cluster/secrets/forgejo-registry-secret.yaml` so `manage-secrets.py` does not revert it. Leaving the SOPS file stale silently breaks pulls on the next secret re-apply.
 
 ## ARCHITECTURAL ISSUES THAT REQUIRE A HUMAN DECISION

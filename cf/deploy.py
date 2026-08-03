@@ -3,12 +3,12 @@
 
 DEV runs as a local docker-compose stack managed by this script (deploy/stop/
 logs/status/restart). PROD deploys via the k8s cluster (ArgoCD GitOps in the
-nuc-k3s repo, namespace dc-prod) — those deploy subcommands fail loud on prod.
+k8s repo, namespace dc-prod) — those deploy subcommands fail loud on prod.
 
 STAGE (the shared staging env, formerly "dev") deploys via k8s too: namespace
-``dc-stage``, ArgoCD-synced from the nuc-k3s stage overlay.
+``dc-stage``, ArgoCD-synced from the k8s stage overlay.
 ``deploy stage`` builds + pushes the api image as the floating ``:stage`` tag
-and bumps the stage overlay image (local nuc-k3s commit — the operator pushes;
+and bumps the stage overlay image (local k8s repo commit — the operator pushes;
 ArgoCD then auto-syncs). See ``docs/MIGRATION-CUTOVER.md`` for the full cutover.
 The legacy ``dev`` docker-compose path stays intact until the cutover retires it.
 
@@ -403,7 +403,7 @@ def show_config(environment: str) -> int:
             cm_vars, sec_vars = _read_cluster_stores(ns, cm_name, sec_name)
         except RuntimeError as e:
             print_error(f"Could not read live {environment} config: {e}")
-            print_info(f"{environment} config lives in the nuc-k3s repo (third_party/k8s):")
+            print_info(f"{environment} config lives in the k8s repo (third_party/k8s):")
             print_info(f"  {overlay}  (kustomize overlay → ConfigMap, non-secret)")
             print_info(f"  cluster/secrets/{sec_name}.yaml   (SOPS Secret)")
             print_info("Edit + apply via `sops` + `kubectl` — see cf/CONFIG.md.")
@@ -839,7 +839,7 @@ def deploy(env_name: str, env_vars: dict[str, str], compose_files: list[str]) ->
 # ---------------------------------------------------------------------------
 # `deploy stage` — k8s/ArgoCD (namespace dc-stage), NOT docker-compose.
 # Post-cutover flow (see docs/MIGRATION-CUTOVER.md): build the api image, push it
-# as the floating :stage tag, bump the stage overlay image in the nuc-k3s repo
+# as the floating :stage tag, bump the stage overlay image in the k8s repo
 # (local commit — operator pushes; ArgoCD then auto-syncs dc-stage). The legacy
 # `dev` docker-compose path stays intact until the cutover runbook retires it.
 # ---------------------------------------------------------------------------
@@ -853,7 +853,7 @@ STAGE_DEFAULT_TAG = "stage"
 
 
 def _nuc_k3s_dir() -> Path:
-    """Resolve the nuc-k3s checkout (the GitOps source for dc-prod/dc-stage).
+    """Resolve the k8s repo checkout (the GitOps source for dc-prod/dc-stage).
 
     Default: ``<outer-workspace>/third_party/k8s`` (``repo/`` is a submodule of
     the outer workspace, so ``cf/../..`` is the outer workspace). Override with
@@ -882,7 +882,7 @@ def _update_stage_image_tag(kustomization_path: Path, new_tag: str) -> bool:
     if not kustomization_path.exists():
         raise RuntimeError(
             f"stage overlay not found at {kustomization_path}. Track 1 "
-            f"(nuc-k3s base/prod/stage manifests) must land first — see "
+            f"(k8s base/prod/stage manifests) must land first — see "
             f"docs/MIGRATION-CUTOVER.md § Prerequisites."
         )
 
@@ -957,7 +957,7 @@ def _update_stage_image_tag(kustomization_path: Path, new_tag: str) -> bool:
 
 
 def deploy_stage(tag: str) -> int:
-    """Build + push the dc-stage api image, then bump the stage overlay (nuc-k3s).
+    """Build + push the dc-stage api image, then bump the stage overlay (k8s repo).
 
     Stage deploys via k8s (ArgoCD, namespace dc-stage), NOT docker-compose. This
     command is the manual ship-image flow (CI's ``:stage`` build is the automated
@@ -966,14 +966,14 @@ def deploy_stage(tag: str) -> int:
       1. Build the api binary natively (reuses the dev build path).
       2. ``docker build`` the api image from ``api/Dockerfile``.
       3. Tag + push it as ``<STAGE_API_IMAGE>:<tag>`` (default ``:stage``).
-      4. Bump the ``images:`` entry in the nuc-k3s stage overlay to ``<tag>``.
-      5. Commit the nuc-k3s change LOCALLY (we cannot push nuc-k3s from here);
+      4. Bump the ``images:`` entry in the k8s stage overlay to ``<tag>``.
+      5. Commit the k8s repo change LOCALLY (we cannot push the k8s repo from here);
          print the exact ``git push`` the operator must run so ArgoCD auto-syncs.
 
     Returns 0 on success, 1 on any failure (each step fails loud with context).
     """
     print_header(f"Decent Cloud — stage deploy (tag: {tag})")
-    print_info("stage runs on k8s (namespace dc-stage, ArgoCD-synced from nuc-k3s)")
+    print_info("stage runs on k8s (namespace dc-stage, ArgoCD-synced from the k8s repo)")
     print_info("this ships the api image + bumps the overlay; see docs/MIGRATION-CUTOVER.md")
     print()
 
@@ -1033,7 +1033,7 @@ def deploy_stage(tag: str) -> int:
     print_success(f"Pushed {full_image}")
     print()
 
-    # 4. bump the nuc-k3s stage overlay image tag.
+    # 4. bump the k8s stage overlay image tag.
     nuc_k3s = _nuc_k3s_dir()
     overlay = nuc_k3s / "cluster" / "apps" / "decent-cloud" / "stage" / "kustomization.yaml"
     print_header(f"Bumping stage overlay: {overlay}")
@@ -1041,7 +1041,7 @@ def deploy_stage(tag: str) -> int:
         changed = _update_stage_image_tag(overlay, tag)
     except RuntimeError as e:
         print_error(f"Could not bump stage overlay: {e}")
-        print_info("Track 1 (nuc-k3s stage manifests) must land first — see docs/MIGRATION-CUTOVER.md")
+        print_info("Track 1 (k8s stage manifests) must land first — see docs/MIGRATION-CUTOVER.md")
         return 1
     if changed:
         print_success(f"Stage overlay api image → :{tag}")
@@ -1049,10 +1049,10 @@ def deploy_stage(tag: str) -> int:
         print_success(f"Stage overlay already pins :{tag} (no manifest change)")
     print()
 
-    # 5. commit nuc-k3s LOCALLY (operator pushes; we cannot — see plan APPENDIX A).
+    # 5. commit the k8s repo LOCALLY (operator pushes; we cannot — see plan APPENDIX A).
     rel_overlay = "cluster/apps/decent-cloud/stage/kustomization.yaml"
     if changed:
-        print_header("Committing nuc-k3s change (local only)")
+        print_header("Committing k8s repo change (local only)")
         try:
             subprocess.run(["git", "-C", str(nuc_k3s), "add", rel_overlay], check=True)
             subprocess.run(
@@ -1062,21 +1062,21 @@ def deploy_stage(tag: str) -> int:
             )
         except subprocess.CalledProcessError as e:
             err = (e.stderr or e.stdout or str(e)).strip()
-            print_error(f"git commit in nuc-k3s failed: {err}")
+            print_error(f"git commit in the k8s repo failed: {err}")
             print_info(f"The overlay edit is on disk at {overlay} — commit + push it manually.")
             return 1
-        print_success("Committed locally in nuc-k3s")
+        print_success("Committed locally in the k8s repo")
         print()
     else:
-        print_info("No nuc-k3s commit needed (overlay unchanged)")
+        print_info("No k8s repo commit needed (overlay unchanged)")
 
-    # Operator handoff — the one step this command cannot do (nuc-k3s push).
+    # Operator handoff — the one step this command cannot do (k8s repo push).
     print(f"{GREEN}========================================")
     print(f"Stage image shipped ({full_image})")
     print(f"========================================{NC}")
     print()
     if changed:
-        print("The nuc-k3s change is committed LOCALLY. Push it so ArgoCD auto-syncs dc-stage:")
+        print("The k8s repo change is committed LOCALLY. Push it so ArgoCD auto-syncs dc-stage:")
         print(f"  {BLUE}cd {nuc_k3s} && git push origin main{NC}")
         print()
     print("Force an ArgoCD refresh + roll dc-stage so it picks up the new image:")
@@ -1099,7 +1099,7 @@ def main() -> int:
         epilog="""
 Examples:
   %(prog)s deploy dev                 # Deploy the local dev stack (docker-compose)
-  %(prog)s deploy stage               # Ship the stage api image + bump nuc-k3s overlay (k8s)
+  %(prog)s deploy stage               # Ship the stage api image + bump k8s overlay (k8s)
   %(prog)s deploy stage --tag <sha>   # Ship a pinned stage image instead of the floating :stage
   %(prog)s stop dev                  # Stop dev services
   %(prog)s logs dev -f website       # Follow dev website logs
@@ -1118,7 +1118,7 @@ retained until the stage cutover retires it.
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Deploy command. `dev` = local docker-compose; `stage` = build+push image +
-    # bump the nuc-k3s overlay (k8s/ArgoCD); `prod` fails loud (GitOps-only).
+    # bump the k8s overlay (k8s/ArgoCD); `prod` fails loud (GitOps-only).
     deploy_parser = subparsers.add_parser("deploy", aliases=["start", "up"], help="Deploy to environment")
     deploy_parser.add_argument("environment", choices=["dev", "development", "prod", "production", "stage"], help="Target environment")
     deploy_parser.add_argument("--tag", default=STAGE_DEFAULT_TAG,

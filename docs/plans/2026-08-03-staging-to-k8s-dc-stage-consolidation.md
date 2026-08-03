@@ -12,7 +12,7 @@ verified live on cluster + product-repo prep in PR #454); **operator cutover pen
 One secret store for the whole project. The shared staging environment (today
 called "dev") moves off the local docker-compose stack + the
 `repo/secrets/shared/` age-SOPS store and onto the k8s cluster (namespace
-`dc-stage`), with its secrets in the nuc-k3s repo (PGP-SOPS) alongside prod.
+`dc-stage`), with its secrets in the k8s repo (PGP-SOPS) alongside prod.
 After that, `repo/secrets/shared/` and `scripts/dc-secrets` are deleted and all
 now-obsolete dev/prod compose code is cleaned up.
 
@@ -76,7 +76,7 @@ Two independent secret stores coexist today:
 | store | env | repo | key type |
 |-------|-----|------|----------|
 | `repo/secrets/shared/{common,dev,play}.yaml` | staging ("dev") | product repo (`repo/`) | age |
-| `third_party/k8s/cluster/secrets/dc-secret.yaml` | prod | nuc-k3s repo | PGP |
+| `third_party/k8s/cluster/secrets/dc-secret.yaml` | prod | k8s repo | PGP |
 
 Symptoms that make this untenable:
 
@@ -91,7 +91,7 @@ Symptoms that make this untenable:
   (AGENTS.md, `cf/{CONFIG,DEPLOYMENT_CONFIG}.md`, `cf/deploy.py`,
   `cf/docker-compose.dev.yml`, `api/.env.example`, `scripts/{dc-secrets,
   dev-server.sh,test_dc_secrets.py}`, `docs/*`, e2e setup docs…).
-- prod already proved the model: PGP-SOPS in nuc-k3s, applied by
+- prod already proved the model: PGP-SOPS in the k8s repo, applied by
   `manage-secrets.py`, edit via `sops cluster/secrets/dc-secret.yaml`. Staging
   should match.
 
@@ -174,7 +174,7 @@ replicas). The nuc-k8s repo has no overlay tooling yet — this introduces it.
    already introspects via kubectl — extend the same pattern and rename the env
    from `dev`→`stage`.
 8. Update `cf/CONFIG.md` + `cf/DEPLOYMENT_CONFIG.md`: stage now sources from
-   `dc-stage-config` / `dc-stage-secret` in nuc-k3s (one store per env, same
+   `dc-stage-config` / `dc-stage-secret` in the k8s repo (one store per env, same
    repo). Dev = local slim compose.
 
 ### Phase 3 — Delete obsolete code + the age store
@@ -271,7 +271,7 @@ replicas). The nuc-k8s repo has no overlay tooling yet — this introduces it.
 
 ## Out of scope
 
-- The 5 genuinely-redundant prod/stage keys become moot once stage is in nuc-k3s
+- The 5 genuinely-redundant prod/stage keys become moot once stage is in the k8s repo
   (they collapse into one value per env in the same repo). No separate rotation
   pass needed.
 - Issues #451 (chatwoot service-account token), #452 (dead CHATWOOT_INBOX_ID),
@@ -289,9 +289,9 @@ environment context for the build.
 | Cluster access | ✅ cluster-admin | kubeconfig at `/project/decent-cloud/kube-config`; server `https://192.168.0.2:6443`; `auth can-i --list` = `*.* [*]` (full admin) |
 | kubectl + kustomize | ✅ installed | `~/.local/bin/kubectl` v1.36.3 (kustomize v5.8.1 built-in); set `export KUBECONFIG=/project/decent-cloud/kube-config` |
 | sops + age | ✅ installed | `/usr/local/bin/{sops,age}` |
-| nuc-k3s repo | ✅ local only | checked out at `/project/decent-cloud/third_party/k8s/` (remote `git@github.com:sasa-tomic/nuc-k3s.git`); can edit+commit locally, **CANNOT push** |
+| k8s repo | ✅ local only | checked out at `/project/decent-cloud/third_party/k8s/` (remote `git@github.com:sasa-tomic/nuc-k3s.git`); can edit+commit locally, **CANNOT push** |
 | Product repo push | ✅ as `andris-k85` | `GITHUB_TEST_PAT` (in outer `secrets/shared/env.yaml`) has `repo` scope, `permissions.push=true` on `decent-stuff/decent-cloud`. repo/ remote uses SSH host alias `github-decent-cloud` (not resolvable here) → push over HTTPS with the PAT instead |
-| nuc-k3s push | ❌ BLOCKED | `sasa-tomic/nuc-k3s` is private; `GITHUB_TEST_PAT` → 404; SSH `claude-code` key → permission denied. Manifests can only be authored locally + applied to cluster via kubectl |
+| k8s repo push | ❌ BLOCKED | `sasa-tomic/nuc-k3s` is private; `GITHUB_TEST_PAT` → 404; SSH `claude-code` key → permission denied. Manifests can only be authored locally + applied to cluster via kubectl |
 | Prod secret (dc-secret.yaml) | ❌ can't decrypt | PGP-SOPS with operator key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` (not present here). Not needed — prod is untouched |
 | Secrets decryption (age) | ✅ ALL decrypt | The body's "age key broken / common.yaml unreadable" premise is **STALE** — `repo/secrets/shared/{common,dev,play}.yaml` AND the NEW consolidated outer `/project/decent-cloud/secrets/shared/env.yaml` all decrypt cleanly with `SOPS_AGE_KEY_FILE=/project/decent-cloud/{repo,}/secrets/.age-identity` |
 | Consolidated secret store | ✅ exists | Outer `/project/decent-cloud/secrets/shared/env.yaml` (age) holds EVERY key (DATABASE_URL, STRIPE_*, CHATWOOT_*, SMTP_*, CF_*, ANTHROPIC_*, GOOGLE_OAUTH_*, TELEGRAM_*, …). This supersedes the 3-layer `repo/secrets/shared/` model |
@@ -300,15 +300,15 @@ environment context for the build.
 **Cluster live state observed:** namespaces present incl. `dc-prod` (active, ArgoCD-managed),
 `argocd`, `apps`. ArgoCD prod App is `automated: {selfHeal: true, prune: true}` → anything applied
 to `dc-prod` NOT in git gets pruned; therefore **prod must NEVER be mutated via kubectl** (only via
-git push to nuc-k3s, which is blocked). A NEW `dc-stage` namespace has no ArgoCD App → resources
-applied there via kubectl persist until the operator pushes nuc-k3s (ArgoCD then adopts by name).
+git push to the k8s repo, which is blocked). A NEW `dc-stage` namespace has no ArgoCD App → resources
+applied there via kubectl persist until the operator pushes the k8s repo (ArgoCD then adopts by name).
 
 ## APPENDIX B — Execution decision (autonomous scope vs operator-gated)
 
 The migration's END STATE (git-persisted ArgoCD-synced dc-stage + dev host decommissioned) is
-**partially blocked** by the nuc-k3s push denial. Split into two tracks:
+**partially blocked** by the k8s repo push denial. Split into two tracks:
 
-### Track 1 — nuc-k3s manifests (LOCAL ONLY, operator pushes later)
+### Track 1 — k8s manifests (LOCAL ONLY, operator pushes later)
 Author + verify, do NOT apply to `dc-prod`:
 1. Restructure `cluster/apps/decent-cloud/{base,prod,stage}/` (kustomize). **Verify**
    `kubectl kustomize prod/` renders byte-equivalent to current live prod (diff against
@@ -359,7 +359,7 @@ Original scope (executed):
   1. **Stage overlay apply bug** — `dc-api-patch.yaml` `SMTP_ADDRESS`/`SMTP_USERNAME`
      `configMapKeyRef`s had no `key` → `apply` failed (`configMapKeyRef.key: Required value`). The
      api-server doesn't read `SMTP_*` (Chatwoot-only; stage reuses prod Chatwoot). Fixed by
-     removing the two lines → nuc-k3s commit `deb4018` (alongside Track 1's `7013258`). Stage dc-api
+      removing the two lines → k8s repo commit `deb4018` (alongside Track 1's `7013258`). Stage dc-api
      env now mirrors prod's set.
   2. **hostPath permissions** — `stage-api-data`/`stage-redis` hostPaths created root-owned
      (`DirectoryOrCreate`) but pods run `runAsUser/runAsGroup/fsGroup=1000` → `PermissionDenied` on
@@ -386,7 +386,7 @@ These are the only gates left. They are the **operator cutover** — fully specc
 with copy-pasteable commands in `docs/MIGRATION-CUTOVER.md` (runbook steps A–G + a
 minor-follow-ups section). The 8 items, in dependency order:
 
-1. **Push the nuc-k3s overlay fix WITH Track 1** — `cd third_party/k8s && git push
+1. **Push the k8s overlay fix WITH Track 1** — `cd third_party/k8s && git push
    origin main`. Commits `7013258` (base/prod/stage split) + `deb4018` (SMTP
    `configMapKeyRef` fix) MUST go together, else ArgoCD re-applies the broken patch
    and the dc-stage sync fails. ArgoCD then syncs dc-stage from git, adopting the
@@ -405,7 +405,7 @@ minor-follow-ups section). The 8 items, in dependency order:
 3. **Encrypt the full `dc-stage-secret` to git** — fill
    `cluster/secrets/dc-stage-secret.yaml.template` values,
    `sops --encrypt --encrypted-regex '^(data|stringData)$' --in-place`,
-   commit+push nuc-k3s (PGP key `FA5814CF1935EE80C454C9F1660DCCF069EC9176`).
+   commit+push the k8s repo (PGP key `FA5814CF1935EE80C454C9F1660DCCF069EC9176`).
    (Runbook Step B.)
 4. **Ship the `:stage` image tag** in CI; update the stage overlay image from the
    pinned prod tag `445a17d4` to `:stage`. Until then stage tracks prod's tag.

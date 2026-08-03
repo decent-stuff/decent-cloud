@@ -8,7 +8,7 @@
   COMPLETE and committed. Baseline re-verified green at session start.
 - A separate, larger plan (`2026-08-03-staging-to-k8s-dc-stage-consolidation.md`) consolidates the
   two secret stores onto k8s. It has **3 forks** (DB strategy, image strategy, hostname rename) AND
-  requires live cluster / external nuc-k3s repo / Cloudflare access — infra/ops risk. **POSTPONED**;
+  requires live cluster / external k8s repo / Cloudflare access — infra/ops risk. **POSTPONED**;
   forks batched to the user at session end (touching live prod k8s autonomously is not safe).
 - `gh` is unauthenticated in this environment → GitHub Issues fall back to the in-repo inventory at
   `docs/OPEN_ISSUES.md` (AGENTS.md notes this limitation).
@@ -71,6 +71,6 @@ link from AGENTS.md is already present.
 ## Blockers / forks (carried over — NOT autonomously resolvable)
 
 - **k8s consolidation plan** (`2026-08-03-staging-to-k8s...`): 3 forks (DB strategy, image strategy,
-  hostname rename) + live cluster / nuc-k3s / Cloudflare access. POSTPONED → batched user question.
+  hostname rename) + live cluster / k8s repo / Cloudflare access. POSTPONED → batched user question.
 - **Decent-Agents cluster** (#418/#415/#416/#427-3,4/#429-432): blocked on credentials + #413 infra.
 - **#447** money-path retroactive refund replay: needs operator sign-off.
