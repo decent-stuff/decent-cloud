@@ -91,6 +91,31 @@ fn parse_env_u64(name: &str, default: u64) -> Result<u64, std::io::Error> {
     }
 }
 
+/// Decide whether to warn about missing Cloudflare DNS config at startup.
+///
+/// Gateway DNS management (creating the `*.gw.decent-cloud.org` records that
+/// route to provider gateways) is a `serve`-only responsibility — the gateway
+/// DNS endpoints live in the running server. `sync` only runs the ledger
+/// sync service and never touches gateway DNS, so emitting the gateway-DNS
+/// warning there is misleading (smoke finding 2026-08-03: the manifest wires
+/// CF_API_TOKEN/CF_ZONE_ID only into the server pod, so dc-api-sync always
+/// logged a noisy false alarm).
+///
+/// Returns the warning text when `serve` is running without Cloudflare
+/// configured; `None` otherwise (including all `sync` invocations).
+pub(crate) fn cloudflare_gateway_dns_warning(
+    command: &str,
+    cloudflare_configured: bool,
+) -> Option<&'static str> {
+    match (command, cloudflare_configured) {
+        ("serve", false) => Some(
+            "Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work. \
+             Set CF_API_TOKEN + CF_ZONE_ID to enable gateway provisioning.",
+        ),
+        _ => None,
+    }
+}
+
 use auto_renewal_service::AutoRenewalService;
 use candid::Principal;
 use clap::{Parser, Subcommand};
@@ -176,7 +201,7 @@ struct AppContext {
     cloudflare_dns: Option<Arc<cloudflare_dns::CloudflareDns>>,
 }
 
-async fn setup_app_context() -> Result<AppContext, std::io::Error> {
+async fn setup_app_context(command: &str) -> Result<AppContext, std::io::Error> {
     // Database setup
     // Note: DATABASE_URL should be set via environment variable or .env file
     let database_url = env::var("DATABASE_URL")
@@ -269,14 +294,15 @@ async fn setup_app_context() -> Result<AppContext, std::io::Error> {
         ))
     });
 
-    // Cloudflare DNS setup (optional - for gateway DNS management)
+    // Cloudflare DNS setup (optional - for gateway DNS management).
+    // The "gateway DNS will NOT work" warning is `serve`-only: `sync` does not
+    // manage gateway DNS (smoke finding 2026-08-03).
     let cloudflare_dns = cloudflare_dns::CloudflareDns::from_env();
-    if cloudflare_dns.is_some() {
+    let cloudflare_configured = cloudflare_dns.is_some();
+    if cloudflare_configured {
         tracing::info!("Cloudflare DNS client initialized for gateway management");
-    } else {
-        tracing::info!(
-            "Cloudflare DNS not configured (CF_API_TOKEN, CF_ZONE_ID) - gateway DNS will NOT work"
-        );
+    } else if let Some(warning) = cloudflare_gateway_dns_warning(command, cloudflare_configured) {
+        tracing::warn!("{warning}");
     }
 
     Ok(AppContext {
@@ -1200,7 +1226,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
         }
     }
 
-    let ctx = setup_app_context().await?;
+    let ctx = setup_app_context("serve").await?;
 
     // Configure Chatwoot Agent Bot
     // Step 1: Use Platform API for bot CRUD (requires CHATWOOT_PLATFORM_API_TOKEN)
@@ -1652,7 +1678,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
 }
 
 async fn sync_command() -> Result<(), std::io::Error> {
-    let ctx = setup_app_context().await?;
+    let ctx = setup_app_context("sync").await?;
 
     // Run sync service
     let sync_service = SyncService::new(
