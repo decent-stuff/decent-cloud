@@ -76,6 +76,19 @@ pub async fn handle_keygen_command(
 }
 
 pub fn mnemonic_from_strings(words: Vec<String>) -> Result<Mnemonic, Box<dyn std::error::Error>> {
+    // Validate the word count up front so a wrong-count phrase gets a clear,
+    // actionable error instead of bip39's generic "not valid in any supported
+    // language" message. BIP-39 only accepts 12/15/18/21/24 words.
+    match words.len() {
+        12 | 15 | 18 | 21 | 24 => {}
+        other => {
+            return Err(format!(
+                "mnemonic must be 12-24 words, got {other}. \
+                 BIP-39 accepts only 12/15/18/21/24-word phrases."
+            )
+            .into());
+        }
+    }
     let phrase = words.join(" ");
     mnemonic_from_phrase(&phrase)
 }
@@ -145,6 +158,33 @@ mod tests {
         assert_eq!(
             mnemonic.to_string(),
             "guilt faith betray uphold faint come scheme south venture visa carry stay"
+        );
+    }
+
+    #[test]
+    fn test_mnemonic_from_strings_rejects_wrong_word_count() {
+        // A wrong-count phrase must fail with the clear up-front word-count
+        // error, NOT bip39's opaque "not valid in any supported language".
+        let short: Vec<String> = vec!["only", "eight", "words", "here", "right", "now", "today", "no"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let err = mnemonic_from_strings(short).unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12-24 words"),
+            "expected clear word-count error, got: {err}"
+        );
+        assert!(err.contains("got 8"), "expected count echoed in error: {err}");
+
+        // 24 words (the max) is accepted by the count gate; bip39 may still reject
+        // if the words/checksum are invalid, but the count gate itself passes.
+        let too_long: Vec<String> = std::iter::repeat_n("abandon", 25)
+            .map(String::from)
+            .collect();
+        let err = mnemonic_from_strings(too_long).unwrap_err().to_string();
+        assert!(
+            err.contains("must be 12-24 words"),
+            "25-word phrase must be rejected by the count gate, got: {err}"
         );
     }
 }

@@ -10,10 +10,6 @@ default-run = "dc"
 name = "dc"
 path = "src/main.rs"
 
-[[bin]]
-name = "keygen"
-path = "src/keygen.rs"
-
 [dependencies]
 ahash.workspace = true
 anyhow.workspace = true
