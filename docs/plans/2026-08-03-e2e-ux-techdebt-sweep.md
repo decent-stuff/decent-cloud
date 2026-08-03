@@ -12,9 +12,9 @@ Unshipped items (F2/F6/F9 product forks + flagged tech-debt) are tracked as defe
 - The 2026-08-02 mandate (e2e radicalization + UX slop + #444 Wave 9/10/11 + auth single-source) is
   COMPLETE and committed. Baseline re-verified green at session start.
 - **k8s consolidation (`2026-08-03-staging-to-k8s-dc-stage-consolidation.md`) is DONE — autonomous
-  portion.** Tracks 1+2+3 complete: nuc-k3s base/prod/stage split (byte-identical prod), dc-stage
+  portion.** Tracks 1+2+3 complete: k8s base/prod/stage split (byte-identical prod), dc-stage
   LIVE on cluster (`/api/v1/health` HTTP 200, 52 migrations/86 tables, prod untouched), product-repo
-  Phase 2/3 in PR #454. Only **operator cutover** remains (push nuc-k3s, persist stage DB pw to
+  Phase 2/3 in PR #454. Only **operator cutover** remains (push the k8s repo, persist stage DB pw to
   SOPS, ship `:stage` image, repoint tunnel, tear down dev host) — documented in
   `docs/MIGRATION-CUTOVER.md`. No longer a blocker for this sweep.
 - `gh` is unauthenticated in this environment → GitHub Issues fall back to the in-repo inventory at
@@ -89,7 +89,7 @@ link from AGENTS.md is already present.
 
 ## Blockers / forks (carried over — NOT autonomously resolvable)
 
-- **k8s consolidation — OPERATOR CUTOVER ONLY remains** (push nuc-k3s, persist stage DB pw to
+- **k8s consolidation — OPERATOR CUTOVER ONLY remains** (push the k8s repo, persist stage DB pw to
   SOPS before ArgoCD first sync, ship `:stage` image, public tunnel/DNS cutover, tear down dev host).
   See `docs/MIGRATION-CUTOVER.md`. Autonomous code work is DONE (PR #454).
 - **Decent-Agents cluster** (#418/#415/#416/#427-3,4/#429-432): blocked on credentials + #413 infra.

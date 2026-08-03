@@ -13,34 +13,59 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
 - **Deferred**: labeled `deferred-post-launch`. Valid but parked until ≥20 paying customers.
 
-## Infrastructure — staging → k8s (`dc-stage`) consolidation — IN CUTOVER
+## Infrastructure — staging → k8s (`dc-stage`) consolidation — PoC VERIFIED, cutover pending
 
-**Status (2026-08-03):** Tracks 1+2+3 done autonomously; **operator cutover is the
-only remaining work.** Authoritative runbook: `docs/MIGRATION-CUTOVER.md`. Plan:
+**Status (2026-08-03):** Tracks 1+2+3 done autonomously; **Track 2 PoC VERIFIED LIVE**
+(dc-stage serves HTTP 200, DB migrated, prod untouched); **operator cutover (8 items
+below) is the only remaining work.** Authoritative runbook:
+`docs/MIGRATION-CUTOVER.md`. Plan:
 `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
 
-What shipped autonomously:
-- **Track 1 (nuc-k3s manifests, committed locally):** kustomize base/prod/stage
+What shipped autonomously (DONE):
+- **Track 1 (k8s manifests, committed locally):** kustomize base/prod/stage
   overlays, `cluster/core/dc-stage.yaml`, `dc-stage-secret.yaml.template`, the
-  `decent-cloud-stage` ArgoCD App CR.
-- **Track 2 (`dc-stage` live on cluster, isolated):** namespace + registry pull
-  secret + in-cluster `dc-stage-secret`/`dc-stage-config` + `decent_cloud_stage`
-  DB + api/website/redis reusing prod's image tag (`445a17d4`); health verified
-  via port-forward. api-sync skipped (PoC safety).
-- **Track 3 (product repo, pushed to `main`):** `cf/deploy.py deploy stage` +
-  `config stage`; this runbook; AGENTS/docs updated. Legacy `dev` docker-compose
-  path retained until the cutover retires it.
+  `decent-cloud-stage` ArgoCD App CR. ✅ manifests authored + prod-overlay
+  byte-equivalence verified.
+- **Track 2 (`dc-stage` live on cluster, VERIFIED):** namespace + registry pull
+  secret + in-cluster `dc-stage-secret`/`dc-stage-config` + dedicated role
+  `decent_cloud_stage` + DB `decent_cloud_stage` (52 migrations auto-applied,
+  86 tables) in the shared `pgsql` app; api/website/redis reusing prod's image
+  tag (`445a17d4`). ✅ **Health VERIFIED** — port-forward → `/api/v1/health`
+  HTTP 200 (`{"success":true,"message":"Decent Cloud API is running","environment":"stage"}`).
+  `dc-api-sync` scaled to 0 (PoC safety). All Services ClusterIP-only — dev tunnel
+  untouched, `dc-prod` untouched. Stripe in TEST mode (`sk_test_`). (Two bugs found
+  + root-cause fixed during bring-up: SMTP `configMapKeyRef` overlay fix `deb4018`;
+  stage hostPath `chown 1000:1000`.)
+- **Track 3 (product repo, in PR #454):** `cf/deploy.py deploy stage` +
+  `config stage`; the cutover runbook; AGENTS/docs updated. ✅ product-repo prep
+  shipped. Legacy `dev` docker-compose path retained until the cutover retires it.
 
-**Operator-gated (OPEN — the cutover, runbook steps A–G):**
-1. Push nuc-k3s → ArgoCD adopts live dc-stage (Step A).
-2. Encrypt + persist `dc-stage-secret` to git (Step B).
-3. Ship `:stage` image tag (Step C — optional until CI builds it).
-4. Public cutover: repoint tunnel + DNS `dev-*`→`stage-*` (Step D — the switch).
-5. Enable dc-api-sync in stage (Step E).
-6. Tear down the old dev host (Step F).
-7. Delete retired files (`cf/docker-compose.dev.yml`, `scripts/dc-secrets`,
-   `repo/secrets/shared/`, the `dev` path in `cf/deploy.py`) — **separate commit,
-   only after F** (Step G).
+**Operator-gated (OPEN — the cutover, runbook steps A–G + minor follow-ups):**
+1. **Push the k8s repo** → ArgoCD adopts live dc-stage. ⚠️ Push BOTH commits `7013258`
+   (base/prod/stage split) + `deb4018` (SMTP overlay fix) together — else ArgoCD
+   re-applies the broken patch. (Step A.)
+2. **⚠️ CRITICAL — reconcile the stage DB password before ArgoCD's first sync.**
+   The `decent_cloud_stage` role password lives ONLY in the live `dc-stage-secret`
+   (kubectl-created, not SOPS). Either extract it + SOPS-encrypt into
+   `cluster/secrets/dc-stage-secret.yaml`, or set your own + `ALTER ROLE … PASSWORD`
+   to match BEFORE the sync — otherwise ArgoCD overwrites the live Secret and
+   breaks DB auth. (Step B, CRITICAL note.)
+3. **Encrypt + persist the full `dc-stage-secret`** to git (SOPS PGP key
+   `FA5814CF1935EE80C454C9F1660DCCF069EC9176`). (Step B.)
+4. **Ship `:stage` image tag** in CI; update the stage overlay from `445a17d4` →
+   `:stage`. (Step C — optional until CI builds it.)
+5. **Public cutover:** repoint the `decent-cloud-dev` cloudflared tunnel → dc-stage
+   services + DNS `dev-*`→`stage-*` (or keep `dev-*`); verify
+   `https://api.stage.decent-cloud.org/api/v1/health` 200. (Step D — the switch.)
+6. **Re-enable `dc-api-sync`:** `kubectl -n dc-stage scale deployment dc-api-sync
+   --replicas=1`. hostPath perms are already fixed — verify Ready. (Step E.)
+7. **Tear down the old dev host** (Step F) + **delete retired files**
+   (`cf/docker-compose.dev.yml`, `scripts/dc-secrets`, `repo/secrets/shared/`, the
+   `dev` path in `cf/deploy.py`) — **separate commit, only after F** (Step G).
+8. **Minor follow-ups:** populate `TWILIO_AUTH_TOKEN` in `env.yaml` (empty — SMS
+   escalation disabled in stage); reconcile `CHATWOOT_PLATFORM_API_TOKEN` (stale →
+   401); optionally drop `SMTP_PASSWORD` from the api secret (unused — api sends
+   via MailChannels).
 
 Until the cutover completes, the live `dev` docker-compose host still serves
 staging traffic and the age store is still in the repo. Do not pre-delete.
@@ -675,7 +700,7 @@ Three read-only audits (`docs/audits/2026-07-24-{fresh-ux,code-robustness,covera
 ### 2026-08-03 session (staging → k8s `dc-stage` consolidation — Track 3, product-repo prep)
 
 Product-repo half of the staging→k8s migration (Track 3 of the 3-track split in
-the plan's Appendix B). Tracks 1 (nuc-k3s manifests) + 2 (`dc-stage` live on
+the plan's Appendix B). Tracks 1 (k8s manifests) + 2 (`dc-stage` live on
 cluster) were done by sibling agents in parallel; this session did the pushable
 product-repo prep + the operator cutover runbook. **Operator cutover pending** —
 see `docs/MIGRATION-CUTOVER.md`. The destructive deletions (retired dev-deploy
@@ -684,14 +709,33 @@ host's next `git pull`); they are runbook Step G, a separate post-cutover commit
 
 | Change | Area | Detail |
 |--------|------|--------|
-| `deploy stage` target | cf/deploy.py | New `python3 cf/deploy.py deploy stage [--tag <tag>]`: builds the api image natively, pushes `git.kalaj.org/decent-stuff/decent-cloud-api:<tag>` (default floating `:stage`), bumps the nuc-k3s stage overlay `images:` entry, commits nuc-k3s LOCALLY, prints the operator `git push` + ArgoCD refresh + health-check commands. Stage is k8s/ArgoCD (ns `dc-stage`), NOT docker-compose. Reuses `build_rust_binaries_natively`/`calculate_binary_hash`/`check_docker` (DRY). Legacy `dev` path intact. |
+| `deploy stage` target | cf/deploy.py | New `python3 cf/deploy.py deploy stage [--tag <tag>]`: builds the api image natively, pushes `git.kalaj.org/decent-stuff/decent-cloud-api:<tag>` (default floating `:stage`), bumps the k8s stage overlay `images:` entry, commits the k8s repo LOCALLY, prints the operator `git push` + ArgoCD refresh + health-check commands. Stage is k8s/ArgoCD (ns `dc-stage`), NOT docker-compose. Reuses `build_rust_binaries_natively`/`calculate_binary_hash`/`check_docker` (DRY). Legacy `dev` path intact. |
 | `config stage` target | cf/deploy.py | Read-only introspection of the live dc-stage cluster stores (dc-stage-config ConfigMap + dc-stage-secret Secret), mirroring `config prod`. Refactored `_read_prod_stores` into a generic `_read_cluster_stores(namespace, configmap, secret)` (DRY) used by both prod + stage. |
 | Image-tag bumper tests | cf/test_deploy.py | 8 unit tests for `_update_stage_image_tag`: update existing newTag (indented + column-0 list), insert when absent, idempotent no-op, no website-image false-match, missing-file/section/target loud errors, byte-for-byte preservation of the rest of the manifest. |
-| Cutover runbook | docs/MIGRATION-CUTOVER.md | Authoritative operator guide: prerequisites, Step 0 verify, Steps A–G (push nuc-k3s → encrypt secret → ship :stage → public cutover → enable api-sync → tear down dev host → delete retired files), rollback. Copy-pasteable real commands. |
+| Cutover runbook | docs/MIGRATION-CUTOVER.md | Authoritative operator guide: prerequisites, Step 0 verify, Steps A–G (push the k8s repo → encrypt secret → ship :stage → public cutover → enable api-sync → tear down dev host → delete retired files), rollback. Copy-pasteable real commands. |
 | Plan status + decisions | docs/plans/2026-08-03-staging-to-…md | Status line → "Tracks 1+2+3 done; operator cutover pending". Open Decisions all RESOLVED: DB = separate `decent_cloud_stage`; image = floating `:stage` (pins prod tag until shipped); hostname = `stage-*` overlay, operator may keep `dev-*`. |
 | Issue inventory | docs/OPEN_ISSUES.md | New "Infrastructure — staging → k8s consolidation" section: status + the 7 operator-gated steps (runbook A–G) as the remaining open items. |
 | Deploy/secrets docs | AGENTS.md (+ cf/*) | Staging is now `dc-stage` on k8s (not docker-compose dev); canonical secret store is the outer `secrets/shared/env.yaml`; `repo/secrets/shared/` + `scripts/dc-secrets` are RETIRED pending post-cutover deletion. Links to the runbook. |
 
 Gates: `python3 -m py_compile cf/deploy.py` clean; `python3 cf/test_deploy.py` →
 8/8; `cf/deploy.py --help` / `deploy --help` / `config --help` render the new
-`stage` choices. No Rust/website code touched; no cluster/nuc-k3s mutation.
+`stage` choices. No Rust/website code touched; no cluster/k8s repo mutation.
+
+### 2026-08-03 session (Track 2 PoC verified → docs recorded on PR #454)
+
+Track 2 (live `dc-stage` PoC on the cluster) completed + was verified end-to-end.
+This session recorded the verified results + the remaining operator gates into the
+migration docs and pushed them to the open PR branch `staging-k8s-dc-stage-track3`
+(PR #454). **PoC verified, cutover pending** — nothing was overstated as "done".
+
+| Change | Area | Detail |
+|--------|------|--------|
+| Verified-results block | docs/MIGRATION-CUTOVER.md | New "Pre-cutover status (VERIFIED 2026-08-03)" section: HTTP 200 health body, stage DB (role `decent_cloud_stage` + 52 migrations / 86 tables, latest `52 | drop account subscription feature`), shared pgsql discovery (pod `pgsql-857cbb44d8-lbzw4`, `pgsql.apps.svc.cluster.local:5432`, `pgvector/pgvector:pg18`), namespace state (api 1/1, api-sync 0/0, redis/website 1/1, ClusterIP-only), Stripe `sk_test_`, the 2 bugs found + fixed (SMTP overlay `deb4018`, hostPath `chown 1000:1000`), non-fatal warnings (CHATWOOT 401, rate-limiting off, CF_* unwired in sync). |
+| Step A note | docs/MIGRATION-CUTOVER.md | Push BOTH k8s repo commits `7013258` + `deb4018` together (else ArgoCD re-applies the broken SMTP patch). |
+| Step B CRITICAL | docs/MIGRATION-CUTOVER.md | DB-password-reconciliation warning: the `decent_cloud_stage` pw lives only in the live `dc-stage-secret`; extract+commit OR `ALTER ROLE` before the first ArgoCD sync, else the SOPS value overwrites it and breaks DB auth. |
+| Step E + minor | docs/MIGRATION-CUTOVER.md | api-sync re-enable uses `scale --replicas=1` (hostPath perms already fixed); new "Minor follow-ups" section (TWILIO empty, stale CHATWOOT token, optional SMTP_PASSWORD drop). |
+| Plan doc | docs/plans/2026-08-03-…md | APPENDIX B Track 2 → "COMPLETE — VERIFIED LIVE" with results summary; top Status line updated; "Operator-gated" expanded to the 8 remaining items. |
+| Issue inventory | docs/OPEN_ISSUES.md | Migration section → "PoC VERIFIED, cutover pending"; completed items marked ✅; open items expanded to 8 (incl. the CRITICAL DB-pw reconciliation + minor follow-ups). |
+
+Docs-only session: no Rust/website code, no cluster/k8s repo mutation, no secrets
+touched. Pushed over HTTPS+PAT to `staging-k8s-dc-stage-track3` (PR #454).

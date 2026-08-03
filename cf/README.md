@@ -2,7 +2,7 @@
 
 This directory contains Docker and Python scripts for deploying the Decent Cloud website with Cloudflare Tunnel.
 
-> Production deploys to k3s (ArgoCD, namespace `dc-prod`) — see [`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md) and [`CONFIG.md`](./CONFIG.md). The prod tunnel is local-managed (its routing lives in a ConfigMap in the nuc-k3s repo, not the Cloudflare API).
+> Production deploys to k3s (ArgoCD, namespace `dc-prod`) — see [`DEPLOYMENT_CONFIG.md`](./DEPLOYMENT_CONFIG.md) and [`CONFIG.md`](./CONFIG.md). The prod tunnel is local-managed (its routing lives in a ConfigMap in the k8s repo, not the Cloudflare API).
 
 ## Quick Start
 
