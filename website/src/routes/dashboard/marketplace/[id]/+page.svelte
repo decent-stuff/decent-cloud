@@ -45,6 +45,7 @@
 	let error = $state<string | null>(null);
 	let selectedOffering = $state<Offering | null>(null);
 	let isAuthenticated = $state(false);
+	let emailVerified = $state(false);
 	let showAuthModal = $state(false);
 	let successMessage = $state<string | null>(null);
 	let copyLinkFeedback = $state(false);
@@ -57,9 +58,15 @@
 	let recipeReviewLoading = $state(false);
 	let recipeReviewError = $state<string | null>(null);
 
-	authStore.isAuthenticated.subscribe((value) => {
-		isAuthenticated = value;
+	authStore.activeIdentity.subscribe((identity) => {
+		isAuthenticated = identity !== null;
+		emailVerified = identity?.account?.emailVerified ?? false;
 	});
+
+	// Email verification is a hard backend prerequisite for creating a rental.
+	// Surface it on the Rent button itself so an unverified user never hits the
+	// "Email verification required" error only after opening the rental dialog.
+	const needsEmailVerification = $derived(isAuthenticated && !emailVerified);
 
 	onMount(async () => {
 		try {
@@ -166,6 +173,13 @@
 	function handleRentClick() {
 		if (!isAuthenticated) {
 			showAuthModal = true;
+			return;
+		}
+		// Verified above as a hard rental prerequisite; route the user to the
+		// account page (which surfaces the verify-email banner + resend) instead
+		// of opening the dialog that would hard-error on submit.
+		if (needsEmailVerification) {
+			goto('/dashboard/account');
 			return;
 		}
 		selectedOffering = offering;
@@ -487,18 +501,20 @@
 							<Icon name="bookmark" size={18} />
 						</button>
 					{/if}
-					<button
-						onclick={handleRentClick}
-						disabled={offering.is_example || offering.provider_online === false}
-						class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-						title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : ''}
-					>
-						{#if offering.provider_online === false}
-							Provider Offline
-						{:else}
-							Rent this offering
-						{/if}
-					</button>
+				<button
+					onclick={handleRentClick}
+					disabled={offering.is_example || offering.provider_online === false}
+					class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : (needsEmailVerification ? 'Email verification is required to rent. Verify your email to continue.' : '')}
+				>
+					{#if offering.provider_online === false}
+						Provider Offline
+					{:else if needsEmailVerification}
+						Verify email to rent
+					{:else}
+						Rent this offering
+					{/if}
+				</button>
 				{/if}
 			</div>
 		</div>
@@ -763,10 +779,12 @@
 					onclick={handleRentClick}
 					disabled={offering.is_example || offering.provider_online === false}
 					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : ''}
+					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : (needsEmailVerification ? 'Email verification is required to rent. Verify your email to continue.' : '')}
 				>
 					{#if offering.provider_online === false}
 						Provider Offline
+					{:else if needsEmailVerification}
+						Verify email to rent
 					{:else}
 						Rent this offering
 					{/if}

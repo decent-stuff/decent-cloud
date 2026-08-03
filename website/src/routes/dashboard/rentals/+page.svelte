@@ -48,6 +48,7 @@
 	let downloadingInvoiceContractId = $state<string | null>(null);
 	let copiedCommand = $state<string | null>(null);
 	let isAuthenticated = $state(false);
+	let emailVerified = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
 	let highlightedContractId = $state<string | null>(null);
 	let pendingGuidanceDismissed = $state(
@@ -333,6 +334,9 @@
 
 		unsubscribeAuth = authStore.isAuthenticated.subscribe(async (isAuth) => {
 			isAuthenticated = isAuth;
+			// Track the email-verification prerequisite so the empty-state guide
+			// can warn tenants before they hit the rental create guard.
+			emailVerified = get(authStore.activeIdentity)?.account?.emailVerified ?? false;
 			await loadContracts();
 			scrollToHighlightedContract();
 			if (isAuth) {
@@ -521,6 +525,18 @@
 			<span class="text-5xl mb-4 block">📋</span>
 			<h3 class="text-2xl font-bold text-white mb-2">No Rentals Yet</h3>
 			<p class="text-neutral-500 mb-6">Get started in three steps</p>
+			{#if !emailVerified}
+				<!-- Email verification is a hard prerequisite for creating a rental;
+				     surface it here so the tenant learns the requirement up-front
+				     instead of from a hard error after choosing an offering (F3). -->
+				<div class="max-w-2xl mx-auto mb-6 p-3 border border-amber-500/40 bg-amber-500/10 text-left flex items-start gap-2">
+					<span class="text-amber-400 shrink-0">⚠</span>
+					<p class="text-sm text-amber-200">
+						Verify your email first — email verification is required to rent.
+						<a href="/dashboard/account" class="underline font-medium hover:text-amber-100">Verify your email</a>
+					</p>
+				</div>
+			{/if}
 			<div class="flex items-center justify-center gap-3 max-w-2xl mx-auto mb-8">
 				<div class="flex-1 bg-surface-elevated border border-neutral-800 p-4 text-center">
 					<div class="text-2xl mb-2">🔍</div>
