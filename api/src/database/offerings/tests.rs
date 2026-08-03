@@ -1591,12 +1591,13 @@ async fn test_search_offerings_dsl_basic_type_filter() {
     .await
     .expect("Failed to execute SQL query");
 
-    // Search for compute type only (1 test + 2 example compute offerings)
+    // Search for compute type only (the demo seed is gone — see migration 053 /
+    // PRODUCT-DIRECTION.md F2 — so only the 1 inserted compute offering matches).
     let results = db
         .search_offerings_dsl("type:compute", 10, 0)
         .await
         .expect("Failed to search offerings DSL");
-    assert_eq!(results.len(), 3);
+    assert_eq!(results.len(), 1);
     // Verify all are compute type
     assert!(results.iter().all(|r| r.product_type == "compute"));
 }

@@ -69,7 +69,11 @@ async fn test_migration_baseline_content() {
     // sync_state INSERT is in schema migration as it's required for the schema to be functional
     assert!(schema_migration.contains("INSERT INTO sync_state"));
 
-    // Seed data contains example provider offerings, not system config
+    // Seed data contains example provider offerings, not system config.
+    // (Migration 053 removes these demo rows after seeding so the live catalog
+    // is honest-empty — see docs/PRODUCT-DIRECTION.md F2. The 002 seed inserts
+    // are intentionally left in place to avoid a checksum change on an
+    // already-applied migration; 053 is the guarded cleanup.)
     assert!(seed_migration.contains("INSERT INTO provider_offerings"));
 }
 

@@ -283,99 +283,65 @@ async fn test_bulk_insert_performance() {
     );
 }
 
-// Example offerings tests
+// Honest-empty-catalog tests (PRODUCT-DIRECTION.md F2).
+//
+// The marketplace must NOT ship synthetic/demo offerings. Migration 002 used to
+// seed 10 demo offerings under a fake placeholder pubkey
+// ("example-offering-provider-identifier"); that seed was removed so a fresh DB
+// after migrations is honest-empty. These tests guard that invariant.
 #[tokio::test]
-async fn test_get_example_offerings() {
+async fn test_fresh_db_has_no_demo_offerings() {
     let db = setup_test_db().await;
 
-    // Test retrieving example offerings
-    let example_offerings = db.get_example_offerings().await.unwrap();
+    // No offerings, registrations, profiles, pools, or agent status may exist
+    // for the example-provider pubkey in a freshly-migrated DB.
+    let offerings = db.get_example_offerings().await.unwrap();
+    assert!(
+        offerings.is_empty(),
+        "fresh DB must contain 0 demo/example offerings (found {}); \
+         the 002_seed_data.sql demo seed must not be re-introduced. \
+         See docs/PRODUCT-DIRECTION.md (drop demo/synthetic offerings).",
+        offerings.len()
+    );
 
-    // Should have 10 example offerings from seed data (2 per product type)
-    assert_eq!(example_offerings.len(), 10);
+    let example = Database::example_provider_pubkey();
+    let registrations: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM provider_registrations WHERE pubkey = $1")
+            .bind(&example[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(registrations, 0, "example provider must not be registered");
 
-    // Verify we have offerings for all product types
-    let product_types: Vec<_> = example_offerings
-        .iter()
-        .map(|o| o.product_type.as_str())
-        .collect();
-    assert!(product_types.contains(&"compute"));
-    assert!(product_types.contains(&"gpu"));
-    assert!(product_types.contains(&"storage"));
-    assert!(product_types.contains(&"network"));
-    assert!(product_types.contains(&"dedicated"));
+    let profiles: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM provider_profiles WHERE pubkey = $1")
+            .bind(&example[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(profiles, 0, "example provider must not have a profile");
 
-    // Find and verify a compute offering
-    let compute_offering = example_offerings
-        .iter()
-        .find(|o| o.offering_id == "compute-001")
-        .expect("Should have compute-001");
-    assert_eq!(compute_offering.offer_name, "Basic VPS");
-    assert_eq!(compute_offering.currency, "USD");
-    assert_eq!(compute_offering.product_type, "compute");
-
-    // Verify it has required data
-    assert!(compute_offering.payment_methods.is_some());
-    assert!(compute_offering.features.is_some());
-    assert!(compute_offering.operating_systems.is_some());
-
-    // Find and verify a GPU offering
-    let gpu_offering = example_offerings
-        .iter()
-        .find(|o| o.offering_id == "gpu-001")
-        .expect("Should have gpu-001");
-    assert_eq!(gpu_offering.offer_name, "AI Training - RTX 4090");
-    assert_eq!(gpu_offering.currency, "USD");
-    assert_eq!(gpu_offering.product_type, "gpu");
-    assert!(gpu_offering.gpu_name.is_some());
-    assert!(gpu_offering.gpu_count.is_some());
+    let pools: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_pools WHERE provider_pubkey = $1")
+            .bind(&example[..])
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+    assert_eq!(pools, 0, "example provider must not own any agent pools");
 }
 
 #[tokio::test]
-async fn test_csv_template_data_retrieval() {
+async fn test_csv_template_source_handles_empty_catalog() {
+    // The CSV template endpoint (GET /offerings/template/:product_type) sources
+    // example rows from get_example_offerings_by_type. With the demo seed gone,
+    // it must return an empty list (not error) so the endpoint still emits a
+    // valid header-only CSV template.
     let db = setup_test_db().await;
-
-    // Verify we can retrieve all data needed for CSV template generation
-    let example_offerings = db.get_example_offerings().await.unwrap();
-    assert_eq!(example_offerings.len(), 10);
-
-    // For each example offering, verify we can fetch all related data without errors
-    for offering in &example_offerings {
-        let payment_methods = offering.payment_methods.as_deref().unwrap_or("");
-        assert!(
-            !payment_methods.is_empty(),
-            "Payment methods should not be empty for {}",
-            offering.offering_id
-        );
-
-        let features = offering.features.as_deref().unwrap_or("");
-        assert!(
-            !features.is_empty(),
-            "Features should not be empty for {}",
-            offering.offering_id
-        );
-
-        // Operating systems are only required for compute, GPU, and dedicated offerings
-        if matches!(
-            offering.product_type.as_str(),
-            "compute" | "gpu" | "dedicated"
-        ) {
-            let operating_systems = offering.operating_systems.as_deref().unwrap_or("");
-            assert!(
-                !operating_systems.is_empty(),
-                "Operating systems should not be empty for {} offerings",
-                offering.product_type
-            );
-        }
-    }
-
-    // Verify example offerings have correct visibility
-    for offering in &example_offerings {
-        assert_eq!(
-            offering.visibility, "public",
-            "Example offerings should have visibility='public'"
-        );
-    }
+    let by_type = db.get_example_offerings_by_type("compute").await.unwrap();
+    assert!(
+        by_type.is_empty(),
+        "no demo compute offerings should exist in a fresh DB"
+    );
 }
 
 #[tokio::test]
