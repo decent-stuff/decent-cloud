@@ -4,6 +4,13 @@
 **Scope:** `repo/` submodule
 **Mirror:** `CLAUDE.md` is a symlink to `AGENTS.md` — edit only `AGENTS.md`
 
+## PRODUCT DIRECTION (authoritative north star — read before any product decision)
+`docs/PRODUCT-DIRECTION.md` defines the product vision and human expectations: **decent-cloud is
+"OpenRouter, but for cloud resources"** — a proxy/reselling platform unifying many cloud providers
+behind one common API, one account, one trust layer. Near-term: drop demo offerings and add the
+first REAL offerings (operator reselling Hetzner). Every product/design decision must align with
+that document's checklist. When a change conflicts with it, flag it rather than proceeding.
+
 ## OVERVIEW
 `repo/` is the real product root: Rust workspace (`api`, `cli`, `common`, `dc-agent`, `ic-canister`, `ledger-map`), SvelteKit frontend (`website`), Python tooling, CI, scripts, and vendored third-party source for integration debugging.
 
