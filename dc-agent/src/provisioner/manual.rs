@@ -4,7 +4,6 @@ use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Serialize;
-use std::time::Duration;
 
 /// Manual provisioner - logs requests but requires human intervention
 pub struct ManualProvisioner {
@@ -29,7 +28,7 @@ impl ManualProvisioner {
             // (proxmox, digitalocean) so a stuck webhook endpoint cannot hang
             // the agent's polling loop.
             client: Client::builder()
-                .timeout(Duration::from_secs(30))
+                .timeout(crate::HTTP_TIMEOUT_SECS)
                 .build()
                 .expect("reqwest client with default config is always buildable"),
         }

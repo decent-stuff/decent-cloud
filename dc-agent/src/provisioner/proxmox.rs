@@ -193,7 +193,7 @@ impl ProxmoxProvisioner {
     pub fn new(config: ProxmoxConfig) -> Result<Self> {
         let client = Client::builder()
             .danger_accept_invalid_certs(!config.verify_ssl)
-            .timeout(Duration::from_secs(30))
+            .timeout(crate::HTTP_TIMEOUT_SECS)
             // Disable connection pooling to avoid keep-alive issues with Proxmox
             .pool_max_idle_per_host(0)
             .build()
