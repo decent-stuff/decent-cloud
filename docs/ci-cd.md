@@ -125,20 +125,20 @@ Migrations are verified to ensure they apply cleanly to a fresh PostgreSQL 16 da
 
 ## sqlx Offline Mode
 
-The project uses sqlx's offline mode for compile-time verification of SQL queries. Pre-generated query metadata is stored in `.sqlx/*.json` files.
+The project uses sqlx's offline mode for compile-time verification of SQL queries. Pre-generated query metadata is stored in the **workspace-root** `.sqlx/*.json` files (316+ committed plans). This is the single source of truth: sqlx walks up from the `api/` package dir to find it, and `SQLX_OFFLINE=true` (`.cargo/config.toml`) makes the build read from it with no live DB.
 
 ### Updating sqlx Metadata
 
 When adding or modifying database queries:
 
 ```bash
-# With a running database
-cargo install sqlx-cli
-sqlx database setup
-cargo check
+# The ONLY correct way — uses --workspace so it writes the committed root .sqlx/
+scripts/sqlx-prepare.sh
 ```
 
-This updates `.sqlx/*.json` files with query metadata for CI to use.
+Then commit the resulting root `.sqlx/*.json` changes.
+
+**Never** run a bare `cargo sqlx prepare` from `api/` — it writes to the gitignored `api/.sqlx/`, leaving the committed root cache stale. The `sqlx_cache_check::sqlx_offline_cache_has_single_committed_source` test guards this in CI.
 
 ## Troubleshooting CI Failures
 
@@ -155,8 +155,8 @@ If tests fail with "connection refused" to PostgreSQL:
 If sqlx complains about outdated `.sqlx/*.json` files:
 
 ```bash
-# Locally regenerate with correct database URL
-DATABASE_URL="postgres://test:test@localhost:5432/test" cargo sqlx prepare
+# Regenerate the committed workspace-root cache correctly (--workspace)
+scripts/sqlx-prepare.sh
 ```
 
 Commit the updated `.sqlx/*.json` files.

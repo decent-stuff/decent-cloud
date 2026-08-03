@@ -65,7 +65,7 @@ impl Database {
         .await?;
 
         let total_offerings: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE LOWER(visibility) = 'public' AND pubkey != $1"#,
+            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE LOWER(visibility) = 'public' AND is_draft = FALSE AND pubkey != $1"#,
             &example_provider_hash
         )
         .fetch_one(&self.pool)

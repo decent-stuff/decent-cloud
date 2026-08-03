@@ -135,7 +135,9 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 
 | # | Title | Filed by |
 |---|-------|----------|
-| _none currently open_ | — | — |
+| (F6) | Reputation page is search-only — no browseable leaderboard / "top providers" section (product-design fork) | 2026-08-03 sweep |
+| (F9) | "Become a Provider" landing CTA lands on the support-account profile page, not a true provider-start (technical onboarding via `dc-agent`/CLI is not reachable from the web) | 2026-08-03 sweep |
+| (F2) | Seed/demo offerings carry a fake placeholder pubkey (`example-offering-provider-identifier`) — honestly labelled "Demo only" + excluded from stats, but would be nonsensical in a production deploy (seed-data-quality decision: env-gate demos out of prod, or refresh seed data with real identities) | 2026-08-03 sweep |
 
 > **#442 (RESOLVED 2026-07-25, `c14cb939`):** create-offering price auto-suggest shipped —
 > pre-fill `#monthly-price` with `cost × 1.15` (15% markup, the product decision from comment
@@ -163,21 +165,28 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 | 444 | Tech debt: split large source files (>2000 lines) into logical modules |
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
 | 334 | Code: Add tests for database modules without dedicated test files |
+| (2026-08-03) | `cli/src/keygen.rs` standalone `[[bin]]` duplicates `cli/src/commands/keygen.rs` with diverged behavior, unreferenced — delete OR delegate (re-flagged; parked since 2026-08-01). |
 
-> **#444 progress (updated 2026-08-02):** 6 providers.rs splits shipped (`PoolsApi` `74fb9248`,
+> **#444 progress (updated 2026-08-03):** 6 providers.rs splits shipped (`PoolsApi` `74fb9248`,
 > `NotificationsApi` `b4259194`, `SlaApi` `ae97cd8f`, `AllowlistApi` `290a218f`, `OfferingCsvApi`
-> `d94d29af`, `ProviderStatsApi` `b5aa9acb`) + the `api-cli.rs` → dir-bin split (`c7dbf962`);
-> providers.rs 6739→**4280** (−2459), each verified byte-identical OpenAPI. Decomposition roadmap at
-> `docs/plans/2026-07-25-large-file-splits-444.md`. Current largest **source** files (>2000 lines,
-> `wc -l` 2026-08-02, excluding `target/`/`third_party/` and `*_tests.rs`/`tests.rs`):
-> `api/src/openapi/providers.rs` **4280**, `dc-agent/src/main.rs` **3674**, `api/src/database/offerings.rs`
-> **2865**, `api/src/openapi/webhooks.rs` **2504**, `api/src/database/cloud_resources.rs` **2444**,
-> `api/src/openapi/contracts.rs` **2251**, `api/src/openapi/accounts.rs` **2230** (7 files).
-> (The largest **test** files — `database/contracts/tests.rs` 5952, `database/offerings/tests.rs` 5368,
-> `database/stats/tests.rs` 3141 — are out of #444's "source files" scope.) `accounts.rs`'s three clean
-> `#[OpenApi]` clusters (TOTP/recovery/email-verification) were split in Waves 9/10/11 using free slots
-> in the 2nd inner tuple (now 14/16 used) — further accounts.rs shrinkage needs a design pass (remaining
-> handlers share `ApiAuthenticatedUser`-gated core). GH #444 stays **open** (partial; ongoing).
+> `d94d29af`, `ProviderStatsApi` `b5aa9acb`) + the `api-cli.rs` → dir-bin split (`c7dbf962`) + the
+> accounts.rs Wave 9/10/11 TOTP/Recovery/EmailVerification splits (`1729e7c6`/`f041a121`/`24ccacb7`)
+> + Wave 12 Stripe dispute split (`e8a6d2b3`, this session — see session log)
+> + Wave 13 OfferingStatsApi split (`50b3249f`, this session — 4 per-offering stats handlers).
+> providers.rs
+> 6739→**4090** (−2649); accounts.rs 2903→**2230**; webhooks.rs 2504→**1277**. Each verified
+> byte-identical OpenAPI. Decomposition roadmap at `docs/plans/2026-07-25-large-file-splits-444.md`.
+> Current largest **source** files (>2000 lines, `wc -l` 2026-08-03, excluding `target/`/`third_party/`
+> and `*_tests.rs`/`tests.rs`): `api/src/openapi/providers.rs` **4090**, `dc-agent/src/main.rs` **3674**,
+> `api/src/database/offerings.rs` **2876**, `api/src/database/cloud_resources.rs` **2445**,
+> `api/src/openapi/contracts.rs` **2244**, `api/src/openapi/accounts.rs` **2230** (6 files;
+> `webhooks.rs` dropped below the 2000-line threshold; `providers.rs` 4280→4090 this session via
+> the Wave 13 `OfferingStatsApi` split). **Wave 12 also shipped a permanent
+> `api/src/openapi/spec_snapshot.rs` guard** (canonical-JSON SHA-256 of `create_combined_api()` → 187
+> paths / 327 schemas) — supersedes the ad-hoc spare-port spec capture; future `*Api` splits'
+> byte-identical claim is now a one-line `cargo nextest` check. accounts.rs is **exhausted** for
+> mechanical splits (remaining handlers share the `ApiAuthenticatedUser`-gated core). GH #444 stays
+> **open** (partial; ongoing).
 
 > **#387 status (verified 2026-08-02):** still **open** — no implementation found.
 > `rg "multiprocessing|worktree|concurrent\.futures|ProcessPool"` = 0 hits across dc-agent/api/cli.
@@ -223,6 +232,73 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 >   extensive `:root[data-theme='light']` rules in `app.css`. Fully shipped.
 
 ## Recently closed by this work
+
+### 2026-08-03 session (k8s migration autonomous portion + #444 Wave 12 + real-app UX fixes + robustness sweep)
+
+Two parallel work streams this session. **(1) k8s staging→`dc-stage` consolidation** (separate plan
+`docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`): the autonomous portion is DONE on
+branch `staging-k8s-dc-stage-track3` → **PR #454** — nuc-k3s kustomize base/prod/stage split
+(byte-identical prod), `dc-stage` brought LIVE on the cluster (`/api/v1/health` HTTP 200, 52
+migrations / 86 tables, prod untouched), product-repo Phase 2/3 (`cf/deploy.py deploy stage` +
+`docs/MIGRATION-CUTOVER.md` runbook). Only the **operator cutover** remains (8 items in
+`docs/MIGRATION-CUTOVER.md`: push nuc-k3s, persist stage DB pw to SOPS before ArgoCD's first sync,
+ship `:stage` image, public tunnel/DNS cutover, tear down dev host). **(2) e2e/UX/tech-debt sweep**
+(branch `sweep-e2e-ux-techdebt`, this entry): a no-mock real-app UX audit → 6 high-confidence fixes
+shipped; one #444 split; a rust robustness sweep. Baseline: `origin/main 31483130`. All gates green
+(smoke 26/26, clippy 0, vitest 869, svelte-check 0/0).
+
+| Fix | Area | Resolution |
+|-----|------|------------|
+| #444 Wave 12 — Stripe dispute split | Tech debt | `e8a6d2b3`: extracted the `charge.dispute.*` cluster from `api/src/openapi/webhooks.rs` → new `webhooks_disputes.rs` (4 handlers, 2 types, 5 helpers, 10 DB-coupled e2e tests). webhooks.rs **2504→1277** (−1227). "Path B" split (webhooks has no `#[OpenApi]` impl — handlers are raw `Route::at` — so `create_combined_api` is untouched, no tuple slot consumed). Byte-identical OpenAPI via the **new permanent `spec_snapshot.rs` guard** (canonical-JSON SHA-256, 187 paths / 327 schemas) which supersedes the ad-hoc spare-port capture for all future splits. clippy 0, nextest 30/30. |
+| UX F5 — blank "Trust Score /100 Reliable" card | UX (trust signal) | `09fa538e`: the trust-score calculator started at 100 + only deducted for *observed* negatives, so a brand-new provider (0 contracts) scored ≈90 → green "Reliable" — a direct contradiction of the product's trust promise. New `hasEnoughTrustData(metrics)` helper (`total_contracts > 0`) gates the verdict; absent track record renders **N/A · "Not enough data"** (neutral). TDD helper test; vitest 865; dashboard-overview smoke green. |
+| UX F3 — email-verification "surprise wall" in rent flow | UX (flow) | `09321415`: rentals were hard-rejected at contract-create for unverified email with NO upstream warning. Surfaced the prerequisite at every entry: offering-detail "Rent this offering" → relabels to "Verify email to rent" + routes to account; rentals empty-state 3-step guide → "Verify your email first" notice; shared `RentalRequestDialog` (the choke point) → "Email verification required" notice + locked Submit + fail-fast guard. New serial spec `rent-email-verification-gate.spec.ts` (3, RED→GREEN). |
+| UX F1 — platform stats counted draft offerings | UX / backend | `3b6d494e`: `get_platform_stats` `total_offerings` counted public offerings WITHOUT filtering `is_draft`, so an admin's in-progress draft showed as an "Available Offering", inconsistent with the marketplace. Added `AND is_draft = FALSE` + regenerated the `.sqlx` plan. (The audit's "0/0 vs marketplace" symptom was the *intentional* demo-provider exclusion — consistent + already copy-gated by the earlier U2 work.) TDD stats test; verified live (total_offerings 4→3 matching the marketplace). |
+| UX F4 — verify-email banner on every page | UX (chrome noise) | `26c65b05`: the full-width verify-email + seed-backup banners rendered on every `/dashboard/*` sub-route. Confined both to `/dashboard` + `/dashboard/account*` (where the action lives); not suppressed entirely for genuinely unverified users. dashboard-banners e2e 4/4. |
+| UX F7 — raw `@handle` salad as provider identity | UX / backend | `bc9caf05`: offerings API returned only the auto-generated `owner_username`; the marketplace/detail/compare rendered `@uxprovidercggf6l`-style handles instead of the provider name collected at onboarding. Backend: added `provider_name` (via `provider_profiles.name` correlated subquery) to the `Offering` struct + list/search/single queries. Frontend: new `providerDisplayName()` helper (provider_name → @handle → truncated pubkey) across 4 pages. TDD helper test (4); offerings + cloud + visibility tests green. |
+| UX F8 — duplicate create-account entry on /login | UX (flow) | `92baf88a`: `/login` showed both the "Generate New" card AND a "New here? Create an account" link for the same flow. Suppresses the redundant link when the chooser is visible (keeps it for the OAuth-on case). Updated `login-registration-cta.spec.ts` OAuth-aware. |
+| Robustness R1 — MailChannels client had no timeout | Robustness | `482047d2`: `EmailService::new` built a bare `reqwest::Client::new()` (the lone workspace outlier) — a stuck MailChannels endpoint could hang the background email-queue processor indefinitely. Added `MAILCHANNELS_TIMEOUT_SECS=30` const + `.timeout(...)`. Also deleted 139 lines of orphaned dead test code in the extracted email-utils subcrate. clippy 0, nextest 1/1. |
+| Robustness R2 — dead WasmLedgerEntry display path (16 unwraps) | Dead code / panics | `5a045278`: `WasmLedgerEntry` + 9 `from_*` constructors + `ledger_block_parse_entries` in `common/src/ledger_refresh.rs` had ZERO callers anywhere (verified across api/cli/dc-agent/ic-canister) and carried 16 `.unwrap()` panic-on-bad-borsh sites. Removed (−158 lines); the live replay path already deserializes correctly with `?`+`error!`. nextest 138/138. |
+| Robustness R3 — duplicated SSH-pubkey regex + panic-on-init | DRY / panics | `deaae832`: the SSH-pubkey regex was duplicated in 2 handler sites, recompiled per request, each with `.unwrap()`/`.expect()` panic-on-init. New single-source `is_valid_ssh_pubkey_format()` + `SSH_PUBKEY_REGEX` OnceLock in `validation.rs` (alongside URL/USERNAME). TDD (4 key types + 4 rejections). validation 12/12, contracts 28/28. |
+| Robustness R4 — silent numeric env-parse fallback | Debuggable errors | `958af5ac`: 11 startup env-var parses used the silent `.ok().and_then(parse).unwrap_or(default)` pattern — a typo like `EMAIL_BATCH_SIZE=1o0` silently became the default. Renamed `parse_env_seconds`→`parse_env_u64`, extracted pure `parse_positive_u64`, converted all 11 sites to fail-fast (matches issues #409/#410). TDD (valid/malformed/zero/negative/overflow/empty). main_tests 6/6. |
+| Robustness R5 — dc-agent `Duration::from_secs(30)` duplicated 7× | DRY | `f471fa3d`: the 30s HTTP-client timeout was hardcoded across 7 dc-agent sites (api + cli already single-source it). New `pub const HTTP_TIMEOUT_SECS` in `dc-agent/src/lib.rs`; all 7 sites reference it. nextest 246/246 (incl. `build_verify_client_enforces_request_timeout`). |
+| Tech-debt — `.sqlx` cache split footgun | Build integrity | New `scripts/sqlx-prepare.sh` self-locating wrapper (always runs `cargo make sqlx-prepare` = `cargo sqlx prepare --workspace` from repo root, so the committed workspace-ROOT `.sqlx/` is the single write+read source) + `api/src/sqlx_cache_check.rs` guard test (`no_per_package_sqlx_cache_dir`) that goes RED the instant the gitignored `api/.sqlx/` appears (the stray bare-`prepare` signature) — runs in `cargo nextest run -p api` so CI blocks drift. Deliberately does NOT re-assert root cache presence (already covered, non-overlapping, by `migration_tests::test_sqlx_offline_mode_data_exists`). TDD-proven (RED on injected `api/.sqlx/`, GREEN clean). Docs: repo `AGENTS.md` (new sqlx subsection), `api/AGENTS.md`, `scripts/AGENTS.md`, `docs/ci-cd.md` (fixed the wrong bare-`cargo sqlx prepare` instruction → `scripts/sqlx-prepare.sh`). clippy 0, nextest green. |
+| Test guard — stale OpenAPI spec_snapshot hash | Test integrity | `7484d3d3`: the byte-identical guard `openapi_spec_is_stable` was RED on the branch (hash `de652956…` vs committed `4549fcf2…`, identical 187/327 counts). Root cause: UX F7 (`bc9caf05`) intentionally added `provider_name` to the `Offering` schema but did not refresh the snapshot hash. Verified the current spec contains `Offering.properties.provider_name` and the only spec-changing commit since the post-Wave-12 capture is F7 (`deaae832` regex DRY is spec-neutral); hash deterministic across runs. Refreshed `EXPECTED_HASH` to `de652956…` (test-artifact maintenance, not a fork) — unblocks the api test gate and restores the guard that all #444 `*Api` splits verify against. |
+| Tech-debt — dev-server.sh release-binary discoverability | DX / e2e | `84aa1f8a`: `scripts/dev-server.sh` served the RELEASE binary by default (deliberate for e2e timing fidelity) but the choice was only in a header comment — a sibling agent rebuilt the DEBUG binary thinking it would affect the running RELEASE server. New `_announce_api_binary()` prints the exact binary path + RELEASE/DEBUG classification + an actionable rebuild hint (release: rebuild + restart — a running server does NOT hot-swap; points at the debug override for fast iteration) at both local-API start sites. |
+| #444 Wave 13 — OfferingStatsApi split | Tech debt | `50b3249f`: extracted the 4 per-offering statistics handlers (contract stats / weekly history / conversion / tenant satisfaction) from `ProvidersApi` in `providers.rs` → new `OfferingStatsApi` in `api/src/openapi/offering_stats.rs`. Cleanest cohesive cluster (read-only analytics, DB-layer return types, no local types/helpers to move). providers.rs **4281→4090** (−191). Byte-identical via `spec_snapshot` (hash `de652956…` unchanged, 187/327). clippy 0; offering-stats serialization + spec_snapshot 6/6. |
+
+**Sweep methodology:** read-only no-mock UX audit (WAVE-B) drove the real warm stack via chrome-cli
+screenshots + zai-vision + Plasmate, new-user + returning-user lens, reported findings (no commits);
+separate implementers shipped the ≥6/10 fixes (WAVE-E) + #444 split (WAVE-D) + rust robustness
+(WAVE-C), sequenced to avoid git-index races on the shared branch. Working tree clean; 14 commits on
+`sweep-e2e-ux-techdebt` ahead of `origin/main`.
+
+**Findings NOT shipped (environmental / low-confidence / needs design — tracked above + below):**
+- **Smoke wall-clock (Finding B):** smoke measured 48–80s vs the <35s target, but the system load
+  average was **42–45** throughout (concurrent cargo builds + shared environment contention). The
+  harness already has warm-stack / fast / smoke / shard infra; individual test times are normal. This
+  is **environmental, not a code regression** — re-measure on an idle system before chasing.
+- **`invoices @smoke empty state` flake (Finding A):** failed under full parallel smoke (timing
+  timeout) but passes in isolation — same parallel-load-contention root cause as Finding B.
+- **`.sqlx` cache split footgun:** the repo has a tracked root `.sqlx/` (workspace cache) AND a
+  gitignored `api/.sqlx/`; `cargo sqlx prepare` run from `api/` writes to the gitignored copy, so a
+  checked `query!`/`query_scalar!` edit + prepare-from-`api/` does NOT update the committed root
+  cache → fresh CI clones fail with "no cached data". Correct incantation: `cargo sqlx prepare
+  --workspace` (or manually copy the new plan into root `.sqlx`). **Recommend:** document the
+  prepare procedure + add a CI check that root `.sqlx` is complete. (Tracked below in tech-debt.)
+  **RESOLVED this session:** `scripts/sqlx-prepare.sh` self-locating wrapper (always uses
+  `--workspace`) + the `sqlx_cache_check::sqlx_offline_cache_has_single_committed_source` test that
+  fails loudly (locally + CI) the instant `api/.sqlx/` appears + AGENTS.md/ci-cd.md docs (incl. fixing
+  the wrong bare-`prepare` instruction).
+- **`dev-server.sh` runs the RELEASE binary by default** (deliberate: debug Ed25519 is ~150x slower,
+  distorting e2e timing). The `API_BINARY=.../debug/api-server` override exists for fast Rust
+  iteration — but the comment is easy to miss (cost a verification cycle). **Minor:** add a louder
+  startup log line. (Tracked below in tech-debt.) **RESOLVED this session:** `_announce_api_binary()`
+  prints the exact binary path + RELEASE/DEBUG classification + a rebuild hint (release: rebuild +
+  restart; notes a running server does NOT hot-swap; points at the debug override for fast iteration)
+  at both local-API start sites.
+- **`cli/src/keygen.rs` standalone binary** (re-flagged by WAVE-C): duplicates `cli/src/commands/keygen.rs`
+  with diverged behavior, unreferenced by any script/CI/Dockerfile — parked since 2026-08-01 (binary
+  surface change, not a live bug). Needs a human call: delete OR delegate.
 
 ### 2026-08-02 session (WAVE-0: prior-session WIP + stale-issue reconciliation)
 

@@ -225,7 +225,7 @@ pub struct DigitalOceanProvisioner {
 impl DigitalOceanProvisioner {
     pub fn new(config: DigitalOceanConfig) -> Result<Self> {
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(crate::HTTP_TIMEOUT_SECS)
             .build()
             .context("Failed to build HTTP client for DigitalOcean API")?;
         Ok(Self {

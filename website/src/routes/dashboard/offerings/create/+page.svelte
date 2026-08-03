@@ -275,6 +275,7 @@
 				reseller_name: undefined,
 				reseller_commission_percent: undefined,
 				owner_username: undefined,
+				provider_name: undefined,
 				provisioner_type: selectedServerType ? 'hetzner' : undefined,
 				provisioner_config:
 					selectedServerType && selectedLocation && selectedImage

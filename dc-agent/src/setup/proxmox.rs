@@ -431,7 +431,7 @@ impl ProxmoxSetup {
         // 30s matches the budget every other dc-agent HTTP client applies
         // (api_client.rs, provisioner/{proxmox,digitalocean,manual}.rs). Without
         // it, a hung Proxmox API would block setup indefinitely.
-        let client = build_verify_client(std::time::Duration::from_secs(30))?;
+        let client = build_verify_client(crate::HTTP_TIMEOUT_SECS)?;
 
         let url = "https://127.0.0.1:8006/api2/json/version";
         let auth_header = format!("PVEAPIToken={}={}", token_id, token_secret);
