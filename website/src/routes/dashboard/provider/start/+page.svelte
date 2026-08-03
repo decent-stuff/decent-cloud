@@ -1,16 +1,62 @@
 <script lang="ts">
 	// "Become a Provider" technical-onboarding hub.
 	//
-	// PRODUCT-DIRECTION.md: "Become a Provider must mean real onboarding to the
-	// technical path (install the agent, register a pool, list an offering), not
-	// just a support-profile wizard." The landing "Become a Provider" CTA used to
-	// land on /dashboard/provider/support (a support-profile completeness wizard)
-	// which never exposed the real provider-setup path. This page is the honest
-	// start: it surfaces the three concrete steps a new provider takes, in order.
+	// PRODUCT-DIRECTION.md: decent-cloud is "OpenRouter, but for cloud resources"
+	// — a proxy/reselling platform unifying many providers behind one common API.
+	// "Become a Provider must mean real onboarding to the technical path … not
+	// just a support-profile wizard." There are TWO honest technical paths:
+	//
+	//   A) Resell a managed cloud (Hetzner/Vultr): the provider adds a cloud API
+	//      token; the central api provisions directly. No infra to run, no
+	//      dc-agent. (Hetzner/Vultr are central-API CloudBackends at
+	//      api/src/cloud/{hetzner,vultr}.rs; dc-agent has no such provisioner,
+	//      and cloud VMs get public IPs with no gateway —
+	//      api/src/cloud_provisioning_service.rs:289-312.)
+	//   B) List your own infrastructure: install dc-agent on Proxmox/Docker/DO,
+	//      register a pool, then create offerings. (dc-agent/src/provisioner/.)
+	//
+	// Both paths converge on step 2 (create an offering). The landing "Become a
+	// Provider" CTA used to land on a support-profile wizard; this page is the
+	// honest start.
 	import Icon, { type IconName } from '$lib/components/Icons.svelte';
 
 	const DC_AGENT_DOCS_URL =
 		'https://github.com/decent-stuff/decent-cloud/blob/main/docs/provider-agent-installation.md';
+
+	interface ProviderPath {
+		icon: IconName;
+		eyebrow: string;
+		title: string;
+		description: string;
+		href: string;
+		cta: string;
+		external?: boolean;
+		testid: string;
+	}
+
+	const paths: ProviderPath[] = [
+		{
+			icon: 'cloud',
+			eyebrow: 'Path A',
+			title: 'Resell a managed cloud',
+			description:
+				'Resell Hetzner or Vultr capacity with zero infrastructure to run. Add a cloud account (API token), then create offerings from the live catalog. The central API provisions VMs directly and gives them public IPs — no dc-agent, no gateway, no pool.',
+			href: '/dashboard/cloud/accounts',
+			cta: 'Add a cloud account',
+			testid: 'provider-start-cloud-accounts-link'
+		},
+		{
+			icon: 'server',
+			eyebrow: 'Path B',
+			title: 'List your own infrastructure',
+			description:
+				'Install dc-agent on your own Proxmox, Docker, or DigitalOcean host. It registers your pool, provisions VMs, and runs the gateway so your capacity is reachable behind one common API.',
+			href: DC_AGENT_DOCS_URL,
+			cta: 'Read the installation guide',
+			external: true,
+			testid: 'provider-start-install-docs-link'
+		}
+	];
 
 	interface OnboardingStep {
 		number: number;
@@ -19,26 +65,15 @@
 		description: string;
 		href: string;
 		cta: string;
-		external?: boolean;
 	}
 
 	const steps: OnboardingStep[] = [
-		{
-			number: 1,
-			icon: 'server',
-			title: 'Install the provider agent (dc-agent)',
-			description:
-				'Install dc-agent on your infrastructure (Proxmox, Hetzner, Docker, DigitalOcean). It registers your pool, provisions VMs, and runs the gateway. Follow the installation guide to get a setup token and run the one-command setup.',
-			href: DC_AGENT_DOCS_URL,
-			cta: 'Read the installation guide',
-			external: true
-		},
 		{
 			number: 2,
 			icon: 'cart',
 			title: 'List your first offering',
 			description:
-				'Once your agent is online and your pool is registered, create a real offering backed by your capacity. Set specs, pricing (Stripe-supported currency), and stock. Your offering appears in the marketplace catalog.',
+				'Once your capacity is reachable (cloud account connected or dc-agent pool registered), create a real offering. Set specs, pricing (Stripe-supported currency), and stock. Your offering appears in the marketplace catalog.',
 			href: '/dashboard/offerings/create',
 			cta: 'Create an offering'
 		},
@@ -67,16 +102,53 @@
 				<span>Become a Provider</span>
 			</div>
 			<h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight mb-4">
-				List your infrastructure on Decent Cloud
+				Provide capacity on Decent Cloud
 			</h1>
 			<p class="text-neutral-400 text-base md:text-lg leading-relaxed max-w-2xl">
-				Decent Cloud is a proxy/reselling platform: providers install an agent, register a
-				pool of capacity, and list real offerings that anyone can rent through one common API.
-				Follow these three steps to become a provider.
+				Decent Cloud is a proxy/reselling platform: many providers, one common API. Choose how
+				you want to provide capacity, then list real offerings anyone can rent.
 			</p>
 		</div>
 
-		<!-- Steps -->
+		<!-- Step 1: choose your path -->
+		<div class="mb-10">
+			<div class="flex items-center gap-3 mb-4">
+				<div
+					class="flex items-center justify-center w-9 h-9 rounded-full bg-primary-500 text-neutral-900 font-bold text-base font-mono"
+				>
+					1
+				</div>
+				<h2 class="text-xl md:text-2xl font-semibold text-white">Choose how you'll provide capacity</h2>
+			</div>
+
+			<div class="grid md:grid-cols-2 gap-5">
+				{#each paths as path (path.testid)}
+					<div class="card p-6 md:p-7 flex flex-col" data-testid="provider-start-path">
+						<div class="flex items-center justify-between mb-4">
+							<div class="text-primary-400">
+								<Icon name={path.icon} size={26} />
+							</div>
+							<span class="text-xs font-mono uppercase tracking-wider text-neutral-500">
+								{path.eyebrow}
+							</span>
+						</div>
+						<h3 class="text-lg font-semibold text-white mb-2">{path.title}</h3>
+						<p class="text-neutral-400 text-sm leading-relaxed mb-5 flex-1">{path.description}</p>
+						<a
+							href={path.href}
+							{...path.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
+							data-testid={path.testid}
+							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors self-start"
+						>
+							<span>{path.cta}</span>
+							<Icon name={path.external ? 'external' : 'arrow-right'} size={16} />
+						</a>
+					</div>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Remaining steps -->
 		<div class="space-y-5">
 			{#each steps as step (step.number)}
 				<div
@@ -104,14 +176,11 @@
 						</p>
 						<a
 							href={step.href}
-							{...step.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}}
-							data-testid={
-								step.external ? 'provider-start-install-docs-link' : 'provider-start-step-link'
-							}
+							data-testid="provider-start-step-link"
 							class="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-neutral-900 text-sm font-semibold hover:bg-primary-400 transition-colors"
 						>
 							<span>{step.cta}</span>
-							<Icon name={step.external ? 'external' : 'arrow-right'} size={16} />
+							<Icon name="arrow-right" size={16} />
 						</a>
 					</div>
 				</div>
