@@ -13,6 +13,7 @@ pub mod invoices;
 pub mod notifications;
 pub mod offerings;
 pub mod offering_csv;
+pub mod offering_stats;
 pub mod pools;
 pub mod provider_stats;
 pub mod providers;
@@ -43,6 +44,7 @@ pub use email_verification::EmailVerificationApi;
 pub use invoices::InvoicesApi;
 pub use notifications::NotificationsApi;
 pub use offering_csv::OfferingCsvApi;
+pub use offering_stats::OfferingStatsApi;
 pub use offerings::OfferingsApi;
 pub use pools::PoolsApi;
 pub use provider_stats::ProviderStatsApi;
@@ -92,6 +94,7 @@ pub fn create_combined_api() -> impl OpenApi {
             VatApi,
             AgentsWaitlistApi,
             OfferingCsvApi,
+            OfferingStatsApi,
             ProviderStatsApi,
             TotpApi,
             RecoveryApi,
