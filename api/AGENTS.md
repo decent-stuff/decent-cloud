@@ -45,6 +45,10 @@ cargo make test-api
 cargo make clippy-api
 ```
 
+## SQLX OFFLINE CACHE
+- The committed query-plan cache is the **workspace-root** `.sqlx/` (single source of truth; the build walks up from `api/` to find it).
+- Regenerate with `scripts/sqlx-prepare.sh` — NEVER a bare `cargo sqlx prepare` from `api/` (writes to the gitignored `api/.sqlx/` and silently stale-ens the root cache). The `sqlx_cache_check::sqlx_offline_cache_has_single_committed_source` test enforces this.
+
 ## NOTES
 - Existing repo-level instructions in `repo/AGENTS.md` still apply here.
 - `src/database/` is dense enough to warrant its own local guidance.

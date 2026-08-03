@@ -15,6 +15,7 @@ pub mod refund;
 pub mod regions;
 pub mod rental_notifications;
 mod search;
+mod sqlx_cache_check;
 pub mod stripe_client;
 pub mod support_bot;
 
