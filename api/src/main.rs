@@ -10,6 +10,7 @@ mod crypto;
 mod database;
 mod email_processor;
 mod email_service;
+mod environment;
 mod helpcenter;
 mod http_util;
 mod invoice_storage;
@@ -1301,7 +1302,7 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     // Configure CORS based on environment
     let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
-    let cors = if environment == "prod" {
+    let cors = if crate::environment::is_production(&environment) {
         Cors::new()
             .allow_origin("https://decent-cloud.org")
             .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])

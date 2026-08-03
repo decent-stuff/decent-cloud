@@ -235,8 +235,9 @@ in use, kill stale `vite` / `api-server` processes first (or run `bash scripts/d
 **Rate limiter (`RATE_LIMIT_ENABLED`):** the API rate-limiter keys on `client_ip + tier`. Parallel
 test workers share 127.0.0.1 and will blow the 120/min RELAXED bucket — producing mass 429s.
 `dev-server.sh start --e2e` and the `E2E_AUTO_SERVER=1` flow both set `RATE_LIMIT_ENABLED=false`
-automatically. The limiter defaults to ON in production (when `ENVIRONMENT=production`) and OFF
-otherwise; see `api/src/rate_limit.rs`.
+automatically. The limiter defaults to ON in production (when `ENVIRONMENT=prod`,
+the canonical value gated by the shared `api/src/environment.rs::is_production`)
+and OFF otherwise; see `api/src/rate_limit.rs`.
 
 ### Browser Rules
 - ALWAYS run `scripts/browser.js errs` after shipping any UI change to catch JS errors before the user does.
