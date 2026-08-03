@@ -186,9 +186,6 @@ manifest, `—`=not used in this env.
 | `TEXTBEE_DEVICE_ID` | `C` | `cfg` | |
 | `TEXTBEE_API_KEY` | `C` | `sec` | |
 | `TEXTBEE_API_URL` | — | `cfg` | prod (empty = feature off) |
-| `TWILIO_ACCOUNT_SID` | — | `cfg` | prod (empty = feature off) |
-| `TWILIO_AUTH_TOKEN` | — | `sec` | |
-| `TWILIO_PHONE_NUMBER` | — | `cfg` | prod (empty = feature off) |
 
 ### AI / LLM
 

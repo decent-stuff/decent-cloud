@@ -317,8 +317,8 @@ Read-only smoke audit against the live deployments (prod `dc-prod`, stage `dc-st
 public-dev). **6 issues found; 5 fixed in this PR (#456), 1 resolved by the operator
 k8s cutover, and the prod-marketplace-emptiness finding closes via the strategic pivot
 (drop demos — done) + the Hetzner first-offerings milestone (forward).** The
-secret/config gap across both envs is **exactly the 4 SMS keys**
-(`TWILIO_AUTH_TOKEN` / `TWILIO_ACCOUNT_SID` / `TWILIO_PHONE_NUMBER` / `TEXTBEE_API_URL`)
+secret/config gap across both envs is **exactly the 3 TextBee SMS keys**
+(`TEXTBEE_DEVICE_ID` / `TEXTBEE_API_KEY` / `TEXTBEE_API_URL`)
 — empty in BOTH prod + stage; every other key is present + non-empty.
 
 | # | Finding (severity) | Resolution | Commit / Plan |
@@ -326,7 +326,7 @@ secret/config gap across both envs is **exactly the 4 SMS keys**
 | 1 | Prod rate-limiting silently OFF — `ENVIRONMENT=prod` vs code checked `=="production"` (P0) | **Fixed this PR** — new `api/src/environment.rs::is_production(env)` predicate | `8ed10bb9` |
 | 2 | Prod marketplace EMPTY — 0 offerings / 0 contracts, only a synthetic seed (P0) | **Not a code bug.** Strategic pivot: demo offerings dropped (migration `053`) + add REAL Hetzner offerings (forward milestone) | `c9dfa9d8` (drop demos) + `docs/plans/2026-08-03-hetzner-first-offerings.md` (add real) |
 | 3 | public-dev stale image — `/auth/capabilities` 404, retired ICP currency, route drift (P1) | **Operator k8s cutover** — push nuc-k3s + repoint the tunnel at `dc-stage` | `docs/MIGRATION-CUTOVER.md` (Step D) |
-| 4 | SMS subsystem silently unconfigured — 4 Twilio/TextBee keys empty in prod + stage (P1) | **Fixed this PR** (boot warning) + **operator must populate the 4 keys** | `3211deeb` |
+| 4 | SMS subsystem silently unconfigured — TextBee keys empty in prod + stage (P1) | **Fixed this PR** (boot warning) + **operator must populate the TextBee keys** | `3211deeb` |
 | 5 | Google OAuth callback hard-400 on consent-denied (`?error=`) (P2) | **Fixed this PR** — redirect instead of 400 | `dec74bf5` |
 | 6 | `dc-api-sync` logged a misleading "Cloudflare DNS not configured" warning (P2) | **Fixed this PR** | `01b1d618` |
 

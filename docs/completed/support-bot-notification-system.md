@@ -27,7 +27,7 @@ User starts chat → Chatwoot widget → AgentBot webhook → AI Bot Service
                                                               ↓
                             Lookup provider contact preferences (our DB)
                                                               ↓
-                    Send notification via Telegram Bot API / Twilio SMS
+                    Send notification via Telegram Bot API / TextBee SMS
                                                               ↓
                               Provider replies in Telegram/SMS
                                                               ↓
@@ -77,7 +77,7 @@ Need more help? Type "human" to speak with the provider.
 - On status change to "open" (human handoff):
   - Query our DB for provider's contact preferences
   - Send notification with conversation summary + link
-- Receives replies via Telegram/Twilio webhooks
+- Receives replies via Telegram/TextBee webhooks
 - Posts replies back to Chatwoot conversation
 
 ### 3. Provider Knowledge Base
@@ -153,5 +153,5 @@ CREATE TABLE user_notification_config (
 
 **External APIs:**
 - Telegram Bot API - Send notifications, receive replies
-- Twilio (optional) - SMS notifications
+- TextBee (optional) - SMS notifications
 - OpenAI/Claude API - Generate answers from articles

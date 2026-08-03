@@ -1,4 +1,4 @@
-//! SMS provider abstraction supporting multiple backends (Twilio, TextBee).
+//! SMS provider abstraction. TextBee is the only supported backend.
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -14,122 +14,23 @@ pub trait SmsProvider: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// Get the configured SMS provider based on environment variables.
-/// Priority: TextBee (if configured) > Twilio (if configured) > None
+/// Get the configured SMS provider (TextBee), or `None` if unconfigured.
 pub fn get_sms_provider() -> Option<Box<dyn SmsProvider>> {
-    if TextBeeClient::is_configured() {
-        match TextBeeClient::from_env() {
-            Ok(c) => Some(Box::new(c) as _),
-            Err(e) => {
-                tracing::error!("TextBee is configured but failed to initialize: {:#}", e);
-                None
-            }
+    if !TextBeeClient::is_configured() {
+        return None;
+    }
+    match TextBeeClient::from_env() {
+        Ok(c) => Some(Box::new(c) as _),
+        Err(e) => {
+            tracing::error!("TextBee is configured but failed to initialize: {:#}", e);
+            None
         }
-    } else if TwilioClient::is_configured() {
-        match TwilioClient::from_env() {
-            Ok(c) => Some(Box::new(c) as _),
-            Err(e) => {
-                tracing::error!("Twilio is configured but failed to initialize: {:#}", e);
-                None
-            }
-        }
-    } else {
-        None
     }
 }
 
-/// Check if any SMS provider is configured.
+/// Check if the SMS provider (TextBee) is configured.
 pub fn is_sms_configured() -> bool {
-    TextBeeClient::is_configured() || TwilioClient::is_configured()
-}
-
-// ============================================================================
-// Twilio Implementation
-// ============================================================================
-
-pub struct TwilioClient {
-    client: Client,
-    account_sid: String,
-    auth_token: String,
-    from_number: String,
-}
-
-impl std::fmt::Debug for TwilioClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TwilioClient")
-            .field("account_sid", &self.account_sid)
-            .field("from_number", &self.from_number)
-            .finish()
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct TwilioMessageResponse {
-    sid: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct TwilioErrorResponse {
-    message: String,
-}
-
-impl TwilioClient {
-    pub fn from_env() -> Result<Self> {
-        Ok(Self {
-            client: crate::http_util::http_client(),
-            account_sid: std::env::var("TWILIO_ACCOUNT_SID")
-                .context("TWILIO_ACCOUNT_SID not set")?,
-            auth_token: std::env::var("TWILIO_AUTH_TOKEN").context("TWILIO_AUTH_TOKEN not set")?,
-            from_number: std::env::var("TWILIO_PHONE_NUMBER")
-                .context("TWILIO_PHONE_NUMBER not set")?,
-        })
-    }
-
-    pub fn is_configured() -> bool {
-        std::env::var("TWILIO_ACCOUNT_SID").is_ok()
-            && std::env::var("TWILIO_AUTH_TOKEN").is_ok()
-            && std::env::var("TWILIO_PHONE_NUMBER").is_ok()
-    }
-}
-
-#[async_trait]
-impl SmsProvider for TwilioClient {
-    async fn send_sms(&self, to: &str, message: &str) -> Result<String> {
-        let url = format!(
-            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
-            self.account_sid
-        );
-
-        let resp = self
-            .client
-            .post(&url)
-            .basic_auth(&self.account_sid, Some(&self.auth_token))
-            .form(&[("To", to), ("From", &self.from_number), ("Body", message)])
-            .send()
-            .await
-            .context("Failed to send Twilio request")?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let msg = resp
-                .json::<TwilioErrorResponse>()
-                .await
-                .map(|e| e.message)
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            anyhow::bail!("Twilio API error {}: {}", status, msg);
-        }
-
-        let response: TwilioMessageResponse = resp
-            .json()
-            .await
-            .context("Failed to parse Twilio response")?;
-
-        Ok(response.sid)
-    }
-
-    fn name(&self) -> &'static str {
-        "twilio"
-    }
+    TextBeeClient::is_configured()
 }
 
 // ============================================================================
@@ -274,28 +175,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_twilio_is_configured() {
-        with_env(
-            &[
-                ("TWILIO_ACCOUNT_SID", None),
-                ("TWILIO_AUTH_TOKEN", None),
-                ("TWILIO_PHONE_NUMBER", None),
-            ],
-            || assert!(!TwilioClient::is_configured()),
-        );
-
-        with_env(
-            &[
-                ("TWILIO_ACCOUNT_SID", Some("ACtest")),
-                ("TWILIO_AUTH_TOKEN", Some("token")),
-                ("TWILIO_PHONE_NUMBER", Some("+1555")),
-            ],
-            || assert!(TwilioClient::is_configured()),
-        );
-    }
-
-    #[test]
-    #[serial]
     fn test_textbee_is_configured() {
         with_env(
             &[("TEXTBEE_DEVICE_ID", None), ("TEXTBEE_API_KEY", None)],
@@ -345,9 +224,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_provider_names() {
-        // Just verify the name() methods return expected values
-        // Factory tests are inherently racy in parallel execution
+    fn test_textbee_provider_name() {
         with_env(
             &[
                 ("TEXTBEE_DEVICE_ID", Some("dev")),
@@ -358,59 +235,24 @@ mod tests {
                 assert_eq!(client.name(), "textbee");
             },
         );
-
-        with_env(
-            &[
-                ("TWILIO_ACCOUNT_SID", Some("AC")),
-                ("TWILIO_AUTH_TOKEN", Some("tok")),
-                ("TWILIO_PHONE_NUMBER", Some("+1")),
-            ],
-            || {
-                let client = TwilioClient::from_env().unwrap();
-                assert_eq!(client.name(), "twilio");
-            },
-        );
     }
 
     #[test]
     #[serial]
-    fn test_is_sms_configured_aggregate() {
-        // The boot-time warning fires when is_sms_configured() is false. Assert
-        // the aggregate OR across both providers: false only when EVERY SMS env
-        // var is absent; true when either provider is fully configured.
+    fn test_is_sms_configured() {
+        // The boot-time warning fires when is_sms_configured() is false: true
+        // only when the TextBee provider is fully configured.
         with_env(
-            &[
-                ("TWILIO_ACCOUNT_SID", None),
-                ("TWILIO_AUTH_TOKEN", None),
-                ("TWILIO_PHONE_NUMBER", None),
-                ("TEXTBEE_DEVICE_ID", None),
-                ("TEXTBEE_API_KEY", None),
-            ],
-            || assert!(!is_sms_configured(), "no SMS keys -> not configured"),
+            &[("TEXTBEE_DEVICE_ID", None), ("TEXTBEE_API_KEY", None)],
+            || assert!(!is_sms_configured(), "no TextBee keys -> not configured"),
         );
 
-        // Twilio alone configured -> aggregate true.
         with_env(
             &[
-                ("TWILIO_ACCOUNT_SID", Some("ACtest")),
-                ("TWILIO_AUTH_TOKEN", Some("token")),
-                ("TWILIO_PHONE_NUMBER", Some("+1555")),
-                ("TEXTBEE_DEVICE_ID", None),
-                ("TEXTBEE_API_KEY", None),
-            ],
-            || assert!(is_sms_configured()),
-        );
-
-        // TextBee alone configured -> aggregate true.
-        with_env(
-            &[
-                ("TWILIO_ACCOUNT_SID", None),
-                ("TWILIO_AUTH_TOKEN", None),
-                ("TWILIO_PHONE_NUMBER", None),
                 ("TEXTBEE_DEVICE_ID", Some("dev123")),
                 ("TEXTBEE_API_KEY", Some("key456")),
             ],
-            || assert!(is_sms_configured()),
+            || assert!(is_sms_configured(), "TextBee keys set -> configured"),
         );
     }
 

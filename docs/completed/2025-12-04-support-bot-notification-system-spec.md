@@ -15,7 +15,7 @@
 
 ### Nice-to-have
 - [ ] Semantic search (embeddings) for articles
-- [ ] SMS notifications via Twilio
+- [ ] SMS notifications via TextBee
 - [ ] Article caching with TTL
 
 ## Steps

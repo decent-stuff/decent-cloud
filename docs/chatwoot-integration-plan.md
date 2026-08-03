@@ -625,10 +625,10 @@ GROUP BY p.id;
 - Facebook Messenger
 - Instagram DMs
 - Twitter/X DMs
-- WhatsApp (via Cloud API, Twilio, or 360dialog)
+- WhatsApp (via Cloud API or 360dialog)
 - Telegram
 - Line
-- SMS (via Twilio/Bandwidth)
+- SMS (via Bandwidth)
 - Custom API channel
 
 ### Agent Features (All Free)
