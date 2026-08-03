@@ -28,6 +28,7 @@ pub mod users;
 pub mod validators;
 pub mod vat;
 pub mod webhooks;
+pub mod webhooks_disputes;
 
 pub use accounts::AccountsApi;
 pub use admin::AdminApi;
@@ -58,6 +59,9 @@ pub use validators::ValidatorsApi;
 pub use vat::VatApi;
 
 use poem_openapi::OpenApi;
+
+#[cfg(test)]
+mod spec_snapshot;
 
 /// Combines all API modules into a single OpenAPI specification
 pub fn create_combined_api() -> impl OpenApi {
