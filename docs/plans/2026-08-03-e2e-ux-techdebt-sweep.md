@@ -1,5 +1,10 @@
 # Plan: 2026-08-03 — Fresh e2e/UX/tech-debt sweep
 
+**Status: DONE (autonomous portion).** All of §1–§5 executed and committed on branch
+`sweep-e2e-ux-techdebt` (15 commits ahead of `origin/main 31483130`); PR opened for review.
+Unshipped items (F2/F6/F9 product forks + flagged tech-debt) are tracked as deferred in
+`docs/OPEN_ISSUES.md`. k8s migration (the other 2026-08-03 plan) is DONE separately (PR #454).
+
 **Created:** 2026-08-03. **Baseline:** `origin/main 31483130` (last merged commit incl. 2026-08-02 Wave 11; the earlier-stated `d3378074` was a local migration-branch HEAD, NOT the clean baseline). Verified green at session start: smoke 26/26 (slow, see Finding B), warm stack healthy. This sweep runs on dedicated branch **`sweep-e2e-ux-techdebt`** (reset from origin/main + cherry-picked this plan doc), isolated from k8s PR #454.
 
 ## Context
