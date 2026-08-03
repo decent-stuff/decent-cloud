@@ -114,6 +114,12 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 | (F9) | "Become a Provider" landing CTA lands on the support-account profile page, not a true provider-start (technical onboarding via `dc-agent`/CLI is not reachable from the web) | 2026-08-03 sweep |
 | (F2) | Seed/demo offerings carry a fake placeholder pubkey (`example-offering-provider-identifier`) — honestly labelled "Demo only" + excluded from stats, but would be nonsensical in a production deploy (seed-data-quality decision: env-gate demos out of prod, or refresh seed data with real identities) | 2026-08-03 sweep |
 
+> **F9 + F2 (RESOLVED 2026-08-03, this PR `sweep-e2e-ux-techdebt`):** F9 "Become a Provider" now
+> routes to real technical onboarding at `/dashboard/provider/start` (`2c393df9`); F2 demo/synthetic
+> offerings dropped via migration `053` (`c9dfa9d8`) — the marketplace is now honestly empty pending
+> real Hetzner offerings. **F6 (top-providers leaderboard) stays deferred** — premature until real
+> offerings exist; see the "Real-deployment smoke audit (2026-08-03)" subsection below.
+
 > **#442 (RESOLVED 2026-07-25, `c14cb939`):** create-offering price auto-suggest shipped —
 > pre-fill `#monthly-price` with `cost × 1.15` (15% markup, the product decision from comment
 > `5078165010`) when Hetzner server cost is known; provider-overridable via a `monthlyPriceTouched`
@@ -141,6 +147,11 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 | 387 | Concurrent multi-ticket processing via multiprocessing + worktrees |
 | 334 | Code: Add tests for database modules without dedicated test files |
 | (2026-08-03) | `cli/src/keygen.rs` standalone `[[bin]]` duplicates `cli/src/commands/keygen.rs` with diverged behavior, unreferenced — delete OR delegate (re-flagged; parked since 2026-08-01). |
+
+> **`cli/src/keygen.rs` standalone binary (RESOLVED 2026-08-03, `79901166`):** operator locked
+> "delete"; the standalone `[[bin]]` is removed (word-count validation preserved in the shared
+> `cli/src/commands/keygen.rs`). **`Cargo.lock` is committed to git** (`24e35ace`) — it was already
+> tracked; the stale `.gitignore` line is removed.
 
 > **#444 progress (updated 2026-08-03):** 6 providers.rs splits shipped (`PoolsApi` `74fb9248`,
 > `NotificationsApi` `b4259194`, `SlaApi` `ae97cd8f`, `AllowlistApi` `290a218f`, `OfferingCsvApi`
@@ -274,6 +285,43 @@ separate implementers shipped the ≥6/10 fixes (WAVE-E) + #444 split (WAVE-D) +
 - **`cli/src/keygen.rs` standalone binary** (re-flagged by WAVE-C): duplicates `cli/src/commands/keygen.rs`
   with diverged behavior, unreferenced by any script/CI/Dockerfile — parked since 2026-08-01 (binary
   surface change, not a live bug). Needs a human call: delete OR delegate.
+
+### Real-deployment smoke audit (2026-08-03)
+
+Read-only smoke audit against the live deployments (prod `dc-prod`, stage `dc-stage`,
+public-dev). **6 issues found; 5 fixed in this PR (#456), 1 resolved by the operator
+k8s cutover, and the prod-marketplace-emptiness finding closes via the strategic pivot
+(drop demos — done) + the Hetzner first-offerings milestone (forward).** The
+secret/config gap across both envs is **exactly the 4 SMS keys**
+(`TWILIO_AUTH_TOKEN` / `TWILIO_ACCOUNT_SID` / `TWILIO_PHONE_NUMBER` / `TEXTBEE_API_URL`)
+— empty in BOTH prod + stage; every other key is present + non-empty.
+
+| # | Finding (severity) | Resolution | Commit / Plan |
+|---|--------------------|------------|---------------|
+| 1 | Prod rate-limiting silently OFF — `ENVIRONMENT=prod` vs code checked `=="production"` (P0) | **Fixed this PR** — new `api/src/environment.rs::is_production(env)` predicate | `8ed10bb9` |
+| 2 | Prod marketplace EMPTY — 0 offerings / 0 contracts, only a synthetic seed (P0) | **Not a code bug.** Strategic pivot: demo offerings dropped (migration `053`) + add REAL Hetzner offerings (forward milestone) | `c9dfa9d8` (drop demos) + `docs/plans/2026-08-03-hetzner-first-offerings.md` (add real) |
+| 3 | public-dev stale image — `/auth/capabilities` 404, retired ICP currency, route drift (P1) | **Operator k8s cutover** — push nuc-k3s + repoint the tunnel at `dc-stage` | `docs/MIGRATION-CUTOVER.md` (Step D) |
+| 4 | SMS subsystem silently unconfigured — 4 Twilio/TextBee keys empty in prod + stage (P1) | **Fixed this PR** (boot warning) + **operator must populate the 4 keys** | `3211deeb` |
+| 5 | Google OAuth callback hard-400 on consent-denied (`?error=`) (P2) | **Fixed this PR** — redirect instead of 400 | `dec74bf5` |
+| 6 | `dc-api-sync` logged a misleading "Cloudflare DNS not configured" warning (P2) | **Fixed this PR** | `01b1d618` |
+
+**Closed this PR (smoke audit + operator-locked decisions):**
+- `cli/src/keygen.rs` standalone `[[bin]]` deleted (`79901166`) — operator locked "delete".
+- `Cargo.lock` committed to git (`24e35ace`) — was already tracked; stale `.gitignore` line removed.
+- Demo/synthetic offerings dropped — migration `053` (`c9dfa9d8`); marketplace now honestly empty.
+- F9 "Become a Provider" → real technical onboarding at `/dashboard/provider/start` (`2c393df9`).
+- The 5 smoke-audit code fixes above (rate-limit / drop-demos / SMS / OAuth / dc-api-sync).
+
+**Deferred:**
+- **F6 — top-providers leaderboard.** Premature: there are no real providers to rank
+  until the Hetzner first-offerings milestone lands real offerings; ranking
+  demo/synthetic providers would mislead (violates the honest-catalog direction in
+  `docs/PRODUCT-DIRECTION.md`). Natural follow-up **after** real offerings exist.
+
+**Forward milestone:** `docs/plans/2026-08-03-hetzner-first-offerings.md` scopes the
+operator reselling Hetzner as the platform's first real provider (ends the
+honest-empty-marketplace period). Status: *Proposed — needs operator's Hetzner creds +
+provider identity to execute.*
 
 ### 2026-08-02 session (WAVE-0: prior-session WIP + stale-issue reconciliation)
 
