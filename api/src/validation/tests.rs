@@ -21,10 +21,30 @@ fn test_validate_url() {
 
 #[test]
 fn test_validate_public_key() {
-    assert!(validate_public_key("ssh-ed25519", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...").is_ok());
+    assert!(validate_public_key("ssh-ed25519", "ssh-ed25519 AAAAC3NzaC1ZDI1NTE5AAAAI...").is_ok());
     assert!(validate_public_key("ssh-rsa", "ssh-rsa AAAAB3NzaC1yc2EA...").is_ok());
     assert!(validate_public_key("ssh-ed25519", "invalid").is_err());
     assert!(validate_public_key("ssh-ed25519", "").is_err());
+}
+
+#[test]
+fn test_is_valid_ssh_pubkey_format() {
+    // Valid: each supported key type, with and without a trailing comment.
+    assert!(is_valid_ssh_pubkey_format("ssh-ed25519 AAAAC3NzaC1ZDI1NTE5AAAAI"));
+    assert!(is_valid_ssh_pubkey_format(
+        "ssh-rsa AAAAB3NzaC1yc2EA user@host"
+    ));
+    assert!(is_valid_ssh_pubkey_format("ssh-ecdsa AAAAE2VjZHNh comment"));
+    assert!(is_valid_ssh_pubkey_format("ssh-dss AAAAB3NzaC1kc3MA"));
+
+    // Padding (base64 `=`) is allowed.
+    assert!(is_valid_ssh_pubkey_format("ssh-ed25519 AAAAC3NzaC1ZDI1NTE5AAAAI=="));
+
+    // Invalid: wrong/missing prefix, no key material, empty.
+    assert!(!is_valid_ssh_pubkey_format("not-starting-with-ssh"));
+    assert!(!is_valid_ssh_pubkey_format("ssh-ed25519"));
+    assert!(!is_valid_ssh_pubkey_format("pgp-masquerading AAAA"));
+    assert!(!is_valid_ssh_pubkey_format(""));
 }
 
 #[test]
