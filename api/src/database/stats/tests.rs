@@ -94,6 +94,49 @@ async fn test_get_platform_stats_with_data() {
     assert_eq!(stats.total_volume_e9s, 500);
 }
 
+// F1: "Available Offerings" must reflect what the marketplace actually lists.
+// The marketplace excludes draft offerings (is_draft = false filter in the
+// public list query), so platform stats must too — otherwise a draft an admin
+// is still editing shows up as an available listing, contradicting the
+// marketplace one click away.
+#[tokio::test]
+async fn test_get_platform_stats_excludes_draft_offerings() {
+    let db = setup_test_db().await;
+    let pubkey = vec![1u8; 32];
+
+    {
+        let pubkey_ref: &[u8] = &pubkey;
+        sqlx::query!(
+            "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Test', '1.0', '1.0', 0)",
+            pubkey_ref
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // One published (non-draft) public offering — counts as available.
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-published', 'Published', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    // One DRAFT public offering — must NOT count as available.
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-draft', 'Draft', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, TRUE)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let stats = db.get_platform_stats().await.unwrap();
+    // Only the published offering counts; the draft is invisible to renters.
+    assert_eq!(stats.total_offerings, 1);
+}
+
 #[tokio::test]
 async fn test_get_reputation_none() {
     let db = setup_test_db().await;
