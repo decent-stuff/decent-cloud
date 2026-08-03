@@ -1292,6 +1292,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
         Ok(_) => {} // Production URL is set, all good
     }
 
+    // SMS notifications are optional but, per AGENTS.md ("BE LOUD ABOUT
+    // MISCONFIGURATIONS"), must warn at boot like every other optional subsystem.
+    // Without TWILIO_* or TEXTBEE_* keys, SMS notifications silently no-op at
+    // send-time (sms.rs only errors lazily); surface it now so the operator
+    // knows SMS is off (smoke finding 2026-08-03).
+    if !notifications::sms::is_sms_configured() {
+        tracing::warn!(
+            "SMS not configured (TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER and \
+             TEXTBEE_DEVICE_ID/TEXTBEE_API_KEY all empty) — SMS notifications will NOT work. \
+             Set either the TWILIO_* or TEXTBEE_* group to enable."
+        );
+    }
+
     tracing::info!("Starting Decent Cloud API server on {}", addr);
 
     // Set up OpenAPI service with Swagger UI

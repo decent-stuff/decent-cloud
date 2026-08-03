@@ -373,6 +373,48 @@ mod tests {
     }
 
     #[test]
+    #[serial]
+    fn test_is_sms_configured_aggregate() {
+        // The boot-time warning fires when is_sms_configured() is false. Assert
+        // the aggregate OR across both providers: false only when EVERY SMS env
+        // var is absent; true when either provider is fully configured.
+        with_env(
+            &[
+                ("TWILIO_ACCOUNT_SID", None),
+                ("TWILIO_AUTH_TOKEN", None),
+                ("TWILIO_PHONE_NUMBER", None),
+                ("TEXTBEE_DEVICE_ID", None),
+                ("TEXTBEE_API_KEY", None),
+            ],
+            || assert!(!is_sms_configured(), "no SMS keys -> not configured"),
+        );
+
+        // Twilio alone configured -> aggregate true.
+        with_env(
+            &[
+                ("TWILIO_ACCOUNT_SID", Some("ACtest")),
+                ("TWILIO_AUTH_TOKEN", Some("token")),
+                ("TWILIO_PHONE_NUMBER", Some("+1555")),
+                ("TEXTBEE_DEVICE_ID", None),
+                ("TEXTBEE_API_KEY", None),
+            ],
+            || assert!(is_sms_configured()),
+        );
+
+        // TextBee alone configured -> aggregate true.
+        with_env(
+            &[
+                ("TWILIO_ACCOUNT_SID", None),
+                ("TWILIO_AUTH_TOKEN", None),
+                ("TWILIO_PHONE_NUMBER", None),
+                ("TEXTBEE_DEVICE_ID", Some("dev123")),
+                ("TEXTBEE_API_KEY", Some("key456")),
+            ],
+            || assert!(is_sms_configured()),
+        );
+    }
+
+    #[test]
     fn test_format_sms_notification() {
         let msg = format_sms_notification("Customer needs help");
         assert!(msg.contains("Customer needs help"));
