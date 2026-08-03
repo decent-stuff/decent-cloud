@@ -1,4 +1,8 @@
 import { test, expect } from '@playwright/test';
+import {
+	seedMarketplaceOffering,
+	deleteOfferingById,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E tests for marketplace sort controls (#439).
@@ -9,8 +13,13 @@ import { test, expect } from '@playwright/test';
  * shares the same `sortField` / `sortDir` state and `syncFiltersToUrl` path as
  * the desktop pills.
  *
- * The dev DB ships only offline demo offerings, so we load the marketplace with
- * `?demo=1&offline=1` (same pattern as search-dsl.spec.ts).
+ * The drop-demos pivot (migration 053) left the marketplace empty, so this spec
+ * self-seeds two is_example (demo) offerings under the example provider pubkey.
+ * They're self_provisioned (online) so they pass the marketplace query's
+ * pool/self-provisioned filter, and is_example so they stay out of the DEFAULT
+ * view (hidden by showDemoOfferings=false) — which keeps the
+ * marketplace-empty-state spec on another worker unaffected. ?demo=1 reveals
+ * them (the offline flag is now a harmless no-op for these online rows).
  */
 
 const MARKETPLACE_URL = '/dashboard/marketplace?demo=1&offline=1';
@@ -21,6 +30,25 @@ const MOBILE = { width: 375, height: 812 } as const;
 const DESKTOP = { width: 1280, height: 800 } as const;
 
 test.describe('Marketplace sort', () => {
+	const seededIds: string[] = [];
+	test.beforeAll(async () => {
+		// Two demo offerings with distinct prices so a sort-control change has
+		// rows to operate on. is_example + self_provisioned → hidden by the
+		// default demo filter but surfaced by ?demo=1.
+		for (const price of [10, 50]) {
+			const handle = await seedMarketplaceOffering({
+				isExample: true,
+				online: true,
+				name: `E2E Sort Offering ${price}`,
+				monthlyPrice: price,
+			});
+			seededIds.push(handle.offeringNumericId);
+		}
+	});
+	test.afterAll(async () => {
+		await Promise.all(seededIds.map((id) => deleteOfferingById(id)));
+	});
+
 	test.beforeEach(async ({ page }) => {
 		await page.goto(MARKETPLACE_URL);
 		await expect(page.locator('h1:has-text("Marketplace")')).toBeVisible();

@@ -1,30 +1,31 @@
 import { test, expect } from './fixtures/test-account';
-import { API_BASE_URL } from './fixtures/api-base';
+import {
+	seedMarketplaceOffering,
+	deleteOfferingById,
+} from './fixtures/seed-helpers';
 
 /**
- * Find the id of the first offline offering in the dev DB.
+ * E2E coverage for the offline-provider warning UI on the offering detail page.
  *
- * The dev DB ships demo offerings (IDs 1-10 at time of writing) all with
- * `provider_online: false`. We dynamically discover an offline id rather than
- * hard-coding one (e.g. the previous `45`) so the spec survives seed churn.
- * Throws if no offline offering exists — the suite cannot exercise the
- * offline-warning UI without one.
+ * After the drop-demos pivot (migration 053) the catalog is honestly empty, so
+ * this spec self-seeds an OFFLINE offering (a plain offering with no agent pool
+ * → provider_online=false) and navigates to its detail page by the known id,
+ * instead of dynamically discovering a leftover demo offering. Self-seeding also
+ * avoids cross-worker flakiness: the old discovery picked ANY offline offering,
+ * which could be another worker's row cleaned up mid-test.
  */
-async function firstOfflineOfferingId(): Promise<number> {
-	const res = await fetch(`${API_BASE_URL}/api/v1/offerings?offline=1&demo=1&per_page=100`);
-	const json = await res.json();
-	const offs = Array.isArray(json) ? json : (json.data ?? json.offerings ?? []);
-	const offline = offs.find((o: { provider_online?: boolean }) => o.provider_online === false);
-	if (!offline) {
-		throw new Error('No offline offering found in dev DB; cannot exercise offline-warning UI');
-	}
-	return offline.id as number;
-}
-
 test.describe('Offline Provider Warning', () => {
+	let offlineId: string | undefined;
+	test.beforeAll(async () => {
+		const handle = await seedMarketplaceOffering({ name: 'E2E Offline Warning Offering' });
+		offlineId = handle.offeringNumericId;
+	});
+	test.afterAll(async () => {
+		if (offlineId) await deleteOfferingById(offlineId);
+	});
+
 	test('should show offline badge next to offering title', async ({ page }) => {
-		const id = await firstOfflineOfferingId();
-		await page.goto(`/dashboard/marketplace/${id}`);
+		await page.goto(`/dashboard/marketplace/${offlineId}`);
 
 		// Offering detail renders an "Offline" status pill next to the title
 		// when provider_online === false (see marketplace/[id]/+page.svelte).
@@ -35,8 +36,7 @@ test.describe('Offline Provider Warning', () => {
 	});
 
 	test('should disable Rent button and explain why when provider is offline', async ({ page }) => {
-		const id = await firstOfflineOfferingId();
-		await page.goto(`/dashboard/marketplace/${id}`);
+		await page.goto(`/dashboard/marketplace/${offlineId}`);
 		await page.waitForSelector('h1', { timeout: 10000 });
 
 		// Rent button is replaced with a disabled "Provider Offline" button whose

@@ -669,6 +669,88 @@ export async function deleteOfferingsByProvider(pubkeyHex: string): Promise<void
 }
 
 /**
+ * The placeholder "example provider" pubkey (a readable ASCII string, NOT a real
+ * ed25519 key). The marketplace query flags any offering under this pubkey with
+ * `is_example = true` — the "demo" filter the showDemoOfferings toggle controls.
+ *
+ * Migration 053 deleted the demo seed rows (offerings, profile, registration)
+ * under this pubkey, so the marketplace is honestly empty after the product
+ * pivot (PRODUCT-DIRECTION.md F2). The runtime exclusion filter is intentionally
+ * RETAINED, so specs exercising the demo/offline UI self-seed an offering under
+ * this pubkey to make `is_example` true. NEVER use this as a real provider.
+ */
+export const EXAMPLE_PROVIDER_PUBKEY_HEX =
+	'6578616d706c652d6f66666572696e672d70726f76696465722d6964656e746966696572';
+
+/**
+ * Insert a minimal `provider_registrations` row so child tables whose FK targets
+ * it (`provider_offering_sla_targets.provider_pubkey`, `agent_pools`, …) can be
+ * seeded. Mirrors the test-only INSERT used across `api/src/database` tests.
+ *
+ * Idempotent (`ON CONFLICT DO NOTHING`) so several specs / parallel workers
+ * seeding the same pubkey (e.g. EXAMPLE_PROVIDER_PUBKEY_HEX) never collide.
+ */
+export async function seedProviderRegistration(pubkeyHex: string): Promise<void> {
+	await sql(`
+		INSERT INTO provider_registrations (pubkey, signature, created_at_ns)
+		VALUES (decode('${pubkeyHex}', 'hex'), '\\x00', 0)
+		ON CONFLICT (pubkey) DO NOTHING
+	`);
+}
+
+/**
+ * Delete a single `provider_offerings` row by its numeric BIGSERIAL id. Surgical
+ * cleanup for specs that seed under a SHARED pubkey (e.g.
+ * EXAMPLE_PROVIDER_PUBKEY_HEX) where `deleteOfferingsByProvider` would nuke other
+ * workers' rows. Cascades to `provider_offering_sla_targets` / sli reports via
+ * the `offering_id` FK.
+ */
+export async function deleteOfferingById(numericId: string | number): Promise<void> {
+	await sql(`DELETE FROM provider_offerings WHERE id = ${numericId}`);
+}
+
+/** Handle returned by seedMarketplaceOffering for navigation + per-row cleanup. */
+export interface MarketplaceOfferingHandle {
+	/** 32-byte hex pubkey the offering was seeded under (example pubkey when demo). */
+	providerPubkeyHex: string;
+	/** Numeric BIGSERIAL id of the provider_offerings row (for /marketplace/<id>). */
+	offeringNumericId: string;
+	/** String offering_id. */
+	offeringId: string;
+}
+
+/**
+ * Seed a public marketplace offering for the browsing/sort/offline/SLA specs
+ * broken by the drop-demos pivot (migration 053). Builds on `seedOffering` along
+ * the two axes those specs vary:
+ *   - `isExample`: seed under EXAMPLE_PROVIDER_PUBKEY_HEX so the marketplace
+ *     query flags the row `is_example` (the "demo" filter). Default false → a
+ *     fresh random 32-byte pubkey (a real, non-demo offering).
+ *   - `online`: set `offering_source='self_provisioned'` so
+ *     `compute_provider_online_status` marks the provider online without an
+ *     agent pool. Default false → a plain offering with no pool, which is
+ *     OFFLINE and therefore hidden by the default marketplace view
+ *     (`showOfflineOfferings=false`).
+ *
+ * Returns identifiers for navigation and surgical cleanup
+ * (`deleteOfferingById`). Prefer per-id cleanup so specs sharing the example
+ * pubkey don't delete each other's rows under parallel workers.
+ */
+export async function seedMarketplaceOffering(
+	opts?: OfferingSeedOverrides & { isExample?: boolean; online?: boolean },
+): Promise<MarketplaceOfferingHandle> {
+	const providerPubkeyHex = opts?.isExample ? EXAMPLE_PROVIDER_PUBKEY_HEX : randomHex(32);
+	const offeringId = opts?.offeringId ?? `mkt-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+	const offeringNumericId = await seedOffering(providerPubkeyHex, {
+		...opts,
+		offeringId,
+		// `online` wins over an explicit offeringSource so the two can't conflict.
+		offeringSource: opts?.online ? 'self_provisioned' : opts?.offeringSource,
+	});
+	return { providerPubkeyHex, offeringNumericId, offeringId };
+}
+
+/**
  * Seed for a REAL tenant→provider rental flow (rent-flow.spec.ts).
  *
  * `seedRentableOffering` alone makes an offering VISIBLE+ONLINE in the marketplace
