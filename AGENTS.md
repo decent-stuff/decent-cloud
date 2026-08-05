@@ -189,6 +189,54 @@ node scripts/dc-auth.js seed-contracts
 ```
 - `seed-ux-data` starts a heartbeat daemon to keep the provider online; stop it with `kill $(cat /tmp/dc-keepalive-*.pid)`.
 
+## Acting as an existing provider identity autonomously
+
+decent-cloud has **no API-token / service-token mechanism yet** (see
+`docs/OPEN_ISSUES.md` → "Future work: API key / service token"). Until one exists,
+provider auth = **Ed25519-signed API requests derived from a BIP-39 seed** — there
+is no other path. This section covers how automation (the AI agent, CI, the
+real-deployment e2e harness) acts as an EXISTING provider identity without going
+through the website sign-up flow.
+
+- **Identity store (agent-accessible, age-tier):** the outer
+  `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS; decrypt with
+  `/project/decent-cloud/secrets/.age-identity`) holds:
+  - `DC_PROD_RESELLER_SEED` — 12-word BIP-39 seed phrase for the prod
+    `hetzner-reseller` account (Ed25519 pubkey `1ed6136d…`).
+  - `DC_PROD_RESELLER_PUBKEY` — the matching Ed25519 pubkey (64 hex chars), for
+    verifying the derivation below produced the right keypair.
+  - Decrypt (value NEVER leaves this command's pipe):
+    ```bash
+    cd /project/decent-cloud && \
+      SOPS_AGE_KEY_FILE=$(pwd)/secrets/.age-identity sops -d secrets/shared/env.yaml
+    ```
+- **To act as the identity:** derive the Ed25519 keypair from the seed **EXACTLY
+  as the website does** (so the derived pubkey matches `DC_PROD_RESELLER_PUBKEY`),
+  then sign each request with the canonical scheme in `common/src/api_auth.rs`
+  (`build_signed_message`: byte-concat `timestamp‖nonce‖METHOD‖/api/v1/…path‖body`,
+  no separators; Ed25519ph signature; context `b"decent-cloud"`; headers
+  `X-Public-Key`/`X-Signature`/`X-Timestamp`/`X-Nonce`). The server verifier is
+  `api/src/auth.rs::verify_request_signature`. **Reuse the derivation + signing
+  code in the real-deployment e2e harness**
+  (`tools/e2e-real-deployments/src/crypto.js`: `deriveIdentity` +
+  `signRequest`) — do NOT re-implement either step. (Today the harness creates a
+  fresh account per run; a small change lets it load `DC_PROD_RESELLER_SEED` from
+  env.yaml and act as the existing `hetzner-reseller` provider: create/manage
+  offerings, run flows, provision/teardown.)
+- **Security constraints (load-bearing):**
+  - The seed is a **MASTER key** (full account control). It lives ONLY in the
+    age-tier `env.yaml` (operator-local outer store — NOT in any public git repo,
+    NOT in the k8s PGP-SOPS secret, NOT in this product repo). NEVER print, echo,
+    log, or commit the seed value.
+  - **Threat model:** `env.yaml` already guards push-capable (`GITHUB_TEST_PAT`)
+    + spend-capable (`HETZNER_API_TOKEN_*`) + Stripe creds under the same age key;
+    a master seed there is consistent with that tier.
+  - When done with a derived keypair, drop in-memory references; NEVER persist a
+    derived private key to disk.
+  - **Future:** a non-custodial API/service-token feature (see
+    `docs/OPEN_ISSUES.md` future-work) will let automation auth with a scoped,
+    revocable token so the master seed can stay fully offline.
+
 ## PROJECT RULES
 - **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
 - Adjust and extend existing code instead of creating parallel implementations. Before you start coding, PLAN how existing code can be adjusted in the most concise way.

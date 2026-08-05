@@ -13,6 +13,34 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
 - **Deferred**: labeled `deferred-post-launch`. Valid but parked until ≥20 paying customers.
 
+## Future work
+
+Proposals not yet filed as GitHub issues — distinct from the open/deferred tables
+above. Each is a forward-looking design note for a future session.
+
+### Future work: API key / service token (non-custodial automation auth)
+
+- **Problem:** provider auth today requires the Ed25519 master key (derived from
+  the BIP-39 seed). Automation (CI, the AI agent, the real-deployment e2e
+  harness) must therefore hold the master seed — a root-credential exposure. As a
+  pragmatic unblock, the prod `hetzner-reseller` seed is currently stored in the
+  agent-accessible age-tier `secrets/shared/env.yaml` (operator-local outer store,
+  NOT in any public repo) as `DC_PROD_RESELLER_SEED` / `DC_PROD_RESELLER_PUBKEY`.
+- **Proposal:** add a non-custodial "API key / service token" feature: a provider
+  mints one or more scoped, revocable tokens (stored hashed in the DB, mirroring
+  the `cloud_accounts.credentials_encrypted` pattern) that authenticate API
+  requests WITHOUT the master key. Automation authenticates with the token; the
+  master seed stays fully offline.
+- **Why:** aligns with `docs/PRODUCT-DIRECTION.md` (operator reselling at scale;
+  programmatic provider management); removes root-credential exposure from
+  automation; enables per-token scoping (e.g. read-only, offerings-only) +
+  rotation without identity churn. The signing scheme (`api/src/auth.rs` +
+  `common/src/api_auth.rs`) would gain a token-auth path alongside the Ed25519
+  path.
+- **Status:** Proposed (future session). Not blocking — the env.yaml-seed path
+  works today (see `repo/AGENTS.md` → "Acting as an existing provider identity
+  autonomously").
+
 ## Infrastructure — staging → k8s (`dc-stage`) consolidation — PoC VERIFIED, cutover pending
 
 **Status (2026-08-03):** Tracks 1+2+3 done autonomously; **Track 2 PoC VERIFIED LIVE**
