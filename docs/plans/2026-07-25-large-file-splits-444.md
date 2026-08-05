@@ -435,4 +435,57 @@ permanent invariant guard for all future `*Api` splits.
   byte-identical claim **a one-line `cargo nextest` check** instead of an
   ad-hoc spare-port capture — Waves 5–11's manual method is superseded.
 
+## Wave 13 (2026-08-05) — contracts.rs telemetry/history cluster → `ContractTelemetryApi` (`contract_telemetry.rs`)
+
+`api/src/openapi/contracts.rs` (2244 → 1747 lines, **−497**) — extracted the
+**contract telemetry & history** cluster (6 handlers under `ApiTags::Contracts`,
+all `/contracts/:id/{...}` sub-resources: `record_usage`, `get_usage`,
+`submit_feedback`, `get_recipe_log`, `get_contract_events`, `get_feedback`)
+plus their 6 DTO tests into a new `ContractTelemetryApi` type in
+`api/src/openapi/contract_telemetry.rs` (527 lines). Wired into the **first**
+inner tuple of `create_combined_api` (tuple 1: 13 → 14; tuple 2 stays at 15).
+Commit `352f2355`.
+
+**Why this cluster (9/10):**
+- **Cohesive + fully decoupled:** the 6 handlers are the per-contract read/write
+  data surface (usage metering, feedback, recipe log, event timeline) —
+  everything queryable about a contract *after* it exists, separate from the
+  lifecycle core (create/extend/cancel/checkout). They depend only on
+  `Database` methods + shared DTOs in `openapi::common` / `database::{contracts,
+  stats}`. **Zero** references to `contracts.rs`-private helpers — verified
+  pre-extraction: `check_spending_alert_and_notify` and
+  `create_stripe_checkout_session` are each used by exactly one site
+  (`create_rental_request`), so the entire tail from `record_usage` to
+  `get_feedback` was clean.
+- **Clean contiguous boundary:** a `/// Record usage event for a contract` doc
+  comment marks the start, and the cluster ends exactly at the `impl
+  ContractsApi` block's closing `}` (the tail-extraction shape of Waves 9/11).
+
+**Verification (definitive, byte-identical OpenAPI via the `spec_snapshot`
+guard):** `cargo nextest run -p api spec_snapshot` PASS — canonical SHA-256
+unchanged at `de6529560b1cc2bd9be65b44c0789b0a2368da52f167da8bc6f495c915faffdc`,
+187 paths / 327 schemas. Spec dump confirms all 6 moved endpoints present with
+identical methods + `ApiTags::Contracts` (`/contracts/{id}/usage` GET+POST,
+`/contracts/{id}/feedback` GET+POST, `/contracts/{id}/recipe-log` GET,
+`/contracts/{id}/events` GET).
+
+- `cargo build -p api` clean; `cargo clippy --tests -p api` → **0 warnings,
+  0 errors**.
+- `cargo nextest run -p api` for `openapi::contracts` +
+  `openapi::contract_telemetry` → **28/28 pass** (22 remaining in
+  `openapi::contracts::tests`; 6 moved to `openapi::contract_telemetry::tests`).
+  The warm stack (`:59011`/`:59010`) was never restarted; health 200 throughout.
+
+**Headroom after this wave:** tuple 1 = 14/16 (2 free), tuple 2 = 15/16
+(1 free). `contracts.rs` is now 1747 lines (under the 2k target).
+
+### Candidate analysis recorded this wave (top remaining, per the #444 roadmap)
+
+| Candidate | Cluster | Boundary | Confidence | Outcome |
+|-----------|---------|----------|-----------:|---------|
+| `openapi/contracts.rs` (1747) | now under 2k — done | — | — | **DONE** this wave |
+| `dc-agent/src/main.rs` (3674) | `run_doctor` (523L) / agent runtime (poll_and_provision + reconcile_instances, ~880L) | binary Path-B (no `#[OpenApi]`, no spec guard); functions share main.rs-private helpers (`create_provisioner_from_config` etc.) → visibility churn; verify via build+clippy+tests+`--help` byte-identical | 6/10 | next candidate — meaningful but needs careful pub-split + a `--help` byte-identical guard; lower confidence than an openapi split |
+| `database/offerings.rs` (2876) | recommendations `impl Database` block | scattered (4 non-contiguous regions) | 4/10 | still deferred — dedicated PR with query-level tests |
+| `database/cloud_resources.rs` (2445) | inline `mod tests` is ~1366 lines | prod code only ~1078 lines (under 2k once tests excluded) | N/A | not actually a >2k prod file — skip |
+
 
