@@ -29,7 +29,17 @@ test.describe('/dashboard/rentals', () => {
 	test.describe.configure({ mode: 'serial' });
 
 	test('@smoke empty state: fresh user sees onboarding steps and marketplace CTAs', async ({ page, testAccount }) => {
+		// The empty state renders only after onMount's signed GET to
+		// /users/{pubkey}/contracts resolves (loadContracts flips `loading`).
+		// Under parallel workers that signed fetch can exceed the default 5s
+		// toBeVisible timeout, so wait for it deterministically BEFORE asserting.
+		// Listener is armed before goto so the response is never missed.
+		const contractsLoaded = page.waitForResponse(
+			(r) => /\/api\/v1\/users\/[^/]+\/contracts$/.test(r.url()) && r.status() < 400,
+			{ timeout: 15000 },
+		);
 		await page.goto('/dashboard/rentals');
+		await contractsLoaded;
 
 		// Header
 		await expect(page.getByRole('heading', { name: 'My Rentals' })).toBeVisible();

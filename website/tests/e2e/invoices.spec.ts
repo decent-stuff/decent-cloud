@@ -25,10 +25,21 @@ test.describe('/dashboard/invoices', () => {
 	test.describe.configure({ mode: 'serial' });
 
 	test('@smoke empty state: fresh user sees FAQ and marketplace CTA', async ({ page }) => {
+		// The empty state renders only after onMount's signed GET to
+		// /users/{pubkey}/contracts resolves (loadContracts flips `loading`).
+		// Under parallel workers that signed fetch can exceed the default 5s
+		// toBeVisible timeout, so wait for it deterministically BEFORE asserting.
+		// Listener is armed before goto so the response is never missed.
+		const contractsLoaded = page.waitForResponse(
+			(r) => /\/api\/v1\/users\/[^/]+\/contracts$/.test(r.url()) && r.status() < 400,
+			{ timeout: 15000 },
+		);
 		await page.goto('/dashboard/invoices');
+		await contractsLoaded;
 
-		// Header
-		await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+		// Header — exact match: the FAQ heading "When will I see invoices?"
+		// otherwise also matches the substring "Invoices" (strict-mode violation).
+		await expect(page.getByRole('heading', { name: 'Invoices', exact: true })).toBeVisible();
 		await expect(page.getByText('Download invoices for your rental contracts')).toBeVisible();
 
 		// FAQ cards

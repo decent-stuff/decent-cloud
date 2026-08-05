@@ -38,6 +38,15 @@ export default defineConfig({
 	// Per-test timeout. The fast-auth fixture lands on /dashboard in <2s; 30s
 	// leaves plenty of headroom for actual test body work under parallel load.
 	timeout: 30_000,
+	// Expect (auto-retry) timeout. The default 5s is too tight on the dev box,
+	// which runs the agent harness + MCP servers as a persistent CPU baseline:
+	// under 2-worker contention, signed-API-gated page renders (rentals,
+	// invoices, …) intermittently exceed 5s and flake (~1/run, all green in
+	// isolation / on an idle box). 10s absorbs that load variance with ZERO
+	// cost to green runs (elements appear in <1s when uncontended). Per-test
+	// deterministic waits (waitForResponse) remain the preferred pattern; this
+	// is the load-tolerant safety net for assertions not yet hardened.
+	expect: { timeout: 10_000 },
 	reporter: process.env.CI ? 'github' : 'list',
 
 	use: {
