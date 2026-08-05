@@ -1,0 +1,9 @@
+{
+  "target": "prod",
+  "webUrl": "https://decent-cloud.org",
+  "apiUrl": "https://api.decent-cloud.org",
+  "hetznerToken": "PLACEHOLDER",
+  "accountEmailPrefix": "PLACEHOLDER",
+  "includeProvision": false,
+  "expectedEnvironment": "prod"
+}
