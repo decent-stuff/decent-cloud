@@ -7,6 +7,7 @@ pub mod auth;
 pub mod chatwoot;
 pub mod cloud;
 pub mod common;
+pub mod contract_telemetry;
 pub mod contracts;
 pub mod email_verification;
 pub mod invoices;
@@ -40,6 +41,7 @@ pub use auth::AuthApi;
 pub use chatwoot::ChatwootApi;
 pub use cloud::CloudApi;
 pub use contracts::ContractsApi;
+pub use contract_telemetry::ContractTelemetryApi;
 pub use email_verification::EmailVerificationApi;
 pub use invoices::InvoicesApi;
 pub use notifications::NotificationsApi;
@@ -82,6 +84,7 @@ pub fn create_combined_api() -> impl OpenApi {
             NotificationsApi,
             SlaApi,
             AllowlistApi,
+            ContractTelemetryApi,
         ),
         (
             OfferingsApi,
