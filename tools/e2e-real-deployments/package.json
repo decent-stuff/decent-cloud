@@ -1,0 +1,23 @@
+{
+  "name": "decent-cloud-e2e-real-deployments",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Parametrized real-deployment end-to-end test harness for decent-cloud. Fires against dev/stage/prod. Fails loud on any missing required input — never reports silent success.",
+  "bin": {
+    "dc-e2e": "./run.js"
+  },
+  "scripts": {
+    "list": "node run.js --list",
+    "start": "node run.js"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.2",
+    "@noble/hashes": "^1.8.0",
+    "bip39": "^3.1.0",
+    "playwright": "^1.56.1"
+  },
+  "engines": {
+    "node": ">=18.18"
+  }
+}
