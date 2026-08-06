@@ -73,9 +73,13 @@ repo/
   then add its name + source to `docs/CREDENTIALS.md`.
 - `scripts/dc-secrets` reads whatever `$DC_SECRETS_DIR` points at — the committed
   `repo/secrets/shared/*.yaml` (common/dev/play) AND the operator-local outer
-  `/project/decent-cloud/secrets/shared/{env,gh}.yaml`. Full manifest, store
-  layout, and the k8s counterpart (`third_party/k8s/scripts/manage-secrets.py`)
-  are in `docs/CREDENTIALS.md`. Never paste, echo, log, or commit a value.
+  `/project/decent-cloud/secrets/shared/{env,gh}.yaml`. Every store encrypts to
+  **both** the agent `age` key (agent decrypts via `$SOPS_AGE_KEY_FILE`) AND the
+  operator `gpg` key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` (operator decrypts
+  via their gpg keyring); override the pgp recipient with `DC_SOPS_PGP_RECIPIENT`
+  + `sops updatekeys`. Full manifest, store layout, and the k8s counterpart
+  (`third_party/k8s/scripts/manage-secrets.py`) are in `docs/CREDENTIALS.md`.
+  Never paste, echo, log, or commit a value.
 
 ## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 

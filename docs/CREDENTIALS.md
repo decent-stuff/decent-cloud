@@ -2,9 +2,10 @@
 
 > **RULE (non-negotiable): NEVER ask the user for a credential before checking
 > this document AND running `scripts/dc-secrets list`.** Credentials already
-> persist — SOPS-sealed with the `age` backend (key resolved from
-> `$SOPS_AGE_KEY_FILE` / `$SOPS_AGE_KEY`, or the repo `.age-identity`), and a
-> working subset is additionally injected as env vars each session. Re-asking
+> persist — SOPS-sealed to **both** the agent `age` key and the operator `gpg`
+> key (age key resolved from `$SOPS_AGE_KEY_FILE` / `$SOPS_AGE_KEY`, or the repo
+> `.age-identity`; operator key resolved from the operator's gpg keyring), and
+> a working subset is additionally injected as env vars each session. Re-asking
 > wastes a round-trip and erodes trust. This file lists every credential **NAME**
 > and where it lives; it contains **no values**.
 
@@ -107,6 +108,29 @@ age-key resolution priority: `SOPS_AGE_KEY` → `SOPS_AGE_KEY_FILE` →
 `secrets/.age-identity`. A fresh clone/sandbox has no `.age-identity`; it MUST
 receive the canonical key via one of the two env vars (see
 `agent/docs/secrets.md`). Without it the committed SOPS files cannot decrypt.
+
+### Recipients (agent age key + operator gpg key)
+
+**Every secret store encrypts to BOTH recipients**, so the agent and the operator
+can each decrypt a file independently:
+
+- **agent age key** `age1vdj457g4pyp7u5834sypdt3ys3gum939wwwggqz3jch8aes9lstsh5y9mr`
+  — the agent decrypts via age (`sops -d <file>` with `$SOPS_AGE_KEY_FILE` /
+  `$SOPS_AGE_KEY` set). No gpg keyring needed.
+- **operator gpg key** fingerprint `FA5814CF1935EE80C454C9F1660DCCF069EC9176`
+  (`Saša Tomić <sasa.gpg@kalaj.org>`) — the operator decrypts via their own gpg
+  keyring: `sops -d <file>` with **no** age env var set (sops then falls back to
+  gpg). No agent age key needed.
+
+Both recipients are written into every `.sops.yaml` `creation_rule` by
+`dc-secrets` (the `age:` and `pgp:` lines). To rotate or **add a NEW operator gpg
+key**, set `DC_SOPS_PGP_RECIPIENT=<fingerprint>` (it overrides the default) and
+re-wrap the existing data keys without touching values:
+
+```bash
+DC_SOPS_PGP_RECIPIENT=<new-fingerprint> scripts/dc-secrets init   # regenerate .sops.yaml
+sops updatekeys --yes <file>        # per file, run from the store dir (sops finds .sops.yaml from CWD)
+```
 
 ### k8s counterpart
 
