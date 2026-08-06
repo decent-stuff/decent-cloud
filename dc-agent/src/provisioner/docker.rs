@@ -15,7 +15,18 @@ use bollard::service::ContainerInspectResponse;
 use bollard::Docker;
 use futures::StreamExt;
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing;
+
+/// Upper bound on a single image pull.
+///
+/// bollard applies a per-operation timeout (~120s), but a slow-trickle pull
+/// (congested registry, huge image, or partial stall that keeps emitting
+/// progress frames) has no upper bound on its own. This runs on the
+/// provisioning path while a contract lock is held, so an unbounded pull can
+/// wedge provisioning forever. 10 minutes covers legitimate large-image pulls
+/// while guaranteeing a stuck pull aborts and releases the contract lock.
+const IMAGE_PULL_TIMEOUT: Duration = Duration::from_secs(600);
 
 // ── procfs helpers ─────────────────────────────────────────────────────────
 
@@ -150,10 +161,34 @@ impl DockerProvisioner {
         };
 
         let mut stream = self.client.create_image(Some(create_options), None, None);
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(_) => {}
-                Err(e) => bail!("Failed to pull image '{}': {}", image, e),
+
+        // Bound the consume loop: a slow-trickle pull can otherwise hold the
+        // provisioning contract lock indefinitely. See `IMAGE_PULL_TIMEOUT`.
+        let pull_outcome = tokio::time::timeout(IMAGE_PULL_TIMEOUT, async move {
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(_) => {}
+                    Err(e) => bail!("Failed to pull image '{}': {}", image, e),
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        })
+        .await;
+
+        match pull_outcome {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                tracing::warn!(
+                    image,
+                    timeout_secs = IMAGE_PULL_TIMEOUT.as_secs(),
+                    "image pull timed out; aborting to release provisioning contract lock"
+                );
+                bail!(
+                    "Timed out after {}s pulling image '{}'; aborting to release contract lock",
+                    IMAGE_PULL_TIMEOUT.as_secs(),
+                    image
+                );
             }
         }
 

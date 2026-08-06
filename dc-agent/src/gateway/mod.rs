@@ -213,12 +213,39 @@ impl GatewayManager {
 
     /// Get bandwidth statistics for all VMs.
     pub fn get_bandwidth_stats(&self) -> std::collections::HashMap<String, BandwidthStats> {
-        BandwidthMonitor::get_all_stats().unwrap_or_default()
+        // Log iptables failures (e.g. binary missing / exec denied) so a
+        // regression is not indistinguishable from "no VMs tracked". The empty
+        // map is still returned to keep callers' happy-path behavior unchanged.
+        match BandwidthMonitor::get_all_stats() {
+            Ok(stats) => stats,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "bandwidth stats collection failed; returning empty report \
+                     (possible iptables regression or permission denial)"
+                );
+                std::collections::HashMap::new()
+            }
+        }
     }
 
     /// Get bandwidth statistics for a specific VM by slug.
     pub fn get_vm_bandwidth(&self, slug: &str) -> Option<BandwidthStats> {
-        BandwidthMonitor::get_stats(slug).ok()
+        // Log iptables failures (e.g. binary missing / exec denied) so a
+        // regression is not indistinguishable from "no data for this VM". None
+        // is still returned to keep callers' happy-path behavior unchanged.
+        match BandwidthMonitor::get_stats(slug) {
+            Ok(stats) => Some(stats),
+            Err(e) => {
+                tracing::warn!(
+                    slug,
+                    error = %e,
+                    "bandwidth stats lookup failed; returning None \
+                     (possible iptables regression or permission denial)"
+                );
+                None
+            }
+        }
     }
 
     /// Get current port allocations for diagnostics.

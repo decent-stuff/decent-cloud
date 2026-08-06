@@ -137,8 +137,20 @@ impl BandwidthMonitor {
                     .strip_prefix("Chain DC_VM_")
                     .and_then(|s| s.split_whitespace().next())
                 {
-                    if let Ok(vm_stats) = Self::get_stats(slug) {
-                        stats.insert(slug.to_string(), vm_stats);
+                    // Surface iptables lookup failures (e.g. binary missing or
+                    // exec denied) instead of silently omitting the VM from the
+                    // report — a regression must not look like "no data".
+                    match Self::get_stats(slug) {
+                        Ok(vm_stats) => {
+                            stats.insert(slug.to_string(), vm_stats);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                slug,
+                                error = %e,
+                                "bandwidth stats lookup failed; VM omitted from report"
+                            );
+                        }
                     }
                 }
             }
