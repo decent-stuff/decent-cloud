@@ -60,10 +60,11 @@
 			: null,
 	);
 
-	// Support portal URLs - base URL from env, specific paths from portalStatus
-	const CHATWOOT_BASE_URL =
-		import.meta.env.VITE_CHATWOOT_BASE_URL ||
-		"https://support.decent-cloud.org";
+	// Support portal URLs - base URL from env, specific paths from portalStatus.
+	// No hardcoded default: avoid linking to a dead/404 host when Chatwoot is
+	// not configured for this deployment. The unconfigured case renders a
+	// static notice instead of broken quick-links (see the Support Portal card).
+	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || "";
 	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || "1";
 
 	// Shared state
@@ -153,11 +154,14 @@
 
 	const accountEmail = $derived(currentIdentity?.account?.email);
 
-	// Dynamic URLs based on provider's portal status
+	// Dynamic URLs based on provider's portal status. Empty when Chatwoot is
+	// not configured so links are never rendered pointing at a dead host.
 	const supportDashboardUrl = $derived(
-		portalStatus?.inboxId
-			? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/inbox/${portalStatus.inboxId}`
-			: `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`,
+		CHATWOOT_BASE_URL
+			? portalStatus?.inboxId
+				? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/inbox/${portalStatus.inboxId}`
+				: `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`
+			: "",
 	);
 	const helpCenterEditUrl = $derived(
 		portalStatus?.portalSlug
@@ -695,68 +699,95 @@
 					</p>
 				</div>
 
-				<!-- Quick Links -->
-				<div class="grid md:grid-cols-2 gap-4">
-					<a
-						href={supportDashboardUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						class="flex items-start gap-4 p-4  bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
-					>
-						<span class="text-3xl">🎧</span>
-						<div>
-							<h3
-								class="text-white font-semibold group-hover:text-primary-300 transition-colors"
-							>
-								Support Dashboard <span class="text-xs opacity-50"
-									>↗</span
-								>
-							</h3>
-							<p class="text-neutral-500 text-sm mt-1">
-								View and respond to customer tickets, manage
-								conversations
-							</p>
-						</div>
-					</a>
-					{#if helpCenterEditUrl}
+				<!-- Quick Links — only render live links when Chatwoot is
+				     configured for this deployment. Otherwise show a static
+				     notice so providers aren't sent to a dead/404 host. -->
+				{#if CHATWOOT_BASE_URL}
+					<div class="grid md:grid-cols-2 gap-4">
 						<a
-							href={helpCenterEditUrl}
+							href={supportDashboardUrl}
 							target="_blank"
 							rel="noopener noreferrer"
-							class="flex items-start gap-4 p-4  bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+							class="flex items-start gap-4 p-4  bg-gradient-to-br from-primary-500/20 to-primary-600/20 border border-primary-500/30 hover:border-primary-400/50 transition-colors group"
 						>
-							<span class="text-3xl">📝</span>
+							<span class="text-3xl">🎧</span>
 							<div>
 								<h3
-									class="text-white font-semibold group-hover:text-green-300 transition-colors"
+									class="text-white font-semibold group-hover:text-primary-300 transition-colors"
 								>
-									Help Center <span class="text-xs opacity-50"
+									Support Dashboard <span class="text-xs opacity-50"
 										>↗</span
 									>
 								</h3>
 								<p class="text-neutral-500 text-sm mt-1">
-									Edit and publish support articles for your
-									customers
+									View and respond to customer tickets, manage
+									conversations
 								</p>
 							</div>
 						</a>
-					{:else}
-						<div
-							class="flex items-start gap-4 p-4  bg-surface-elevated border border-neutral-800"
-						>
-							<span class="text-3xl opacity-50">📝</span>
-							<div>
-								<h3 class="text-neutral-500 font-semibold">
-									Help Center
-								</h3>
-								<p class="text-neutral-600 text-sm mt-1">
-									Create your portal account first to access the
-									Help Center
-								</p>
+						{#if helpCenterEditUrl}
+							<a
+								href={helpCenterEditUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								class="flex items-start gap-4 p-4  bg-gradient-to-br from-green-600/20 to-teal-600/20 border border-green-500/30 hover:border-green-400/50 transition-colors group"
+							>
+								<span class="text-3xl">📝</span>
+								<div>
+									<h3
+										class="text-white font-semibold group-hover:text-green-300 transition-colors"
+									>
+										Help Center <span class="text-xs opacity-50"
+											>↗</span
+										>
+									</h3>
+									<p class="text-neutral-500 text-sm mt-1">
+										Edit and publish support articles for your
+										customers
+									</p>
+								</div>
+							</a>
+						{:else}
+							<div
+								class="flex items-start gap-4 p-4  bg-surface-elevated border border-neutral-800"
+							>
+								<span class="text-3xl opacity-50">📝</span>
+								<div>
+									<h3 class="text-neutral-500 font-semibold">
+										Help Center
+									</h3>
+									<p class="text-neutral-600 text-sm mt-1">
+										Create your portal account first to access the
+										Help Center
+									</p>
+								</div>
 							</div>
+						{/if}
+					</div>
+				{:else}
+					<div
+						class="flex items-start gap-4 p-4 bg-surface-elevated border border-neutral-800"
+					>
+						<span class="text-3xl opacity-50">🎧</span>
+						<div>
+							<h3 class="text-neutral-500 font-semibold">
+								Support chat is not configured
+							</h3>
+							<p class="text-neutral-600 text-sm mt-1">
+								This deployment hasn't wired up the support portal.
+								{#if accountEmail}
+									Reach the operator at
+									<a
+										href="mailto:{accountEmail}"
+										class="text-primary-400 hover:underline">{accountEmail}</a
+									>.
+								{:else}
+									Contact your operator to enable it.
+								{/if}
+							</p>
 						</div>
-					{/if}
-				</div>
+					</div>
+				{/if}
 
 				<!-- Portal Account Status -->
 				<div class="bg-surface-elevated  p-4 space-y-4">
@@ -917,12 +948,14 @@
 										>Android Play Store</a
 									>
 								</li>
-								<li>
-									Server URL: <code
-										class="bg-black/30 px-1.5 py-0.5 rounded text-xs"
-										>{CHATWOOT_BASE_URL}</code
-									>
-								</li>
+								{#if CHATWOOT_BASE_URL}
+									<li>
+										Server URL: <code
+											class="bg-black/30 px-1.5 py-0.5 rounded text-xs"
+											>{CHATWOOT_BASE_URL}</code
+										>
+									</li>
+								{/if}
 							</ul>
 						</div>
 					</div>

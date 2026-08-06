@@ -268,22 +268,26 @@ URL + Telegram handle) into the website build (`release.yml:191-201`) but **omit
 (`cf/deploy.py:623-629`); Vite inlines it at build time. The legacy path is why
 current prod works.
 
-**Latent CI gap (operator action required before relying on release.yml for the
-website image).** A fresh `release.yml` checkout has no `.env.local`, so its
-website build would inline `websiteToken: undefined`. The layout gates the widget
-behind `{#if CHATWOOT_TOKEN}` (`website/src/routes/+layout.svelte:25`), so a
-release.yml-built bundle would silently ship **no support widget**. Before the
-website image is produced by `release.yml` (the k8s cutover direction), add the
-token from a GitHub Actions secret, mirroring the existing `VITE_CHATWOOT_BASE_URL`
-line:
+**CI wiring (now in place, operator action to populate).** `release.yml`'s "Build
+website" env block now injects both Chatwoot vars, sourced from GitHub so the
+prod bundle is never coupled to a hardcoded host:
 
 ```yaml
-# .github/workflows/release.yml — "Build website" env block (~release.yml:196)
-VITE_CHATWOOT_BASE_URL: https://support.decent-cloud.org
-VITE_CHATWOOT_WEBSITE_TOKEN: ${{ secrets.CHATWOOT_WEBSITE_TOKEN }}   # ADD THIS
+# .github/workflows/release.yml — "Build website" env block
+VITE_CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
+VITE_CHATWOOT_WEBSITE_TOKEN: ${{ secrets.CHATWOOT_WEBSITE_TOKEN }}
 ```
 
-…and add the `CHATWOOT_WEBSITE_TOKEN` Actions secret to
-`decent-stuff/decent-cloud` (the public Chatwoot website token — safe to store as
-a Actions secret; it is not sensitive). Until that line exists, keep building the
-website via `cf/deploy.py` so the widget keeps working.
+The widget renders **only when both are non-empty** (`ChatwootWidget.svelte`
+gates on token AND base URL), so an unset pair yields a console-clean bundle with
+the widget gated off (no dead-host fetch / 404 / X-Frame-Options error). To make
+a release.yml-built website image actually show support chat, the operator must
+set in `decent-stuff/decent-cloud`:
+- repo **Variable** `CHATWOOT_BASE_URL` = the public Chatwoot URL (currently the
+  live instance `https://dev-support.decent-cloud.org`; do **not** use the dead
+  `support.decent-cloud.org` tunnel), and
+- Actions **Secret** `CHATWOOT_WEBSITE_TOKEN` = the Chatwoot inbox website token
+  (public/client-embeddable; safe to store as an Actions secret).
+
+Until both are populated in GitHub, keep building the website via `cf/deploy.py`
+so the widget keeps working.

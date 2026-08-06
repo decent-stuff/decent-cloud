@@ -10,13 +10,24 @@
 		baseUrl?: string;
 	}
 
-	let { websiteToken, baseUrl = 'https://support.decent-cloud.org' }: Props = $props();
+	// No hardcoded default: a dead/misconfigured host (404 + X-Frame-Options
+	// block) must NEVER be loaded. Callers pass env-driven values; when either
+	// is missing the component renders nothing (no script/iframe, no console
+	// errors). See +layout.svelte for the env gate that wraps this component.
+	let { websiteToken, baseUrl }: Props = $props();
 
 	let currentIdentity = $state<IdentityInfo | null>(null);
 	let unsubscribe: (() => void) | null = null;
 	let scriptLoaded = false;
 
 	onMount(() => {
+		// Env gate: bail out entirely unless BOTH the website token and base
+		// URL are configured. This keeps an unconfigured build console-clean
+		// (no sdk.js fetch, no iframe, no X-Frame-Options error).
+		if (!websiteToken || !baseUrl) {
+			return;
+		}
+
 		unsubscribe = authStore.activeIdentity.subscribe(async (identity) => {
 			currentIdentity = identity;
 			if (scriptLoaded && identity) {

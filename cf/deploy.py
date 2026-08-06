@@ -618,20 +618,31 @@ def build_website_natively(environment: str, env_vars: dict[str, str]) -> bool:
                 f.write("# Stripe not configured - credit card payments disabled\n")
                 f.write("# VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...\n")
 
-            # Chatwoot widget configuration
+            # Chatwoot widget configuration. Require BOTH the token and the
+            # base URL: the website widget only renders when both are present
+            # (see ChatwootWidget.svelte). Never default to a hardcoded host —
+            # a dead/misconfigured host causes 404 + X-Frame-Options console
+            # errors on every page.
             f.write("\n")
             chatwoot_token = env_vars.get("CHATWOOT_WEBSITE_TOKEN")
             chatwoot_base_url = env_vars.get("CHATWOOT_BASE_URL")
-            if chatwoot_token:
+            if chatwoot_token and chatwoot_base_url:
                 f.write("# Chatwoot support widget\n")
                 f.write(f"VITE_CHATWOOT_WEBSITE_TOKEN={chatwoot_token}\n")
-                base_url = chatwoot_base_url or "https://support.decent-cloud.org"
-                f.write(f"VITE_CHATWOOT_BASE_URL={base_url}\n")
+                f.write(f"VITE_CHATWOOT_BASE_URL={chatwoot_base_url}\n")
                 print_success("Configured Chatwoot widget for website build")
+            elif chatwoot_token and not chatwoot_base_url:
+                # Token set but no base URL: emit the token but leave the URL
+                # commented so the widget stays gated OFF (no dead-host fetch).
+                f.write("# Chatwoot token present but CHATWOOT_BASE_URL missing — widget DISABLED\n")
+                f.write(f"VITE_CHATWOOT_WEBSITE_TOKEN={chatwoot_token}\n")
+                f.write("# VITE_CHATWOOT_BASE_URL=https://your-chatwoot.example.org\n")
+                print_warning("CHATWOOT_WEBSITE_TOKEN is set but CHATWOOT_BASE_URL is missing")
+                print_warning("Support widget will NOT render until CHATWOOT_BASE_URL is set")
             else:
-                f.write("# Chatwoot not configured - support widget disabled\n")
+                f.write("# Chatwoot not configured — support widget disabled\n")
                 f.write("# VITE_CHATWOOT_WEBSITE_TOKEN=your_token\n")
-                f.write("# VITE_CHATWOOT_BASE_URL=https://support.decent-cloud.org\n")
+                f.write("# VITE_CHATWOOT_BASE_URL=https://your-chatwoot.example.org\n")
 
             # Telegram bot username for UI display
             f.write("\n")
