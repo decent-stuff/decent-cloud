@@ -421,7 +421,7 @@ def test_list_discovery_prints_names_never_values(tmp_path):
     secret_val = "supersecret-value-DO-NOT-LEAK-1234567890"
     stripe_val = "sk_live_DO_NOT_LEAK_abcdef"
     run_dc(
-        ["set", "shared/env", f"HETZNER_API_TOKEN={secret_val}", f"STRIPE_SECRET_KEY={stripe_val}"],
+        ["set", "shared/env", f"TEST_DC_SECRET={secret_val}", f"STRIPE_SECRET_KEY={stripe_val}"],
         dc_dir=store,
     )
     r = run_dc_discovery(
@@ -432,7 +432,7 @@ def test_list_discovery_prints_names_never_values(tmp_path):
     assert r.returncode == 0, r.stderr
     out = r.stdout
     # The known SOPS key NAME appears (the task's required known key) ...
-    assert "HETZNER_API_TOKEN" in out
+    assert "TEST_DC_SECRET" in out
     assert "STRIPE_SECRET_KEY" in out
     # ... as does an env-secret NAME matched by the heuristic (_PAT) ...
     assert "GITHUB_TEST_PAT" in out
