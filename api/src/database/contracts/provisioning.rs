@@ -690,8 +690,26 @@ impl Database {
             return Ok(false);
         }
 
-        let offering_db_id: i64 = contract.offering_id.parse().map_err(|_| {
-            anyhow::anyhow!("Invalid offering_id in contract: {}", contract.offering_id)
+        // Contracts store the offering's STRING slug (create_rental_request persists
+        // `offering.offering_id`, NOT the numeric DB id). Resolve the numeric id by
+        // (provider_pubkey, offering_id slug) — parsing the slug as i64 silently
+        // broke cloud provisioning for every offering with a non-numeric slug.
+        let provider_pubkey = hex::decode(&contract.provider_pubkey)
+            .map_err(|_| anyhow::anyhow!("Invalid provider pubkey hex"))?;
+
+        let offering_db_id: i64 = sqlx::query_scalar!(
+            r#"SELECT id as "id!: i64" FROM provider_offerings WHERE pubkey = $1 AND offering_id = $2"#,
+            provider_pubkey,
+            contract.offering_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Offering '{}' not found for provider {}",
+                contract.offering_id,
+                contract.provider_pubkey
+            )
         })?;
 
         let offering = self
@@ -703,9 +721,6 @@ impl Database {
             Some(t) => t,
             _ => return Ok(false),
         };
-
-        let provider_pubkey = hex::decode(&contract.provider_pubkey)
-            .map_err(|_| anyhow::anyhow!("Invalid provider pubkey hex"))?;
 
         let (cloud_account_id, server_type, location, image) = match provisioner_type {
             "hetzner" => {
