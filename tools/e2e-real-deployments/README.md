@@ -68,10 +68,13 @@ prerequisites are auto-included (e.g. `--flows provider-onboard-path-a` pulls in
 | # | flow                    | what it asserts |
 |---|-------------------------|-----------------|
 | 1 | `health`                | `GET /api/v1/health` → 200 + `success` + `environment` (matches `expectedEnvironment` if set); `GET /auth/capabilities` → 200 + parses (`google_oauth`). A clean 404 on capabilities is a **finding**, not a fail. |
-| 2 | `marketplace`           | `GET /stats` + `GET /offerings` return the documented shape; records counts. Honest-empty is a PASS; **prod with 0 offerings is a finding**. |
-| 3 | `signup`                | Drives the website sign-up flow headlessly, captures the 12-word seed phrase, asserts the logged-in (dashboard) state. Cleans up by **noting** the test account email (no public delete-account API). |
-| 4 | `provider-onboard-path-a` | The core reseller flow, as the signed-up user, via **signed API calls**: register provider_profile → `POST /cloud-accounts` (Hetzner token validated **live**) → `GET /cloud-accounts/:id/catalog` (live-fetches server types) → create ONE offering from the catalog (cheapest / `cx22`) → assert it appears. Cleans up the offering + cloud account. |
-| 5 | `rent-provision-cancel` | **[GATED, costs money]** Creates a real rental contract on the offering, waits for provisioning, asserts SSH `:22` reachable, then cancels + asserts cleanup. Forced to `cx22`. Default OFF; needs `--include-provision` / `DC_E2E_INCLUDE_PROVISION=1`. |
+| 2 | `marketplace`           | `GET /stats` + `GET /offerings` return the documented shape; records counts. Honest-empty is a PASS; **prod with 0 offerings is a finding**. Also asserts catalog honesty: a non-empty catalog that is ALL `is_example` demos, or has ZERO rentable (`provider_online`) offerings, **fails on prod / finds elsewhere** — naming total/example/online counts + the example-pubkey ASCII so the operator can act. |
+| 3 | `console-errors`        | Loads `/` + `/dashboard/marketplace` headlessly and collects severe browser-console errors (uncaught exceptions, `ERR_BLOCKED_BY_RESPONSE`, X-Frame-Options refusals, first-party asset 4xx/5xx). Catches defects invisible to the API-only flows (e.g. a broken Chatwoot widget). One FINDING per severe error; a navigation failure or a ≥3-error pile-up **fails**. |
+| 4 | `drift`                 | Diffs key read-only endpoints between this target and prod (the reference): `/health` environment, `/auth/capabilities` status + `google_oauth`, `/stats`, and `/offerings` currency/payment_methods (flags retired ICP/BTC). One FINDING per meaningful diff; a DNS failure reaching either side is itself a finding, never a crash. When the target IS prod, there is nothing to diff. Override the reference with `DC_E2E_DRIFT_REFERENCE_API`. |
+| 5 | `stats-honesty`         | Heuristic: `active_providers` vs the count of `provider_online` offerings (`/offerings?limit=100`). `active_providers>0` with zero online offerings is a **finding** pointing at the retired-table stat bug. Findings only — never a hard fail. |
+| 6 | `signup`                | Drives the website sign-up flow headlessly, captures the 12-word seed phrase, asserts the logged-in (dashboard) state. Cleans up by **noting** the test account email (no public delete-account API). |
+| 7 | `provider-onboard-path-a` | The core reseller flow, as the signed-up user, via **signed API calls**: register provider_profile → `POST /cloud-accounts` (Hetzner token validated **live**) → `GET /cloud-accounts/:id/catalog` (live-fetches server types) → create ONE offering from the catalog (cheapest / `cx22`) → assert it appears. Cleans up the offering + cloud account. |
+| 8 | `rent-provision-cancel` | **[GATED, costs money]** Creates a real rental contract on the offering, waits for provisioning, asserts SSH `:22` reachable, then cancels + asserts cleanup. Forced to `cx22`. Default OFF; needs `--include-provision` / `DC_E2E_INCLUDE_PROVISION=1`. |
 
 ### How signing works (no API key to register — the website is the only path)
 
@@ -115,6 +118,6 @@ tools/e2e-real-deployments/
 │   ├── browser.js         # own headless Chromium + website sign-up driver
 │   ├── assert.js          # AssertionError primitive
 │   ├── runner.js          # flow registry, dependency expansion, aggregation
-│   └── flows/             # health, marketplace, signup, providerOnboardPathA, rentProvisionCancel
+│   └── flows/             # health, marketplace, consoleErrors, drift, statsHonesty, signup, providerOnboardPathA, rentProvisionCancel
 └── targets/               # dev.json, stage.json, prod.json (+ README)
 ```

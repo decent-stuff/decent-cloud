@@ -14,6 +14,7 @@ const flow = {
 	name: 'signup',
 	description: 'Website sign-up (seed phrase) → fresh account; assert logged-in state',
 	requires: [],
+	needsBrowser: true, // runner lazy-launches a shared headless Chromium
 	async run(ctx) {
 		const { webUrl, accountEmailPrefix } = ctx.config;
 		const stamp = `${Date.now()}${Math.floor(Math.random() * 1e4)}`;

@@ -137,6 +137,9 @@ function hintForKey(key) {
 export const FLOW_REQUIREMENTS = {
 	health: ['apiUrl', 'target'],
 	marketplace: ['apiUrl'],
+	'console-errors': ['webUrl'],
+	drift: ['apiUrl', 'target'],
+	'stats-honesty': ['apiUrl'],
 	signup: ['webUrl', 'apiUrl', 'accountEmailPrefix'],
 	'provider-onboard-path-a': ['webUrl', 'apiUrl', 'hetznerToken', 'accountEmailPrefix'],
 	'rent-provision-cancel': ['webUrl', 'apiUrl', 'hetznerToken', 'accountEmailPrefix'],

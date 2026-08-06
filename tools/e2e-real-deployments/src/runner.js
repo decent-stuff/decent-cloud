@@ -15,6 +15,9 @@ import { FLOW_REQUIREMENTS, validateConfig } from './config.js';
 
 import health from './flows/health.js';
 import marketplace from './flows/marketplace.js';
+import consoleErrors from './flows/consoleErrors.js';
+import drift from './flows/drift.js';
+import statsHonesty from './flows/statsHonesty.js';
 import signup from './flows/signup.js';
 import providerOnboardPathA from './flows/providerOnboardPathA.js';
 import rentProvisionCancel from './flows/rentProvisionCancel.js';
@@ -23,6 +26,9 @@ import rentProvisionCancel from './flows/rentProvisionCancel.js';
 export const FLOWS = [
 	health,
 	marketplace,
+	consoleErrors,
+	drift,
+	statsHonesty,
 	signup,
 	providerOnboardPathA,
 	rentProvisionCancel,
@@ -101,7 +107,9 @@ export async function runFlows({ config, selectedFlows, log, onResult }) {
 	try {
 		for (const flow of selectedFlows) {
 			// Lazy-launch a single shared browser the first time a flow needs it.
-			if (!ctx.browser && (flow.name === 'signup' || flow.requires?.includes('signup'))) {
+			// `needsBrowser: true` is the explicit opt-in (signup + console-errors);
+			// flows that require signup get it transitively (signup runs first).
+			if (!ctx.browser && flow.needsBrowser) {
 				log(`launching own headless Chromium…`);
 				ctx.browser = await launchBrowser();
 				browserLaunched = true;
