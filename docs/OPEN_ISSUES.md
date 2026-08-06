@@ -1,6 +1,6 @@
 # Open Issues
 
-**Snapshot:** 2026-08-03. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-08-06. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
@@ -12,6 +12,64 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
 - **Deferred**: labeled `deferred-post-launch`. Valid but parked until ≥20 paying customers.
+
+## Resolved this session (2026-08-06)
+
+Findings fixed by the 2026-08-05 sweep (branch `sweep-2026-08-05`); see plan
+`docs/plans/2026-08-05-sweep-continuation.md`. One line per fix + the commit SHA. Full per-commit
+detail is in the plan's STATUS block.
+
+| Finding (source) | Fix | Commit |
+|------------------|-----|--------|
+| Stats `active_providers` reads retired ICP `provider_check_ins` (Wave-A F1 / real-deploy F5) | Now reads LIVE `provider_agent_status` (online agents) | `3b372ae9` |
+| Stats `total_offerings` disagrees with marketplace list | Aligned to the same marketplace pool rule | `3b372ae9` |
+| api `SyncService::new` `.expect()` panics on I/O | `SyncService::new` → `Result`, propagated | `3b372ae9` |
+| Doctor had no example-offering guard | New `DOCTOR_EXAMPLE_OFFERINGS_PRESENT` guard (FAIL-in-prod) | `3b372ae9` |
+| Zombie demo UI code after migration 053 (Wave-A F2) | Removed `showDemoOfferings`/`?demo=`/`Demo-only` badges | `c32177f3` |
+| Rent dialog OS selector defaults to placeholder (Wave-A F3) | Defaults to offering's first OS | `c32177f3` |
+| Trending surfaces offline/unrentable offerings (Wave-A F4) | Trending strip excludes known-offline offerings | `c32177f3` |
+| "Welcome back" shown to first-time users (Wave-A F6) | First-visit dashboard greeting | `c32177f3` |
+| dc-agent docker image-pull unbounded (could wedge contract lock) | 600s overall timeout | `e64b37a8` |
+| dc-agent gateway iptables silent errors (3 sites) | Surfaced via `match` + `warn!` | `e64b37a8` |
+| Real-deploy harness marketplace flow passes on dishonest catalog (all-demo / zero-rentable) | Marketplace-honesty assertions (FAIL-on-prod) | `f6c37458` |
+| E2E README stale (wrong ports, wrong smoke count) | Rewrote 318→~95 lines, correct ports | `eb3f8ba5` |
+| E2E category `--grep @rental` returns 0 (tags doc-only) | Fixed FLOWS category-run section | `eb3f8ba5` |
+| #444 `contracts.rs` 2244L (mechanical split candidate) | Split 2244→1745 + new `contract_telemetry.rs` (527L) | `352f2355`,`a1f1a2f0` |
+
+## Operator / deploy blockers (need human)
+
+NOT autonomously fixable — require a deploy or operator action. Each lists concrete evidence, the
+required action, and the autonomous guard that now catches a regression. Drift from these is what
+the sweep's new guards surfaced.
+
+- **OP-1 (CRITICAL) — Prod marketplace serves 10 synthetic demo offerings.** Evidence:
+  `GET https://api.decent-cloud.org/api/v1/offerings?limit=20` returns 10 rows all `is_example:true`,
+  all under fake pubkey `6578616d706c652d...` (ASCII `example-offering-provider-identifier`). Cause:
+  migration `053_drop_example_provider_seed.sql` (PR #456) never applied to the prod DB (the migration
+  is an unconditional `DELETE`; if it ran, the rows would be gone) — i.e. prod was never redeployed at
+  ≥ these commits. Violates the honest-catalog goal in `docs/PRODUCT-DIRECTION.md`. (This supersedes
+  the 2026-08-03 "Deferred — UX" F2 note, which recorded demos as dropped: the migration landed in
+  code, but the prod DB never received it.) **ACTION:** redeploy prod at ≥ these commits; confirm
+  sqlx migrations apply at boot; verify
+  `SELECT count(*) FROM provider_offerings WHERE pubkey='\x6578616d706c652d...'` = 0. **Autonomous
+  guard now in place:** doctor check `DOCTOR_EXAMPLE_OFFERINGS_PRESENT` FAILS-in-prod (`3b372ae9`) +
+  harness marketplace-honesty FAIL-on-prod (`f6c37458`).
+- **OP-2 — Stage (dev-api) is stale.** Evidence: `GET /api/v1/auth/capabilities` → 404 on stage (prod
+  200); stage offerings priced in the retired ICP currency (`currency:ICP`,
+  `payment_methods:ICP,ckBTC`) while prod is USD/Stripe. **ACTION:** redeploy stage from the current
+  image (`python3 cf/deploy.py deploy stage` → operator `git push` the k8s repo).
+- **OP-3 — PROD Chatwoot support widget broken on every page.** Evidence: widget URL
+  `https://support.decent-cloud.org/widget?website_token=yDZeiDhpXW5UEhwPVFmgJAkg` → HTTP 404; the host
+  sends `X-Frame-Options:SAMEORIGIN` which blocks the iframe (`ERR_BLOCKED_BY_RESPONSE`, console error
+  on all prod routes; dev-web is clean). **ACTION:** operator re-create/restore the Chatwoot web
+  widget token, set the allowed origin / disable `X-Frame-Options` for decent-cloud.org, and update
+  the configured website token.
+- **OP-4 — `stage-*` hostnames do not resolve (k8s dc-stage cutover incomplete).** Evidence:
+  `stage-api.decent-cloud.org` + `stage.decent-cloud.org` DNS-fail; `dev-*` is the de-facto stage.
+  **ACTION:** complete `docs/MIGRATION-CUTOVER.md` Step D (public tunnel/DNS cutover) OR update the
+  docs to state `dev-*` is the only live stage. This overlaps the existing k8s staging→dc-stage
+  cutover blocker tracked below (see "Infrastructure — staging → k8s … consolidation"); it is the
+  public-DNS slice of that same cutover, not a separate plan.
 
 ## Future work
 
@@ -172,6 +230,11 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 > offerings dropped via migration `053` (`c9dfa9d8`) — the marketplace is now honestly empty pending
 > real Hetzner offerings. **F6 (top-providers leaderboard) stays deferred** — premature until real
 > offerings exist; see the "Real-deployment smoke audit (2026-08-03)" subsection below.
+>
+> ⚠️ **2026-08-06 reconciliation:** the migration-053 code drop landed, but the audit found the PROD
+> DB still serves 10 demo offerings — migration `053` was never applied to prod (prod never
+> redeployed). The code/migration is correct; the live prod DB is not. Tracked as **OP-1** (operator
+> blocker) above.
 
 > **#442 (RESOLVED 2026-07-25, `c14cb939`):** create-offering price auto-suggest shipped —
 > pre-fill `#monthly-price` with `cost × 1.15` (15% markup, the product decision from comment
