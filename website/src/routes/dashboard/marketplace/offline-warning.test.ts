@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
 type OfferingForRentButton = {
-	is_example?: boolean;
 	provider_online?: boolean | null;
 	offering_source?: string;
 	external_checkout_url?: string;
@@ -14,9 +13,6 @@ function getRentButtonState(offering: OfferingForRentButton): {
 } {
 	if (offering.offering_source === 'seeded' && offering.external_checkout_url) {
 		return { disabled: false, label: 'Visit Provider', title: '' };
-	}
-	if (offering.is_example) {
-		return { disabled: true, label: 'Demo only', title: 'Demo only — not available for rent' };
 	}
 	if (offering.provider_online === false) {
 		return {
@@ -59,22 +55,6 @@ describe('rent button: offline state', () => {
 	});
 });
 
-describe('rent button: demo state', () => {
-	it('shows disabled "Demo only" button for example offerings (takes precedence)', () => {
-		const offering: OfferingForRentButton = { is_example: true, provider_online: true };
-		const state = getRentButtonState(offering);
-		expect(state.disabled).toBe(true);
-		expect(state.label).toBe('Demo only');
-	});
-
-	it('shows disabled "Demo only" even when offline', () => {
-		const offering: OfferingForRentButton = { is_example: true, provider_online: false };
-		const state = getRentButtonState(offering);
-		expect(state.disabled).toBe(true);
-		expect(state.label).toBe('Demo only');
-	});
-});
-
 describe('rent button: external checkout', () => {
 	it('shows "Visit Provider" link for seeded offerings with external URL', () => {
 		const offering: OfferingForRentButton = {
@@ -98,7 +78,7 @@ describe('rent button: external checkout', () => {
 });
 
 describe('rent button: normal state', () => {
-	it('shows enabled "Rent" button for online non-demo offering', () => {
+	it('shows enabled "Rent" button for online offering', () => {
 		const offering: OfferingForRentButton = { provider_online: true };
 		const state = getRentButtonState(offering);
 		expect(state.disabled).toBe(false);

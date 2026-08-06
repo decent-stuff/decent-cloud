@@ -8,7 +8,6 @@
 		isReseller?: boolean;
 		resellerName?: string;
 		resellerCommission?: number;
-		isDemo?: boolean;
 		isSubscription?: boolean;
 		subscriptionIntervalDays?: number;
 		hasRecipe?: boolean;
@@ -21,7 +20,6 @@
 		isReseller = false,
 		resellerName,
 		resellerCommission,
-		isDemo = false,
 		isSubscription = false,
 		subscriptionIntervalDays,
 		hasRecipe = false
@@ -45,9 +43,6 @@
 	function getPrimaryStatus(): { label: string; color: string } | null {
 		if (providerOnline === false) {
 			return { label: "Offline", color: "bg-danger/20 text-danger border-danger/30" };
-		}
-		if (isDemo) {
-			return { label: "Demo", color: "bg-warning/20 text-warning border-warning/30" };
 		}
 		if (isReseller && resellerName) {
 			return { label: `Via ${resellerName}`, color: "bg-primary-500/20 text-primary-400 border-primary-500/30" };

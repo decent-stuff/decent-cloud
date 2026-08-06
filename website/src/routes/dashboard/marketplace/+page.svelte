@@ -56,7 +56,6 @@
 	let selectedVirt = $state<string>("");
 	let unmeteredOnly = $state(false);
 	let minTrust = $state<number | null>(null);
-	let showDemoOfferings = $state(false);
 	let showOfflineOfferings = $state(false);
 	let recipesOnly = $state(false);
 	let inStockOnly = $state(true);
@@ -238,20 +237,13 @@
 	});
 
 	// Offerings that pass every user filter but are hidden by the default
-	// visibility settings (demo/offline). Powers the empty-state reveal.
+	// offline-hiding behavior. Powers the empty-state reveal.
 	let defaultHiddenCount = $derived(
-		userFiltered.filter(
-			(o) =>
-				(!showDemoOfferings && o.is_example) ||
-				(!showOfflineOfferings && !o.provider_online),
-		).length,
+		userFiltered.filter((o) => !showOfflineOfferings && !o.provider_online).length,
 	);
 
 	let filteredOfferings = $derived.by(() => {
 		let result = [...userFiltered];
-		if (!showDemoOfferings) {
-			result = result.filter((o) => !o.is_example);
-		}
 		if (!showOfflineOfferings) {
 			result = result.filter((o) => o.provider_online);
 		}
@@ -281,6 +273,20 @@
 			.map(id => offerings.find(o => o.id === id))
 			.filter((o): o is Offering => o !== undefined)
 			.slice(0, 5)
+	);
+
+	// The trending endpoint doesn't return provider_online, so we cross-
+	// reference the main offerings list to drop offerings we know are offline —
+	// a click on an offline trending card lands on a detail page whose rent
+	// button is disabled ("Provider Offline"), a dead end. Items absent from
+	// the main list have unknown status and are kept (matching the table's
+	// "unknown = include" default). The strip only renders with no active
+	// filters, so the main list is the broad default set at that point.
+	let offlineOfferingIds = $derived(
+		new Set(offerings.filter((o) => o.provider_online === false).map((o) => o.id))
+	);
+	let visibleTrendingOfferings = $derived(
+		trendingOfferings.filter((t) => !offlineOfferingIds.has(t.offering_id))
 	);
 
 	authStore.isAuthenticated.subscribe((value) => {
@@ -377,7 +383,6 @@
 		selectedVirt = p.get('virt') ?? '';
 		unmeteredOnly = p.get('unmetered') === '1';
 		minTrust = p.has('minTrust') ? Number(p.get('minTrust')) : null;
-		showDemoOfferings = p.get('demo') === '1';
 		showOfflineOfferings = p.get('offline') === '1';
 		recipesOnly = p.get('recipes') === '1';
 		inStockOnly = p.get('inStock') !== '0';
@@ -403,7 +408,6 @@
 		if (selectedVirt) params.set('virt', selectedVirt);
 		if (unmeteredOnly) params.set('unmetered', '1');
 		if (minTrust != null) params.set('minTrust', String(minTrust));
-		if (showDemoOfferings) params.set('demo', '1');
 		if (showOfflineOfferings) params.set('offline', '1');
 		if (recipesOnly) params.set('recipes', '1');
 		if (!inStockOnly) params.set('inStock', '0');
@@ -505,7 +509,6 @@
 		selectedVirt = "";
 		unmeteredOnly = false;
 		minTrust = null;
-		showDemoOfferings = false;
 		showOfflineOfferings = false;
 		recipesOnly = false;
 		inStockOnly = true;
@@ -700,7 +703,7 @@
 		selectedTypes.size > 0 || searchQuery !== '' || selectedRegion !== '' || selectedCountry !== '' ||
 		selectedCity !== '' || minPrice !== null || maxPrice !== null || minCores !== null ||
 		minMemoryGb !== null || minSsdGb !== null || selectedVirt !== '' || unmeteredOnly ||
-		minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly || !inStockOnly ||
+		minTrust !== null || showOfflineOfferings || recipesOnly || !inStockOnly ||
 		quickFilter !== null || selectedPreset !== null
 	);
 
@@ -748,9 +751,6 @@
 		}
 		if (minTrust !== null) {
 			chips.push({ label: `Trust ≥ ${minTrust}`, remove: () => { minTrust = null; syncFiltersToUrl(); } });
-		}
-		if (showDemoOfferings) {
-			chips.push({ label: "Showing demos", remove: () => { showDemoOfferings = false; syncFiltersToUrl(); } });
 		}
 		if (showOfflineOfferings) {
 			chips.push({ label: "Showing offline", remove: () => { showOfflineOfferings = false; syncFiltersToUrl(); } });
@@ -1044,23 +1044,8 @@
 							</label>
 						</div>
 
-						<!-- Show Demo Offerings Filter -->
-						<div>
-							<label class="flex items-center gap-2 cursor-pointer group">
-								<input
-									type="checkbox"
-									bind:checked={showDemoOfferings}
-									onchange={() => syncFiltersToUrl()}
-									class="border-neutral-700 bg-base text-primary-500 focus:ring-primary-500"
-								/>
-								<span class="text-sm text-neutral-400 group-hover:text-white"
-									>Show demo offerings</span
-								>
-							</label>
-						</div>
-
-						<!-- Show Offline Offerings Filter -->
-						<div>
+					<!-- Show Offline Offerings Filter -->
+					<div>
 							<label class="flex items-center gap-2 cursor-pointer group">
 								<input
 									type="checkbox"
@@ -1282,14 +1267,14 @@
 				</div>
 			{/if}
 
-			{#if trendingOfferings.length >= 2 && !hasActiveFilters}
-				<div class="mb-6">
-					<div class="flex items-center justify-between mb-2">
-						<div class="text-xs text-neutral-500 uppercase tracking-wide">Trending this week</div>
-						<a href="/dashboard/marketplace" class="text-xs text-primary-400 hover:text-primary-300 transition-colors">See all</a>
-					</div>
-					<div class="flex gap-3 overflow-x-auto pb-1">
-						{#each trendingOfferings as t}
+		{#if visibleTrendingOfferings.length >= 2 && !hasActiveFilters}
+			<div class="mb-6">
+				<div class="flex items-center justify-between mb-2">
+					<div class="text-xs text-neutral-500 uppercase tracking-wide">Trending this week</div>
+					<a href="/dashboard/marketplace" class="text-xs text-primary-400 hover:text-primary-300 transition-colors">See all</a>
+				</div>
+				<div class="flex gap-3 overflow-x-auto pb-1">
+					{#each visibleTrendingOfferings as t}
 							<a
 								href="/dashboard/marketplace/{t.offering_id}"
 								class="flex-none w-44 p-3 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 transition-colors"
@@ -1347,22 +1332,22 @@
 				{:else}
 					<p class="text-neutral-500 mb-2">No offerings found</p>
 				{/if}
-				{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || showDemoOfferings || showOfflineOfferings || recipesOnly || searchQuery}
-					<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
-					<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
-						Clear all filters
-					</button>
-				{:else if defaultHiddenCount > 0}
-					<p class="text-neutral-600 text-sm mb-4">
-						{defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering is' : 'offerings are'} hidden because no providers are currently online. Show demo/offline offerings?
-					</p>
-					<button
-						onclick={() => { showDemoOfferings = true; showOfflineOfferings = true; syncFiltersToUrl(); }}
-						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
-					>
-						Show {defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering' : 'offerings'}
-					</button>
-				{/if}
+			{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || showOfflineOfferings || recipesOnly || searchQuery}
+				<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
+				<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
+					Clear all filters
+				</button>
+			{:else if defaultHiddenCount > 0}
+				<p class="text-neutral-600 text-sm mb-4">
+					{defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering is' : 'offerings are'} hidden because no providers are currently online. Show offline offerings?
+				</p>
+				<button
+					onclick={() => { showOfflineOfferings = true; syncFiltersToUrl(); }}
+					class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
+				>
+					Show {defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering' : 'offerings'}
+				</button>
+			{/if}
 				</div>
 			{:else}
 				<!-- Desktop Table -->
@@ -1408,27 +1393,26 @@
 												hasCriticalFlags={offering.has_critical_flags}
 												isReseller={hasReseller(offering)}
 												resellerName={offering.reseller_name}
-												resellerCommission={offering.reseller_commission_percent}
-												isDemo={offering.is_example}
-												isSubscription={offering.is_subscription}
-												subscriptionIntervalDays={offering.subscription_interval_days}
-												hasRecipe={!!offering.post_provision_script}
-											/>
-										</div>
-										<a
-											href="/dashboard/providers/{offering.owner_username ||
-												offering.pubkey}"
-											onclick={(e) => e.stopPropagation()}
-											class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username ||
-											offering.provider_name ? '' : 'font-mono'}">{providerDisplayName(offering)}</a
-										>
-									</td>
-									<td class="py-3 pr-4">
-										<span class="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300"
-											><Icon name={getTypeIcon(offering.product_type)} size={20} />
-											{offering.product_type}</span
-										>
-									</td>
+											resellerCommission={offering.reseller_commission_percent}
+											isSubscription={offering.is_subscription}
+											subscriptionIntervalDays={offering.subscription_interval_days}
+											hasRecipe={!!offering.post_provision_script}
+										/>
+									</div>
+									<a
+										href="/dashboard/providers/{offering.owner_username ||
+											offering.pubkey}"
+										onclick={(e) => e.stopPropagation()}
+										class="text-xs text-neutral-500 hover:text-primary-400 {offering.owner_username ||
+										offering.provider_name ? '' : 'font-mono'}">{providerDisplayName(offering)}</a
+									>
+								</td>
+								<td class="py-3 pr-4">
+									<span class="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-300"
+										><Icon name={getTypeIcon(offering.product_type)} size={20} />
+										{offering.product_type}</span
+									>
+								</td>
 									<td class="py-3 pr-4 text-neutral-300"
 										>{formatSpecs(offering)}</td
 									>
@@ -1447,18 +1431,16 @@
 											<span class="text-xs text-neutral-600">—</span>
 										{/if}
 									</td>
-									<td class="py-3">
-										{#if hasReseller(offering)}
-											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-										{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-											<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
-										{:else if offering.is_example}
-											<Button variant="sm" disabled class="h-7 min-h-7 inline-flex items-center justify-center leading-none whitespace-nowrap bg-neutral-700 text-neutral-500 cursor-not-allowed">Demo only</Button>
-										{:else}
-											<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-										{/if}
-									</td>
-								<td class="py-3 text-right">
+								<td class="py-3">
+									{#if hasReseller(offering)}
+										<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
+									{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
+										<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
+									{:else}
+										<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
+									{/if}
+								</td>
+							<td class="py-3 text-right">
 									{#if offering.id !== undefined}
 										<Button variant="sm" onclick={(e) => toggleBookmark(e, offering.id!)} title={savedIds.has(offering.id) ? "Remove from saved" : "Save for later"} class="{buildRowActionButtonClass('save', savedIds.has(offering.id))} gap-1">
 												<Icon name="bookmark" size={14} />
@@ -1717,12 +1699,11 @@
 											hasCriticalFlags={offering.has_critical_flags}
 											isReseller={hasReseller(offering)}
 											resellerName={offering.reseller_name}
-											resellerCommission={offering.reseller_commission_percent}
-											isDemo={offering.is_example}
-											isSubscription={offering.is_subscription}
-											subscriptionIntervalDays={offering.subscription_interval_days}
-											hasRecipe={!!offering.post_provision_script}
-										/>
+										resellerCommission={offering.reseller_commission_percent}
+										isSubscription={offering.is_subscription}
+										subscriptionIntervalDays={offering.subscription_interval_days}
+										hasRecipe={!!offering.post_provision_script}
+									/>
 									</div>
 									<div class="flex items-center gap-1 text-xs text-neutral-400">
 										<Icon name={getTypeIcon(offering.product_type)} size={20} />
@@ -1760,15 +1741,13 @@
 									{formatLocation(offering)}
 								</div>
 								</div>
-								{#if hasReseller(offering)}
-									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-								{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-									<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
-								{:else if offering.is_example}
-									<Button variant="sm" disabled class="h-7 min-h-7 inline-flex items-center justify-center leading-none bg-neutral-700 text-neutral-500 cursor-not-allowed">Demo only</Button>
-								{:else}
-									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-								{/if}
+							{#if hasReseller(offering)}
+								<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
+							{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
+								<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
+							{:else}
+								<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
+							{/if}
 							</div>
 							{#if offering.id !== undefined}
 								{@const inCompare = compareIds.has(offering.id)}

@@ -469,25 +469,23 @@
 						<td class="px-4 py-4 text-neutral-500 font-medium text-xs uppercase tracking-wider">Rent</td>
 						{#each offerings as offering}
 							<td class="px-4 py-4">
-								{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
-									<a
-										href={offering.external_checkout_url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="inline-flex items-center gap-1 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium transition-colors"
-									>
-										Visit Provider <Icon name="external" size={14} class="text-white" />
-									</a>
-								{:else if offering.is_example}
-									<span class="inline-flex px-4 py-2 bg-neutral-700 text-neutral-500 text-xs font-medium cursor-not-allowed">Demo only</span>
-								{:else}
-									<button
-										onclick={() => handleRentClick(offering)}
-										class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white text-xs font-semibold hover:brightness-110 transition-all"
-									>
-										Rent {offering.offer_name}
-									</button>
-								{/if}
+							{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
+								<a
+									href={offering.external_checkout_url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-flex items-center gap-1 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-xs font-medium transition-colors"
+								>
+									Visit Provider <Icon name="external" size={14} class="text-white" />
+								</a>
+							{:else}
+								<button
+									onclick={() => handleRentClick(offering)}
+									class="px-4 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white text-xs font-semibold hover:brightness-110 transition-all"
+								>
+									Rent {offering.offer_name}
+								</button>
+							{/if}
 							</td>
 						{/each}
 					</tr>

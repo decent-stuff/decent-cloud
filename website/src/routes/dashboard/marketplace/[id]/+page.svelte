@@ -501,10 +501,10 @@
 							<Icon name="bookmark" size={18} />
 						</button>
 					{/if}
-				<button
-					onclick={handleRentClick}
-					disabled={offering.is_example || offering.provider_online === false}
-					class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+			<button
+				onclick={handleRentClick}
+				disabled={offering.provider_online === false}
+				class="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : (needsEmailVerification ? 'Email verification is required to rent. Verify your email to continue.' : '')}
 				>
 					{#if offering.provider_online === false}
@@ -775,10 +775,10 @@
 					Visit Provider <Icon name="external" size={16} class="text-white" />
 				</a>
 			{:else}
-				<button
-					onclick={handleRentClick}
-					disabled={offering.is_example || offering.provider_online === false}
-					class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+			<button
+				onclick={handleRentClick}
+				disabled={offering.provider_online === false}
+				class="px-8 py-3 bg-gradient-to-r from-primary-500 to-primary-600 font-semibold hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
 					title={offering.provider_online === false ? 'This provider is currently offline. Your request will be queued until they return.' : (needsEmailVerification ? 'Email verification is required to rent. Verify your email to continue.' : '')}
 				>
 					{#if offering.provider_online === false}

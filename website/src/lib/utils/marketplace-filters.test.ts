@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterInStock, isOfferingPaused, filterDemoOfferings, filterOfflineOfferings } from './marketplace-filters';;
+import { filterInStock, isOfferingPaused, filterOfflineOfferings } from './marketplace-filters';
 
 // ---------- isOfferingPaused ----------
 describe('isOfferingPaused', () => {
@@ -146,7 +146,6 @@ describe('marketplace filter URL encoding', () => {
 		params.set('virt', 'kvm');
 		params.set('unmetered', '1');
 		params.set('minTrust', '80');
-		params.set('demo', '1');
 		params.set('offline', '1');
 		params.set('recipes', '1');
 		params.set('sort', 'trust');
@@ -170,7 +169,6 @@ describe('marketplace filter URL encoding', () => {
 		expect(p.get('virt') ?? '').toBe('kvm');
 		expect(p.get('unmetered') === '1').toBe(true);
 		expect(p.has('minTrust') ? Number(p.get('minTrust')) : null).toBe(80);
-		expect(p.get('demo') === '1').toBe(true);
 		expect(p.get('offline') === '1').toBe(true);
 		expect(p.get('recipes') === '1').toBe(true);
 		expect((p.get('sort') as 'price' | 'trust' | 'newest') ?? 'price').toBe('trust');
@@ -211,32 +209,6 @@ describe('marketplace first-time hint: visit counter', () => {
 		const stored = null;
 		const parsed = parseInt(stored ?? '0', 10);
 		expect(parsed).toBe(0);
-	});
-});
-
-// ---------- filterDemoOfferings ----------
-describe('filterDemoOfferings', () => {
-	const demoOffering = { is_example: true };
-	const realOffering = { is_example: false };
-
-	it('excludes demo offerings when includeDemo is false (default behavior)', () => {
-		const result = filterDemoOfferings([demoOffering, realOffering], false);
-		expect(result).toEqual([realOffering]);
-	});
-
-	it('includes all offerings when includeDemo is true', () => {
-		const result = filterDemoOfferings([demoOffering, realOffering], true);
-		expect(result).toEqual([demoOffering, realOffering]);
-	});
-
-	it('returns empty array when all offerings are demo and includeDemo is false', () => {
-		const result = filterDemoOfferings([demoOffering, { is_example: true }], false);
-		expect(result).toEqual([]);
-	});
-
-	it('returns empty array for empty input', () => {
-		expect(filterDemoOfferings([], false)).toEqual([]);
-		expect(filterDemoOfferings([], true)).toEqual([]);
 	});
 });
 

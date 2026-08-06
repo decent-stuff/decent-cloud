@@ -551,25 +551,23 @@
 									<div class="font-semibold text-white text-sm">{formatPrice(offering)}</div>
 								</div>
 
-								{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
-									<a
-										href={offering.external_checkout_url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-xs font-medium transition-colors"
-									>
-										Visit <Icon name="external" size={12} class="text-white" />
-									</a>
-								{:else if offering.is_example}
-									<span class="px-3 py-1.5 bg-neutral-700 text-neutral-500 text-xs font-medium cursor-not-allowed">Demo</span>
-								{:else}
-									<button
-										onclick={(e) => handleRentClick(e, offering)}
-										class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-xs font-medium transition-colors"
-									>
-										Rent
-									</button>
-								{/if}
+							{#if offering.offering_source === 'seeded' && offering.external_checkout_url}
+								<a
+									href={offering.external_checkout_url}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-xs font-medium transition-colors"
+								>
+									Visit <Icon name="external" size={12} class="text-white" />
+								</a>
+							{:else}
+								<button
+									onclick={(e) => handleRentClick(e, offering)}
+									class="px-3 py-1.5 bg-primary-600 hover:bg-primary-500 text-xs font-medium transition-colors"
+								>
+									Rent
+								</button>
+							{/if}
 							</div>
 						</div>
 					{/each}

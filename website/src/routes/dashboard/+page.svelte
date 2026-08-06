@@ -50,6 +50,12 @@
 	// Platform stats collapsible
 	let platformStatsExpanded = $state(false);
 
+	// First-visit greeting: brand-new users see "Welcome to Decent Cloud" once,
+	// returning users see "Welcome back{, name?}". localStorage-only — no API
+	// call. Defaults to true; corrected in onMount before the greeting renders
+	// (the greeting is gated behind currentIdentity, which is null on SSR).
+	let isFirstDashboardVisit = $state(true);
+
 	// Derived role for personalized stats
 	let userRole = $derived(detectUserRole(activity, myOfferings));
 
@@ -184,6 +190,13 @@
 	onMount(() => {
 		if (!browser) return;
 
+		// First-visit greeting flag (localStorage-only).
+		if (localStorage.getItem('dc_dashboard_seen') === '1') {
+			isFirstDashboardVisit = false;
+		} else {
+			localStorage.setItem('dc_dashboard_seen', '1');
+		}
+
 		const unsubscribeData = dashboardStore.data.subscribe((value) => {
 			dashboardData = value;
 		});
@@ -227,7 +240,9 @@
 				</div>
 				<div class="flex-1 min-w-0">
 					<h2 class="text-lg font-semibold text-white">
-						{#if currentIdentity.displayName}
+						{#if isFirstDashboardVisit}
+							Welcome to Decent Cloud
+						{:else if currentIdentity.displayName}
 							Welcome back, {currentIdentity.displayName}
 						{:else}
 							Welcome back

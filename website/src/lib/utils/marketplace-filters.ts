@@ -7,24 +7,8 @@ export interface OfferingStockable {
 	stock_status: string;
 }
 
-export interface OfferingExample {
-	is_example: boolean;
-}
-
 export interface OfferingOnline {
 	provider_online: boolean | undefined;
-}
-
-/**
- * Filters offerings by demo status.
- * When includeDemo is false, excludes offerings where is_example is true.
- */
-export function filterDemoOfferings<T extends OfferingExample>(
-	offerings: T[],
-	includeDemo: boolean
-): T[] {
-	if (includeDemo) return offerings;
-	return offerings.filter((o) => !o.is_example);
 }
 
 /**

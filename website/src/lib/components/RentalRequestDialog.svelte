@@ -128,6 +128,14 @@
 	);
 	let hasOperatingSystems = $derived(availableOperatingSystems.length > 0);
 
+	// Default the OS select to the offering's first OS (e.g. Ubuntu) so most
+	// renters don't spend a decision on the placeholder. Re-runs whenever the
+	// offering changes, resetting the pick for a fresh rent. The placeholder
+	// option remains as a manual fallback.
+	$effect(() => {
+		selectedOperatingSystem = availableOperatingSystems[0] ?? "";
+	});
+
 	// Validate SSH public key format
 	function validateSshKey(key: string): string | null {
 		if (!key.trim()) {
