@@ -48,8 +48,8 @@ class HetznerScraper(BaseScraper):
         """Fetch offerings from Hetzner Cloud API.
 
         Requires the ``HETZNER_API_TOKEN_DEV`` (read-write) environment variable.
-        Catalog scraping is itself read-only, but the bare ``HETZNER_API_TOKEN``
-        is no longer injected into agent sessions, so ``_DEV`` is required — see
+        Catalog scraping is itself read-only, but no other Hetzner token is
+        injected into agent sessions, so ``_DEV`` is required — see
         ``repo/AGENTS.md`` "Hetzner tokens".
 
         Raises:

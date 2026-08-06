@@ -19,8 +19,8 @@
 //
 // Usage:
 //   HETZNER_API_TOKEN_DEV=... node poc/hetzner-cloud-resell-poc.mjs
-// (read-write; required to create+delete test VMs. The bare HETZNER_API_TOKEN is
-//  read-only and removed from the agent env — see repo/AGENTS.md "Hetzner tokens".)
+// (read-write; required to create+delete test VMs. Read-only tokens 403 on
+//  delete and are not injected into the agent env — see repo/AGENTS.md "Hetzner tokens".)
 //
 // Reusable for the sanctioned stage/prod seeding run: point API_URL + DB_URL at
 // the target env and (for prod) replace `generateMnemonic` with
@@ -39,11 +39,10 @@ import {
 const API_URL = process.env.API_URL || 'http://localhost:59011';
 const WEB_URL = process.env.WEB_URL || 'http://localhost:59010';
 const DB_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
-// Agents MUST use the WRITE-capable dev token (HETZNER_API_TOKEN_DEV): the bare
-// HETZNER_API_TOKEN is READ-ONLY on the dev Hetzner project (GET works; POST/DELETE
-// → HTTP 403) and is no longer injected into agent sessions, so it is NOT a
-// fallback here — the script fails fast if _DEV is missing. See repo/AGENTS.md
-// "Hetzner tokens".
+// Hard-require the WRITE-capable dev token (HETZNER_API_TOKEN_DEV): read-only
+// tokens 403 on create/delete and are not injected into agent sessions, so there
+// is no fallback here — the script fails fast if _DEV is missing. See
+// repo/AGENTS.md "Hetzner tokens".
 const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN_DEV;
 // When set (any value), drive a headless browser to load the marketplace detail
 // page and assert the Rent button is ENABLED (text "Rent this offering", not
