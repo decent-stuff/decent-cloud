@@ -479,8 +479,19 @@ secret/config gap across both envs is **exactly the 3 TextBee SMS keys**
 
 **Forward milestone:** `docs/plans/2026-08-03-hetzner-first-offerings.md` scopes the
 operator reselling Hetzner as the platform's first real provider (ends the
-honest-empty-marketplace period). Status: *Proposed — needs operator's Hetzner creds +
-provider identity to execute.*
+honest-empty-marketplace period). Status: **PROVEN + UNBLOCKED (2026-08-06).** The
+data path was proven end-to-end by a no-spend PoC (`poc/hetzner-cloud-resell-poc.mjs`,
+commit `4c6eb3b7`): fresh identity → provider onboarding → live-validated Hetzner
+cloud_account → real cloud-resell offering created (cx23/nbg1/ubuntu-24.04) →
+**marketplace VISIBLE with Rent button ENABLED** (empirically confirms the `a2a96862`
+cloud-resell visibility fix). All creds (`HETZNER_API_TOKEN{_DEV/_STAGE/_PROD}`,
+`DC_PROD_RESELLER_PUBKEY/_SEED`) are already in the age-SOPS store — see
+`docs/CREDENTIALS.md`. A latent bug was also fixed: the retired `cx22` Hetzner server
+type default → `cx23`. **Remaining steps (need operator opt-in):** (1) real-VM
+provisioning verification (cheapest cx23, ~€0.0007 for 5 min, force-delete) — gated
+behind `DC_E2E_INCLUDE_PROVISION` or api-cli rent→provision→SSH→cancel; (2) seed the
+offering to STAGE then PROD (data only — reuse the PoC pointed at the reseller seed,
+ship the api image with the cx23 fix via GitOps). Full runbook in the PoC commit header.
 
 ### 2026-08-02 session (WAVE-0: prior-session WIP + stale-issue reconciliation)
 
