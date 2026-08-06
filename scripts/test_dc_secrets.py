@@ -29,13 +29,19 @@ MULTILINE = "line1\nline2\nline3"  # no trailing newline (get normalizes trailin
 
 # ─── helpers ───────────────────────────────────────────────────────────────────
 def _base_env(dc_dir: Path) -> dict:
-    """Inherit PATH/HOME (for sops/age/uv) but scrub ambient key sources."""
+    """Inherit PATH/HOME (for sops/age/uv) but scrub ambient key sources.
+
+    DC_SOPS_PGP_RECIPIENT is set empty so existing tests stay HERMETIC and
+    age-only — they neither depend on a gpg key being present nor invoke gpg.
+    The dedicated pgp-recipient test opts back in with a throwaway fingerprint.
+    """
     env = {
         k: v
         for k, v in os.environ.items()
-        if k not in ("SOPS_AGE_KEY", "SOPS_AGE_KEY_FILE", "DC_SECRETS_DIR")
+        if k not in ("SOPS_AGE_KEY", "SOPS_AGE_KEY_FILE", "DC_SECRETS_DIR", "DC_SOPS_PGP_RECIPIENT")
     }
     env["DC_SECRETS_DIR"] = str(dc_dir)
+    env["DC_SOPS_PGP_RECIPIENT"] = ""
     return env
 
 
@@ -64,6 +70,7 @@ def _minimal_env(dc_dir: Path, secrets: dict[str, str] | None = None) -> dict:
         or k.startswith("UV_")  # uv cache dir etc.
     }
     env["DC_SECRETS_DIR"] = str(dc_dir)
+    env["DC_SOPS_PGP_RECIPIENT"] = ""  # hermetic: discovery never needs a gpg key
     if secrets:
         env.update(secrets)
     return env
@@ -145,6 +152,36 @@ def test_init_idempotent(tmp_path):
     assert r.returncode == 0, r.stderr
     # Second init adopts the now-existing repo identity; key unchanged.
     assert (store / ".age-identity").read_text() == before
+
+
+# ─── .sops.yaml: dual age + operator-gpg recipients ────────────────────────────
+def test_sops_config_has_age_and_pgp_recipients(tmp_path):
+    """The generated .sops.yaml creation rule carries BOTH an age: recipient (the
+    agent path) and a pgp: recipient (the operator path), so each can decrypt a
+    file independently. The pgp value is sourced from DC_SOPS_PGP_RECIPIENT; here
+    we set a throwaway fingerprint so the assertion never couples to the real one.
+    """
+    store = tmp_path / "store"
+    fake_fp = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+    r = run_dc(["init"], dc_dir=store, env_extra={"DC_SOPS_PGP_RECIPIENT": fake_fp})
+    assert r.returncode == 0, r.stderr
+    cfg = (store / ".sops.yaml").read_text()
+    assert "creation_rules:" in cfg
+    assert re.search(r"(?m)^\s+age:\s+\S+", cfg), "age recipient line missing"
+    assert re.search(r"(?m)^\s+pgp:\s+\S+", cfg), "pgp recipient line missing"
+    # pgp recipient equals the env override (NOT coupled to the real fingerprint).
+    assert f"pgp: {fake_fp}" in cfg
+
+
+def test_sops_config_pgp_recipient_opt_out(tmp_path):
+    """Setting DC_SOPS_PGP_RECIPIENT="" emits an age-ONLY rule (no pgp line) — the
+    opt-out path used by hermetic tests / key-less stores."""
+    store = tmp_path / "store"
+    r = run_dc(["init"], dc_dir=store, env_extra={"DC_SOPS_PGP_RECIPIENT": ""})
+    assert r.returncode == 0, r.stderr
+    cfg = (store / ".sops.yaml").read_text()
+    assert re.search(r"(?m)^\s+age:\s+\S+", cfg)
+    assert "pgp:" not in cfg
 
 
 # ─── set / get round-trip ─────────────────────────────────────────────────────

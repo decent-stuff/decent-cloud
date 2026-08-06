@@ -9,6 +9,9 @@ export DC_SECRETS_DIR="$TEST_DIR"
 # `init` generates a fresh bootstrap key (and the portable-key tests below control
 # their own key sources explicitly).
 unset SOPS_AGE_KEY SOPS_AGE_KEY_FILE
+# Hermetic: existing checks use age-only stores (no dependency on a gpg key). The
+# dedicated pgp-recipient check below opts back in with a throwaway fingerprint.
+export DC_SOPS_PGP_RECIPIENT=
 DC_SECRETS="$SCRIPT_DIR/dc-secrets"
 
 pass=0; fail=0
@@ -43,6 +46,21 @@ assert_eq "creates hires dir" "true" "$([[ -d "$TEST_DIR/hires" ]] && echo true 
 # Idempotent
 "$DC_SECRETS" init >/dev/null 2>&1
 assert_eq "init idempotent" "0" "$?"
+
+echo "--- sops config: age + operator-gpg recipients ---"
+# DC_SOPS_PGP_RECIPIENT drives the pgp: line; use a throwaway value so the check
+# never couples to the real operator fingerprint.
+pgp_dir=$(mktemp -d); EXTRA_DIRS+=("$pgp_dir")
+DC_SOPS_PGP_RECIPIENT="FAKEFINGERPRINTFORTHISTEST" DC_SECRETS_DIR="$pgp_dir" \
+    "$DC_SECRETS" init >/dev/null 2>&1
+cfg="$pgp_dir/.sops.yaml"
+assert_eq "config has age recipient" "true" "$(grep -Eq '^[[:space:]]*age:' "$cfg" && echo true || echo false)"
+assert_eq "config has pgp recipient" "true" "$(grep -Eq '^[[:space:]]*pgp:' "$cfg" && echo true || echo false)"
+assert_eq "pgp recipient is the env override" "true" "$(grep -q 'pgp: FAKEFINGERPRINTFORTHISTEST' "$cfg" && echo true || echo false)"
+# Opt-out: an empty DC_SOPS_PGP_RECIPIENT yields an age-ONLY rule (no pgp line).
+nogpg_dir=$(mktemp -d); EXTRA_DIRS+=("$nogpg_dir")
+DC_SOPS_PGP_RECIPIENT="" DC_SECRETS_DIR="$nogpg_dir" "$DC_SECRETS" init >/dev/null 2>&1
+assert_eq "empty pgp recipient omits pgp line" "false" "$(grep -Eq '^[[:space:]]*pgp:' "$nogpg_dir/.sops.yaml" && echo true || echo false)"
 
 echo "--- set/get ---"
 "$DC_SECRETS" set shared/test KEY1=val1 KEY2=val2
