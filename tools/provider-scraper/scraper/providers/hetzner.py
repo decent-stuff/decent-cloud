@@ -47,21 +47,19 @@ class HetznerScraper(BaseScraper):
     async def scrape_offerings(self) -> list[Offering]:
         """Fetch offerings from Hetzner Cloud API.
 
-        Requires ``HETZNER_API_TOKEN_DEV`` (preferred, read-write) or
-        ``HETZNER_API_TOKEN`` (read-only) environment variable. Catalog scraping
-        is read-only, so either works; agents should default to ``_DEV`` — see
+        Requires the ``HETZNER_API_TOKEN_DEV`` (read-write) environment variable.
+        Catalog scraping is itself read-only, but the bare ``HETZNER_API_TOKEN``
+        is no longer injected into agent sessions, so ``_DEV`` is required — see
         ``repo/AGENTS.md`` "Hetzner tokens".
 
         Raises:
             HetznerScrapeError: If API token is missing or API request fails.
         """
-        api_token = os.environ.get("HETZNER_API_TOKEN_DEV") or os.environ.get(
-            "HETZNER_API_TOKEN"
-        )
+        api_token = os.environ.get("HETZNER_API_TOKEN_DEV")
         if not api_token:
             raise HetznerScrapeError(
-                "HETZNER_API_TOKEN_DEV (preferred) or HETZNER_API_TOKEN environment "
-                "variable is required. Create one at "
+                "HETZNER_API_TOKEN_DEV (read-write; required for Hetzner scraping) "
+                "environment variable is required. Create one at "
                 "https://console.hetzner.cloud/ → Security → API Tokens"
             )
 

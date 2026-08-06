@@ -84,28 +84,28 @@ repo/
 - **Hetzner tokens (load-bearing for dev/experimentation):** AI agents MUST use
   `HETZNER_API_TOKEN_DEV` (read-write) for ALL development/experimentation Hetzner
   API calls — PoC scripts, probes, the `api-cli e2e` cloud-provisioning test, the
-  provider-scraper, any real-Hetzner verification. The env-injected
+  provider-scraper, any real-Hetzner verification. The bare
   `HETZNER_API_TOKEN` is **READ-ONLY** on the dev Hetzner project (GET works;
-  POST/DELETE return HTTP 403 `permission denied`). An agent that creates a test
-  VM with the read-only token CANNOT delete it — stranding it (the original
-  foot-gun). All four SOPS tokens (`HETZNER_API_TOKEN`, `_DEV`, `_STAGE`, `_PROD`)
-  share ONE Hetzner project; `_DEV` is the read-write one for agent use.
-  - In code: read `HETZNER_API_TOKEN_DEV` first, fall back to `HETZNER_API_TOKEN`
-    only for read-only catalog probes (so they still work when the bare token is
-    the only one injected). Write-capable scripts (anything that POSTs/DELETEs on
-    Hetzner) MUST require `_DEV` and fail fast if the token can't write.
+  POST/DELETE return HTTP 403 `permission denied`); an agent that creates a test
+  VM with it CANNOT delete it — stranding it (the original foot-gun). All four
+  SOPS tokens (`HETZNER_API_TOKEN`, `_DEV`, `_STAGE`, `_PROD`) share ONE Hetzner
+  project; `_DEV` is the read-write one for agent use.
+  - **In code: hard-require `HETZNER_API_TOKEN_DEV` — NEVER fall back to the
+    read-only `HETZNER_API_TOKEN`.** If `_DEV` is unset, fail fast with a clear
+    message. The bare token is read-only and is no longer injected into agent
+    sessions, so a fallback to it would silently 403 on create/delete.
   - This is a DEV/agent-tooling rule only. **Prod provisioning does NOT read
     `HETZNER_API_TOKEN` as an env var** — the API provisions via per-`cloud_account`
     stored (encrypted) tokens (`offering.pubkey` → `cloud_account` → decrypt →
     `HetznerBackend::new(token)`); the only env read is the `api-cli e2e` test
     binary (`api/src/bin/api-cli/e2e.rs`).
-  - **Injection note:** the dev container (`agent/entrypoint.sh`) injects
-    `dc-secrets export play` from the repo store, which currently contains
-    `HETZNER_API_TOKEN` (read-only) but NOT `HETZNER_API_TOKEN_DEV`. Until an
-    operator adds `HETZNER_API_TOKEN_DEV` to `repo/secrets/shared/common.yaml`
-    (`cd repo && DC_SECRETS_DIR=secrets scripts/dc-secrets set shared/common
-    HETZNER_API_TOKEN_DEV=<rw-token>`), write-capable scripts won't find it in the
-    session env — read-only probes still work via the fallback.
+  - **Injection (the rule is enforced in the committed store):** the dev container
+    (`agent/entrypoint.sh`) injects `dc-secrets export play` from `repo/secrets`,
+    which reads `shared/common.yaml` + `shared/play.yaml`. `common.yaml` now holds
+    `HETZNER_API_TOKEN_DEV` (read-write) and NO longer holds the bare read-only
+    `HETZNER_API_TOKEN` — so agents get `_DEV` and never get `_TOKEN`. The operator
+    keeps both in the operator-local outer `secrets/shared/env.yaml` for their own
+    use; that file is not the agent-injection path.
 
 ## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 

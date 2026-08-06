@@ -203,11 +203,12 @@ pub(crate) async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Resul
             // for cloud-provisioning E2E: this test creates AND deletes a real VM
             // via the cloud_account. The bare HETZNER_API_TOKEN is READ-ONLY on
             // the dev Hetzner project (GET works; POST/DELETE → HTTP 403), which
-            // would strand the test VM. See repo/AGENTS.md "Hetzner tokens".
-            let hetzner_token = env::var("HETZNER_API_TOKEN_DEV")
-                .or_else(|_| env::var("HETZNER_API_TOKEN"))
-                .context(
-                    "HETZNER_API_TOKEN_DEV (read-write; preferred) or HETZNER_API_TOKEN \
+            // would strand the test VM, and it is no longer injected into agent
+            // sessions — so this hard-requires _DEV and fails fast otherwise. See
+            // repo/AGENTS.md "Hetzner tokens".
+            let hetzner_token =
+                env::var("HETZNER_API_TOKEN_DEV").context(
+                    "HETZNER_API_TOKEN_DEV (read-write; required to create+delete test VMs) \
                      env var must be set for cloud provisioning E2E test",
                 )?;
 

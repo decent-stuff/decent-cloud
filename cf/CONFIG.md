@@ -220,8 +220,8 @@ manifest, `—`=not used in this env.
 | Var | DEV | PROD | Notes |
 |-----|-----|------|-------|
 | `GITHUB_API_TOKEN`, `GITHUB_TEST_PAT` | `C` | — | dev/CI |
-| `HETZNER_API_TOKEN` | `C` | — | dev (READ-ONLY; catalog/probe reads only) |
-| `HETZNER_API_TOKEN_DEV` | `env` | — | dev (read-write; the token agents MUST use to create+delete test VMs — see `AGENTS.md` "Hetzner tokens") |
+| `HETZNER_API_TOKEN_DEV` | `C`, `env` | — | dev (read-write; the token agents MUST use to create+delete test VMs — now injected via `common.yaml`. See `AGENTS.md` "Hetzner tokens") |
+| `HETZNER_API_TOKEN` | `env` | — | dev (READ-ONLY; removed from the agent-injection store `common.yaml` — operator-local `env.yaml` only; do NOT use to create/delete) |
 | `PROXMOX_SSH` | `C` | — | dev |
 | `EMAIL_BATCH_SIZE`, `EMAIL_PROCESSOR_INTERVAL_SECS` | `C` | — | dev tuning |
 | `PG_HOST/PORT/USER/PASSWORD/DB`, `TEST_DATABASE_URL` | `P` | — | local sidecar |
