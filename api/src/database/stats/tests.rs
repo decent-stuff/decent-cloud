@@ -38,6 +38,23 @@ async fn test_get_platform_stats_with_data() {
         .await
         .unwrap();
     }
+    // total_offerings uses the marketplace visibility rule, so the offering's
+    // provider needs a pool in the offering's region (US -> "na") for it to be
+    // counted (otherwise the marketplace list drops it).
+    sqlx::query(
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ('pool-na', $1, 'NA Pool', 'na', 'manual', 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
     let contract_id = vec![1u8; 32];
     let requester_pubkey = vec![2u8; 32];
     {
@@ -70,16 +87,19 @@ async fn test_get_platform_stats_with_data() {
     let now_ns = chrono::Utc::now()
         .timestamp_nanos_opt()
         .expect("timestamp overflow (year > 2262)");
-    let nonce_signature = vec![0u8; 64];
+    let agent_pubkey = vec![3u8; 32];
     {
-        let pubkey_ref: &[u8] = &pubkey;
-        let nonce_signature_ref: &[u8] = &nonce_signature;
-        sqlx::query!(
-            "INSERT INTO provider_check_ins (pubkey, memo, nonce_signature, block_timestamp_ns) VALUES ($1, 'test', $2, $3)",
-            pubkey_ref,
-            nonce_signature_ref,
-            now_ns
+        // active_providers now derives from the LIVE agent-heartbeat source
+        // (provider_agent_status) that the marketplace uses for provider_online —
+        // NOT the retired ICP provider_check_ins table. An online agent with a
+        // fresh heartbeat makes this provider "active".
+        sqlx::query(
+            "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4)",
         )
+        .bind(agent_pubkey.as_slice())
+        .bind(pubkey.as_slice())
+        .bind(now_ns)
+        .bind(now_ns)
         .execute(&db.pool)
         .await
         .unwrap();
@@ -95,12 +115,12 @@ async fn test_get_platform_stats_with_data() {
 }
 
 // F1: "Available Offerings" must reflect what the marketplace actually lists.
-// The marketplace excludes draft offerings (is_draft = false filter in the
-// public list query), so platform stats must too — otherwise a draft an admin
-// is still editing shows up as an available listing, contradicting the
-// marketplace one click away.
+// The marketplace drops any offering whose provider has no resolvable agent pool
+// (compute_provider_online_status -> resolved_pool_id.is_none()), so platform
+// stats must apply the SAME rule — otherwise the marketplace can show 0 listings
+// while stats advertises 1 (smoke finding: stats honesty).
 #[tokio::test]
-async fn test_get_platform_stats_excludes_draft_offerings() {
+async fn test_get_platform_stats_excludes_offerings_without_resolvable_pool() {
     let db = setup_test_db().await;
     let pubkey = vec![1u8; 32];
 
@@ -115,17 +135,10 @@ async fn test_get_platform_stats_excludes_draft_offerings() {
         .unwrap();
     }
 
-    // One published (non-draft) public offering — counts as available.
+    // A published (non-draft), public, non-example offering whose provider has NO
+    // agent pool. The marketplace list drops it, so total_offerings must be 0.
     sqlx::query(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-published', 'Published', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
-    )
-    .bind(pubkey.as_slice())
-    .execute(&db.pool)
-    .await
-    .unwrap();
-    // One DRAFT public offering — must NOT count as available.
-    sqlx::query(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-draft', 'Draft', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, TRUE)",
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-no-pool', 'No Pool', 'USD', 100.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
     )
     .bind(pubkey.as_slice())
     .execute(&db.pool)
@@ -133,8 +146,66 @@ async fn test_get_platform_stats_excludes_draft_offerings() {
     .unwrap();
 
     let stats = db.get_platform_stats().await.unwrap();
-    // Only the published offering counts; the draft is invisible to renters.
-    assert_eq!(stats.total_offerings, 1);
+    // No resolvable pool -> invisible in the marketplace -> not counted.
+    assert_eq!(stats.total_offerings, 0);
+}
+
+// FIX 1: active_providers must use the SAME live source the marketplace uses for
+// provider_online — provider_agent_status with the marketplace's 5-minute
+// liveness window (online = TRUE AND last_heartbeat_ns > now - 5min) — not the
+// retired provider_check_ins table.
+#[tokio::test]
+async fn test_active_providers_counts_online_agents_in_liveness_window() {
+    let db = setup_test_db().await;
+    let provider_a = vec![10u8; 32];
+    let provider_b = vec![11u8; 32];
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
+    // Outside the marketplace's 5-minute liveness window.
+    let stale_ns = now_ns - 10 * 60 * 1_000_000_000;
+
+    // Empty: no online agents -> 0 active.
+    assert_eq!(db.get_platform_stats().await.unwrap().active_providers, 0);
+
+    // provider_a: STALE heartbeat -> NOT active (outside liveness window).
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4)",
+    )
+    .bind(vec![20u8; 32].as_slice())
+    .bind(provider_a.as_slice())
+    .bind(stale_ns)
+    .bind(stale_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(db.get_platform_stats().await.unwrap().active_providers, 0);
+
+    // provider_b: FRESH heartbeat (within window) -> active.
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4)",
+    )
+    .bind(vec![21u8; 32].as_slice())
+    .bind(provider_b.as_slice())
+    .bind(now_ns)
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(db.get_platform_stats().await.unwrap().active_providers, 1);
+
+    // A second online agent for the SAME provider must not double-count.
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4)",
+    )
+    .bind(vec![22u8; 32].as_slice())
+    .bind(provider_b.as_slice())
+    .bind(now_ns)
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(db.get_platform_stats().await.unwrap().active_providers, 1);
 }
 
 #[tokio::test]
@@ -149,26 +220,22 @@ async fn test_get_reputation_with_changes() {
     let db = setup_test_db().await;
     let pubkey = vec![1u8; 32];
 
-    {
-        let pubkey_ref: &[u8] = &pubkey;
-        sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 10, 'test', 0)",
-            pubkey_ref
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-    }
-    {
-        let pubkey_ref: &[u8] = &pubkey;
-        sqlx::query!(
-            "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, -5, 'penalty', 1000)",
-            pubkey_ref
-        )
-        .execute(&db.pool)
-        .await
-        .unwrap();
-    }
+    // Two changes (+10 reward, -5 penalty) so the test exercises both signs and
+    // the SUM (5) and COUNT (2) assertions are meaningful.
+    sqlx::query(
+        "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, 10, 'reward', 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO reputation_changes (pubkey, change_amount, reason, block_timestamp_ns) VALUES ($1, -5, 'penalty', 1000)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
 
     let info = db.get_reputation(&pubkey).await.unwrap().unwrap();
     assert_eq!(info.total_reputation, 5);

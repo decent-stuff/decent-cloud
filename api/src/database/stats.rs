@@ -54,22 +54,32 @@ impl Database {
         .fetch_one(&self.pool)
         .await?;
 
-        // Active in the last year
-        let cutoff_ns = crate::now_ns()? - 365 * 24 * 3600 * 1_000_000_000;
+        // Active providers = those with at least one agent online within the
+        // marketplace's liveness window. This MUST read the same live source the
+        // marketplace uses for `provider_online` — `provider_agent_status` with
+        // `online = TRUE AND last_heartbeat_ns > now - 5min` (see
+        // offerings.rs::search_offerings / agent_pools.rs::list_agent_pools_with_stats)
+        // — NOT the retired ICP `provider_check_ins` table, which is empty/stale
+        // forever on every real deployment and reported 0 active providers while
+        // the marketplace showed online providers.
+        let now_ns = crate::now_ns()?;
+        let five_mins_ns: i64 = 5 * 60 * 1_000_000_000;
+        let heartbeat_cutoff = now_ns - five_mins_ns;
         let active_providers: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM provider_check_ins WHERE block_timestamp_ns > $1 AND (pubkey) != $2"#,
-            cutoff_ns,
+            r#"SELECT COUNT(DISTINCT s.provider_pubkey) as "count!" FROM provider_agent_status s
+               WHERE s.online = TRUE AND s.last_heartbeat_ns > $1 AND s.provider_pubkey != $2"#,
+            heartbeat_cutoff,
             &example_provider_hash
         )
         .fetch_one(&self.pool)
         .await?;
 
-        let total_offerings: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE LOWER(visibility) = 'public' AND is_draft = FALSE AND pubkey != $1"#,
-            &example_provider_hash
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        // Total offerings MUST match what the marketplace list actually shows.
+        // The list drops offerings whose provider has no resolvable agent pool, so
+        // the count applies that same rule (single source of truth in
+        // offerings.rs::count_marketplace_visible_offerings). Otherwise stats can
+        // advertise 1 listing while the marketplace shows 0.
+        let total_offerings = self.count_marketplace_visible_offerings().await?;
 
         let total_contracts: i64 =
             sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests"#)

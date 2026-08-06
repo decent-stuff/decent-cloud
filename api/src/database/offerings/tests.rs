@@ -189,6 +189,81 @@ async fn test_count_offerings_no_filters() {
     assert!(count >= 2);
 }
 
+// FIX 2 (stats honesty): count_marketplace_visible_offerings must apply the SAME
+// visibility rule the marketplace list applies in search_offerings — an offering
+// counts only if it has a resolvable agent pool (or is self-provisioned) and is
+// public + non-draft. Otherwise platform stats advertises a listing the
+// marketplace silently drops.
+#[tokio::test]
+async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
+    let db = setup_test_db().await;
+    let visible_pubkey = vec![30u8; 32];
+    let no_pool_pubkey = vec![31u8; 32];
+    let draft_pubkey = vec![32u8; 32];
+
+    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+
+    // 1) Public, non-draft, provider HAS a matching pool + online agent -> VISIBLE.
+    insert_test_offering(&db, 30, &visible_pubkey, "US", 100.0).await;
+
+    // 2) Public, non-draft, provider has NO pool -> NOT visible (marketplace drops it).
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-no-pool', 'NoPool', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
+    )
+    .bind(no_pool_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // 3) DRAFT, provider HAS a pool -> NOT visible (drafts are excluded).
+    register_provider(&db, &draft_pubkey).await;
+    ensure_provider_with_pool(&db, &draft_pubkey, "US").await;
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, 'off-draft', 'Draft', 'USD', 75.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, TRUE)",
+    )
+    .bind(draft_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let after = db.count_marketplace_visible_offerings().await.unwrap();
+    // Exactly the one pool-backed, published offering became newly visible.
+    assert_eq!(
+        after - baseline,
+        1,
+        "only the pool-backed published offering should be counted"
+    );
+}
+
+// FIX 4 (defense-in-depth): the doctor's catalog-integrity check counts synthetic
+// example offerings (rows owned by the example-provider pubkey). Production must
+// never publicly serve these; if migration 053 was not applied, this count is the
+// signal the doctor surfaces.
+#[tokio::test]
+async fn test_count_example_offerings_detects_synthetic_rows() {
+    let db = setup_test_db().await;
+    let example = Database::example_provider_pubkey();
+
+    let before = db.count_example_offerings().await.expect("count failed");
+
+    // Simulate the prod failure mode: a synthetic example offering remains public
+    // because migration 053_drop_example_provider_seed.sql was never applied.
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'example-demo', 'Demo', 'USD', 1.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
+    )
+    .bind(example.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let after = db.count_example_offerings().await.expect("count failed");
+    assert_eq!(
+        after - before,
+        1,
+        "doctor check must detect the synthetic example offering"
+    );
+}
+
 #[tokio::test]
 async fn test_search_offerings_no_filters() {
     let db = setup_test_db().await;

@@ -842,6 +842,66 @@ async fn doctor_command() -> Result<(), std::io::Error> {
         }
     }
 
+    // === Catalog Integrity ===
+    // Defense-in-depth: prod must never publicly serve synthetic example/demo
+    // offerings. Migration 053_drop_example_provider_seed.sql deletes them, but a
+    // 2026-08-05 audit found prod still serving 10 because 053 was never applied.
+    // This check queries the catalog directly so a stale prod DB cannot recur
+    // silently. Diagnostic only — it never refuses to boot the server.
+    print!("  Checking for synthetic example offerings... ");
+    match Database::new(&database_url).await {
+        Ok(db) => match db.count_example_offerings().await {
+            Ok(0) => println!("[OK] none"),
+            Ok(count) => {
+                let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
+                let in_production = crate::environment::is_production(&environment);
+                let example_hash = hex::encode(Database::example_provider_pubkey());
+                if in_production {
+                    tracing::error!(
+                        error.code = "DOCTOR_EXAMPLE_OFFERINGS_PRESENT",
+                        count = count,
+                        example_pubkey_hash = %example_hash,
+                        environment = %environment,
+                        "production catalog still serves {} synthetic example offering(s) — \
+                         migration 053_drop_example_provider_seed.sql was not applied",
+                        count
+                    );
+                    println!("[ERROR] {} synthetic example offering(s) still public", count);
+                    println!();
+                    println!("    Migration 053_drop_example_provider_seed.sql was NOT applied to this DB.");
+                    println!("    Example provider pubkey (hex):");
+                    println!("      {}", example_hash);
+                    println!("    Apply migration 053 to delete the demo rows, then redeploy.");
+                    errors += 1;
+                } else {
+                    tracing::warn!(
+                        error.code = "DOCTOR_EXAMPLE_OFFERINGS_PRESENT",
+                        count = count,
+                        example_pubkey_hash = %example_hash,
+                        environment = %environment,
+                        "non-production catalog serves {} synthetic example offering(s) — \
+                         migration 053_drop_example_provider_seed.sql was not applied",
+                        count
+                    );
+                    println!("[WARN] {} synthetic example offering(s) still public", count);
+                    println!();
+                    println!("    Migration 053_drop_example_provider_seed.sql was not applied.");
+                    println!("    Example provider pubkey (hex): {}", example_hash);
+                    println!("    Fix before deploying to production.");
+                    warnings += 1;
+                }
+            }
+            Err(e) => {
+                println!("[WARN] could not query example offerings: {:#}", e);
+                warnings += 1;
+            }
+        },
+        Err(e) => {
+            println!("[WARN] DB unavailable, skipping example-offering check: {:#}", e);
+            warnings += 1;
+        }
+    }
+
     // === Chatwoot Integration ===
     println!("\nChatwoot Integration:");
     check_env!("CHATWOOT_BASE_URL", optional, "Chatwoot features disabled");
@@ -1684,7 +1744,8 @@ async fn sync_command() -> Result<(), std::io::Error> {
         ctx.ledger_client.clone(),
         ctx.database.clone(),
         ctx.sync_interval_secs,
-    );
+    )
+    .map_err(|e| std::io::Error::other(format!("sync service init failed: {e:#}")))?;
 
     tracing::info!(
         "Running sync service with {}s interval",

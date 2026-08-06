@@ -1,5 +1,5 @@
 use crate::{database::Database, ledger_client::LedgerClient, ledger_path::ledger_dir_path};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dcc_common::{fetch_and_write_ledger_data, parse_ledger_entries};
 use ledger_map::LedgerMap;
 use std::sync::{Arc, Mutex};
@@ -13,24 +13,33 @@ pub struct SyncService {
 }
 
 impl SyncService {
+    /// Resolve the ledger directory and construct the backing-file parser.
+    ///
+    /// Factored out of [`new`](Self::new) so the I/O failures that used to
+    /// `panic!` via `.expect()` (permission-denied / missing ledger dir / mmap
+    /// setup failure) are surfaced as `Err` with execution-state context instead
+    /// of crashing `api-server sync` with a backtrace.
+    fn build_ledger_parser() -> Result<Arc<Mutex<LedgerMap>>> {
+        let ledger_dir = ledger_dir_path()
+            .context("SyncService: failed to resolve the ledger directory (LEDGER_DIR)")?;
+        let ledger_file = ledger_dir.join("main.bin");
+        let ledger_parser = LedgerMap::new_with_path(None, Some(ledger_file))
+            .context("SyncService: failed to initialize the LedgerMap backing file")?;
+        Ok(Arc::new(Mutex::new(ledger_parser)))
+    }
+
     pub fn new(
         ledger_client: Arc<LedgerClient>,
         database: Arc<Database>,
         interval_secs: u64,
-    ) -> Self {
-        let ledger_dir =
-            ledger_dir_path().expect("Failed to resolve ledger directory for sync service");
-        let ledger_file = ledger_dir.join("main.bin");
-
-        let ledger_parser = LedgerMap::new_with_path(None, Some(ledger_file))
-            .expect("Failed to create LedgerMap parser");
-
-        Self {
+    ) -> Result<Self> {
+        let ledger_parser = Self::build_ledger_parser()?;
+        Ok(Self {
             ledger_client,
             database,
             interval: Duration::from_secs(interval_secs),
-            ledger_parser: Arc::new(Mutex::new(ledger_parser)),
-        }
+            ledger_parser,
+        })
     }
 
     pub async fn run(self) {
