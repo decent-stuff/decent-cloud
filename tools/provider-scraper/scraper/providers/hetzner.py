@@ -47,16 +47,22 @@ class HetznerScraper(BaseScraper):
     async def scrape_offerings(self) -> list[Offering]:
         """Fetch offerings from Hetzner Cloud API.
 
-        Requires HETZNER_API_TOKEN environment variable.
+        Requires ``HETZNER_API_TOKEN_DEV`` (preferred, read-write) or
+        ``HETZNER_API_TOKEN`` (read-only) environment variable. Catalog scraping
+        is read-only, so either works; agents should default to ``_DEV`` — see
+        ``repo/AGENTS.md`` "Hetzner tokens".
 
         Raises:
             HetznerScrapeError: If API token is missing or API request fails.
         """
-        api_token = os.environ.get("HETZNER_API_TOKEN")
+        api_token = os.environ.get("HETZNER_API_TOKEN_DEV") or os.environ.get(
+            "HETZNER_API_TOKEN"
+        )
         if not api_token:
             raise HetznerScrapeError(
-                "HETZNER_API_TOKEN environment variable is required. "
-                "Create one at https://console.hetzner.cloud/ → Security → API Tokens"
+                "HETZNER_API_TOKEN_DEV (preferred) or HETZNER_API_TOKEN environment "
+                "variable is required. Create one at "
+                "https://console.hetzner.cloud/ → Security → API Tokens"
             )
 
         headers = {"Authorization": f"Bearer {api_token}"}
@@ -82,7 +88,9 @@ class HetznerScraper(BaseScraper):
             )
 
             if response.status_code == 401:
-                raise HetznerScrapeError("Invalid HETZNER_API_TOKEN - authentication failed")
+                raise HetznerScrapeError(
+                    "Invalid Hetzner API token - authentication failed"
+                )
             if response.status_code == 429:
                 raise HetznerScrapeError("Rate limited by Hetzner API - try again later")
             if response.status_code != 200:

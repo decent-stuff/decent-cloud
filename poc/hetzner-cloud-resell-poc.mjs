@@ -18,7 +18,10 @@
 // local stack. Cleanup runs in `finally` to leave the local DB clean.
 //
 // Usage:
-//   HETZNER_API_TOKEN=... node poc/hetzner-cloud-resell-poc.mjs
+//   HETZNER_API_TOKEN_DEV=... node poc/hetzner-cloud-resell-poc.mjs
+// (HETZNER_API_TOKEN is READ-ONLY on the dev Hetzner project and only works for
+//  these read-only catalog calls; HETZNER_API_TOKEN_DEV is the read-write token
+//  agents MUST default to — see repo/AGENTS.md "Hetzner tokens".)
 //
 // Reusable for the sanctioned stage/prod seeding run: point API_URL + DB_URL at
 // the target env and (for prod) replace `generateMnemonic` with
@@ -37,7 +40,12 @@ import {
 const API_URL = process.env.API_URL || 'http://localhost:59011';
 const WEB_URL = process.env.WEB_URL || 'http://localhost:59010';
 const DB_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
-const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
+// Agents MUST default to the WRITE-capable dev token (HETZNER_API_TOKEN_DEV) so
+// dev/experimentation can CREATE and DELETE test VMs. The bare HETZNER_API_TOKEN
+// is READ-ONLY on the dev Hetzner project (GET works; POST/DELETE → HTTP 403);
+// it is kept as a fallback so this read-only catalog PoC still runs when only the
+// read-only token is injected. See repo/AGENTS.md "Hetzner tokens".
+const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN_DEV || process.env.HETZNER_API_TOKEN;
 // When set (any value), drive a headless browser to load the marketplace detail
 // page and assert the Rent button is ENABLED (text "Rent this offering", not
 // "Provider Offline"). Needs the warm web stack at WEB_URL.
@@ -45,7 +53,10 @@ const DO_BROWSER_CHECK = !!process.env.POC_BROWSER_CHECK;
 const SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 if (!HETZNER_TOKEN) {
-  console.error('FAIL: HETZNER_API_TOKEN env var is required (read-only catalog calls only).');
+  console.error(
+    'FAIL: set HETZNER_API_TOKEN_DEV (read-write; preferred) or HETZNER_API_TOKEN ' +
+      '(read-only) for live catalog calls.',
+  );
   process.exit(2);
 }
 
