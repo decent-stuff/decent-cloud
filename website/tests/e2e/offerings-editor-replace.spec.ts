@@ -1,7 +1,13 @@
 import { test, expect } from './fixtures/test-account';
 import type { Page } from '@playwright/test';
 import { assertNoNativeDialog } from './fixtures/auth-helpers';
-import { pubkeyHexFromSeed, seedOffering, deleteOfferingsByProvider } from './fixtures/seed-helpers';
+import {
+	pubkeyHexFromSeed,
+	seedOffering,
+	deleteOfferingsByProvider,
+	seedMarketplaceOffering,
+	deleteOfferingById,
+} from './fixtures/seed-helpers';
 
 /**
  * E2E coverage for the OfferingsEditor "load example data" replace guard
@@ -34,6 +40,32 @@ function replaceBar(page: Page) {
 }
 
 test.describe('Offerings editor replace guard (inline two-step confirm)', () => {
+	// The OfferingsEditor's product-type buttons render from
+	// GET /api/v1/offerings/product-types, and "Load Example Data" pulls rows
+	// from GET /api/v1/offerings/template/<type>. BOTH derive from
+	// example-provider offerings, which migration 053 dropped — so without a
+	// seed the product-type response is [] (no "Compute" button → click times
+	// out) and the template CSV is header-only (replace can't grow the row
+	// count). Seed several compute example offerings so the Compute button is
+	// present AND the template carries more rows than the user's single seeded
+	// offering (before=1), letting the replace assertion (count > before) hold.
+	// Same self-seed pattern as offerings-template.spec.ts; cleaned up per-id so
+	// parallel specs sharing the example pubkey don't delete each other's rows.
+	const exampleOfferingIds: string[] = [];
+	test.beforeAll(async () => {
+		for (let i = 0; i < 3; i++) {
+			const handle = await seedMarketplaceOffering({
+				isExample: true,
+				productType: 'compute',
+				name: `E2E Editor ProductType ${i}`,
+			});
+			exampleOfferingIds.push(handle.offeringNumericId);
+		}
+	});
+	test.afterAll(async () => {
+		await Promise.all(exampleOfferingIds.map((id) => deleteOfferingById(id)));
+	});
+
 	test('first Load click reveals an inline confirm; Confirm replaces existing data', async ({ page, testAccount }) => {
 		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
 		await seedOffering(pubkey, { name: 'E2E Replace Guard' });
