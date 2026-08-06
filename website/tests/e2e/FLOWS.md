@@ -39,9 +39,30 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 ```bash
 cd website
 npm run test:e2e:fast:smoke                 # ~26 critical-path tests, <35s (dev loop)
-npm run test:e2e:fast -- --grep @rental     # every flow in a category
-npm run test:e2e:fast -- signin-flow.spec.ts   # one spec file
+npm run test:e2e:fast                       # full suite (all specs)
 ```
+
+> **Tags are doc-only except `@smoke`.** The category labels in this file
+> (`@auth`, `@marketplace`, `@rental`, `@provider`, …) are documentation-only
+> row markers — they are **not** present in test titles, so
+> `--grep @rental` (or `@provider`/`@marketplace`/…) matches **zero** tests
+> (verified). The only tag matched at runtime is **`@smoke`**, which lives in
+> test titles (e.g. `test('@smoke ...')`).
+>
+> Run a **category by spec-file pattern** instead — specs are grouped one flow
+> per file (or a small cluster), so a filename glob is the category selector:
+>
+> ```bash
+> npm run test:e2e:fast -- rentals.spec.ts        # one spec file
+> npm run test:e2e:fast -- "*rental*"             # every rental-related spec (filename glob)
+> npm run test:e2e:fast -- "provider-*"           # every provider-dashboard spec
+> npm run test:e2e:fast -- -g "should sign in"    # one test by title substring
+> ```
+>
+> Adding per-test category tags (`@rental`, `@provider`, …) to titles so the
+> categories become grep-able is a **documented future enhancement** — not done
+> today (it would mean editing every spec title for a grep convenience, against
+> KISS/YAGNI).
 
 ---
 

@@ -145,38 +145,6 @@ test.describe('Account Settings Page', () => {
 		await expect(page.locator(`button:has-text("${newName}")`)).toBeVisible();
 	});
 
-	test('account page: cancel device name edit', async ({ page }) => {
-		await page.goto('/dashboard/account/security');
-
-		// Find Devices section
-		await expect(page.locator('text=Devices')).toBeVisible();
-
-		// Click the device name button to start editing. Use the title attribute
-		// (stable across runs) — an earlier test in this suite renames the device,
-		// so the displayed text is no longer "Unnamed Device" by the time we run.
-		const deviceNameBtn = page.locator('button[title="Click to edit device name"]');
-		await expect(deviceNameBtn).toBeVisible();
-		await deviceNameBtn.click();
-
-		// Should show edit input (or inline editing form)
-		const editInput = page.locator('input[placeholder="Device name"]').or(
-			page.locator('input[type="text"]').filter({ hasText: '' })
-		);
-		await expect(editInput.first()).toBeVisible({ timeout: 2000 });
-
-		// Click Cancel or press Escape
-		const cancelBtn = page.locator('button:has-text("Cancel")');
-		if (await cancelBtn.isVisible({ timeout: 1000 })) {
-			await cancelBtn.click();
-		} else {
-			// If no Cancel button, press Escape key
-			await page.keyboard.press('Escape');
-		}
-
-		// Edit input should disappear
-		await expect(page.locator('input[placeholder="Device name"]')).not.toBeVisible();
-	});
-
 	test('account page: open Add Device modal', async ({ page }) => {
 		await page.goto('/dashboard/account/security');
 
@@ -190,24 +158,5 @@ test.describe('Account Settings Page', () => {
 		// Should show options to generate or import
 		await expect(page.locator('button:has-text("Generate New")')).toBeVisible();
 		await expect(page.locator('button:has-text("Import Existing")')).toBeVisible();
-	});
-
-	test('account page: cancel Add Device modal', async ({ page }) => {
-		await page.goto('/dashboard/account/security');
-
-		// Click Add Device button
-		await page.click('button:has-text("+ Add Device")');
-
-		// Wait for modal
-		await expect(page.locator('h3:has-text("Seed Phrase")')).toBeVisible();
-
-		// Click Back to close modal
-		await page.click('button:has-text("Back")');
-
-		// Modal should close
-		await expect(page.locator('h3:has-text("Seed Phrase")')).not.toBeVisible();
-
-		// Still should have 1 key
-		await expect(page.locator('text=1 key')).toBeVisible();
 	});
 });

@@ -2,13 +2,15 @@ import { test, expect } from './fixtures/test-account';
 
 /**
  * E2E coverage for the authenticated (non-provider) state of
- * /dashboard/provider/requests — the gap left by provider-batch-actions.spec.ts.
+ * /dashboard/provider/requests.
  *
- * provider-batch-actions.spec.ts pins the ANONYMOUS state (Login Required).
- * This spec pins the authenticated non-provider state: the fixture account is
- * not a provider, so the ProviderSetupBanner must render ("Provider Setup
- * Required") with a link into the provider-support onboarding page. That banner
- * is the meaningful gate between "anonymous" and "fully-onboarded provider".
+ * The ANONYMOUS state for this route (Login Required gate) is covered by
+ * auth-protection.spec.ts (it iterates the protected pages, including this one,
+ * and asserts "Login Required"). This spec pins the authenticated non-provider
+ * state: the fixture account is not a provider, so the ProviderSetupBanner must
+ * render ("Provider Setup Required") with a link into the provider-support
+ * onboarding page. That banner is the meaningful gate between "anonymous" and
+ * "fully-onboarded provider".
  */
 test.describe('/dashboard/provider/requests (authenticated, non-provider)', () => {
 	test('shows the provider-setup-required banner for a non-provider account', async ({ page }) => {
