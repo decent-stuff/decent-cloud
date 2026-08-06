@@ -52,6 +52,30 @@ repo/
 | Browser automation helpers | `scripts/` | See child `scripts/AGENTS.md` for browser and auth tooling |
 | Provider scrape tooling | `tools/provider-scraper/` | Python project with its own tests |
 | Third-party integration references | `third_party/` | Debug contracts, APIs, payloads |
+| **Credentials** | `docs/CREDENTIALS.md` + `scripts/dc-secrets` | Value-free manifest + one-command discovery; see **Credentials** below |
+
+## Credentials
+
+> **NEVER ask the user for a credential before checking `docs/CREDENTIALS.md`
+> AND running `scripts/dc-secrets list`.** Credentials already persist —
+> SOPS-sealed (`age` key at `$SOPS_AGE_KEY_FILE` / `$SOPS_AGE_KEY`) — and a
+> working subset is injected as env vars each session. Re-asking wastes a
+> round-trip.
+
+- **Discover what exists (one command, names only — never values):**
+  ```bash
+  scripts/dc-secrets list           # every credential NAME across env + SOPS, grouped by source
+  scripts/dc-secrets list shared/env # key names within one file
+  ```
+- **Inject SOPS creds into your shell:** `eval "$(scripts/dc-secrets export)"`
+  (add `play` / `dev` / `prod` for an env layer; bare `export` is common-only).
+- **Persist a new user-provided cred:** `scripts/dc-secrets set shared/env KEY="$VAL"`,
+  then add its name + source to `docs/CREDENTIALS.md`.
+- `scripts/dc-secrets` reads whatever `$DC_SECRETS_DIR` points at — the committed
+  `repo/secrets/shared/*.yaml` (common/dev/play) AND the operator-local outer
+  `/project/decent-cloud/secrets/shared/{env,gh}.yaml`. Full manifest, store
+  layout, and the k8s counterpart (`third_party/k8s/scripts/manage-secrets.py`)
+  are in `docs/CREDENTIALS.md`. Never paste, echo, log, or commit a value.
 
 ## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 
@@ -59,7 +83,7 @@ Every task follows this exact sequence. No exceptions. You may NEVER deviate fro
 
 ### 1. Verify Prerequisites
 - Confirm real services, credentials, env vars, and infrastructure exist before coding. YOU MUST HAVE everything you need to do your job properly.
-- Check credentials: the consolidated store is the outer `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS) — `sops -d` it + the outer `.age-identity` to read keys. (The legacy `repo/secrets/shared/` + `scripts/dc-secrets` are RETIRED pending the post-cutover deletion — see `docs/MIGRATION-CUTOVER.md`. Local dev needs no secrets.)
+- Check credentials FIRST via **Credentials** above: run `scripts/dc-secrets list` and read `docs/CREDENTIALS.md` before asking for anything (the consolidated age-SOPS store at `/project/decent-cloud/secrets/shared/env.yaml` is readable through `dc-secrets` / `sops -d` + the outer `.age-identity`). Local dev (slim stack) needs no secrets.
 - **If anything is missing: STOP immediately and ask.** Do not guess, stub, or silently mock what should be real.
 
 ### 2. Build a Working PoC (NOT SKIPPABLE)
@@ -167,13 +191,16 @@ stack (api + website + postgres) — needs no secrets.
 
 - **Canonical secret store:** the consolidated outer
   `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS) holds EVERY key
-  across envs. Read it with `sops -d` + the outer `.age-identity` (never paste a
-  value into chat, a commit, or a manifest).
-- **`scripts/dc-secrets` + `repo/secrets/shared/` are RETIRED** (pending
-  deletion post-cutover). Do NOT add new secrets there. They still exist only so
-  the live `dev` docker-compose host keeps serving until the operator cutover
-  completes — see `docs/MIGRATION-CUTOVER.md` (the cutover runbook; Step G deletes
-  them). Plan: `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
+  across envs. Access it through `scripts/dc-secrets` (set `DC_SECRETS_DIR` to
+  the outer dir) or `sops -d` + the outer `.age-identity` (never paste a value
+  into chat, a commit, or a manifest).
+- **`scripts/dc-secrets` is the active credential CLI** (discovery, export,
+  get/set/edit) — it reads whichever store `$DC_SECRETS_DIR` points at. The
+  committed `repo/secrets/shared/*.yaml` deploy files, however, are being
+  phased out as the live `dev` docker-compose host migrates to `dc-stage` on
+  k8s; do NOT add new DEPLOY secrets there (use the outer store / k8s repo).
+  See `docs/MIGRATION-CUTOVER.md` (Step G) and
+  `docs/plans/2026-08-03-staging-to-k8s-dc-stage-consolidation.md`.
 - **Ship a stage image:** `python3 cf/deploy.py deploy stage` (builds api, pushes
   `git.kalaj.org/decent-stuff/decent-cloud-api:stage`, bumps the k8s stage
   overlay, commits the k8s repo locally; prints the operator `git push`).
