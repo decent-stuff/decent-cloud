@@ -235,6 +235,145 @@ async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
     );
 }
 
+// Cloud-resell offerings (Hetzner/Vultr/Proxmox-API) are provisioned by the
+// central `CloudProvisioningService` running in the API server, NOT by a
+// per-host dc-agent pool. They carry `provisioner_type` from the `BackendType`
+// enum (hetzner/vultr/proxmox_api) and `agent_pool_id = NULL`. The marketplace
+// MUST list them without a pool — otherwise the operator's Hetzner resell
+// offering is invisible (the original bug).
+#[tokio::test]
+async fn test_cloud_resell_offering_visible_without_pool() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+
+    // Provider registered, but NO pool and NO online agent.
+    let hetzner_pubkey = vec![40u8; 32];
+    let vultr_pubkey = vec![41u8; 32];
+    register_provider(&db, &hetzner_pubkey).await;
+    register_provider(&db, &vultr_pubkey).await;
+
+    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+
+    // Hetzner resell offering: central-provisioner backend, no pool, default
+    // offering_source ('provider') — the exact shape a real resell offering has.
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, provisioner_type, agent_pool_id, created_at_ns) VALUES ($1, 'off-hetzner', 'Hetzner Resell', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Falkenstein', FALSE, 'hetzner', NULL, 0)",
+    )
+    .bind(hetzner_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Vultr resell offering — confirms the whole BackendType set is admitted,
+    // not just a single magic string.
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, provisioner_type, agent_pool_id, created_at_ns) VALUES ($1, 'off-vultr', 'Vultr Resell', 'USD', 55.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 'vultr', NULL, 0)",
+    )
+    .bind(vultr_pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Must be counted in the marketplace-visible headline number.
+    let after = db.count_marketplace_visible_offerings().await.unwrap();
+    assert_eq!(
+        after - baseline,
+        2,
+        "both cloud-resell offerings (hetzner + vultr) must be counted as marketplace-visible"
+    );
+
+    // Must appear in marketplace search.
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+            text_search: None,
+        })
+        .await
+        .expect("Failed to search offerings");
+    assert!(
+        results.iter().any(|o| o.offering_id == "off-hetzner"),
+        "cloud-resell Hetzner offering must be listed without a pool: {:?}",
+        results.iter().map(|o| &o.offering_id).collect::<Vec<_>>()
+    );
+    assert!(
+        results.iter().any(|o| o.offering_id == "off-vultr"),
+        "cloud-resell Vultr offering must be listed without a pool: {:?}",
+        results.iter().map(|o| &o.offering_id).collect::<Vec<_>>()
+    );
+
+    // And must report provider_online — the central provisioner is always
+    // available, so a cloud-resell offering is never "offline".
+    for expected in ["off-hetzner", "off-vultr"] {
+        let offering = results
+            .iter()
+            .find(|o| o.offering_id == expected)
+            .unwrap_or_else(|| panic!("{expected} should be in results"));
+        assert_eq!(
+            offering.provider_online,
+            Some(true),
+            "cloud-resell offering `{expected}` should be reported online"
+        );
+    }
+}
+
+// Over-admission guard: a pool-less offering that is NOT cloud-resell (e.g. a
+// dc-agent-style 'proxmox' offering with no registered agent) must stay HIDDEN.
+// Only central-CloudProvisioningService backends (the BackendType enum) are
+// admitted without a pool — never a self-hosted offering missing its agent.
+#[tokio::test]
+async fn test_non_cloud_resell_offering_without_pool_stays_hidden() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+    let pubkey = vec![42u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+
+    // dc-agent-style proxmox offering, NO pool, NO online agent -> must stay
+    // hidden. ('proxmox' is distinct from the cloud-resell 'proxmox_api'.)
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, provisioner_type, agent_pool_id, created_at_ns) VALUES ($1, 'off-proxmox-nopool', 'Proxmox NoPool', 'USD', 60.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 'proxmox', NULL, 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let after = db.count_marketplace_visible_offerings().await.unwrap();
+    assert_eq!(
+        after, baseline,
+        "non-cloud-resell offering without a pool must NOT inflate the marketplace count"
+    );
+
+    let results = db
+        .search_offerings(SearchOfferingsParams {
+            product_type: None,
+            country: None,
+            in_stock_only: false,
+            has_recipe: false,
+            min_price_monthly: None,
+            max_price_monthly: None,
+            limit: 100,
+            offset: 0,
+            text_search: None,
+        })
+        .await
+        .expect("Failed to search offerings");
+    assert!(
+        !results
+            .iter()
+            .any(|o| o.offering_id == "off-proxmox-nopool"),
+        "non-cloud-resell offering without a pool must NOT appear in marketplace search"
+    );
+}
+
 #[tokio::test]
 async fn test_search_offerings_no_filters() {
     let db = setup_test_db().await;

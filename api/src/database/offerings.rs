@@ -1,5 +1,6 @@
 use super::types::Database;
 use super::user_notifications::insert_notification;
+use crate::cloud::types::BackendType;
 use crate::regions::{country_to_region, is_valid_country_code};
 use anyhow::Result;
 use poem_openapi::Object;
@@ -7,6 +8,42 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use ts_rs::TS;
+
+/// True iff this offering is a **cloud-resell** offering — i.e. backed by the
+/// central `CloudProvisioningService` (Hetzner/Vultr/Proxmox-API), provisioned
+/// directly from the API server using the provider's stored cloud-account
+/// credentials. This is the dual of the **self-hosted** model, where a provider
+/// runs a per-host dc-agent and registers an `agent_pool`.
+///
+/// Cloud-resell offerings carry a `provisioner_type` drawn from the
+/// [`BackendType`] enum — the single source of truth for central-provisioner
+/// backends. Self-hosted dc-agent pools use distinct provisioner types
+/// (e.g. `"proxmox"` for LXC, never `"proxmox_api"`), so parsing against
+/// `BackendType` cleanly separates the two models and never admits a pool-less
+/// self-hosted offering.
+fn is_cloud_resell(provisioner_type: Option<&str>) -> bool {
+    provisioner_type
+        .and_then(|pt| pt.parse::<BackendType>().ok())
+        .is_some()
+}
+
+/// The marketplace visibility predicate: an offering is listed iff it is
+/// actually provisionable right now. That holds when ANY of:
+///   - it resolves to an agent pool (`resolved_pool_id`, set by
+///     [`Database::compute_provider_online_status`]) — the self-hosted model;
+///   - it is `self_provisioned` (the VM is already running); or
+///   - it is a cloud-resell offering (central `CloudProvisioningService`) —
+///     always provisionable on demand, no pool required.
+///
+/// Applied identically by [`Database::search_offerings`],
+/// [`Database::search_offerings_dsl`], and
+/// [`Database::count_marketplace_visible_offerings`] so the headline count and
+/// the listing one click away can never disagree.
+fn is_marketplace_visible(o: &Offering) -> bool {
+    o.resolved_pool_id.is_some()
+        || o.offering_source.as_deref() == Some("self_provisioned")
+        || is_cloud_resell(o.provisioner_type.as_deref())
+}
 
 /// Base SELECT for the public marketplace offering list. Shared by `search_offerings`,
 /// `search_offerings_dsl`, and `count_marketplace_visible_offerings` so the column set (and thus the
@@ -687,13 +724,11 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool or are self-provisioned
+        // Filter to only include offerings that are actually provisionable:
+        // pool-backed (self-hosted), self-provisioned, or cloud-resell.
         let filtered: Vec<Offering> = with_status
             .into_iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .filter(is_marketplace_visible)
             .take(params.limit as usize)
             .collect();
 
@@ -761,6 +796,15 @@ impl Database {
             for (original_index, mut offering) in provider_offerings {
                 // Self-provisioned offerings are always "online" — the VM is already running
                 if offering.offering_source.as_deref() == Some("self_provisioned") {
+                    offering.provider_online = Some(true);
+                    result.push((original_index, offering));
+                    continue;
+                }
+
+                // Cloud-resell offerings are always "online" — the central
+                // CloudProvisioningService provisions them on demand from the
+                // API server, independent of any per-host dc-agent.
+                if is_cloud_resell(offering.provisioner_type.as_deref()) {
                     offering.provider_online = Some(true);
                     result.push((original_index, offering));
                     continue;
@@ -969,9 +1013,9 @@ impl Database {
     }
 
     /// Count public, non-draft offerings that are actually visible in the
-    /// marketplace — i.e. they pass the SAME pool-resolution filter that
-    /// [`search_offerings`] applies post-fetch (`resolved_pool_id.is_some()` or
-    /// `offering_source == "self_provisioned"`).
+    /// marketplace — i.e. they pass the SAME visibility predicate that
+    /// [`search_offerings`] applies post-fetch ([`is_marketplace_visible`]:
+    /// pool-backed, self-provisioned, or cloud-resell).
     ///
     /// This is the single source of truth the platform-stats `total_offerings`
     /// field reads, so the headline count can never contradict the marketplace
@@ -996,11 +1040,8 @@ impl Database {
         // same resolver the marketplace uses.
         let with_status = self.compute_provider_online_status(offerings).await?;
         let count = with_status
-            .iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .into_iter()
+            .filter(is_marketplace_visible)
             .count() as i64;
         Ok(count)
     }
@@ -1069,13 +1110,11 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool or are self-provisioned
+        // Filter to only include offerings that are actually provisionable:
+        // pool-backed (self-hosted), self-provisioned, or cloud-resell.
         let filtered: Vec<Offering> = with_status
             .into_iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .filter(is_marketplace_visible)
             .collect();
 
         Ok(filtered)
