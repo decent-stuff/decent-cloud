@@ -83,3 +83,39 @@ Candidates (prod source, >2000L): `api/src/openapi/providers.rs` (4090), `dc-age
 - [x] Surface blockers/forks to user (Decent-Agents epic, Hetzner, k8s cutover) — recorded as OP-1..OP-4 in `docs/OPEN_ISSUES.md`.
 
 ## Status: DONE (2026-08-06) — see STATUS block at the top of this file.
+
+## Round 2/3 (user feedback + CI/release, 2026-08-06)
+
+Follow-on sweep on the same branch, driven by user feedback (Hetzner-requires-a-pool bug,
+provider-sidebar defaults) + CI/release verification. 7 commits on top of round 1
+(origin/main `252c7f76` → `45953812`); spec_snapshot unchanged (187 paths / 327 schemas); full
+Playwright suite **314/0**.
+
+- `28740f20` chore: workspace version 0.5.3→0.5.5 (release-tag consistency).
+- `9e16e677` refactor: remove dead `is_example` concept entirely (field/SQL projection/`$N` param
+  threading/frontend serialization) + remove the now-obsolete `DOCTOR_EXAMPLE_OFFERINGS_PRESENT`
+  doctor guard (`is_example` was derived, never a column, always false since migration 053;
+  `example_provider_pubkey()` retained — 2 live endpoints + a fresh-DB guard still use it).
+- `2978b0ad` fix(website): Chatwoot widget env-gate (renders only when both `websiteToken`+`baseUrl`
+  set); removed hardcoded dead `support.decent-cloud.org` default; `release.yml`+`cf/deploy.py` wire
+  `VITE_CHATWOOT_*` build vars.
+- `89b6dbb2` fix(ci): repaired 2 demo-removal Playwright regressions; removed empty `DC_REPO_WRITE`
+  checkout override; committed Cargo.lock for `--locked`.
+- `87c45517` fix(website): provider sidebar OPEN by default + added Cloud Accounts nav link.
+- `a2a96862` fix(offerings): cloud-resell (Hetzner/Vultr) offerings visible in marketplace without a
+  pool — DRY `is_cloud_resell`/`is_marketplace_visible` helpers (BackendType SSOT). The user's
+  "Hetzner requires a pool" bug.
+- `45953812` fix(e2e): root-caused 2 PRE-EXISTING Playwright failures (account-page ambiguous `Account`
+  selector → exact match; offerings-editor-replace depended on example-provider templates dropped by
+  053 → self-seeds). Full suite now 314/0.
+
+**k8s manifest audit (read-only, no manifest changes):** migrations auto-run unconditionally at boot
+(`database/core.rs:15`); website Chatwoot config is build-time-baked (no runtime env needed); stage
+overlay correct + isolated; probes adequate; image-tag policy sound. One flagged non-action
+(`CHATWOOT_INBOX_ID` env unread by code → wire-or-drop) surfaced as OP-5 in `docs/OPEN_ISSUES.md`.
+A full prod+stage deploy runbook is recorded inline in the OP-1 entry of `docs/OPEN_ISSUES.md`
+(retag → `release.yml` builds image → ArgoCD syncs → migration `053` applies at boot). The cutover
+sequence itself is cross-referenced in `docs/MIGRATION-CUTOVER.md` (not duplicated here).
+
+The standing mandate (no-mock UX audit, continued #444 splits, robustness, e2e harness
+radicalization) continues.

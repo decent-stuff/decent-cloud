@@ -80,8 +80,12 @@ test.describe('Account Settings Page', () => {
 		await expect(page).toHaveURL('/dashboard/account/security');
 		await expect(page.locator('h1:has-text("Security")')).toBeVisible();
 
-		// Navigate back to account overview
-		await page.click('a:has-text("Account")');
+		// Navigate back to account overview. Exact-name match on role=link: the
+		// substring `has-text("Account")` is ambiguous here because the sidebar
+		// also has a "Support Account" link (/dashboard/provider/support), so a
+		// substring click lands on the wrong one. No SettingsTabs tab is named
+		// "Account", so exact-name scopes uniquely to the sidebar Account link.
+		await page.getByRole('link', { name: 'Account', exact: true }).click();
 		await expect(page).toHaveURL('/dashboard/account');
 		await expect(
 			page.locator('h1:has-text("Account Settings")'),

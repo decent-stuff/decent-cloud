@@ -40,16 +40,12 @@ impl Database {
     /// Get platform-wide statistics
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
         // Total providers = all who have ever checked in or created a profile
-        // Exclude the example provider used for template generation
-        let example_provider_hash = Self::example_provider_pubkey();
         let total_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM (
-                SELECT pubkey FROM provider_profiles WHERE pubkey != $1
+                SELECT pubkey FROM provider_profiles
                 UNION
-                SELECT pubkey FROM provider_check_ins WHERE pubkey != $2
-            ) AS combined"#,
-            &example_provider_hash,
-            &example_provider_hash
+                SELECT pubkey FROM provider_check_ins
+            ) AS combined"#
         )
         .fetch_one(&self.pool)
         .await?;
@@ -67,9 +63,8 @@ impl Database {
         let heartbeat_cutoff = now_ns - five_mins_ns;
         let active_providers: i64 = sqlx::query_scalar!(
             r#"SELECT COUNT(DISTINCT s.provider_pubkey) as "count!" FROM provider_agent_status s
-               WHERE s.online = TRUE AND s.last_heartbeat_ns > $1 AND s.provider_pubkey != $2"#,
-            heartbeat_cutoff,
-            &example_provider_hash
+               WHERE s.online = TRUE AND s.last_heartbeat_ns > $1"#,
+            heartbeat_cutoff
         )
         .fetch_one(&self.pool)
         .await?;

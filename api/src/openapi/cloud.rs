@@ -1391,7 +1391,6 @@ impl CloudApi {
             operating_systems: None,
             trust_score: None,
             has_critical_flags: None,
-            is_example: false,
             is_draft: false,
             publish_at: None,
             offering_source: Some("self_provisioned".to_string()),

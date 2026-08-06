@@ -70,8 +70,9 @@ const flow = {
 			ctx.metric('catalog.locations', cat.locations.length);
 			ctx.metric('catalog.images', cat.images.length);
 
-			// 4. Pick the cheapest server type (prefer cx22 per MINIMIZE-CLOUD-SPENDING),
-			//    the first location, and an Ubuntu image.
+		// 4. Pick the cheapest server type (prefer cx23 per MINIMIZE-CLOUD-SPENDING;
+		//    cx22 was retired by Hetzner, cx23 is the cheapest shared-CPU type now),
+		//    the first location, and an Ubuntu image.
 			const cheapest = pickCheapestServerType(cat.server_types);
 			const location = pickLocation(cat.locations);
 			const image = pickImage(cat.images);
@@ -110,10 +111,10 @@ const flow = {
 	},
 };
 
-/** Prefer cx22 (cheapest Hetzner); else the lowest monthly price; else the first. */
+/** Prefer cx23 (cheapest Hetzner shared-CPU; cx22 was retired); else the lowest monthly price; else the first. */
 function pickCheapestServerType(serverTypes) {
-	const cx22 = serverTypes.find((s) => s.name === 'cx22');
-	if (cx22) return cx22;
+	const cx23 = serverTypes.find((s) => s.name === 'cx23');
+	if (cx23) return cx23;
 	const priced = serverTypes.filter((s) => typeof s.priceMonthly === 'number' && s.priceMonthly >= 0);
 	if (priced.length) return priced.sort((a, b) => a.priceMonthly - b.priceMonthly)[0];
 	return serverTypes[0];
@@ -138,7 +139,7 @@ function buildOffering(ctx, serverType, location, image) {
 	const stamp = `${Date.now()}`.slice(-8);
 	return {
 		// Server sets id + pubkey; everything below mirrors the website wizard.
-		offering_id: `e2e-cx22-${stamp}`,
+		offering_id: `e2e-cx23-${stamp}`,
 		offer_name: `[e2e] ${serverType.name} @ ${location.name} (automated test)`,
 		description: 'Automated e2e-harness offering — safe to delete.',
 		currency: 'eur',

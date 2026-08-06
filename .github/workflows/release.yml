@@ -167,7 +167,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.DC_REPO_WRITE }}
           fetch-depth: 1
 
       - name: Install Rust
@@ -193,7 +192,16 @@ jobs:
           # inherits dev values from a stray local website/.env.local (which Vite would
           # otherwise pick up via `npm run build`). All VITE_ vars are public/client-side.
           VITE_DECENT_CLOUD_API_URL: https://api.decent-cloud.org
-          VITE_CHATWOOT_BASE_URL: https://support.decent-cloud.org
+          # Chatwoot support widget — env-driven. The widget renders ONLY when
+          # BOTH are set (see ChatwootWidget.svelte), so an unset pair yields a
+          # console-clean bundle with the widget gated off. The base URL is a
+          # non-secret repo Variable; the website token is an Actions Secret.
+          # Operator: set repo var `CHATWOOT_BASE_URL` (public Chatwoot URL,
+          # e.g. https://dev-support.decent-cloud.org) and Actions secret
+          # `CHATWOOT_WEBSITE_TOKEN` (Chatwoot inbox → Configuration → Website
+          # Token) to enable support chat. See cf/CONFIG.md → "Website build".
+          VITE_CHATWOOT_BASE_URL: ${{ vars.CHATWOOT_BASE_URL }}
+          VITE_CHATWOOT_WEBSITE_TOKEN: ${{ secrets.CHATWOOT_WEBSITE_TOKEN }}
           VITE_TELEGRAM_BOT_USERNAME: DecentCloudBot
         run: |
           cd website

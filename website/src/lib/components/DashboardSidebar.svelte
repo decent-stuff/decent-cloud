@@ -47,7 +47,7 @@
 	const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
 		discover: false,
 		activity: false,
-		provider: true
+		provider: false
 	};
 
 	let sectionCollapsed = $state<Record<SectionKey, boolean>>({ ...SECTION_DEFAULTS });
@@ -75,10 +75,14 @@
 		}
 	});
 
-	const CHATWOOT_BASE_URL =
-		import.meta.env.VITE_CHATWOOT_BASE_URL || 'https://support.decent-cloud.org';
+	// No hardcoded default: a dead host would link users to a 404. When the
+	// env var is unset, the "Support Dashboard" sidebar link simply doesn't
+	// render (the {#if CHATWOOT_BASE_URL} block below stays empty).
+	const CHATWOOT_BASE_URL = import.meta.env.VITE_CHATWOOT_BASE_URL || '';
 	const CHATWOOT_ACCOUNT_ID = import.meta.env.VITE_CHATWOOT_ACCOUNT_ID || '1';
-	const supportDashboardUrl = `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`;
+	const supportDashboardUrl = CHATWOOT_BASE_URL
+		? `${CHATWOOT_BASE_URL}/app/accounts/${CHATWOOT_ACCOUNT_ID}/dashboard`
+		: '';
 
 	interface NavItem {
 		href: string;
@@ -113,7 +117,8 @@
 		{ href: '/dashboard/provider/ssh-key-rotations', icon: 'key', label: 'SSH Key Rotations' },
 		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
-		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
+		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' },
+		{ href: '/dashboard/cloud/accounts', icon: 'cloud', label: 'Cloud Accounts' }
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);

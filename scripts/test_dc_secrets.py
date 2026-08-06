@@ -11,6 +11,7 @@ Run from repo root:  ``python3 -m pytest scripts/test_dc_secrets.py -q``
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -46,6 +47,33 @@ def run_dc(args, *, dc_dir, env_extra=None, stdin=None) -> subprocess.CompletedP
         [str(DC_SECRETS_BIN), *args],
         env=env,
         input=stdin,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _minimal_env(dc_dir: Path, secrets: dict[str, str] | None = None) -> dict:
+    """Env for hermetic DISCOVERY tests: only PATH/HOME/locale + DC_SECRETS_DIR +
+    the provided secret vars — so ambient real-credential NAMES don't leak into
+    the subprocess and assertions stay deterministic. ``sops`` resolves the age
+    key from the store's init-generated ``.age-identity``, so no key env needed."""
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k in ("PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM")
+        or k.startswith("UV_")  # uv cache dir etc.
+    }
+    env["DC_SECRETS_DIR"] = str(dc_dir)
+    if secrets:
+        env.update(secrets)
+    return env
+
+
+def run_dc_discovery(args, *, dc_dir, secrets=None) -> subprocess.CompletedProcess:
+    """Run dc-secrets with a scrubbed env (for no-arg `list` discovery tests)."""
+    return subprocess.run(
+        [str(DC_SECRETS_BIN), *args],
+        env=_minimal_env(dc_dir, secrets),
         capture_output=True,
         text=True,
     )
@@ -336,19 +364,93 @@ def test_export_agent_override_wins_as_last(tmp_path):
     assert k_lines[-1] == "K=agent"
 
 
-# ─── list ─────────────────────────────────────────────────────────────────────
-def test_list_files_and_keys(tmp_path):
+# ─── list <path>: per-file key listing (unchanged) ────────────────────────────
+def test_list_per_file_keys(tmp_path):
+    """`list <path>` prints the key NAMES within ONE file (never values)."""
     store = tmp_path / "store"
     init_store(store)
     run_dc(["set", "shared/alpha", "A=1"], dc_dir=store)
     run_dc(["set", "agents/beta", "B=2"], dc_dir=store)
-    files = run_dc(["list"], dc_dir=store).stdout.split()
-    assert "shared/alpha" in files
-    assert "agents/beta" in files
-    # .sops.yaml is excluded.
-    assert ".sops" not in files
     keys = run_dc(["list", "shared/alpha"], dc_dir=store).stdout.split()
     assert keys == ["A"]
+
+
+# ─── list (no args): aggregated credential DISCOVERY (names only, never values) ─
+def test_list_discovery_prints_names_never_values(tmp_path):
+    """No-arg `list` is credential DISCOVERY: every NAME across env + SOPS,
+    NEVER a value. A SOPS value decrypts to memory only to test emptiness."""
+    store = tmp_path / "store"
+    init_store(store)
+    secret_val = "supersecret-value-DO-NOT-LEAK-1234567890"
+    stripe_val = "sk_live_DO_NOT_LEAK_abcdef"
+    run_dc(
+        ["set", "shared/env", f"HETZNER_API_TOKEN={secret_val}", f"STRIPE_SECRET_KEY={stripe_val}"],
+        dc_dir=store,
+    )
+    r = run_dc_discovery(
+        ["list"],
+        dc_dir=store,
+        secrets={"GITHUB_TEST_PAT": "envsecret-xyz-DO-NOT-LEAK", "CF_DOMAIN": "example.com"},
+    )
+    assert r.returncode == 0, r.stderr
+    out = r.stdout
+    # The known SOPS key NAME appears (the task's required known key) ...
+    assert "HETZNER_API_TOKEN" in out
+    assert "STRIPE_SECRET_KEY" in out
+    # ... as does an env-secret NAME matched by the heuristic (_PAT) ...
+    assert "GITHUB_TEST_PAT" in out
+    # ... but a config-ish env NAME not in any SOPS file and not heuristic is NOT
+    # surfaced (no false positives from non-credential env noise).
+    assert "CF_DOMAIN" not in out
+    # CRITICAL: values NEVER appear anywhere in the output.
+    assert secret_val not in out
+    assert stripe_val not in out
+    assert "envsecret-xyz-DO-NOT-LEAK" not in out
+    # No KEY=value leakage (every line is NAME<TAB>source, never NAME=value).
+    assert "=" not in out
+
+
+def test_list_discovery_env_overlap_with_sops(tmp_path):
+    """A config-ish env NAME that ALSO lives in a SOPS file is surfaced via the
+    SOPS-name overlap path (e.g. DATABASE_URL has no secret-y name substring)."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/common", "DATABASE_URL=postgres://x/y"], dc_dir=store)
+    r = run_dc_discovery(["list"], dc_dir=store, secrets={"DATABASE_URL": "postgres://env/y"})
+    assert r.returncode == 0, r.stderr
+    # DATABASE_URL appears once under env (overlap) and once under sops.
+    assert "DATABASE_URL\tenv" in r.stdout
+    assert "DATABASE_URL\tsops:shared/common.yaml" in r.stdout
+
+
+def test_list_discovery_marks_empty_values(tmp_path):
+    """An empty env var / empty SOPS value is flagged `(empty)`, never dropped."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/env", "EMPTY_SOPS_KEY="], dc_dir=store)
+    r = run_dc_discovery(["list"], dc_dir=store, secrets={"EMPTY_ENV_TOKEN": ""})
+    assert r.returncode == 0, r.stderr
+    assert "EMPTY_SOPS_KEY\tsops:shared/env.yaml (empty)" in r.stdout
+    assert "EMPTY_ENV_TOKEN\tenv (empty)" in r.stdout
+
+
+def test_list_discovery_groups_by_source_and_shape(tmp_path):
+    """Output is grouped: a `# <source>` header precedes each block; every data
+    line matches `NAME<TAB>source[( (empty))]`; env block precedes sops blocks."""
+    store = tmp_path / "store"
+    init_store(store)
+    run_dc(["set", "shared/env", "FOO_TOKEN=v"], dc_dir=store)
+    r = run_dc_discovery(["list"], dc_dir=store, secrets={"BAR_SECRET": "x"})
+    assert r.returncode == 0, r.stderr
+    out = r.stdout
+    assert "# env" in out
+    assert "# sops:shared/env.yaml" in out
+    assert out.index("# env") < out.index("# sops:shared/env.yaml")
+    shape = re.compile(r"^[A-Za-z0-9_]+\t(env|sops:[A-Za-z0-9_./-]+)( \(empty\))?$")
+    for line in out.splitlines():
+        if not line or line.startswith("# "):
+            continue
+        assert shape.match(line), f"malformed discovery line: {line!r}"
 
 
 # ─── import ───────────────────────────────────────────────────────────────────

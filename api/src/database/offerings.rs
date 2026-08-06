@@ -1,5 +1,6 @@
 use super::types::Database;
 use super::user_notifications::insert_notification;
+use crate::cloud::types::BackendType;
 use crate::regions::{country_to_region, is_valid_country_code};
 use anyhow::Result;
 use poem_openapi::Object;
@@ -8,12 +9,47 @@ use sqlx::Row;
 use std::collections::{HashMap, HashSet};
 use ts_rs::TS;
 
+/// True iff this offering is a **cloud-resell** offering — i.e. backed by the
+/// central `CloudProvisioningService` (Hetzner/Vultr/Proxmox-API), provisioned
+/// directly from the API server using the provider's stored cloud-account
+/// credentials. This is the dual of the **self-hosted** model, where a provider
+/// runs a per-host dc-agent and registers an `agent_pool`.
+///
+/// Cloud-resell offerings carry a `provisioner_type` drawn from the
+/// [`BackendType`] enum — the single source of truth for central-provisioner
+/// backends. Self-hosted dc-agent pools use distinct provisioner types
+/// (e.g. `"proxmox"` for LXC, never `"proxmox_api"`), so parsing against
+/// `BackendType` cleanly separates the two models and never admits a pool-less
+/// self-hosted offering.
+fn is_cloud_resell(provisioner_type: Option<&str>) -> bool {
+    provisioner_type
+        .and_then(|pt| pt.parse::<BackendType>().ok())
+        .is_some()
+}
+
+/// The marketplace visibility predicate: an offering is listed iff it is
+/// actually provisionable right now. That holds when ANY of:
+///   - it resolves to an agent pool (`resolved_pool_id`, set by
+///     [`Database::compute_provider_online_status`]) — the self-hosted model;
+///   - it is `self_provisioned` (the VM is already running); or
+///   - it is a cloud-resell offering (central `CloudProvisioningService`) —
+///     always provisionable on demand, no pool required.
+///
+/// Applied identically by [`Database::search_offerings`],
+/// [`Database::search_offerings_dsl`], and
+/// [`Database::count_marketplace_visible_offerings`] so the headline count and
+/// the listing one click away can never disagree.
+fn is_marketplace_visible(o: &Offering) -> bool {
+    o.resolved_pool_id.is_some()
+        || o.offering_source.as_deref() == Some("self_provisioned")
+        || is_cloud_resell(o.provisioner_type.as_deref())
+}
+
 /// Base SELECT for the public marketplace offering list. Shared by `search_offerings`,
 /// `search_offerings_dsl`, and `count_marketplace_visible_offerings` so the column set (and thus the
 /// `Offering` row mapping) stays identical across all three read paths.
-/// Bindings: `$1` = example-provider pubkey (hex string), `$2` = agent liveness
-/// cutoff in nanoseconds (`now_ns - 5min`).
-const OFFERING_BASE_SELECT: &str = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, p.reliability_score, o.is_draft, o.publish_at, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, p.name as provider_name, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, EXISTS(SELECT 1 FROM provider_agent_status s WHERE s.provider_pubkey = o.pubkey AND s.online = TRUE AND s.last_heartbeat_ns > $2) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id";
+/// Bindings: `$1` = agent liveness cutoff in nanoseconds (`now_ns - 5min`).
+const OFFERING_BASE_SELECT: &str = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, p.reliability_score, o.is_draft, o.publish_at, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, p.name as provider_name, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, EXISTS(SELECT 1 FROM provider_agent_status s WHERE s.provider_pubkey = o.pubkey AND s.online = TRUE AND s.last_heartbeat_ns > $1) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id";
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -112,10 +148,6 @@ pub struct Offering {
     #[ts(type = "string | undefined")]
     #[sqlx(default)]
     pub publish_at: Option<chrono::DateTime<chrono::Utc>>,
-    // Example flag - indicates if this is an example offering
-    #[ts(type = "boolean")]
-    #[sqlx(default)]
-    pub is_example: bool,
     // Source of offering data: 'provider' (normal) or 'seeded' (scraped/curated)
     #[ts(type = "string | undefined")]
     #[sqlx(default)]
@@ -610,15 +642,14 @@ impl Database {
         &self,
         params: SearchOfferingsParams<'_>,
     ) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
         let mut query = String::from(OFFERING_BASE_SELECT);
         query.push_str(" WHERE LOWER(o.visibility) = 'public' AND o.is_draft = FALSE");
 
-        // Track placeholder index (starts at 3 since $1 and $2 are already used)
-        let mut idx = 2;
+        // Track placeholder index (starts at 1 since $1 is the liveness cutoff)
+        let mut idx = 1;
 
         if params.product_type.is_some() {
             idx += 1;
@@ -660,7 +691,6 @@ impl Database {
         ));
 
         let mut query_builder = sqlx::query_as::<_, Offering>(&query)
-            .bind(example_provider_pubkey)
             .bind(heartbeat_cutoff);
 
         if let Some(pt) = params.product_type {
@@ -694,13 +724,11 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool or are self-provisioned
+        // Filter to only include offerings that are actually provisionable:
+        // pool-backed (self-hosted), self-provisioned, or cloud-resell.
         let filtered: Vec<Offering> = with_status
             .into_iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .filter(is_marketplace_visible)
             .take(params.limit as usize)
             .collect();
 
@@ -773,6 +801,15 @@ impl Database {
                     continue;
                 }
 
+                // Cloud-resell offerings are always "online" — the central
+                // CloudProvisioningService provisions them on demand from the
+                // API server, independent of any per-host dc-agent.
+                if is_cloud_resell(offering.provisioner_type.as_deref()) {
+                    offering.provider_online = Some(true);
+                    result.push((original_index, offering));
+                    continue;
+                }
+
                 let (has_pool, pool_is_online, resolved_pool) = if let Some(pool_id) =
                     &offering.agent_pool_id
                 {
@@ -818,7 +855,6 @@ impl Database {
 
     /// Get offerings by provider with resolved pool information and online status
     pub async fn get_provider_offerings(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval,
@@ -829,12 +865,11 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
-               FROM provider_offerings WHERE pubkey = $2 ORDER BY monthly_price ASC"#
+               FROM provider_offerings WHERE pubkey = $1 ORDER BY monthly_price ASC"#
         )
-        .bind(example_provider_pubkey)
         .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
@@ -848,7 +883,6 @@ impl Database {
 
     /// Get public offerings by provider (for public API - respects visibility)
     pub async fn get_provider_offerings_public(&self, pubkey: &[u8]) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval,
@@ -859,12 +893,11 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
-               FROM provider_offerings WHERE pubkey = $2 AND LOWER(visibility) = 'public' ORDER BY monthly_price ASC"#
+               FROM provider_offerings WHERE pubkey = $1 AND LOWER(visibility) = 'public' ORDER BY monthly_price ASC"#
         )
-        .bind(example_provider_pubkey)
         .bind(pubkey)
         .fetch_all(&self.pool)
         .await?;
@@ -876,7 +909,6 @@ impl Database {
 
     /// Get single offering by id
     pub async fn get_offering(&self, offering_id: i64) -> Result<Option<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offering =
             sqlx::query_as::<_, Offering>(r#"SELECT provider_offerings.id, lower(encode(provider_offerings.pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                 setup_fee, visibility, product_type, virtualization_type, billing_interval,
@@ -887,14 +919,13 @@ impl Database {
                 ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                 datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                 control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at, CASE WHEN lower(encode(provider_offerings.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
                 offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, acc.username as owner_username, (SELECT name FROM provider_profiles WHERE pubkey = provider_offerings.pubkey) as provider_name,
                 provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                  FROM provider_offerings
                  LEFT JOIN account_public_keys apk ON provider_offerings.pubkey = apk.public_key AND apk.is_active = TRUE
                  LEFT JOIN accounts acc ON apk.account_id = acc.id
-                 WHERE provider_offerings.id = $2"#)
-                .bind(example_provider_pubkey)
+                 WHERE provider_offerings.id = $1"#)
                 .bind(offering_id)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -913,7 +944,6 @@ impl Database {
     #[cfg(test)]
     pub async fn get_example_offerings(&self) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
-        let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval,
@@ -924,12 +954,11 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
-               FROM provider_offerings WHERE pubkey = $2 ORDER BY offering_id ASC"#
+               FROM provider_offerings WHERE pubkey = $1 ORDER BY offering_id ASC"#
         )
-        .bind(&example_provider_pubkey_hex)
         .bind(&example_provider_pubkey)
         .fetch_all(&self.pool)
         .await?;
@@ -941,7 +970,6 @@ impl Database {
     /// Used by: GET /offerings/csv-template endpoint
     pub async fn get_example_offerings_by_type(&self, product_type: &str) -> Result<Vec<Offering>> {
         let example_provider_pubkey = Self::example_provider_pubkey();
-        let example_provider_pubkey_hex = hex::encode(&example_provider_pubkey);
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT id, lower(encode(pubkey, 'hex')) as pubkey, offering_id, offer_name, description, product_page_url, currency, monthly_price,
                setup_fee, visibility, product_type, virtualization_type, billing_interval,
@@ -952,12 +980,11 @@ impl Database {
                ssd_amount, total_ssd_capacity, unmetered_bandwidth, uplink_speed, traffic,
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
-               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at, CASE WHEN lower(encode(pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
-               FROM provider_offerings WHERE pubkey = $2 AND product_type = $3 ORDER BY offering_id ASC"#
+               FROM provider_offerings WHERE pubkey = $1 AND product_type = $2 ORDER BY offering_id ASC"#
         )
-        .bind(&example_provider_pubkey_hex)
         .bind(&example_provider_pubkey)
         .bind(product_type)
         .fetch_all(&self.pool)
@@ -985,32 +1012,26 @@ impl Database {
             .expect("Example provider pubkey hex should always decode successfully")
     }
 
-    /// Count public, non-draft, non-example offerings that are actually visible in
-    /// the marketplace — i.e. they pass the SAME pool-resolution filter that
-    /// [`search_offerings`] applies post-fetch (`resolved_pool_id.is_some()` or
-    /// `offering_source == "self_provisioned"`).
+    /// Count public, non-draft offerings that are actually visible in the
+    /// marketplace — i.e. they pass the SAME visibility predicate that
+    /// [`search_offerings`] applies post-fetch ([`is_marketplace_visible`]:
+    /// pool-backed, self-provisioned, or cloud-resell).
     ///
     /// This is the single source of truth the platform-stats `total_offerings`
     /// field reads, so the headline count can never contradict the marketplace
     /// listing one click away (a provider with offerings but no agent pool would
     /// otherwise be counted here yet dropped from the list).
     pub async fn count_marketplace_visible_offerings(&self) -> Result<i64> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
 
-        // Same SELECT + bindings ($1 example hex, $2 liveness cutoff) as the
-        // marketplace list; the example provider is excluded directly so the
-        // count never includes synthetic demo rows.
+        // Same SELECT + binding ($1 liveness cutoff) as the marketplace list.
         let sql = format!(
-            "{base} WHERE LOWER(o.visibility) = 'public' \
-                AND o.is_draft = FALSE \
-                AND lower(encode(o.pubkey, 'hex')) != $1",
+            "{base} WHERE LOWER(o.visibility) = 'public' AND o.is_draft = FALSE",
             base = OFFERING_BASE_SELECT
         );
         let offerings = sqlx::query_as::<_, Offering>(&sql)
-            .bind(&example_provider_pubkey)
             .bind(heartbeat_cutoff)
             .fetch_all(&self.pool)
             .await?;
@@ -1019,27 +1040,9 @@ impl Database {
         // same resolver the marketplace uses.
         let with_status = self.compute_provider_online_status(offerings).await?;
         let count = with_status
-            .iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .into_iter()
+            .filter(is_marketplace_visible)
             .count() as i64;
-        Ok(count)
-    }
-
-    /// Count synthetic example offerings still present in the catalog (rows owned
-    /// by the example-provider pubkey). Zero is the honest state — migration
-    /// `053_drop_example_provider_seed.sql` deletes them. A non-zero result means
-    /// the demo catalog is publicly served again and the doctor must flag it.
-    pub async fn count_example_offerings(&self) -> Result<i64> {
-        let example = Self::example_provider_pubkey();
-        let count: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(*) as "count!" FROM provider_offerings WHERE pubkey = $1"#,
-            &example
-        )
-        .fetch_one(&self.pool)
-        .await?;
         Ok(count)
     }
 
@@ -1050,7 +1053,6 @@ impl Database {
         limit: i64,
         offset: i64,
     ) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
@@ -1059,8 +1061,8 @@ impl Database {
         let filters = crate::search::parse_dsl(query)
             .map_err(|e| anyhow::anyhow!("DSL parse error: {}", e))?;
 
-        // Build SQL WHERE clause and bind values (starting from $3 since $1 and $2 are used below)
-        let (dsl_where, dsl_values) = crate::search::build_sql_with_offset(&filters, 2)
+        // Build SQL WHERE clause and bind values (starting from $2 since $1 is the liveness cutoff)
+        let (dsl_where, dsl_values) = crate::search::build_sql_with_offset(&filters, 1)
             .map_err(|e| anyhow::anyhow!("SQL build error: {}", e))?;
 
         // Base SELECT with same fields as search_offerings
@@ -1076,8 +1078,8 @@ impl Database {
             )
         };
 
-        // Calculate LIMIT/OFFSET placeholder indices (after fixed bindings + DSL bindings)
-        let limit_idx = 2 + dsl_values.len() + 1;
+        // Calculate LIMIT/OFFSET placeholder indices (after fixed binding + DSL bindings)
+        let limit_idx = 1 + dsl_values.len() + 1;
         let offset_idx = limit_idx + 1;
 
         // Complete query with ORDER BY and pagination
@@ -1088,7 +1090,6 @@ impl Database {
 
         // Build query with bindings
         let mut query_builder = sqlx::query_as::<_, Offering>(&query_sql)
-            .bind(&example_provider_pubkey)
             .bind(heartbeat_cutoff);
 
         // Bind DSL values
@@ -1109,13 +1110,11 @@ impl Database {
         // Compute online status for all offerings
         let with_status = self.compute_provider_online_status(offerings).await?;
 
-        // Filter to only include offerings that have a matching pool or are self-provisioned
+        // Filter to only include offerings that are actually provisionable:
+        // pool-backed (self-hosted), self-provisioned, or cloud-resell.
         let filtered: Vec<Offering> = with_status
             .into_iter()
-            .filter(|o| {
-                o.resolved_pool_id.is_some()
-                    || o.offering_source.as_deref() == Some("self_provisioned")
-            })
+            .filter(is_marketplace_visible)
             .collect();
 
         Ok(filtered)
@@ -1334,7 +1333,6 @@ impl Database {
             reliability_score: _,
             is_draft,
             publish_at,
-            is_example: _,
             offering_source,
             external_checkout_url,
             reseller_name: _,
@@ -1593,7 +1591,6 @@ impl Database {
             reliability_score: _,
             is_draft,
             publish_at,
-            is_example: _,
             offering_source,
             external_checkout_url,
             reseller_name: _,
@@ -1899,7 +1896,6 @@ impl Database {
             reliability_score: None,
             is_draft: source.is_draft,
             publish_at: None,
-            is_example: false,
             offering_source: source.offering_source,
             external_checkout_url: source.external_checkout_url,
             reseller_name: None,
@@ -2363,7 +2359,6 @@ impl Database {
             reliability_score: None,
             is_draft: get_bool("is_draft"),
             publish_at: None,
-            is_example: false,
             offering_source: get_opt_str("offering_source"),
             external_checkout_url: get_opt_str("external_checkout_url"),
             reseller_name: None,
@@ -2412,7 +2407,6 @@ impl Database {
 
     /// Get all saved offerings for a user, joined with full offering data.
     pub async fn get_saved_offerings(&self, user_pubkey: &[u8]) -> Result<Vec<Offering>> {
-        let example_provider_pubkey = hex::encode(Self::example_provider_pubkey());
         let offerings = sqlx::query_as::<_, Offering>(
             r#"SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price,
                o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval,
@@ -2425,15 +2419,14 @@ impl Database {
                o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours,
                o.payment_methods, o.features, o.operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score,
-               o.is_draft, o.publish_at, CASE WHEN lower(encode(o.pubkey, 'hex')) = $1 THEN TRUE ELSE FALSE END as is_example,
+               o.is_draft, o.publish_at,
                o.offering_source, o.external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
                o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script,
                NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings o
-               INNER JOIN saved_offerings s ON o.id = s.offering_id AND s.user_pubkey = $2
+               INNER JOIN saved_offerings s ON o.id = s.offering_id AND s.user_pubkey = $1
                ORDER BY s.saved_at DESC"#
         )
-        .bind(example_provider_pubkey)
         .bind(user_pubkey)
         .fetch_all(&self.pool)
         .await?;

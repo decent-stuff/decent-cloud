@@ -8,6 +8,35 @@ inventory for quick local reference; GitHub remains the source of truth. Re-sync
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
 
+## Real-deployment audit (2026-08-04)
+
+A CDP-driven audit of the REAL prod deployment (`https://decent-cloud.org`, ns `dc-prod`) + the
+Hetzner operator console mapped **19 findings** (no VM rented; cloud spend $0). Full details in
+[`docs/REAL-DEPLOYMENT-ISSUES.md`](REAL-DEPLOYMENT-ISSUES.md). **Two P0s head the list:**
+
+- **P0-A — prod OUTAGE (resolved out-of-band; PERMANENCE FIX NEEDED):** the nuc-k3s symmetry rename
+  (`dc-secret`→`dc-prod-secret`, commit `86b1422`) + an unused `HETZNER_API_TOKEN` secretKeyRef stub
+  (commit `4ac1b80`) were pushed WITHOUT re-applying the secret under its new name in-cluster → all
+  `dc-prod` pods went `CreateContainerConfigError: secret "dc-prod-secret" not found` for ~3.5h
+  (HTTP 530→502). Recovered via kubectl (copy `dc-secret`→`dc-prod-secret` + patch in
+  `HETZNER_API_TOKEN` + delete stuck pods); prod now HTTP 200, `dc-api` 1/1 Running. **Permanence
+  (operator):** run `manage-secrets.py` (k8s repo) so `dc-prod-secret` is reconciled from the
+  renamed SOPS file, and remove the unused `HETZNER_API_TOKEN` stub from `base/dc-api.yaml` (k8s
+  repo — only `api/src/bin/api-cli/e2e.rs:203` ever reads it from env).
+- **P0-B — Path-A Hetzner offerings SILENTLY HIDDEN from the marketplace (OPEN — the big product
+  blocker):** `search_offerings`/`search_offerings_dsl`
+  (`api/src/database/offerings.rs:695`/`:1052`) post-filter requires
+  `resolved_pool_id.is_some() || offering_source == "self_provisioned"`; a Path-A Hetzner offering
+  has NEITHER (no agent pool; `offering_source` NULL because
+  `website/src/routes/dashboard/offerings/create/+page.svelte:273` submits
+  `offering_source: undefined`). The entire "Resell a managed cloud" Path A is a dead end — you can
+  list an offering nobody can see or rent. Fix: set `offering_source:"self_provisioned"` for
+  `provisioner_type IN ('hetzner','vultr')` at create, OR add that as an OR-branch in the filter.
+
+The remaining 17 findings (P1–P3: token-creation pitfalls, catalog/mismatch issues, console
+errors, onboarding sequencing, etc.) + a `dc-stage` staging note + the full operator action list
+are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e harness (PR #459).
+
 ## Scope rules (per `repo/AGENTS.md` + `repo/PROMPT.md`)
 
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
@@ -36,6 +65,28 @@ detail is in the plan's STATUS block.
 | E2E category `--grep @rental` returns 0 (tags doc-only) | Fixed FLOWS category-run section | `eb3f8ba5` |
 | #444 `contracts.rs` 2244L (mechanical split candidate) | Split 2244→1745 + new `contract_telemetry.rs` (527L) | `352f2355`,`a1f1a2f0` |
 
+## Resolved this session — round 2/3 (2026-08-06)
+
+Follow-on sweep on the same branch (`sweep-2026-08-05`), driven by user feedback + CI/release
+verification. 7 commits on top of round 1 (origin/main `252c7f76` → `45953812`). spec_snapshot
+unchanged (187 paths / 327 schemas); full Playwright suite now **314/0**. No code migration needed —
+all fixes are projections of existing data or build/config wiring.
+
+| Finding (source) | Fix | Commit |
+|------------------|-----|--------|
+| Workspace version drifted (0.5.3) vs release-tag consistency target | Bump 0.5.3→0.5.5 for release-tag consistency | `28740f20` |
+| Dead `is_example` concept — DERIVED field (never a column), always false since migration 053; polluted SQL projection, `$N` param threading, frontend serialization | Removed `is_example` ENTIRELY (field/SQL projection/`$N` param threading/frontend serialization) + removed the now-obsolete `DOCTOR_EXAMPLE_OFFERINGS_PRESENT` doctor guard. `example_provider_pubkey()` RETAINED (2 live endpoints `/offerings/template/:product_type`, `/offerings/product-types` + a fresh-DB guard use it; full retirement is a separate coordinated change). spec_snapshot 187/327 unchanged | `9e16e677` |
+| Chatwoot widget rendered unconditionally — 404 iframe + console errors on every prod page; hardcoded dead `support.decent-cloud.org` default | Env-gate: widget renders ONLY when both `websiteToken`+`baseUrl` set; removed the hardcoded default; `release.yml`+`cf/deploy.py` wire `VITE_CHATWOOT_*` build vars | `2978b0ad` |
+| CI: 2 Playwright regressions from demo-removal; `release.yml` empty `DC_REPO_WRITE` token override; `--locked` build failed (no Cargo.lock) | Repaired 2 e2e regressions; removed empty `DC_REPO_WRITE` checkout override; committed Cargo.lock for `--locked` | `89b6dbb2` |
+| Provider sidebar collapsed by default; Cloud Accounts route had no nav link (full UI + working Hetzner key validation already shipped) | Sidebar OPEN by default; added Cloud Accounts nav link | `87c45517` |
+| Cloud-resell (Hetzner/Vultr) offerings invisible in marketplace without a pool — user-reported "Hetzner requires a pool" bug | DRY `is_cloud_resell`/`is_marketplace_visible` helpers (BackendType SSOT); cloud-resell offerings now marketplace-visible WITHOUT a pool. Live-verified | `a2a96862` |
+| 2 PRE-EXISTING Playwright failures: account-page ambiguous `Account` selector; offerings-editor-replace depended on example-provider templates dropped by 053 | Root-caused both: exact-match selector; spec now self-seeds like its sibling. Full suite 314/0 | `45953812` |
+
+Also a read-only **k8s manifest audit** (no manifest changes needed): migrations auto-run
+unconditionally at boot (`database/core.rs:15`), website Chatwoot config is build-time-baked (no
+runtime env needed), stage overlay correct + isolated, probes adequate, image-tag policy sound. One
+flagged non-action → tracked as OP-5 below (`CHATWOOT_INBOX_ID` env unread by code).
+
 ## Operator / deploy blockers (need human)
 
 NOT autonomously fixable — require a deploy or operator action. Each lists concrete evidence, the
@@ -49,11 +100,17 @@ the sweep's new guards surfaced.
   is an unconditional `DELETE`; if it ran, the rows would be gone) — i.e. prod was never redeployed at
   ≥ these commits. Violates the honest-catalog goal in `docs/PRODUCT-DIRECTION.md`. (This supersedes
   the 2026-08-03 "Deferred — UX" F2 note, which recorded demos as dropped: the migration landed in
-  code, but the prod DB never received it.) **ACTION:** redeploy prod at ≥ these commits; confirm
-  sqlx migrations apply at boot; verify
-  `SELECT count(*) FROM provider_offerings WHERE pubkey='\x6578616d706c652d...'` = 0. **Autonomous
-  guard now in place:** doctor check `DOCTOR_EXAMPLE_OFFERINGS_PRESENT` FAILS-in-prod (`3b372ae9`) +
-  harness marketplace-honesty FAIL-on-prod (`f6c37458`).
+  code, but the prod DB never received it.) **ACTION:** redeploy prod at ≥ these commits; verify
+  `SELECT count(*) FROM provider_offerings WHERE pubkey='\x6578616d706c652d...'` = 0. **The
+  `is_example` concept is now removed from code entirely** (`9e16e677`, round 2/3) — there is no
+  longer an `is_example` field/projection/serialization at all (it was always derived, always false
+  since 053). **A working deploy runbook exists:** migrations auto-run unconditionally at boot
+  (`database/core.rs:15`), so retagging the image + `release.yml` building it + ArgoCD syncing
+  applies `053` automatically (confirmed by the 2026-08-06 k8s manifest audit — probes adequate,
+  image-tag policy sound). The prod data fix still needs the redeploy itself. **Autonomous guard:**
+  the `DOCTOR_EXAMPLE_OFFERINGS_PRESENT` doctor guard was REMOVED in `9e16e677` (obsolete once
+  `is_example` is gone); the harness marketplace-honesty assertion (`f6c37458`) remains the live
+  FAIL-on-prod guard.
 - **OP-2 — Stage (dev-api) is stale.** Evidence: `GET /api/v1/auth/capabilities` → 404 on stage (prod
   200); stage offerings priced in the retired ICP currency (`currency:ICP`,
   `payment_methods:ICP,ckBTC`) while prod is USD/Stripe. **ACTION:** redeploy stage from the current
@@ -61,15 +118,30 @@ the sweep's new guards surfaced.
 - **OP-3 — PROD Chatwoot support widget broken on every page.** Evidence: widget URL
   `https://support.decent-cloud.org/widget?website_token=yDZeiDhpXW5UEhwPVFmgJAkg` → HTTP 404; the host
   sends `X-Frame-Options:SAMEORIGIN` which blocks the iframe (`ERR_BLOCKED_BY_RESPONSE`, console error
-  on all prod routes; dev-web is clean). **ACTION:** operator re-create/restore the Chatwoot web
-  widget token, set the allowed origin / disable `X-Frame-Options` for decent-cloud.org, and update
-  the configured website token.
+  on all prod routes; dev-web is clean). **Round 2/3 update (`2978b0ad`):** the widget is now
+  env-gated — it renders ONLY when both `websiteToken`+`baseUrl` are set, and the hardcoded dead
+  `support.decent-cloud.org` default is removed, so prod no longer emits console errors when the
+  tunnel is down. The widget is still NOT functional in prod because `support.decent-cloud.org`
+  remains **dead-infra**. **ACTION:** restore the support tunnel OR point `CHATWOOT_BASE_URL` at
+  `dev-support` (the live Chatwoot host), re-create/restore the website token, set the allowed origin
+  / disable `X-Frame-Options` for decent-cloud.org, and populate the GitHub repo var/secret so the CI
+  build bakes the config (see OP-5).
 - **OP-4 — `stage-*` hostnames do not resolve (k8s dc-stage cutover incomplete).** Evidence:
   `stage-api.decent-cloud.org` + `stage.decent-cloud.org` DNS-fail; `dev-*` is the de-facto stage.
   **ACTION:** complete `docs/MIGRATION-CUTOVER.md` Step D (public tunnel/DNS cutover) OR update the
   docs to state `dev-*` is the only live stage. This overlaps the existing k8s staging→dc-stage
   cutover blocker tracked below (see "Infrastructure — staging → k8s … consolidation"); it is the
   public-DNS slice of that same cutover, not a separate plan.
+- **OP-5 — Populate GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN`
+  (for the release.yml website build).** Surfaced by round 2/3 (`2978b0ad`): the website Chatwoot
+  widget is now build-time-baked from `VITE_CHATWOOT_*` vars, and `release.yml` + `cf/deploy.py` wire
+  those vars from the GitHub repo Variable (`CHATWOOT_BASE_URL`) + Actions Secret
+  (`CHATWOOT_WEBSITE_TOKEN`). Until the operator populates both, CI builds a widget-less website
+  (intentionally silent — the env-gate suppresses it), so the support widget cannot render even after
+  OP-3's tunnel is restored. **ACTION:** set both in the repo settings (Variables tab +
+  Secrets→Actions). Also decide the flagged non-action from the 2026-08-06 k8s audit: the
+  `CHATWOOT_INBOX_ID` env var is **unread by code** (intended for the support bot) — either wire it
+  into a consumer or drop it from the k8s `dc-config`/`dc-stage-config` in the same change.
 
 ## Future work
 
@@ -436,8 +508,19 @@ secret/config gap across both envs is **exactly the 3 TextBee SMS keys**
 
 **Forward milestone:** `docs/plans/2026-08-03-hetzner-first-offerings.md` scopes the
 operator reselling Hetzner as the platform's first real provider (ends the
-honest-empty-marketplace period). Status: *Proposed — needs operator's Hetzner creds +
-provider identity to execute.*
+honest-empty-marketplace period). Status: **PROVEN + UNBLOCKED (2026-08-06).** The
+data path was proven end-to-end by a no-spend PoC (`poc/hetzner-cloud-resell-poc.mjs`,
+commit `4c6eb3b7`): fresh identity → provider onboarding → live-validated Hetzner
+cloud_account → real cloud-resell offering created (cx23/nbg1/ubuntu-24.04) →
+**marketplace VISIBLE with Rent button ENABLED** (empirically confirms the `a2a96862`
+cloud-resell visibility fix). All creds (`HETZNER_API_TOKEN{_DEV/_STAGE/_PROD}`,
+`DC_PROD_RESELLER_PUBKEY/_SEED`) are already in the age-SOPS store — see
+`docs/CREDENTIALS.md`. A latent bug was also fixed: the retired `cx22` Hetzner server
+type default → `cx23`. **Remaining steps (need operator opt-in):** (1) real-VM
+provisioning verification (cheapest cx23, ~€0.0007 for 5 min, force-delete) — gated
+behind `DC_E2E_INCLUDE_PROVISION` or api-cli rent→provision→SSH→cancel; (2) seed the
+offering to STAGE then PROD (data only — reuse the PoC pointed at the reseller seed,
+ship the api image with the cx23 fix via GitOps). Full runbook in the PoC commit header.
 
 ### 2026-08-02 session (WAVE-0: prior-session WIP + stale-issue reconciliation)
 

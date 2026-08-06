@@ -238,8 +238,6 @@ struct Offering {
     #[serde(alias = "price_monthly_usd")]
     monthly_price: Option<f64>,
     stock_status: Option<String>,
-    #[serde(default)]
-    is_example: bool,
 }
 
 #[derive(Debug, Deserialize)]

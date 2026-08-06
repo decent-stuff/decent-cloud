@@ -73,8 +73,8 @@ prerequisites are auto-included (e.g. `--flows provider-onboard-path-a` pulls in
 | 4 | `drift`                 | Diffs key read-only endpoints between this target and prod (the reference): `/health` environment, `/auth/capabilities` status + `google_oauth`, `/stats`, and `/offerings` currency/payment_methods (flags retired ICP/BTC). One FINDING per meaningful diff; a DNS failure reaching either side is itself a finding, never a crash. When the target IS prod, there is nothing to diff. Override the reference with `DC_E2E_DRIFT_REFERENCE_API`. |
 | 5 | `stats-honesty`         | Heuristic: `active_providers` vs the count of `provider_online` offerings (`/offerings?limit=100`). `active_providers>0` with zero online offerings is a **finding** pointing at the retired-table stat bug. Findings only — never a hard fail. |
 | 6 | `signup`                | Drives the website sign-up flow headlessly, captures the 12-word seed phrase, asserts the logged-in (dashboard) state. Cleans up by **noting** the test account email (no public delete-account API). |
-| 7 | `provider-onboard-path-a` | The core reseller flow, as the signed-up user, via **signed API calls**: register provider_profile → `POST /cloud-accounts` (Hetzner token validated **live**) → `GET /cloud-accounts/:id/catalog` (live-fetches server types) → create ONE offering from the catalog (cheapest / `cx22`) → assert it appears. Cleans up the offering + cloud account. |
-| 8 | `rent-provision-cancel` | **[GATED, costs money]** Creates a real rental contract on the offering, waits for provisioning, asserts SSH `:22` reachable, then cancels + asserts cleanup. Forced to `cx22`. Default OFF; needs `--include-provision` / `DC_E2E_INCLUDE_PROVISION=1`. |
+| 7 | `provider-onboard-path-a` | The core reseller flow, as the signed-up user, via **signed API calls**: register provider_profile → `POST /cloud-accounts` (Hetzner token validated **live**) → `GET /cloud-accounts/:id/catalog` (live-fetches server types) → create ONE offering from the catalog (cheapest / `cx23`) → assert it appears. Cleans up the offering + cloud account. |
+| 8 | `rent-provision-cancel` | **[GATED, costs money]** Creates a real rental contract on the offering, waits for provisioning, asserts SSH `:22` reachable, then cancels + asserts cleanup. Forced to `cx23`. Default OFF; needs `--include-provision` / `DC_E2E_INCLUDE_PROVISION=1`. |
 
 ### How signing works (no API key to register — the website is the only path)
 
@@ -102,7 +102,7 @@ debuggable from the log. `[FINDING]` lines are non-fatal warnings.
 - No silent `.catch(() => {})`; errors are surfaced (as findings or fails).
 - Provider-onboarding cleanup runs in a `finally` — the offering + cloud account are deleted best-effort even on failure.
 - The rent-provision-cancel flow cancels the contract unconditionally and confirms a terminal `cancelled`/`terminated` state.
-- `MINIMIZE-CLOUD-SPENDING`: provisioning is forced to the cheapest server type (`cx22` when available).
+- `MINIMIZE-CLOUD-SPENDING`: provisioning is forced to the cheapest server type (`cx23` when available; `cx22` was retired by Hetzner).
 
 ## Layout
 

@@ -79,14 +79,14 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-03. Refreshed after UX F7 (`bc9caf05`, which added
-    // `provider_name` to the `Offering` response schema) — that intentional field
-    // addition changed the canonical hash without altering path/schema counts
-    // (still 187/327). The previous hash (`4549fcf2…`, post-Wave-12 capture) had
-    // gone stale because F7 did not refresh it, leaving this guard red.
+    // Capture date: 2026-08-06. Refreshed after removing the dead `is_example`
+    // field from the `Offering` schema (migration 053 dropped all example-provider
+    // seed data, so `is_example` was always false). Path/schema counts are
+    // unchanged (187/327); the only diff is the removal of the `is_example`
+    // property + its `required` entry on `Offering`.
     const EXPECTED_PATHS: usize = 187;
     const EXPECTED_SCHEMAS: usize = 327;
-    const EXPECTED_HASH: &str = "de6529560b1cc2bd9be65b44c0789b0a2368da52f167da8bc6f495c915faffdc";
+    const EXPECTED_HASH: &str = "f4b3cfd966aa0e7250a9ac75023b71d0a19ca3ee6f433a5532932c2d61d5c843";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");

@@ -176,6 +176,25 @@ manifest, `—`=not used in this env.
 | `CHATWOOT_WEBSITE_TOKEN` | `D` | — | dev widget embed |
 | `OPENAI_API_KEY` | — | `sec` | chatwoot-worker (answer assist) |
 
+> **Website build (support widget).** Two `VITE_*` vars are injected at website
+> build time to load the in-page Chatwoot widget: `VITE_CHATWOOT_BASE_URL`
+> (public URL of the Chatwoot instance serving `/packs/js/sdk.js`) and
+> `VITE_CHATWOOT_WEBSITE_TOKEN` (the inbox website token). The widget renders
+> **only when both are set** — an unset pair yields a console-clean bundle with
+> the widget silently gated off (no dead-host fetch, no 404/X-Frame-Options
+> error). Mapping:
+> - `cf/deploy.py` (docker-compose deploy path): `VITE_CHATWOOT_BASE_URL` ←
+>   `CHATWOOT_BASE_URL`, `VITE_CHATWOOT_WEBSITE_TOKEN` ← `CHATWOOT_WEBSITE_TOKEN`
+>   (written to gitignored `website/.env.local`); requires **both** or it warns.
+> - `.github/workflows/release.yml` (k8s image path): `VITE_CHATWOOT_BASE_URL` ←
+>   repo **Variable** `CHATWOOT_BASE_URL`, `VITE_CHATWOOT_WEBSITE_TOKEN` ←
+>   Actions **Secret** `CHATWOOT_WEBSITE_TOKEN`. Operator must set both in
+>   `decent-stuff/decent-cloud` for a release.yml-built website image to show
+>   support chat.
+> The live Chatwoot instance is currently `https://dev-support.decent-cloud.org`
+> (`CHATWOOT_BASE_URL`); `support.decent-cloud.org` is a dead tunnel and must
+> not be used as a hardcoded default.
+
 ### Notifications
 
 | Var | DEV | PROD | Notes |

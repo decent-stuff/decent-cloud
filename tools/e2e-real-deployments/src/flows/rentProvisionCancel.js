@@ -3,7 +3,7 @@
 // contract on the provider-onboard offering, waits for the VM to provision,
 // asserts SSH :22 reachability, then cancels + asserts cleanup.
 //
-// This flow SPENDS REAL MONEY (provisions a real Hetzner VM, forced to cx22 per
+// This flow SPENDS REAL MONEY (provisions a real Hetzner VM, forced to cx23 per
 // MINIMIZE-CLOUD-SPENDING). It requires: a Hetzner token, a target whose API
 // auto-provisions Path-A offerings, working payment/self-rental, and network
 // egress to the provisioned VM. Cleanup is bulletproof (try/finally cancel).
@@ -21,7 +21,7 @@ const DUMMY_SSH_PUBKEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2eharnessplaceho
 
 const flow = {
 	name: 'rent-provision-cancel',
-	description: '[GATED] Real rent→provision→SSH:22→cancel on a cx22 offering (spends money)',
+	description: '[GATED] Real rent→provision→SSH:22→cancel on a cx23 offering (spends money)',
 	requires: ['provider-onboard-path-a'],
 	async run(ctx) {
 		if (!ctx.config.includeProvision) {
@@ -35,7 +35,7 @@ const flow = {
 		let contractId = null;
 		try {
 			// 1. Create the rental contract (self-rental: requester == provider).
-			ctx.log(`creating rental contract on offering ${offeringId} (cx22)…`);
+			ctx.log(`creating rental contract on offering ${offeringId} (cx23)…`);
 			const create = await ctx.signed(identity, 'POST', '/api/v1/contracts', {
 				offering_db_id: offeringId,
 				ssh_pubkey: DUMMY_SSH_PUBKEY,
@@ -49,7 +49,7 @@ const flow = {
 			ctx.log(`contract ${contractId} created`);
 
 			// 2. Wait for provisioning to reach an active/provisioned terminal state.
-			ctx.log('waiting for VM provisioning (this provisions a REAL cx22)…');
+			ctx.log('waiting for VM provisioning (this provisions a REAL cx23)…');
 			const terminal = await waitForProvisioned(ctx, identity, contractId);
 
 			// 3. Verify SSH :22 is reachable on the provisioned host.

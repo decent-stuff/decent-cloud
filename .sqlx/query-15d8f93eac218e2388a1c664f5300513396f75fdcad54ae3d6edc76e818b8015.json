@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COUNT(DISTINCT s.provider_pubkey) as \"count!\" FROM provider_agent_status s\n               WHERE s.online = TRUE AND s.last_heartbeat_ns > $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "15d8f93eac218e2388a1c664f5300513396f75fdcad54ae3d6edc76e818b8015"
+}

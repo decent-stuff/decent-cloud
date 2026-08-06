@@ -63,7 +63,6 @@ test.describe('Offering create contract (POST /providers/:pubkey/offerings)', ()
 			unmetered_bandwidth: false,
 			datacenter_country: 'DE',
 			datacenter_city: 'Falkenstein',
-			is_example: false,
 			is_draft: false,
 		};
 

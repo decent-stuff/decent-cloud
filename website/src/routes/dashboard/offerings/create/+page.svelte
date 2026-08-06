@@ -267,7 +267,6 @@
 				trust_score: undefined,
 				has_critical_flags: undefined,
 				reliability_score: undefined,
-				is_example: false,
 				is_draft: isDraft,
 				publish_at: isDraft && publishAt ? new Date(publishAt).toISOString() : undefined,
 				offering_source: undefined,
