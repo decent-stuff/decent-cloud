@@ -235,35 +235,6 @@ async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
     );
 }
 
-// FIX 4 (defense-in-depth): the doctor's catalog-integrity check counts synthetic
-// example offerings (rows owned by the example-provider pubkey). Production must
-// never publicly serve these; if migration 053 was not applied, this count is the
-// signal the doctor surfaces.
-#[tokio::test]
-async fn test_count_example_offerings_detects_synthetic_rows() {
-    let db = setup_test_db().await;
-    let example = Database::example_provider_pubkey();
-
-    let before = db.count_example_offerings().await.expect("count failed");
-
-    // Simulate the prod failure mode: a synthetic example offering remains public
-    // because migration 053_drop_example_provider_seed.sql was never applied.
-    sqlx::query(
-        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'example-demo', 'Demo', 'USD', 1.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
-    )
-    .bind(example.as_slice())
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    let after = db.count_example_offerings().await.expect("count failed");
-    assert_eq!(
-        after - before,
-        1,
-        "doctor check must detect the synthetic example offering"
-    );
-}
-
 #[tokio::test]
 async fn test_search_offerings_no_filters() {
     let db = setup_test_db().await;
@@ -662,7 +633,6 @@ async fn test_create_offering_success() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -787,7 +757,6 @@ async fn test_create_offering_duplicate_id() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -876,7 +845,6 @@ async fn test_create_offering_missing_required_fields() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -1003,7 +971,6 @@ fn sample_offering_params(pubkey: &[u8], offering_id: &str) -> Offering {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -1086,7 +1053,6 @@ async fn test_update_offering_success() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -1189,7 +1155,6 @@ async fn test_update_offering_unauthorized() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2085,7 +2050,6 @@ async fn test_get_provider_offerings_with_resolved_pool() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2191,7 +2155,6 @@ async fn test_get_provider_offerings_with_explicit_pool_id() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2294,7 +2257,6 @@ async fn test_get_provider_offerings_no_matching_pool() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2403,7 +2365,6 @@ async fn test_search_offerings_filters_by_pool_existence() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2481,7 +2442,6 @@ async fn test_search_offerings_filters_by_pool_existence() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2559,7 +2519,6 @@ async fn test_search_offerings_filters_by_pool_existence() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2674,7 +2633,6 @@ async fn test_create_subscription_offering() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2769,7 +2727,6 @@ async fn test_create_yearly_subscription_offering() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2864,7 +2821,6 @@ async fn test_get_subscription_offering_fields() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -2985,7 +2941,6 @@ async fn test_one_time_offering_default_subscription_fields() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -3080,7 +3035,6 @@ async fn test_template_name_generates_provisioner_config() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -3181,7 +3135,6 @@ async fn test_template_name_non_numeric_no_config() {
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: false,
         offering_source: None,
         external_checkout_url: None,
@@ -5092,7 +5045,6 @@ fn make_draft_offering(
         trust_score: None,
         has_critical_flags: None,
         reliability_score: None,
-        is_example: false,
         is_draft: true,
         publish_at,
         offering_source: None,

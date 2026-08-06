@@ -145,11 +145,10 @@ pub(crate) async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Resul
                 None => {
                     println!("Step 1: Auto-discovering available offering...");
                     let offerings = fetch_offerings(api_url).await?;
-                    // Prefer non-example offerings (example offerings have fake pubkeys)
+                    // All offerings are real now (example/demo catalog was dropped at
+                    // source via migration 053); pick the first available one.
                     let offering = offerings
-                        .iter()
-                        .find(|o| !o.is_example)
-                        .or(offerings.first())
+                        .first()
                         .context("No offerings available for lifecycle test")?;
                     println!(
                         "  Found offering: {} (ID: {})",
@@ -396,11 +395,11 @@ pub(crate) async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Resul
                 Some(oid) => Some(oid),
                 None => match fetch_offerings(api_url).await {
                     Ok(offerings) if !offerings.is_empty() => {
-                        // Prefer non-example offerings (example offerings have fake pubkeys)
+                        // All offerings are real now (example/demo catalog was dropped
+                        // at source via migration 053); use the first available.
                         let offering = offerings
-                            .iter()
-                            .find(|o| !o.is_example)
-                            .unwrap_or(&offerings[0]);
+                            .first()
+                            .unwrap();
                         println!(
                             "  Auto-discovered offering: {} (ID: {})",
                             offering.offer_name.as_deref().unwrap_or("N/A"),

@@ -260,7 +260,6 @@ async function cmdCreateProvider(args) {
     datacenter_city:     'New York',
     unmetered_bandwidth: false,
     is_draft:            true, // draft so it doesn't pollute the live marketplace
-    is_example:          false,
   };
 
   const path   = `/api/v1/providers/${pubkeyHex}/offerings`;
@@ -391,7 +390,6 @@ async function cmdSeedUxData(args) {
       is_subscription:      false,
       stock_status:         'in_stock',
       is_draft:             false,
-      is_example:           false,
       datacenter_country:   def.datacenter_country,
       datacenter_city:      def.datacenter_city,
       operating_systems:    'Ubuntu 22.04,Debian 12,Rocky Linux 9',
@@ -485,7 +483,7 @@ async function cmdSeedContracts(args) {
     throw new Error('No in-stock offerings found');
   }
 
-  const availableOfferings = offeringsResult.data.filter(o => !o.is_draft && o.stock_status === 'in_stock' && !o.is_example);
+  const availableOfferings = offeringsResult.data.filter(o => !o.is_draft && o.stock_status === 'in_stock');
   if (availableOfferings.length === 0) throw new Error('No public in-stock offerings available');
 
   const sshPubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test@example.com';
@@ -611,7 +609,6 @@ async function cmdSeedEdgeCases(args) {
     is_subscription:      false,
     stock_status:         'in_stock',
     is_draft:             false,
-    is_example:           false,
     datacenter_country:   'DE',
     datacenter_city:      'Berlin',
     operating_systems:    'Ubuntu 22.04,Debian 12',
