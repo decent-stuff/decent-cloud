@@ -8,6 +8,35 @@ inventory for quick local reference; GitHub remains the source of truth. Re-sync
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
 
+## Real-deployment audit (2026-08-04)
+
+A CDP-driven audit of the REAL prod deployment (`https://decent-cloud.org`, ns `dc-prod`) + the
+Hetzner operator console mapped **19 findings** (no VM rented; cloud spend $0). Full details in
+[`docs/REAL-DEPLOYMENT-ISSUES.md`](REAL-DEPLOYMENT-ISSUES.md). **Two P0s head the list:**
+
+- **P0-A — prod OUTAGE (resolved out-of-band; PERMANENCE FIX NEEDED):** the nuc-k3s symmetry rename
+  (`dc-secret`→`dc-prod-secret`, commit `86b1422`) + an unused `HETZNER_API_TOKEN` secretKeyRef stub
+  (commit `4ac1b80`) were pushed WITHOUT re-applying the secret under its new name in-cluster → all
+  `dc-prod` pods went `CreateContainerConfigError: secret "dc-prod-secret" not found` for ~3.5h
+  (HTTP 530→502). Recovered via kubectl (copy `dc-secret`→`dc-prod-secret` + patch in
+  `HETZNER_API_TOKEN` + delete stuck pods); prod now HTTP 200, `dc-api` 1/1 Running. **Permanence
+  (operator):** run `manage-secrets.py` (k8s repo) so `dc-prod-secret` is reconciled from the
+  renamed SOPS file, and remove the unused `HETZNER_API_TOKEN` stub from `base/dc-api.yaml` (k8s
+  repo — only `api/src/bin/api-cli/e2e.rs:203` ever reads it from env).
+- **P0-B — Path-A Hetzner offerings SILENTLY HIDDEN from the marketplace (OPEN — the big product
+  blocker):** `search_offerings`/`search_offerings_dsl`
+  (`api/src/database/offerings.rs:695`/`:1052`) post-filter requires
+  `resolved_pool_id.is_some() || offering_source == "self_provisioned"`; a Path-A Hetzner offering
+  has NEITHER (no agent pool; `offering_source` NULL because
+  `website/src/routes/dashboard/offerings/create/+page.svelte:273` submits
+  `offering_source: undefined`). The entire "Resell a managed cloud" Path A is a dead end — you can
+  list an offering nobody can see or rent. Fix: set `offering_source:"self_provisioned"` for
+  `provisioner_type IN ('hetzner','vultr')` at create, OR add that as an OR-branch in the filter.
+
+The remaining 17 findings (P1–P3: token-creation pitfalls, catalog/mismatch issues, console
+errors, onboarding sequencing, etc.) + a `dc-stage` staging note + the full operator action list
+are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e harness (PR #459).
+
 ## Scope rules (per `repo/AGENTS.md` + `repo/PROMPT.md`)
 
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
