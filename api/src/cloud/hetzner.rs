@@ -212,9 +212,14 @@ pub struct HetznerProvisionerConfig {
 /// Resolve Hetzner provisioner config from offering fields, applying fallback logic.
 ///
 /// Priority for each field:
-/// - `server_type`: provisioner_config JSON > default "cx22"
+/// - `server_type`: provisioner_config JSON > default "cx23"
 /// - `location`: provisioner_config JSON > lowercase datacenter_city
 /// - `image`: provisioner_config JSON > template_name > default "ubuntu-24.04"
+///
+/// `cx23` is the cheapest shared-CPU server type currently offered by Hetzner
+/// (2 vCPU / 4 GB / 40 GB, ~€5.93/mo). The earlier `cx22` was retired and now
+/// returns no results from the Hetzner catalog, so any offering relying on the
+/// default would fail live validation — hence the updated fallback.
 pub fn resolve_provisioner_config(
     provisioner_config: Option<&str>,
     datacenter_city: &str,
@@ -226,7 +231,7 @@ pub fn resolve_provisioner_config(
         .context("Invalid provisioner_config JSON")?
         .unwrap_or(serde_json::json!({}));
 
-    let server_type = config["server_type"].as_str().unwrap_or("cx22").to_string();
+    let server_type = config["server_type"].as_str().unwrap_or("cx23").to_string();
     let location = config["location"]
         .as_str()
         .unwrap_or(&datacenter_city.to_lowercase())
@@ -1064,7 +1069,7 @@ mod tests {
     #[test]
     fn test_resolve_provisioner_config_fallbacks() {
         let config = resolve_provisioner_config(None, "Falkenstein", Some("ubuntu-22.04")).unwrap();
-        assert_eq!(config.server_type, "cx22");
+        assert_eq!(config.server_type, "cx23");
         assert_eq!(config.location, "falkenstein");
         assert_eq!(config.image, "ubuntu-22.04");
     }
@@ -1072,7 +1077,7 @@ mod tests {
     #[test]
     fn test_resolve_provisioner_config_empty() {
         let config = resolve_provisioner_config(None, "Falkenstein", None).unwrap();
-        assert_eq!(config.server_type, "cx22");
+        assert_eq!(config.server_type, "cx23");
         assert_eq!(config.location, "falkenstein");
         assert_eq!(config.image, "ubuntu-24.04");
     }

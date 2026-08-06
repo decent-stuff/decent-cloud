@@ -79,9 +79,10 @@ offerings with real specs/prices/currency, and the operator's Hetzner creds atta
    mapped to the operator's provider + pool/dc. Price auto-suggest (`#442`, cost × 1.15
    markup) is available as a starting point.
 5. **Verify end-to-end:** a renter can **discover → rent → provision → SSH → cancel**.
-   Per `AGENTS.md` § MINIMIZE CLOUD SPENDING: use the **cheapest `cx22`** Hetzner
-   server type, and **delete the VM immediately** after verification — never leave a
-   test VM running unattended.
+   Per `AGENTS.md` § MINIMIZE CLOUD SPENDING: use the **cheapest `cx23`**
+   Hetzner server type (`cx22` was retired; `cx23` is the cheapest shared-CPU
+   type now — 2 vCPU / 4 GB / 40 GB, ~€5.93/mo), and **delete the VM
+   immediately** after verification — never leave a test VM running unattended.
 6. **Seed to prod** (or stage-first then promote): once the offering verifies clean on
    `dc-stage`, promote to `dc-prod` so the public marketplace is no longer empty.
 

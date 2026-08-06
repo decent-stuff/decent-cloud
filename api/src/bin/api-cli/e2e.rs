@@ -230,15 +230,15 @@ pub(crate) async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Resul
 
             // Ensure cleanup on any failure
             let cleanup_result = async {
-                // Step 2: Provision a cloud resource (cheapest: cx22, nbg1)
-                println!("\nStep 2: Provisioning cloud resource (cx22/nbg1)...");
+                // Step 2: Provision a cloud resource (cheapest: cx23, nbg1)
+                println!("\nStep 2: Provisioning cloud resource (cx23/nbg1)...");
                 let resource: serde_json::Value = client
                     .post_api(
                         "/cloud-resources",
                         &ProvisionResourceRequest {
                             cloud_account_id: account_id.clone(),
                             name: format!("e2e-test-{}", &uuid::Uuid::new_v4().to_string()[..8]),
-                            server_type: "cx22".to_string(),
+                            server_type: "cx23".to_string(),
                             location: "nbg1".to_string(),
                             image: "ubuntu-24.04".to_string(),
                             ssh_pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummy e2e-cloud-test"

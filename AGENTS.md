@@ -265,7 +265,7 @@ through the website sign-up flow.
     revocable token so the master seed can stay fully offline.
 
 ## PROJECT RULES
-- **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx22` on Hetzner), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
+- **MINIMIZE CLOUD SPENDING**: When testing against paid cloud providers (Hetzner, AWS, etc.), ALWAYS use the cheapest possible server type (e.g., `cx23` on Hetzner — the cheapest shared-CPU type; `cx22` was retired), ALWAYS delete resources immediately after verification, and NEVER leave VMs running unattended. Every test VM must be cleaned up in the same session it was created.
 - Adjust and extend existing code instead of creating parallel implementations. Before you start coding, PLAN how existing code can be adjusted in the most concise way.
 - New code must stay minimal, DRY, YAGNI, KISS, and fail fast. Code must be idiomatic (e.g. use `match`).
 - NEVER silently ignore failures or return results. Avoid patterns like `let _ = ...`. In case of error, provide failure details (e.g. with `"{:#?}"`) for troubleshooting.
