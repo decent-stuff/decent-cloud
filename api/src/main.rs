@@ -1595,7 +1595,11 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // Start cloud provisioning service in background
     let cloud_provisioning_interval_secs = parse_env_u64("CLOUD_PROVISIONING_INTERVAL_SECS", 10)?;
 
-    let cloud_termination_interval_secs = parse_env_u64("CLOUD_TERMINATION_INTERVAL_SECS", 60)?;
+    // Termination poll interval matches the provisioning interval (10s) so a
+    // cancel never waits up to a full minute before its VM is deleted. Env-
+    // overridable (CLOUD_TERMINATION_INTERVAL_SECS) for ops tuning. Each cancel
+    // previously paid up to ~60s of orphaned-VM billing before this default.
+    let cloud_termination_interval_secs = parse_env_u64("CLOUD_TERMINATION_INTERVAL_SECS", 10)?;
 
     let db_for_cloud = ctx.database.clone();
     let email_svc_for_cloud = ctx.email_service.clone();

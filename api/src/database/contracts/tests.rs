@@ -2177,6 +2177,100 @@ async fn test_try_auto_accept_contract_no_rule_means_accept_all() {
     assert!(accepted, "No rule for offering means accept all");
 }
 
+/// `try_trigger_cloud_provisioning` must resolve the offering by the contract's
+/// stored STRING offering_id (slug) + provider pubkey, NOT by parsing the slug as
+/// a numeric DB id. Contracts store the offering *slug* (rental.rs persists
+/// `offering.offering_id`, not the numeric id), so a numeric parse silently
+/// breaks cloud provisioning for every hetzner/vultr offering whose slug is
+/// non-numeric (the normal case). Regression test for the silent
+/// "Cloud provisioning trigger failed: Invalid offering_id in contract: <slug>"
+/// failure observed end-to-end.
+#[tokio::test]
+async fn test_try_trigger_cloud_provisioning_resolves_offering_by_slug() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![7u8; 32];
+    let requester_pk = vec![8u8; 32];
+    let contract_id = vec![9u8; 32];
+
+    // Provider profile + account + a valid Hetzner cloud_account (so the resolver
+    // used by try_trigger_cloud_provisioning finds one for the provider).
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Hetz Provider', 'v1', '1.0', 0)",
+    )
+    .bind(&provider_pk)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let account = db
+        .create_account("hetz_prov", &provider_pk, "hetz@example.com")
+        .await
+        .unwrap();
+    db.create_cloud_account(
+        &account.id,
+        crate::cloud::types::BackendType::Hetzner,
+        "hetz",
+        "encrypted-creds",
+        None,
+    )
+    .await
+    .unwrap();
+
+    // Offering with a deliberately NON-NUMERIC slug + hetzner provisioner config.
+    let offering_slug = "hetzner-cx23-nbg1";
+    sqlx::query(
+        r#"INSERT INTO provider_offerings (
+            pubkey, offering_id, offer_name, currency, monthly_price, setup_fee,
+            visibility, product_type, billing_interval, stock_status,
+            datacenter_country, datacenter_city, unmetered_bandwidth,
+            provisioner_type, provisioner_config, created_at_ns
+        ) VALUES (
+            $1, $2, 'cx23 @ nbg1', 'eur', 8.0, 0,
+            'public', 'compute', 'monthly', 'in_stock',
+            'DE', 'nbg1', FALSE,
+            'hetzner', '{"server_type":"cx23","location":"nbg1","image":"ubuntu-24.04"}', 0
+        )"#,
+    )
+    .bind(&provider_pk)
+    .bind(offering_slug)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // Contract in 'accepted' status referencing the offering BY SLUG (this is what
+    // create_rental_request stores: offering.offering_id, the slug).
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        offering_slug,
+        0,
+        "accepted",
+    )
+    .await;
+
+    // Buggy code parsed the slug as i64 → returned Err → provisioning never fired.
+    let triggered = db
+        .try_trigger_cloud_provisioning(&contract_id)
+        .await
+        .expect("try_trigger_cloud_provisioning must resolve the offering by slug and succeed");
+    assert!(
+        triggered,
+        "should create a pending cloud_resource for the hetzner contract"
+    );
+
+    // A pending cloud_resource must exist for this contract, carrying the resolved
+    // server_type/location/image from the offering's provisioner_config.
+    let pending = db.get_pending_provisioning_resources(10).await.unwrap();
+    let ours = pending
+        .iter()
+        .find(|p| p.contract_id.as_deref() == Some(&contract_id[..]))
+        .expect("a pending cloud_resource should have been created for the contract");
+    assert_eq!(ours.server_type, "cx23");
+    assert_eq!(ours.location, "nbg1");
+    assert_eq!(ours.image, "ubuntu-24.04");
+}
+
 #[tokio::test]
 async fn test_cancel_active_contract_with_prorated_refund() {
     let db = setup_test_db().await;

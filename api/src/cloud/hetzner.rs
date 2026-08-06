@@ -122,7 +122,12 @@ struct HetznerServer {
     status: String,
     public_net: HetznerPublicNet,
     server_type: HetznerServerTypeRef,
-    datacenter: HetznerDatacenter,
+    // Hetzner's server object exposes a top-level `location` (e.g. {name:"nbg1",...}),
+    // NOT `datacenter` (verified against the live API: GET /v1/servers returns
+    // `location`, never `datacenter`). Requiring `datacenter` made every server
+    // response fail to deserialize with `missing field 'datacenter'` — the master
+    // root cause of cloud-resell provisioning silently failing.
+    location: HetznerLocationRef,
     image: Option<HetznerImageRef>,
     created: String,
 }
@@ -140,13 +145,6 @@ struct HetznerIpv4 {
 #[derive(Debug, Deserialize)]
 struct HetznerServerTypeRef {
     name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct HetznerDatacenter {
-    #[allow(dead_code)]
-    name: String,
-    location: HetznerLocationRef,
 }
 
 #[derive(Debug, Deserialize)]
@@ -382,7 +380,7 @@ impl HetznerBackend {
             status,
             public_ip: Some(s.public_net.ipv4.ip),
             server_type: s.server_type.name,
-            location: s.datacenter.location.name,
+            location: s.location.name,
             image: s.image.map(|i| i.name).unwrap_or_default(),
             created_at,
         }
@@ -628,32 +626,65 @@ impl CloudBackend for HetznerBackend {
             return Err(self.handle_error(server_response).await);
         }
 
-        let server_data: ServerResponse = server_response.json().await?;
-        let mut server = self.convert_server(server_data.server);
+        // POST /servers returned 2xx — a VM now exists on Hetzner. ANY failure
+        // from here (parse error, status-poll failure, SSH-unreachable) must
+        // clean up BOTH the created VM and the SSH key, otherwise we orphan real
+        // resources (this is what stranded VM 159722362 and leaked SSH keys: the
+        // serde parse error skipped cleanup entirely). Extract the VM id from the
+        // raw body first so even a deserialize error (schema drift like the old
+        // `datacenter` bug) can still delete the VM.
+        let body = server_response
+            .text()
+            .await
+            .context("Failed to read create-server response body")?;
+        let created_server_id: Option<String> = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("server")?.get("id")?.as_i64())
+            .map(|id| id.to_string());
 
-        let mut retries = 0;
-        while server.status == ServerStatus::Provisioning && retries < 60 {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-            server = self.get_server(&server.id).await?;
-            retries += 1;
+        let provisioned = async {
+            let server_data: ServerResponse =
+                serde_json::from_str(&body).context("Failed to deserialize create-server response")?;
+            let mut server = self.convert_server(server_data.server);
+
+            let mut retries = 0;
+            while server.status == ServerStatus::Provisioning && retries < 60 {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                server = self.get_server(&server.id).await?;
+                retries += 1;
+            }
+
+            if server.status != ServerStatus::Running {
+                anyhow::bail!("Server failed to reach running state: {:?}", server.status);
+            }
+
+            if let Some(ref ip) = server.public_ip {
+                if !self.wait_for_ssh_reachable(ip, 120).await? {
+                    anyhow::bail!("SSH port not reachable after 120s");
+                }
+            }
+
+            Ok::<Server, anyhow::Error>(server)
         }
+        .await;
 
-        if server.status != ServerStatus::Running {
-            cleanup_server_and_key(self, &server.id, &ssh_key_id.to_string()).await;
-            anyhow::bail!("Server failed to reach running state: {:?}", server.status);
-        }
-
-        if let Some(ref ip) = server.public_ip {
-            if !self.wait_for_ssh_reachable(ip, 120).await? {
-                cleanup_server_and_key(self, &server.id, &ssh_key_id.to_string()).await;
-                anyhow::bail!("SSH port not reachable after 120s");
+        match provisioned {
+            Ok(server) => Ok(ProvisionResult {
+                server,
+                ssh_key_id: Some(ssh_key_id.to_string()),
+            }),
+            Err(e) => {
+                // The VM was created on Hetzner but a post-create step failed.
+                // Delete it (if we know its id) and the SSH key so nothing is
+                // orphaned, then surface the original failure.
+                if let Some(id) = &created_server_id {
+                    cleanup_server_and_key(self, id, &ssh_key_id.to_string()).await;
+                } else {
+                    cleanup_ssh_key(self, &ssh_key_id.to_string()).await;
+                }
+                Err(e)
             }
         }
-
-        Ok(ProvisionResult {
-            server,
-            ssh_key_id: Some(ssh_key_id.to_string()),
-        })
     }
 
     async fn get_server(&self, id: &str) -> anyhow::Result<Server> {
@@ -744,12 +775,15 @@ impl CloudBackend for HetznerBackend {
             .send()
             .await?;
 
-        if !response.status().is_success() && response.status() != StatusCode::NOT_FOUND {
-            tracing::warn!(
-                "Failed to delete Hetzner SSH key {}: {:?}",
-                id,
-                response.status()
-            );
+        // A missing key is already gone — that's the desired end state, so treat
+        // 404 as success. Any other non-2xx (401/403/5xx) is a real failure that
+        // must surface (never silently ignore failures) — callers decide whether
+        // it's fatal or best-effort.
+        if response.status() == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        if !response.status().is_success() {
+            return Err(self.handle_error(response).await);
         }
 
         Ok(())
@@ -787,11 +821,8 @@ mod tests {
             server_type: HetznerServerTypeRef {
                 name: "cx23".to_string(),
             },
-            datacenter: HetznerDatacenter {
-                name: "fsn1-dc14".to_string(),
-                location: HetznerLocationRef {
-                    name: "fsn1".to_string(),
-                },
+            location: HetznerLocationRef {
+                name: "fsn1".to_string(),
             },
             image: Some(HetznerImageRef {
                 name: "ubuntu-24.04".to_string(),
@@ -832,6 +863,90 @@ mod tests {
         // Unknown falls to Failed
         let converted = backend.convert_server(make_test_server("exploded"));
         assert_eq!(converted.status, ServerStatus::Failed);
+    }
+
+    /// Regression guard for the P0 cloud-resell provisioning bug.
+    ///
+    /// Hetzner's server object exposes a top-level `location` (e.g.
+    /// `{"name":"nbg1",...}`) and has NO `datacenter` field (verified against
+    /// the live API: GET /v1/servers returns `location`, never `datacenter`).
+    /// Requiring `datacenter` made EVERY server response fail to deserialize
+    /// (`missing field 'datacenter'`), so `create_server` failed ~0.35s AFTER
+    /// the VM was actually created: the VM was orphaned, the contract never
+    /// reached `active`, and cleanup couldn't delete it. This feeds the REAL
+    /// live server shape through `serde_json` and asserts it round-trips.
+    #[test]
+    fn test_hetzner_server_deserializes_real_response() {
+        // Verbatim shape captured from the live Hetzner API (GET /v1/servers/<id>).
+        // Top-level `location`, NO `datacenter`, plus many siblings serde ignores.
+        let server_json = r#"{
+            "id": 159722362,
+            "name": "dc-recipe-abcd1234",
+            "status": "running",
+            "created": "2026-08-06T12:00:00+00:00",
+            "public_net": {
+                "ipv4": {"id": 1, "ip": "203.0.113.10", "blocked": false, "dns_ptr": "host.example"},
+                "ipv6": {"id": 2, "ip": "2a01:4f9::1/64", "blocked": false, "dns_ptr": []},
+                "floating_ips": [],
+                "firewalls": []
+            },
+            "server_type": {"id": 114, "name": "cx23", "description": "CX 23", "cores": 2, "memory": 4.0, "disk": 40, "architecture": "x86", "deprecated": false},
+            "location": {"id": 2, "name": "nbg1", "description": "Nuremberg 1 DC Park 1", "city": "Nuremberg", "country": "DE", "latitude": 49.4521, "longitude": 11.0767, "network_zone": "eu-central"},
+            "image": {"id": 161547269, "type": "system", "name": "ubuntu-24.04", "description": "Ubuntu 24.04", "os_flavor": "ubuntu", "os_version": "24.04", "status": "available", "architecture": "x86", "rapid_deploy": true, "deprecated": null, "deleted": null},
+            "iso": null,
+            "rescue_enabled": false,
+            "locked": false,
+            "backup_window": null,
+            "outgoing_traffic": 0,
+            "ingoing_traffic": 0,
+            "included_traffic": 21990232555520,
+            "primary_disk_size": 40,
+            "protection": {"delete": false, "rebuild": false},
+            "labels": {},
+            "volumes": [],
+            "load_balancers": [],
+            "private_net": [],
+            "placement_group": null
+        }"#;
+        let wrapped = format!("{{\"server\":{server_json}}}");
+
+        // The real shape MUST round-trip. With the buggy `datacenter` field this
+        // returned `missing field 'datacenter'` — the P0 root cause.
+        let resp: ServerResponse = serde_json::from_str(&wrapped)
+            .expect("real Hetzner server JSON must deserialize (location, not datacenter)");
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let server = backend.convert_server(resp.server);
+
+        assert_eq!(server.id, "159722362");
+        assert_eq!(server.name, "dc-recipe-abcd1234");
+        assert_eq!(server.status, ServerStatus::Running);
+        assert_eq!(server.public_ip.as_deref(), Some("203.0.113.10"));
+        assert_eq!(server.server_type, "cx23");
+        assert_eq!(server.location, "nbg1");
+        assert_eq!(server.image, "ubuntu-24.04");
+    }
+
+    /// Documents the schema contract that broke before the fix: a server object
+    /// that omits `location` (the old `datacenter`-only fixture shape) MUST fail
+    /// to deserialize, proving `location` is the required field. This is why the
+    /// pre-existing hand-rolled fixtures never caught the P0 — they wrongly
+    /// included `datacenter` and omitted `location`, encoding the bug.
+    #[test]
+    fn test_hetzner_server_requires_location_field() {
+        // Old buggy fixture shape: had `datacenter` but NO top-level `location`.
+        let server_json = r#"{
+            "id": 1, "name": "x", "status": "running", "created": "2026-01-01T00:00:00Z",
+            "public_net": {"ipv4": {"ip": "1.2.3.4"}},
+            "server_type": {"name": "cx23"},
+            "datacenter": {"name": "nbg1-dc14", "location": {"name": "nbg1"}},
+            "image": null
+        }"#;
+        let wrapped = format!("{{\"server\":{server_json}}}");
+        let err = serde_json::from_str::<ServerResponse>(&wrapped).unwrap_err();
+        assert!(
+            err.to_string().contains("missing field `location`"),
+            "server object must require top-level `location`, got: {err}"
+        );
     }
 
     #[test]
