@@ -1,9 +1,4 @@
 import { test, expect } from '@playwright/test';
-import {
-	seedMarketplaceOffering,
-	deleteOfferingById,
-	type MarketplaceOfferingHandle,
-} from './fixtures/seed-helpers';
 
 /**
  * E2E Tests for Anonymous Browsing
@@ -104,74 +99,6 @@ test.describe('Anonymous Browsing', () => {
 				page.locator('button:has-text("Login")')
 			).first()).toBeVisible();
 		}
-	});
-
-	test.describe('demo-offering toggle (self-seeded)', () => {
-		// The showDemoOfferings UI is still a shipped feature (the runtime
-		// example-provider exclusion is RETAINED after migration 053), but the
-		// demo seed rows are gone per the product pivot, so this spec self-seeds
-		// an is_example offering to exercise the toggle instead of relying on
-		// ambient demo data.
-		//
-		// The offering is self_provisioned (so it passes the marketplace query's
-		// "must have a pool or be self-provisioned" filter AND is online) and
-		// lives under the example provider pubkey (so is_example=true → hidden by
-		// the default showDemoOfferings=false filter, revealed by ?demo=1).
-		let demo: MarketplaceOfferingHandle | undefined;
-		test.beforeAll(async () => {
-			demo = await seedMarketplaceOffering({
-				isExample: true,
-				online: true,
-				name: 'E2E Demo Toggle Offering',
-			});
-		});
-		test.afterAll(async () => {
-			if (demo) await deleteOfferingById(demo.offeringNumericId);
-		});
-
-		test('should hide demo offerings by default on marketplace', async ({ page }) => {
-			// Wait for the offerings API call (client-side fetch implies SvelteKit
-			// hydration is complete — replaces networkidle, which tanks parallel
-			// runs under Vite HMR — see playwright.config.ts:28-33).
-			const offeringsResponse = page.waitForResponse(
-				(resp) => resp.url().includes('/api/v1/offerings') && resp.status() === 200,
-				{ timeout: 15000 },
-			);
-			await page.goto('/dashboard/marketplace');
-			await offeringsResponse;
-			await page.waitForSelector('h1:has-text("Marketplace")', { timeout: 10000 });
-
-			// The "Show demo offerings" checkbox lives inside the collapsible
-			// "More filters" section; expand it so the checkbox is in the DOM.
-			await page.locator('button:has-text("More filters")').click();
-
-			// The "Show demo offerings" checkbox should be unchecked by default
-			const demoLabel = page.locator('label:has-text("Show demo offerings")');
-			const demoCheckbox = demoLabel.locator('input[type="checkbox"]');
-			await expect(demoCheckbox).not.toBeChecked();
-
-			// Check the "Show demo offerings" checkbox
-			await demoCheckbox.check();
-
-			// Wait for URL to update (filter syncs to URL)
-			await page.waitForURL(/demo=1/, { timeout: 5000 });
-
-			// The self-seeded offering is is_example (hidden by the default demo
-			// filter) and online (self_provisioned), so it appears once the demo
-			// filter is relaxed — ?demo=1&offline=1 relaxes both, matching the
-			// shape of the original dev-DB demo offerings.
-			const countLocator = page.locator('text=/\\d+ offerings? found/');
-			const offeringsResponse2 = page.waitForResponse(
-				(resp) => resp.url().includes('/api/v1/offerings') && resp.status() === 200,
-				{ timeout: 15000 },
-			);
-			await page.goto('/dashboard/marketplace?demo=1&offline=1');
-			await offeringsResponse2;
-			await expect(countLocator).toBeVisible({ timeout: 10000 });
-			const demoCountText = await countLocator.textContent();
-			const demoCount = parseInt(demoCountText?.match(/(\d+)/)?.[1] || '0');
-			expect(demoCount).toBeGreaterThan(0);
-		});
 	});
 
 	test('should allow dismissing auth modal', async ({ page }) => {

@@ -167,7 +167,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.DC_REPO_WRITE }}
           fetch-depth: 1
 
       - name: Install Rust
