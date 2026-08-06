@@ -156,10 +156,20 @@ store.
 
 ### Cloud providers
 
+> **Hetzner token rule for AI agents:** use `HETZNER_API_TOKEN_DEV` (read-write)
+> for ALL development/experimentation (PoC scripts, probes, `api-cli e2e`, the
+> provider-scraper, real-Hetzner verification). The env-injected
+> `HETZNER_API_TOKEN` is **READ-ONLY** on the dev Hetzner project (GET works;
+> POST/DELETE → HTTP 403) — using it to create a test VM strands it (no delete).
+> All four `HETZNER_API_TOKEN*` tokens share ONE Hetzner project; `_DEV` is the
+> read-write one. Prod provisioning does NOT use these as env vars — it provisions
+> via per-`cloud_account` stored (encrypted) tokens. See `repo/AGENTS.md`
+> "Hetzner tokens" for the full rule + injection note.
+
 | Name | Source | Purpose | Scope |
 |---|---|---|---|
-| `HETZNER_API_TOKEN` | env; common.yaml; env.yaml | Hetzner Cloud API (operator Hetzner resell + general) | all |
-| `HETZNER_API_TOKEN_DEV` | env.yaml | Hetzner API, dev environment | dev |
+| `HETZNER_API_TOKEN` | env; common.yaml; env.yaml | Hetzner Cloud API — **READ-ONLY** on the dev project (GET only; do NOT use to create/delete). Prod does not read it as an env var. | all |
+| `HETZNER_API_TOKEN_DEV` | env.yaml | Hetzner API, **read-write, dev environment — the token AI agents MUST use for dev/experimentation** | dev |
 | `HETZNER_API_TOKEN_STAGE` | env.yaml | Hetzner API, stage environment | stage |
 | `HETZNER_API_TOKEN_PROD` | env.yaml | Hetzner API, production | prod |
 | `PROXMOX_SSH` | env; common.yaml; env.yaml | Proxmox provider host SSH access | all |

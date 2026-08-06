@@ -81,6 +81,32 @@ repo/
   (`third_party/k8s/scripts/manage-secrets.py`) are in `docs/CREDENTIALS.md`.
   Never paste, echo, log, or commit a value.
 
+- **Hetzner tokens (load-bearing for dev/experimentation):** AI agents MUST use
+  `HETZNER_API_TOKEN_DEV` (read-write) for ALL development/experimentation Hetzner
+  API calls — PoC scripts, probes, the `api-cli e2e` cloud-provisioning test, the
+  provider-scraper, any real-Hetzner verification. The env-injected
+  `HETZNER_API_TOKEN` is **READ-ONLY** on the dev Hetzner project (GET works;
+  POST/DELETE return HTTP 403 `permission denied`). An agent that creates a test
+  VM with the read-only token CANNOT delete it — stranding it (the original
+  foot-gun). All four SOPS tokens (`HETZNER_API_TOKEN`, `_DEV`, `_STAGE`, `_PROD`)
+  share ONE Hetzner project; `_DEV` is the read-write one for agent use.
+  - In code: read `HETZNER_API_TOKEN_DEV` first, fall back to `HETZNER_API_TOKEN`
+    only for read-only catalog probes (so they still work when the bare token is
+    the only one injected). Write-capable scripts (anything that POSTs/DELETEs on
+    Hetzner) MUST require `_DEV` and fail fast if the token can't write.
+  - This is a DEV/agent-tooling rule only. **Prod provisioning does NOT read
+    `HETZNER_API_TOKEN` as an env var** — the API provisions via per-`cloud_account`
+    stored (encrypted) tokens (`offering.pubkey` → `cloud_account` → decrypt →
+    `HetznerBackend::new(token)`); the only env read is the `api-cli e2e` test
+    binary (`api/src/bin/api-cli/e2e.rs`).
+  - **Injection note:** the dev container (`agent/entrypoint.sh`) injects
+    `dc-secrets export play` from the repo store, which currently contains
+    `HETZNER_API_TOKEN` (read-only) but NOT `HETZNER_API_TOKEN_DEV`. Until an
+    operator adds `HETZNER_API_TOKEN_DEV` to `repo/secrets/shared/common.yaml`
+    (`cd repo && DC_SECRETS_DIR=secrets scripts/dc-secrets set shared/common
+    HETZNER_API_TOKEN_DEV=<rw-token>`), write-capable scripts won't find it in the
+    session env — read-only probes still work via the fallback.
+
 ## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 
 Every task follows this exact sequence. No exceptions. You may NEVER deviate from this workflow. If prerequisites are missing or you are NOT 90+% confident the code will be ready for production — STOP and ask for acknowledgement.
