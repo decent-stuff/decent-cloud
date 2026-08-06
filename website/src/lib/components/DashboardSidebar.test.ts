@@ -8,7 +8,7 @@ const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
 	discover: false,
 	activity: false,
 	cloud: false,
-	provider: true
+	provider: false
 };
 
 function loadSectionState(key: SectionKey, storage: Storage): boolean {
@@ -71,8 +71,8 @@ describe('DashboardSidebar: loadSectionState defaults', () => {
 		expect(loadSectionState('cloud', storage)).toBe(false);
 	});
 
-	it('returns true (collapsed) for provider when no entry in localStorage', () => {
-		expect(loadSectionState('provider', storage)).toBe(true);
+	it('returns false (expanded) for provider when no entry in localStorage', () => {
+		expect(loadSectionState('provider', storage)).toBe(false);
 	});
 
 	it('returns stored true when localStorage has "true"', () => {
@@ -106,7 +106,9 @@ describe('DashboardSidebar: toggleSection persists to localStorage', () => {
 	});
 
 	it('expands a collapsed section and writes "false" to localStorage', () => {
-		const state: Record<SectionKey, boolean> = { ...SECTION_DEFAULTS }; // provider = true
+		// Start from an explicitly collapsed provider section (the default is now
+		// expanded, so collapse it first to exercise the expand path).
+		const state: Record<SectionKey, boolean> = { ...SECTION_DEFAULTS, provider: true };
 		const next = toggleSection('provider', state, storage);
 		expect(next.provider).toBe(false);
 		expect(storage.getItem('sidebar_section_provider')).toBe('false');
@@ -201,6 +203,6 @@ describe('DashboardSidebar: section key storage isolation', () => {
 		toggleSection('discover', state, storage);
 		toggleSection('provider', state, storage);
 		expect(storage.getItem('sidebar_section_discover')).toBe('true');
-		expect(storage.getItem('sidebar_section_provider')).toBe('false');
+		expect(storage.getItem('sidebar_section_provider')).toBe('true');
 	});
 });

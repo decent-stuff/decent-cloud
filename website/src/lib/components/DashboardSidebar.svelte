@@ -47,7 +47,7 @@
 	const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
 		discover: false,
 		activity: false,
-		provider: true
+		provider: false
 	};
 
 	let sectionCollapsed = $state<Record<SectionKey, boolean>>({ ...SECTION_DEFAULTS });
@@ -117,7 +117,8 @@
 		{ href: '/dashboard/provider/ssh-key-rotations', icon: 'key', label: 'SSH Key Rotations' },
 		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
-		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
+		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' },
+		{ href: '/dashboard/cloud/accounts', icon: 'cloud', label: 'Cloud Accounts' }
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
