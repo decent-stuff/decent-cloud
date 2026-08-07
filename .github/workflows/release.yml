@@ -245,7 +245,10 @@ jobs:
             --owner "${FORGEJO_OWNER}" --push
 
   update-version:
-    needs: [create-release, upload-release, deploy-prod]
+    # Only needs the parsed version string; decoupled from build/upload/deploy so
+    # the version-bump PR opens in parallel (~immediately) rather than after the
+    # ~25 min deploy-prod build.
+    needs: [create-release]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -263,10 +266,13 @@ jobs:
           cargo update --workspace
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        id: create_pr
+        uses: peter-evans/create-pull-request@v7
         with:
-          # Use PAT instead of GITHUB_TOKEN for PR creation to avoid error
-          # Error: GitHub Actions is not permitted to create or approve pull requests.
+          # Classic PAT (not GITHUB_TOKEN): a PR created by GITHUB_TOKEN does NOT
+          # trigger CI workflows (GitHub suppresses its push/pull_request events),
+          # so auto-merge below would have nothing to gate on. The PAT makes the
+          # bump-version PR run build-and-test like any contributor PR.
           token: ${{ secrets.DC_REPO_WRITE }}
           commit-message: "chore: bump version to ${{ needs.create-release.outputs.version }}"
           title: "chore: bump version to ${{ needs.create-release.outputs.version }}"
@@ -276,3 +282,14 @@ jobs:
             This PR was automatically created by the release workflow.
           branch: bump-version-${{ needs.create-release.outputs.version }}
           base: main
+
+      - name: Enable auto-merge
+        # Only arm auto-merge when a new PR is created (skip on reruns that just
+        # update an existing branch). Requires repo setting Settings → General →
+        # Pull Requests → "Allow auto-merge" ON; with main branch protection
+        # listing build-and-test as a required check, the merge waits for CI (the
+        # PAT-made PR runs it) rather than completing immediately.
+        if: steps.create_pr.outputs.pull-request-operation == 'created'
+        env:
+          GH_TOKEN: ${{ secrets.DC_REPO_WRITE }}
+        run: gh pr merge "${{ steps.create_pr.outputs.pull-request-number }}" --auto --squash --delete-branch
