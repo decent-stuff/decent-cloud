@@ -21,8 +21,9 @@ Hetzner operator console mapped **19 findings** (no VM rented; cloud spend $0). 
   (HTTP 530→502). Recovered via kubectl (copy `dc-secret`→`dc-prod-secret` + patch in
   `HETZNER_API_TOKEN` + delete stuck pods); prod now HTTP 200, `dc-api` 1/1 Running. **Permanence
   (operator):** run `manage-secrets.py` (k8s repo) so `dc-prod-secret` is reconciled from the
-  renamed SOPS file, and remove the unused `HETZNER_API_TOKEN` stub from `base/dc-api.yaml` (k8s
-  repo — only `api/src/bin/api-cli/e2e.rs:203` ever reads it from env).
+  renamed SOPS file. (DONE: the unused `HETZNER_API_TOKEN` secretKeyRef stub was removed from
+  `base/dc-api.yaml` + the stage overlay in the k8s repo — committed locally; operator pushes
+  nuc-k3s. The api-server never read it from env; only `api/src/bin/api-cli/e2e.rs` reads `_DEV`.)
 - **P0-B — Path-A Hetzner offerings SILENTLY HIDDEN from the marketplace (OPEN — the big product
   blocker):** `search_offerings`/`search_offerings_dsl`
   (`api/src/database/offerings.rs:695`/`:1052`) post-filter requires

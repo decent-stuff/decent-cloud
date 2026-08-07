@@ -39,7 +39,8 @@ The Hetzner integration already exists and is wired into the contract lifecycle 
 - **Credentials** are stored per-provider via `api/src/database/cloud_accounts.rs`
   (`BackendType::{Hetzner, ProxmoxApi, Vultr}`).
 - **CLI e2e** already exercises the Hetzner cloud-provisioning path end-to-end
-  (`api/src/bin/api-cli/e2e.rs` reads `HETZNER_API_TOKEN`).
+  (`api/src/bin/api-cli/e2e.rs` reads `HETZNER_API_TOKEN_DEV`, the read-write dev
+  token agents use for ALL Hetzner dev/experimentation).
 - **Provider onboarding** (F9, `2c393df9`) now routes "Become a Provider" to real
   technical onboarding at `/dashboard/provider/start`.
 
@@ -49,9 +50,12 @@ offerings with real specs/prices/currency, and the operator's Hetzner creds atta
 
 ## Prerequisites (operator-gated)
 
-1. **Operator's Hetzner API token.** `HETZNER_API_TOKEN` already exists in the
-   consolidated outer `secrets/shared/env.yaml` (age-SOPS). Confirm it is attached as
-   a `cloud_account` for the operator's provider identity (see open question 3).
+1. **Operator's Hetzner API token.** `HETZNER_API_TOKEN_DEV` (read-write) is the
+   token to attach as the operator's `cloud_account` — it MUST be read-write so the
+   VMs it creates can be deleted. It lives in the consolidated outer
+   `secrets/shared/env.yaml` (age-SOPS); confirm it is attached as a
+   `cloud_account` for the operator's provider identity (see open question 3).
+   (Any read-only Hetzner token 403s on provisioning — use `_DEV` only.)
 2. **Provider identity.** Register the operator as a **provider** in the central API
    (website provider onboarding, now `/dashboard/provider/start` per F9) and set a
    real provider display name (not an auto-generated `@handle`).
@@ -71,7 +75,8 @@ offerings with real specs/prices/currency, and the operator's Hetzner creds atta
 1. **Register the operator as a provider** + set the provider display name
    (`/dashboard/provider/start` flow).
 2. **Attach the Hetzner credential** to that provider (`cloud_account`,
-   `BackendType::Hetzner`, `HETZNER_API_TOKEN`).
+   `BackendType::Hetzner`, `HETZNER_API_TOKEN_DEV` — read-write; required so the
+   VMs it creates can also be deleted).
 3. **Provision via dc-agent / cloud-backend** with the Hetzner creds and confirm a VM
    can be created + destroyed against the operator's account.
 4. **Create the real offerings** (CLI `create-offering` or the website

@@ -18,7 +18,9 @@
 // local stack. Cleanup runs in `finally` to leave the local DB clean.
 //
 // Usage:
-//   HETZNER_API_TOKEN=... node poc/hetzner-cloud-resell-poc.mjs
+//   HETZNER_API_TOKEN_DEV=... node poc/hetzner-cloud-resell-poc.mjs
+// (read-write; required to create+delete test VMs. Read-only tokens 403 on
+//  delete and are not injected into the agent env — see repo/AGENTS.md "Hetzner tokens".)
 //
 // Reusable for the sanctioned stage/prod seeding run: point API_URL + DB_URL at
 // the target env and (for prod) replace `generateMnemonic` with
@@ -37,7 +39,11 @@ import {
 const API_URL = process.env.API_URL || 'http://localhost:59011';
 const WEB_URL = process.env.WEB_URL || 'http://localhost:59010';
 const DB_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
-const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
+// Hard-require the WRITE-capable dev token (HETZNER_API_TOKEN_DEV): read-only
+// tokens 403 on create/delete and are not injected into agent sessions, so there
+// is no fallback here — the script fails fast if _DEV is missing. See
+// repo/AGENTS.md "Hetzner tokens".
+const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN_DEV;
 // When set (any value), drive a headless browser to load the marketplace detail
 // page and assert the Rent button is ENABLED (text "Rent this offering", not
 // "Provider Offline"). Needs the warm web stack at WEB_URL.
@@ -45,7 +51,10 @@ const DO_BROWSER_CHECK = !!process.env.POC_BROWSER_CHECK;
 const SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 if (!HETZNER_TOKEN) {
-  console.error('FAIL: HETZNER_API_TOKEN env var is required (read-only catalog calls only).');
+  console.error(
+    'FAIL: set HETZNER_API_TOKEN_DEV (read-write; required to create+delete test VMs) ' +
+      'for live Hetzner calls.',
+  );
   process.exit(2);
 }
 

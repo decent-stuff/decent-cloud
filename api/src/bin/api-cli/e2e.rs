@@ -199,8 +199,16 @@ pub(crate) async fn handle_e2e_action(action: E2eAction, api_url: &str) -> Resul
             println!("  E2E Cloud Provisioning Test");
             println!("========================================\n");
 
-            let hetzner_token = env::var("HETZNER_API_TOKEN")
-                .context("HETZNER_API_TOKEN env var must be set for cloud provisioning E2E test")?;
+            // Hard-require the WRITE-capable dev token (HETZNER_API_TOKEN_DEV):
+            // this test creates AND deletes a real VM via the cloud_account, and
+            // read-only tokens 403 on delete (stranding the VM). No other Hetzner
+            // token is injected into agent sessions, so this fails fast if _DEV
+            // is unset. See repo/AGENTS.md "Hetzner tokens".
+            let hetzner_token =
+                env::var("HETZNER_API_TOKEN_DEV").context(
+                    "HETZNER_API_TOKEN_DEV (read-write; required to create+delete test VMs) \
+                     env var must be set for cloud provisioning E2E test",
+                )?;
 
             let id = Identity::load(&identity)?;
             let client = SignedClient::new(&id, api_url)?;

@@ -81,6 +81,31 @@ repo/
   (`third_party/k8s/scripts/manage-secrets.py`) are in `docs/CREDENTIALS.md`.
   Never paste, echo, log, or commit a value.
 
+- **Hetzner tokens (load-bearing for dev/experimentation):** AI agents use
+  `HETZNER_API_TOKEN_DEV` (read-write) for ALL Hetzner dev/experimentation API
+  calls — PoC scripts, probes, the `api-cli e2e` cloud-provisioning test, the
+  provider-scraper, any real-Hetzner verification. No other Hetzner token is
+  injected into agent sessions; if a script can't read `_DEV`, fail fast with a
+  clear message rather than looking for another Hetzner token. (A read-only
+  Hetzner token exists in operator-local stores only; never use it — it 403s on
+  create/delete and would strand a test VM.) All four `HETZNER_API_TOKEN*`
+  SOPS keys share ONE Hetzner project; `_DEV` is the read-write one for agent use.
+  - **In code: hard-require `HETZNER_API_TOKEN_DEV` — there is no fallback
+    Hetzner token in agent sessions.** If `_DEV` is unset, fail fast with a
+    clear message (do not probe for any other `HETZNER_API_TOKEN*` env var).
+  - This is a DEV/agent-tooling rule only. **Prod provisioning does NOT read a
+    Hetzner token as an env var** — the API provisions via per-`cloud_account`
+    stored (encrypted) tokens (`offering.pubkey` → `cloud_account` → decrypt →
+    `HetznerBackend::new(token)`); the only env read of `_DEV` is the
+    `api-cli e2e` test binary (`api/src/bin/api-cli/e2e.rs`).
+  - **Injection (the rule is enforced in the committed store):** the dev container
+    (`agent/entrypoint.sh`) injects `dc-secrets export play` from `repo/secrets`,
+    which reads `shared/common.yaml` + `shared/play.yaml`. `common.yaml` ships
+    `HETZNER_API_TOKEN_DEV` (read-write) and no other Hetzner token — so agents
+    get `_DEV` and nothing else. The operator keeps the other Hetzner tokens in
+    the operator-local outer `secrets/shared/env.yaml` for their own use; that
+    file is not the agent-injection path.
+
 ## MANDATORY WORKFLOW (NON-NEGOTIABLE)
 
 Every task follows this exact sequence. No exceptions. You may NEVER deviate from this workflow. If prerequisites are missing or you are NOT 90+% confident the code will be ready for production — STOP and ask for acknowledgement.
