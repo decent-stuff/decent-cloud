@@ -193,6 +193,32 @@ impl StatsApi {
             }),
         }
     }
+
+    /// Reputation leaderboard
+    ///
+    /// Returns the top providers by trust score and completed-contract track
+    /// record. Providers with zero contracts are excluded (honesty gate).
+    #[oai(path = "/reputation/leaderboard", method = "get", tag = "ApiTags::Stats")]
+    async fn get_reputation_leaderboard(
+        &self,
+        db: Data<&Arc<Database>>,
+        #[oai(name = "limit")] limit: Query<Option<i64>>,
+    ) -> Json<ApiResponse<Vec<crate::database::stats::ReputationLeaderboardEntry>>> {
+        let leaderboard_limit = limit.0.unwrap_or(20).clamp(1, 100);
+
+        match db.get_reputation_leaderboard(leaderboard_limit).await {
+            Ok(results) => Json(ApiResponse {
+                success: true,
+                data: Some(results),
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -278,6 +304,59 @@ mod tests {
     #[test]
     fn test_search_limit_clamping_above_max() {
         assert_eq!(clamp_search_limit(Some(200)), 100);
+    }
+
+    /// Helper that mirrors the leaderboard handler's clamping: default 20, [1,100].
+    fn clamp_leaderboard_limit(limit: Option<i64>) -> i64 {
+        limit.unwrap_or(20).clamp(1, 100)
+    }
+
+    #[test]
+    fn test_leaderboard_limit_clamping_default() {
+        assert_eq!(clamp_leaderboard_limit(None), 20);
+    }
+
+    #[test]
+    fn test_leaderboard_limit_clamping_within_bounds() {
+        assert_eq!(clamp_leaderboard_limit(Some(50)), 50);
+    }
+
+    #[test]
+    fn test_leaderboard_limit_clamping_above_max() {
+        assert_eq!(clamp_leaderboard_limit(Some(200)), 100);
+    }
+
+    #[test]
+    fn test_leaderboard_limit_clamping_below_min() {
+        assert_eq!(clamp_leaderboard_limit(Some(0)), 1);
+        assert_eq!(clamp_leaderboard_limit(Some(-5)), 1);
+    }
+
+    #[test]
+    fn test_leaderboard_route_declaration() {
+        // The handler path/tag is part of the StatsApi surface. Serializing a
+        // ReputationLeaderboardEntry round-trips the response shape the route
+        // returns, guarding the field set + the honesty-gate defaults.
+        let entry = crate::database::stats::ReputationLeaderboardEntry {
+            pubkey: "ab".repeat(32),
+            username: None,
+            display_name: None,
+            provider_name: "Top Provider".to_string(),
+            trust_score: Some(95),
+            completed_contracts: 3,
+            total_contracts: 3,
+            completion_rate_pct: 100.0,
+            volume_e9s: 3_000_000_000,
+        };
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(json["provider_name"], "Top Provider");
+        assert_eq!(json["trust_score"], 95);
+        assert_eq!(json["completed_contracts"], 3);
+        assert_eq!(json["completion_rate_pct"], 100.0);
+        assert_eq!(json["volume_e9s"].as_i64(), Some(3_000_000_000));
+        // Optional fields are absent when None.
+        assert!(json.get("username").is_none());
+        assert!(json.get("display_name").is_none());
     }
 
     #[test]

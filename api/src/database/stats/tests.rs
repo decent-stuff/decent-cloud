@@ -590,6 +590,7 @@ async fn test_search_accounts_case_insensitive() {
 fn export_typescript_types() {
     PlatformStats::export().expect("Failed to export PlatformStats type");
     AccountSearchResult::export().expect("Failed to export AccountSearchResult type");
+    ReputationLeaderboardEntry::export().expect("Failed to export ReputationLeaderboardEntry type");
     ProviderTrustMetrics::export().expect("Failed to export ProviderTrustMetrics type");
     ProviderContractFeedback::export().expect("Failed to export ProviderContractFeedback type");
     OfferingSatisfactionStats::export().expect("Failed to export OfferingSatisfactionStats type");
@@ -3248,4 +3249,102 @@ async fn test_get_offering_conversion_stats_only_counts_own_provider() {
     let stats_b = db.get_offering_conversion_stats(&provider_b).await.unwrap();
     assert_eq!(stats_b.len(), 1);
     assert_eq!(stats_b[0].rentals_30d, 1);
+}
+
+// Reputation leaderboard: honesty gate (0-contract exclusion), ordering, and
+// completion_rate math. Three providers: A (3 completed + high trust), B
+// (1 completed + 1 cancelled), C (0 contracts -> must never appear).
+#[tokio::test]
+async fn test_get_reputation_leaderboard_honesty_gate_and_ordering() {
+    let db = setup_test_db().await;
+
+    let provider_a = vec![1u8; 32];
+    let provider_b = vec![2u8; 32];
+    let provider_c = vec![3u8; 32];
+    let requester = vec![4u8; 32];
+
+    for (pk, name, score) in [
+        (provider_a.as_slice(), "Provider A", Some(95i64)),
+        (provider_b.as_slice(), "Provider B", Some(70i64)),
+        (provider_c.as_slice(), "Provider C", Some(100i64)),
+    ] {
+        sqlx::query(
+            "INSERT INTO provider_profiles (pubkey, name, trust_score, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, '1.0', '1.0', 0)",
+        )
+        .bind(pk)
+        .bind(name)
+        .bind(score)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Provider A: 3 completed contracts.
+    for i in 0..3u8 {
+        let cid = vec![10u8 + i; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 1000000000, 'memo', 0, 'completed', 'test', NULL, NULL, 'usd')",
+        )
+        .bind(cid.as_slice())
+        .bind(requester.as_slice())
+        .bind(provider_a.as_slice())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    // Provider B: 1 completed + 1 cancelled -> completion_rate 50%.
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 2000000000, 'memo', 0, 'completed', 'test', NULL, NULL, 'usd')",
+    )
+    .bind(vec![20u8; 32].as_slice())
+    .bind(requester.as_slice())
+    .bind(provider_b.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 0, 'memo', 0, 'cancelled', 'test', NULL, NULL, 'usd')",
+    )
+    .bind(vec![21u8; 32].as_slice())
+    .bind(requester.as_slice())
+    .bind(provider_b.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let leaderboard = db.get_reputation_leaderboard(20).await.unwrap();
+
+    // Honesty gate: provider C (0 contracts) excluded despite a higher trust_score.
+    assert_eq!(
+        leaderboard.len(),
+        2,
+        "provider with 0 contracts must be excluded by the honesty gate"
+    );
+
+    // Ordering: A (trust 95) ranks above B (trust 70).
+    assert_eq!(leaderboard[0].provider_name, "Provider A");
+    assert_eq!(leaderboard[1].provider_name, "Provider B");
+
+    let a = &leaderboard[0];
+    assert_eq!(a.trust_score, Some(95));
+    assert_eq!(a.completed_contracts, 3);
+    assert_eq!(a.total_contracts, 3);
+    assert!((a.completion_rate_pct - 100.0).abs() < 0.001);
+    assert_eq!(a.volume_e9s, 3_000_000_000);
+    assert_eq!(a.pubkey, hex::encode(&provider_a));
+
+    let b = &leaderboard[1];
+    assert_eq!(b.trust_score, Some(70));
+    assert_eq!(b.completed_contracts, 1);
+    assert_eq!(b.total_contracts, 2);
+    assert!((b.completion_rate_pct - 50.0).abs() < 0.001);
+    assert_eq!(b.volume_e9s, 2_000_000_000);
+}
+
+#[tokio::test]
+async fn test_get_reputation_leaderboard_empty() {
+    let db = setup_test_db().await;
+    let leaderboard = db.get_reputation_leaderboard(20).await.unwrap();
+    assert!(leaderboard.is_empty());
 }

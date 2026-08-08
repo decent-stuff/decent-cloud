@@ -902,6 +902,48 @@ impl Database {
             })
             .collect())
     }
+
+    /// Get the reputation leaderboard: top providers ranked by trust score,
+    /// then completed contracts, then volume. The honesty gate
+    /// (`total_contracts > 0`) excludes providers with no contract track
+    /// record, so a brand-new profile can never appear as a "top" provider.
+    pub async fn get_reputation_leaderboard(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<ReputationLeaderboardEntry>> {
+        let rows = sqlx::query_as::<_, ReputationLeaderboardEntry>(
+            r#"SELECT
+                lower(encode(pp.pubkey,'hex')) AS pubkey,
+                pp.name AS provider_name,
+                pp.trust_score AS trust_score,
+                a.username,
+                a.display_name,
+                COALESCE(cs.completed_contracts,0) AS completed_contracts,
+                COALESCE(cs.total_contracts,0) AS total_contracts,
+                CASE WHEN COALESCE(cs.total_contracts,0) > 0
+                     THEN cs.completed_contracts::DOUBLE PRECISION / cs.total_contracts * 100.0
+                     ELSE 0.0 END AS completion_rate_pct,
+                COALESCE(cs.volume_e9s,0) AS volume_e9s
+            FROM provider_profiles pp
+            LEFT JOIN account_public_keys apk ON pp.pubkey = apk.public_key AND apk.is_active = TRUE
+            LEFT JOIN accounts a ON apk.account_id = a.id
+            LEFT JOIN (
+                SELECT provider_pubkey,
+                       COUNT(*) AS total_contracts,
+                       COUNT(*) FILTER (WHERE status='completed') AS completed_contracts,
+                       COALESCE(SUM(payment_amount_e9s) FILTER (WHERE status='completed'),0)::BIGINT AS volume_e9s
+                FROM contract_sign_requests GROUP BY provider_pubkey
+            ) cs ON pp.pubkey = cs.provider_pubkey
+            WHERE COALESCE(cs.total_contracts,0) > 0
+            ORDER BY COALESCE(pp.trust_score,0) DESC, completed_contracts DESC, volume_e9s DESC, pp.name ASC
+            LIMIT $1"#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, poem_openapi::Object)]
@@ -1054,6 +1096,36 @@ pub struct AccountSearchResult {
     pub contract_count: i64,
     #[ts(type = "number")]
     pub offering_count: i64,
+}
+
+/// One row of the reputation leaderboard: a provider with a real contract
+/// track record, ranked by trust score, completed contracts, and volume.
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, poem_openapi::Object, TS)]
+#[ts(export, export_to = "../../website/src/lib/types/generated/")]
+pub struct ReputationLeaderboardEntry {
+    /// Provider public key (lowercase hex)
+    pub pubkey: String,
+    /// Linked account username, if the provider pubkey maps to an account
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    pub username: Option<String>,
+    /// Linked account display name, if set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    pub display_name: Option<String>,
+    /// Provider profile display name (always present)
+    pub provider_name: String,
+    /// Cached composite trust score 0-100 (NULL until first trust-metrics compute)
+    #[ts(type = "number | undefined")]
+    pub trust_score: Option<i64>,
+    #[ts(type = "number")]
+    pub completed_contracts: i64,
+    #[ts(type = "number")]
+    pub total_contracts: i64,
+    pub completion_rate_pct: f64,
+    /// Total volume from completed contracts (e9s)
+    #[ts(type = "number")]
+    pub volume_e9s: i64,
 }
 
 /// Per-offering conversion stats: views vs rentals for a provider's offerings
