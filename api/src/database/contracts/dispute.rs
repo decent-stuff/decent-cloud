@@ -458,7 +458,7 @@ impl Database {
     ///
     /// Scope (intentionally narrow): this ONLY sets `contract_id`. It does NOT
     /// replay pause / terminate / refund actions even if the dispute has since
-    /// closed -- that is the caller's job via [`Self::replay_orphan_dispute_pause`]
+    /// closed -- that is the caller's job via [`Self::replay_orphan_dispute_lifecycle`]
     /// (#447), which is kept separate so this method stays a money-safe FK
     /// backfill. The orphan ops alert already fired at dispute-created time, so
     /// an operator can act on still-open disputes; closing the FK link here
