@@ -254,7 +254,9 @@ mod gateway_tests {
         let result =
             check_ssh_connectivity("127.0.0.1", port, tmp_key.to_str().unwrap(), std::time::Duration::from_millis(500))
                 .await;
-        std::fs::remove_file(&tmp_key).ok();
+        if let Err(e) = std::fs::remove_file(&tmp_key) {
+            tracing::debug!(path = %tmp_key.display(), error = %e, "cleanup: failed to remove temp file");
+        }
 
         let elapsed = started.elapsed();
         // Should return promptly after the 500ms budget — well under ssh's

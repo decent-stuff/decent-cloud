@@ -13,6 +13,14 @@ use std::time::{Duration, Instant};
 const GITHUB_REPO: &str = "decent-stuff/decent-cloud";
 const BINARY_NAME: &str = "dc-agent-linux-amd64";
 const LOCK_FILE: &str = "/var/run/dc-agent-upgrade.lock";
+
+/// Best-effort temp-file removal that logs on failure instead of silently
+/// dropping the error via `.ok()`. (ROB-009)
+fn remove_temp_file(path: &Path) {
+    if let Err(e) = fs::remove_file(path) {
+        tracing::debug!(path = %path.display(), error = %e, "cleanup: failed to remove temp file");
+    }
+}
 const UPGRADE_TIMEOUT_SECS: u64 = 120;
 /// Bounded budget for `dc-agent --version` after downloading a candidate
 /// binary. The check is local (no network) so 10s is plenty for even the
@@ -370,8 +378,8 @@ pub async fn run_upgrade(
     let actual_checksum = calculate_sha256(&temp_binary)?;
 
     if expected_checksum != actual_checksum {
-        fs::remove_file(&temp_binary).ok();
-        fs::remove_file(&temp_checksums).ok();
+        remove_temp_file(&temp_binary);
+        remove_temp_file(&temp_checksums);
         bail!(
             "CHECKSUM VERIFICATION FAILED!\n\
              Expected: {}\n\
@@ -421,15 +429,14 @@ pub async fn run_upgrade(
 
     // Atomic rename replaces running binary (old inode stays valid for running process)
     if let Err(e) = fs::rename(&staged_path, &install_path) {
-        // Clean up staged file on failure (old binary still in place, no restoration needed)
-        fs::remove_file(&staged_path).ok();
+        remove_temp_file(&staged_path);
         bail!("Failed to install new binary: {:#}", e);
     }
     println!("  [ok] Installed to {}", install_path.display());
 
     // Clean up temp files
-    fs::remove_file(&temp_binary).ok();
-    fs::remove_file(&temp_checksums).ok();
+    remove_temp_file(&temp_binary);
+    remove_temp_file(&temp_checksums);
 
     // Restart service if applicable
     if is_systemd_service() {
@@ -592,7 +599,7 @@ fedcba654321  decent-cloud-darwin-arm64";
             .expect("chmod temp script");
 
         let result = verify_binary_version(&script, "v9.9.9");
-        std::fs::remove_file(&script).ok();
+        super::remove_temp_file(&script);
         result.expect("script output must contain the expected version tag");
     }
 
@@ -617,7 +624,7 @@ fedcba654321  decent-cloud-darwin-arm64";
             .expect("chmod temp script");
 
         let err = verify_binary_version(&script, "9.9.9-never-exists");
-        std::fs::remove_file(&script).ok();
+        super::remove_temp_file(&script);
         let err = err.expect_err("mismatch must fail");
         let msg = format!("{:#}", err);
         assert!(
