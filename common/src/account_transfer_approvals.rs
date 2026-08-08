@@ -72,7 +72,9 @@ impl FundsTransferApprovalV1 {
 
     pub fn to_tx_id(&self) -> [u8; 32] {
         let mut hasher = sha2::Sha256::new();
-        hasher.update(borsh::to_vec(self).unwrap());
+        hasher.update(borsh::to_vec(self).expect(
+            "Borsh serialization of FundsTransferApprovalV1 is infallible",
+        ));
         let result = hasher.finalize();
         let mut tx_id = [0u8; 32];
         tx_id.copy_from_slice(&result[..32]);
@@ -153,7 +155,8 @@ impl FundsTransferApproval {
         ledger.upsert(
             LABEL_DC_TOKEN_APPROVAL,
             self.to_tx_id(),
-            borsh::to_vec(self).unwrap(),
+            borsh::to_vec(self)
+                .expect("Borsh serialization of FundsTransferApproval is infallible"),
         )?;
         let new_tx_num = RecentCache::get_next_tx_num();
         RecentCache::add_entry(new_tx_num, self.into());
