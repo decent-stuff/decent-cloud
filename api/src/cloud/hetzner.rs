@@ -18,6 +18,9 @@ use crate::cloud::types::{
 };
 
 const HETZNER_API_BASE: &str = "https://api.hetzner.cloud/v1";
+const SSH_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+const SSH_BANNER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const SERVER_STATUS_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct HetznerBackend {
     client: Client,
@@ -476,7 +479,7 @@ impl HetznerBackend {
             if let Ok(mut stream) = TcpStream::connect(&addr).await {
                 let mut banner = [0u8; 256];
                 if let Ok(Ok(n)) = tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
+                    SSH_BANNER_READ_TIMEOUT,
                     stream.read(&mut banner),
                 )
                 .await
@@ -490,7 +493,7 @@ impl HetznerBackend {
                     }
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(SSH_POLL_INTERVAL).await;
         }
 
         tracing::warn!("SSH not reachable at {} after {}s", addr, timeout_secs);
@@ -519,7 +522,7 @@ impl HetznerBackend {
                     server.status
                 );
             }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(SERVER_STATUS_POLL_INTERVAL).await;
         }
     }
 }
@@ -678,7 +681,7 @@ impl CloudBackend for HetznerBackend {
 
             let mut retries = 0;
             while server.status == ServerStatus::Provisioning && retries < 60 {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                tokio::time::sleep(SERVER_STATUS_POLL_INTERVAL).await;
                 server = self.get_server(&server.id).await?;
                 retries += 1;
             }

@@ -20,6 +20,9 @@ use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::time::Duration;
+
+const SSE_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 fn validate_recipe_if_present(script: Option<&String>) -> Result<(), String> {
     if let Some(script) = script {
@@ -142,7 +145,7 @@ pub async fn password_reset_events(
             } else {
                 None
             };
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(SSE_POLL_INTERVAL).await;
             Some((event, (db, pk, Some(ids))))
         },
     )
@@ -285,7 +288,7 @@ pub async fn contract_status_events(
             }
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        tokio::time::sleep(SSE_POLL_INTERVAL).await;
         Some((
             events,
             SseState {

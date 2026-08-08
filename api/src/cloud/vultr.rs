@@ -19,6 +19,8 @@ use crate::cloud::types::{
 
 const VULTR_API_BASE: &str = "https://api.vultr.com/v2";
 const IP_ASSIGNMENT_TIMEOUT_SECS: u64 = 120;
+const SSH_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+const SSH_BANNER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct VultrBackend {
     client: Client,
@@ -42,7 +44,7 @@ impl VultrBackend {
             client,
             api_key,
             base_url: VULTR_API_BASE.to_string(),
-            poll_interval: std::time::Duration::from_secs(5),
+            poll_interval: SSH_POLL_INTERVAL,
             ip_wait_timeout_secs: IP_ASSIGNMENT_TIMEOUT_SECS,
             ssh_wait_timeout_secs: 120,
         })
@@ -416,7 +418,7 @@ impl VultrBackend {
             if let Ok(mut stream) = TcpStream::connect(&addr).await {
                 let mut banner = [0u8; 256];
                 if let Ok(Ok(n)) = tokio::time::timeout(
-                    std::time::Duration::from_secs(5),
+                    SSH_BANNER_READ_TIMEOUT,
                     stream.read(&mut banner),
                 )
                 .await
@@ -430,7 +432,7 @@ impl VultrBackend {
                     }
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(self.poll_interval).await;
         }
 
         tracing::warn!("SSH not reachable at {} after {}s", addr, timeout_secs);
