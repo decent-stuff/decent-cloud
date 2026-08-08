@@ -5,8 +5,11 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 		// The '/' handler binds via <svelte:window onkeydown> at hydration, and
 		// the page fetches /api/v1/offerings in onMount — so that response is a
 		// deterministic hydration signal (registered before goto to avoid a race).
-		const offeringsReady = page.waitForResponse((r) =>
-			r.url().includes('/api/v1/offerings'),
+		// Explicit timeout: a bare waitForResponse waits forever, which turns a
+		// missed response into a 30s test timeout instead of a fast failure.
+		const offeringsReady = page.waitForResponse(
+			(r) => r.url().includes('/api/v1/offerings'),
+			{ timeout: 15000 },
 		);
 		await page.goto('/dashboard/marketplace');
 		await offeringsReady;
@@ -23,8 +26,9 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 	});
 
 	test('/ does not hijack input when already typing in a field', async ({ page }) => {
-		const offeringsReady = page.waitForResponse((r) =>
-			r.url().includes('/api/v1/offerings'),
+		const offeringsReady = page.waitForResponse(
+			(r) => r.url().includes('/api/v1/offerings'),
+			{ timeout: 15000 },
 		);
 		await page.goto('/dashboard/marketplace');
 		await offeringsReady;
@@ -76,8 +80,9 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 			// The '/' handler + marketplace search live on the marketplace
 			// route; wait for its hydration signal (offerings fetch) before
 			// interacting. The help handler guards on activeElement tag.
-			const offeringsReady = page.waitForResponse((r) =>
-				r.url().includes('/api/v1/offerings'),
+			const offeringsReady = page.waitForResponse(
+				(r) => r.url().includes('/api/v1/offerings'),
+				{ timeout: 15000 },
 			);
 			await page.goto('/dashboard/marketplace');
 			await offeringsReady;
