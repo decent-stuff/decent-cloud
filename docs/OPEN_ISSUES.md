@@ -51,6 +51,10 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 | **#452** — Dead `CHATWOOT_INBOX_ID` config (never read by code) | Removed from `.env.example`(×2), `docker-compose.dev.yml`, `CONFIG.md`, `deploy.py` `NON_SECRET_VARS`; rewrote `support_bot/AGENTS.md` to describe the real `list_inboxes()` assign-to-all loop. | `71210f8e` |
 | **#453** — `api/.sqlx` gitignored | Already resolved: workspace-root `.sqlx/` is the single committed source of truth (299 tracked query files); `api/.sqlx/` correctly gitignored (`.gitignore:120`). GH issue commented; no code change needed. | — |
 | Verification finding — `poc/hetzner-provision-probe.mjs` reads bare `HETZNER_API_TOKEN` (stranded-VM foot-gun in operator-local runs) | Hard-switched to `HETZNER_API_TOKEN_DEV` (consistent with #467 agent rule). | `b5be319c` |
+| SOPS `common.yaml` stored `EMAIL_PROCESSOR_INTERVAL_SECS: '30  # default'` — inline YAML comment parsed as part of value → API u64 parse failure → startup abort | Three-layer fix: SOPS values cleaned to bare numerics; `dev-server.sh` SECRETS_ENV parser strips inline comments; `cf/.env.example` cleaned. | `cc4b1c2e` |
+| Latent panic + terse error messages (rewards.rs `[..8]` on short slice; ledger_cursor FromStr discards value+error; identity.rs, offerings.rs) | Bound-check before slice + echo bad value + error in all 6 cursor-parse sites + 3 more error-message improvements. New regression test for the panic guard. | `86227dc6` |
+| Dev-cycle: no fast debug-binary path; broken `_announce_api_binary` suggestion; entrypoint missing `CARGO_TARGET_DIR` workaround | Added `--dev` flag to `dev-server.sh` (debug binary, honors `CARGO_TARGET_DIR`); fixed broken path suggestion; entrypoint error now leads with the no-sudo workaround. | `c5b19c67` |
+| **E2e suite verification** — full 314-test Playwright suite run against warm stack | 303 passed, 5 flaky under parallel load (all pass in isolation — documented in config), 6 cascade. No code bugs found. | — |
 
 ## Resolved this session (2026-08-06)
 
