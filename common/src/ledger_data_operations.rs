@@ -66,11 +66,12 @@ where
         None
     };
 
-    // Use the cursor's request string format (same as CLI)
-    let cursor_str = Some(cursor_local.to_request_string());
-    tracing_info!("Fetching data from cursor: {}", cursor_str.clone().unwrap());
+    // Use the cursor's request string format (same as CLI). Construct the
+    // Option only at the call site so the log line needs no fragile unwrap.
+    let cursor_request = cursor_local.to_request_string();
+    tracing_info!("Fetching data from cursor: {}", cursor_request);
 
-    let (new_cursor_str, raw_data) = data_fetch_fn(cursor_str, bytes_before).await?;
+    let (new_cursor_str, raw_data) = data_fetch_fn(Some(cursor_request), bytes_before).await?;
     tracing_info!(
         "Fetched {} bytes, new cursor: {}",
         raw_data.len(),
