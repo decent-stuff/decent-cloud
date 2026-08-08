@@ -22,9 +22,7 @@
 		activeProviders: 0,
 		totalOfferings: 0,
 		totalContracts: 0,
-		activeValidators: 0,
-		totalTransfers: 0,
-		totalVolumeE9s: 0,
+		totalVolumeE9s: 0
 	});
 	let error = $state<string | null>(null);
 	let currentIdentity = $state<IdentityInfo | null>(null);
@@ -328,7 +326,7 @@
 	<!-- Personalized Stats: role-aware -->
 	{#if !currentIdentity || activityLoading || myOfferingsLoading}
 		<!-- Loading or anonymous: show global platform stats -->
-		<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
 					<Icon name="server" size={20} class="text-neutral-600" />
@@ -361,14 +359,6 @@
 				<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
 				<p class="metric-subtext">Total</p>
 			</div>
-			<div class="metric-card">
-				<div class="flex items-center gap-2 mb-3">
-					<Icon name="shield" size={20} class="text-neutral-600" />
-					<span class="metric-label mb-0">Validators</span>
-				</div>
-				<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
-				<p class="metric-subtext">Active</p>
-			</div>
 		</div>
 	{:else if userRole === 'new'}
 		<!-- New user: prominent Get Started CTAs -->
@@ -397,14 +387,14 @@
 					<span class="text-xs text-neutral-500">Set up your profile</span>
 				</a>
 				<a
-					href="/dashboard/validators"
+					href="/dashboard/provider/start"
 					class="group flex flex-col items-center gap-2 p-4 bg-surface-elevated border border-neutral-700 hover:border-primary-500/50 hover:bg-primary-500/5 transition-all text-center"
 				>
 					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="shield" size={20} />
+						<Icon name="zap" size={20} />
 					</div>
-					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">View Validators</span>
-					<span class="text-xs text-neutral-500">Network trust nodes</span>
+					<span class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Become a Provider</span>
+					<span class="text-xs text-neutral-500">List your own offerings</span>
 				</a>
 			</div>
 		</div>
@@ -574,7 +564,7 @@
 				Platform Overview
 			</button>
 			{#if platformStatsExpanded}
-				<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3">
+				<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
 					<div class="metric-card">
 						<div class="flex items-center gap-2 mb-3">
 							<Icon name="server" size={20} class="text-neutral-600" />
@@ -606,14 +596,6 @@
 						</div>
 						<p class="metric-value">{dashboardData.totalContracts.toLocaleString()}</p>
 						<p class="metric-subtext">Total</p>
-					</div>
-					<div class="metric-card">
-						<div class="flex items-center gap-2 mb-3">
-							<Icon name="shield" size={20} class="text-neutral-600" />
-							<span class="metric-label mb-0">Validators</span>
-						</div>
-						<p class="metric-value">{dashboardData.activeValidators.toLocaleString()}</p>
-						<p class="metric-subtext">Active</p>
 					</div>
 				</div>
 			{/if}
@@ -651,15 +633,15 @@
 					</div>
 				</a>
 				<a
-					href="/dashboard/validators"
+					href="/dashboard/provider/start"
 					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 				>
 					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="shield" size={20} />
+						<Icon name="zap" size={20} />
 					</div>
 					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Validators</h3>
-						<p class="text-xs text-neutral-500">Network nodes</p>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Become a Provider</h3>
+						<p class="text-xs text-neutral-500">List offerings</p>
 					</div>
 				</a>
 			</div>
@@ -691,15 +673,15 @@
 					</div>
 				</a>
 				<a
-					href="/dashboard/validators"
+					href="/dashboard/provider/start"
 					class="group flex items-center gap-3 p-4 bg-surface-elevated border border-neutral-800 hover:border-neutral-700 hover:bg-surface-hover transition-all"
 				>
 					<div class="icon-box group-hover:border-primary-500/30 transition-colors">
-						<Icon name="shield" size={20} />
+						<Icon name="zap" size={20} />
 					</div>
 					<div>
-						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Validators</h3>
-						<p class="text-xs text-neutral-500">Network nodes</p>
+						<h3 class="text-sm font-medium text-white group-hover:text-primary-400 transition-colors">Become a Provider</h3>
+						<p class="text-xs text-neutral-500">List offerings</p>
 					</div>
 				</a>
 			</div>

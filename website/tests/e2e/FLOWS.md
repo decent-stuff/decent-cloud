@@ -27,7 +27,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 |-----|---------|
 | `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~26 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
-| `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, validators, pricing, reputation, compare. |
+| `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
 | `@provider` | Provider dashboard: become provider, create/edit offering, status/stock/visibility, requests, earnings, agent pools, SLA. |
 | `@account` | Account: profile, devices/security, notifications, saved offerings, cloud accounts. |
@@ -82,7 +82,6 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Offering detail renders | ✅ | `@marketplace` | `rentable-offering-fixture.spec.ts` · `offline-provider-warning.spec.ts` | `seeded self_provisioned offering shows an enabled Rent Resource button` |
 | Offering detail SLA card | ✅ | `@marketplace` | `offering-sla-empty-state.spec.ts` | `shows friendly empty state instead of empty gray bars...` |
 | Offline-provider warning | ✅ | `@marketplace` | `offline-provider-warning.spec.ts` | `should disable Rent button and explain why when provider is offline` |
-| Validators page | ✅ | `@marketplace` | `validators.spec.ts` | `renders the three stat cards with their unique labels` |
 | Pricing (agents) | ✅ | `@marketplace` | `agents-pricing.spec.ts` · `agents.spec.ts` | `renders the single pricing tier with a price point and CTAs` |
 | Reputation search | ✅ | `@marketplace` | `reputation.spec.ts` | `renders the Reputation heading and search box` |
 | Reputation detail | ✅ | `@marketplace` | `reputation-detail.spec.ts` | `renders the reputation profile for a known account` |

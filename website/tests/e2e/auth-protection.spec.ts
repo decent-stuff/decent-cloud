@@ -58,8 +58,7 @@ test.describe('Auth Protection', () => {
 	test('should allow access to public pages without login prompt', async ({ page }) => {
 		const publicPages = [
 			'/dashboard',
-			'/dashboard/marketplace',
-			'/dashboard/validators'
+			'/dashboard/marketplace'
 		];
 
 		for (const pagePath of publicPages) {

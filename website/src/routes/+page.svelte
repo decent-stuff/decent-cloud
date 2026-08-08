@@ -14,8 +14,6 @@
 		activeProviders: 0,
 		totalOfferings: 0,
 		totalContracts: 0,
-		activeValidators: 0,
-		totalTransfers: 0,
 		totalVolumeE9s: 0
 	});
 	let error = $state<string | null>(null);

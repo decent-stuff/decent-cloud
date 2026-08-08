@@ -41,7 +41,7 @@ describe('fetchDashboardData', () => {
 		expect(dashboard.activeProviders).toBe(mockStats.active_providers);
 		expect(dashboard.totalOfferings).toBe(mockStats.total_offerings);
 		expect(dashboard.totalContracts).toBe(mockStats.total_contracts);
-		expect(dashboard.activeValidators).toBe(mockStats.validator_count_24h);
+		expect(dashboard.totalVolumeE9s).toBe(mockStats.total_volume_e9s);
 	});
 
 	it('propagates failures from the stats API', async () => {

@@ -64,18 +64,6 @@ test.describe('Anonymous Browsing', () => {
 		await expect(loginButtons.first()).toBeVisible();
 	});
 
-	test('should allow anonymous user to view validators', async ({ page }) => {
-		await page.goto('/dashboard/validators');
-
-		// Page should load
-		await expect(page).toHaveURL('/dashboard/validators');
-
-		// Should show a visible Sign In button (the auth banner one; the
-		// mobile-only fixed button is hidden on desktop viewports).
-		const loginButtons = page.locator('button:has-text("Sign In")').filter({ visible: true });
-		await expect(loginButtons.first()).toBeVisible();
-	});
-
 	test('@smoke should show auth modal when anonymous user tries to rent resource', async ({ page }) => {
 		await page.goto('/dashboard/marketplace');
 
@@ -152,7 +140,6 @@ test.describe('Anonymous Browsing', () => {
 		// Sidebar shows the public "Browse" navigation items.
 		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 		await expect(page.locator('aside a[href="/dashboard/reputation"]')).toBeVisible();
-		await expect(page.locator('aside a[href="/dashboard/validators"]')).toBeVisible();
 
 		// REMOVED: aside a[href="/dashboard/offerings"] assertion - the offerings
 		// link moved into the auth-gated "My Activity" section and is no longer

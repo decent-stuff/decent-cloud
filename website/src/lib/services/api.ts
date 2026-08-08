@@ -1,7 +1,6 @@
 // Import auto-generated types from Rust (these have pubkey as Vec<u8> which is skipped in TS)
 import type { Offering as OfferingRaw } from '$lib/types/generated/Offering';
 import type { ProviderProfile as ProviderProfileRaw } from '$lib/types/generated/ProviderProfile';
-import type { Validator as ValidatorRaw } from '$lib/types/generated/Validator';
 import type { PlatformOverview } from '$lib/types/generated/PlatformOverview';
 import type { UserProfile as UserProfileRaw } from '$lib/types/generated/UserProfile';
 import type { SignedRequestHeaders } from '$lib/types/generated/SignedRequestHeaders';
@@ -30,7 +29,6 @@ type ConvertNullToUndefined<T> = {
 // Frontend types: convert null to undefined for convenience
 export type Offering = ConvertNullToUndefined<OfferingRaw> & { pubkey: string };
 export type ProviderProfile = ConvertNullToUndefined<ProviderProfileRaw> & { pubkey: string };
-export type Validator = ConvertNullToUndefined<ValidatorRaw> & { pubkey: string };
 export type UserProfile = ConvertNullToUndefined<UserProfileRaw> & { pubkey: string };
 export type PlatformStats = ConvertNullToUndefined<PlatformOverview>;
 export type ProviderTrustMetrics = ConvertNullToUndefined<ProviderTrustMetricsRaw>;
@@ -422,28 +420,6 @@ export async function getProviderHealthSummary(
 	}
 
 	return payload.data;
-}
-
-export async function getActiveValidators(days: number = 1): Promise<Validator[]> {
-	const url = `${API_BASE_URL}/api/v1/validators/active/${days}`;
-	const response = await fetch(url);
-
-	if (!response.ok) {
-		throw new Error(`Failed to fetch active validators: ${response.status} ${response.statusText}`);
-	}
-
-	const payload = (await response.json()) as ApiResponse<Validator[]>;
-
-	if (!payload.success) {
-		throw new Error(payload.error ?? 'Decent Cloud API validators response failed');
-	}
-
-	const validators = payload.data ?? [];
-	// Normalize pubkey to hex string
-	return validators.map((v) => ({
-		...v,
-		pubkey: normalizePubkey(v.pubkey)
-	}));
 }
 
 export async function getOffering(id: number): Promise<Offering> {

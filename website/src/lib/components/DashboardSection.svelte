@@ -9,8 +9,6 @@
 			activeProviders: number;
 			totalOfferings: number;
 			totalContracts: number;
-			activeValidators: number;
-			totalTransfers: number;
 			totalVolumeE9s: number;
 		};
 		error?: string | null;
@@ -23,6 +21,12 @@
 	// the stats grid (prior behavior) rather than claiming emptiness.
 	const empty = $derived(!error && marketplaceIsEmpty(dashboardData));
 
+	// Honest marketing stats only. "Active Providers" is deliberately omitted:
+	// it is a heartbeat ("online now") metric that reads as a dead marketplace
+	// (0 next to a non-zero total) on a marketing page. The authenticated
+	// dashboard keeps it with an "Online now" annotation. Volume is aggregated
+	// from paid contracts and shows $0 until payments settle — that's honest,
+	// not a bug.
 	const stats: {
 		label: string;
 		key: keyof Props['dashboardData'];
@@ -30,11 +34,8 @@
 		format?: (v: number) => string;
 	}[] = [
 		{ label: 'Total Providers', key: 'totalProviders', icon: 'server' },
-		{ label: 'Active Providers', key: 'activeProviders', icon: 'activity' },
 		{ label: 'Available Offerings', key: 'totalOfferings', icon: 'package' },
 		{ label: 'Total Contracts', key: 'totalContracts', icon: 'file' },
-		{ label: 'Active Validators', key: 'activeValidators', icon: 'shield' },
-		{ label: 'Total Transfers', key: 'totalTransfers', icon: 'arrow-right' },
 		{
 			// Volume is aggregated from contract payments, all now in USD via Stripe.
 			label: 'Total Volume (USD)',
@@ -83,7 +84,7 @@
 			</div>
 		{:else}
 			<!-- Stats grid -->
-			<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+			<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 				{#each stats as stat, i}
 					<div
 						class="metric-card text-center"
