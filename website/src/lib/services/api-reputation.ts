@@ -36,6 +36,18 @@ export interface AccountSearchResult {
 	offering_count: number;
 }
 
+export interface ReputationLeaderboardEntry {
+	pubkey: string;
+	username?: string;
+	display_name?: string;
+	provider_name: string;
+	trust_score?: number;
+	completed_contracts: number;
+	total_contracts: number;
+	completion_rate_pct: number;
+	volume_e9s: number;
+}
+
 // ============ Helper Functions ============
 
 function normalizePubkey(pubkey: string | number[]): string {
@@ -163,6 +175,30 @@ export async function searchReputation(query: string, limit: number = 50): Promi
 	}
 
 	const payload = (await response.json()) as ApiResponse<AccountSearchResult[]>;
+
+	if (!payload.success || !payload.data) {
+		return [];
+	}
+
+	return payload.data;
+}
+
+/**
+ * Get the reputation leaderboard: top providers by trust score and completed
+ * contracts. The backend honesty gate excludes providers with no contracts.
+ */
+export async function getReputationLeaderboard(
+	limit: number = 20
+): Promise<ReputationLeaderboardEntry[]> {
+	const url = `${API_BASE_URL}/api/v1/reputation/leaderboard?limit=${limit}`;
+
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch leaderboard: ${response.status} ${response.statusText}`);
+	}
+
+	const payload = (await response.json()) as ApiResponse<ReputationLeaderboardEntry[]>;
 
 	if (!payload.success || !payload.data) {
 		return [];

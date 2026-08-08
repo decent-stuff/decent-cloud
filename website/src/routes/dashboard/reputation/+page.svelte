@@ -3,9 +3,12 @@
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import { truncatePubkey } from '$lib/utils/identity';
+	import { getScoreColor } from '$lib/utils/trust-score';
 	import {
 		searchReputation,
-		type AccountSearchResult
+		getReputationLeaderboard,
+		type AccountSearchResult,
+		type ReputationLeaderboardEntry
 	} from '$lib/services/api-reputation';
 	import Icon from '$lib/components/Icons.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -17,14 +20,34 @@
 	let debounceTimeout: ReturnType<typeof setTimeout> | null = null;
 	let myUsername = $state<string | null>(null);
 
+	let leaderboard = $state<ReputationLeaderboardEntry[]>([]);
+	let leaderboardLoading = $state(true);
+	let leaderboardError = $state<string | null>(null);
+
 	onMount(() => {
 		const unsubscribe = authStore.currentIdentity.subscribe((identity) => {
 			if (identity?.account?.username) {
 				myUsername = identity.account.username;
 			}
 		});
+
+		loadLeaderboard();
+
 		return unsubscribe;
 	});
+
+	async function loadLeaderboard() {
+		leaderboardLoading = true;
+		leaderboardError = null;
+		try {
+			leaderboard = await getReputationLeaderboard(20);
+		} catch (e) {
+			leaderboardError = e instanceof Error ? e.message : 'Failed to load leaderboard';
+			leaderboard = [];
+		} finally {
+			leaderboardLoading = false;
+		}
+	}
 
 	async function performSearch() {
 		if (!searchQuery || searchQuery.trim().length === 0) {
@@ -60,6 +83,20 @@
 		return num.toLocaleString();
 	}
 
+	function formatVolume(e9s: number): string {
+		const value = e9s / 1_000_000_000;
+		if (value >= 1000) return `$${(value / 1000).toFixed(1)}k`;
+		return `$${value.toFixed(0)}`;
+	}
+
+	function displayName(entry: ReputationLeaderboardEntry): string {
+		return entry.display_name || entry.username || entry.provider_name;
+	}
+
+	function navigateIdentifier(entry: ReputationLeaderboardEntry): string {
+		return entry.username || entry.pubkey;
+	}
+
 	function navigateToProfile(identifier: string) {
 		goto(`/dashboard/reputation/${identifier}`);
 	}
@@ -82,6 +119,84 @@
 			</Button>
 		</div>
 	{/if}
+
+	<!-- Top Providers Leaderboard -->
+	<section class="space-y-4">
+		<div class="flex items-center justify-between">
+			<h2 class="text-lg font-semibold text-white">Top Providers</h2>
+			<span class="text-xs text-neutral-500">
+				Ranked by trust score &amp; completed contracts
+			</span>
+		</div>
+
+		{#if leaderboardLoading}
+			<div class="card p-5 flex items-center gap-2 text-neutral-400">
+				<div class="w-4 h-4 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
+				<span class="text-sm">Loading leaderboard...</span>
+			</div>
+		{:else if leaderboardError}
+			<div class="card p-5 text-danger text-sm">{leaderboardError}</div>
+		{:else if leaderboard.length === 0}
+			<div class="card p-8 text-center">
+				<div class="icon-box-accent mx-auto mb-4">
+					<Icon name="star" size={20} />
+				</div>
+				<h3 class="text-base font-semibold text-white mb-2">No providers with completed contracts yet</h3>
+				<p class="text-neutral-500 text-sm">
+					The leaderboard fills in as providers complete rentals. Check back soon.
+				</p>
+			</div>
+		{:else}
+			<div class="card overflow-hidden">
+				<table class="w-full text-sm">
+					<thead>
+						<tr class="text-left text-[11px] uppercase tracking-label text-neutral-500 border-b border-neutral-800/60">
+							<th class="py-3 px-4 w-12">#</th>
+							<th class="py-3 px-4">Provider</th>
+							<th class="py-3 px-4 text-right">Trust</th>
+							<th class="py-3 px-4 text-right">Completed</th>
+							<th class="py-3 px-4 text-right">Completion</th>
+							<th class="py-3 px-4 text-right">Volume</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each leaderboard as entry, i}
+							<tr
+								class="border-b border-neutral-800/40 last:border-0 hover:bg-neutral-800/30 cursor-pointer"
+								onclick={() => navigateToProfile(navigateIdentifier(entry))}
+							>
+								<td class="py-3 px-4 text-neutral-500 font-mono">{i + 1}</td>
+								<td class="py-3 px-4">
+									<div class="font-medium text-white truncate">{displayName(entry)}</div>
+									<div class="text-xs text-neutral-600 font-mono mt-0.5">
+										{truncatePubkey(entry.pubkey)}
+									</div>
+								</td>
+								<td class="py-3 px-4 text-right font-mono">
+									{#if entry.trust_score !== undefined && entry.trust_score !== null}
+										<span class="font-semibold {getScoreColor(entry.trust_score)}">
+											{entry.trust_score}
+										</span>
+									{:else}
+										<span class="text-neutral-600">—</span>
+									{/if}
+								</td>
+								<td class="py-3 px-4 text-right text-white">
+									{formatNumber(entry.completed_contracts)}
+								</td>
+								<td class="py-3 px-4 text-right text-white">
+									{entry.completion_rate_pct.toFixed(0)}%
+								</td>
+								<td class="py-3 px-4 text-right text-white font-mono">
+									{formatVolume(entry.volume_e9s)}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
 
 	<!-- Search Box -->
 	<div class="card p-5">
@@ -163,19 +278,6 @@
 			</p>
 			<p class="text-xs text-neutral-600 mt-2">
 				Try searching by username, display name, or public key
-			</p>
-		</div>
-	{:else if !searchQuery && !loading}
-		<div class="card p-8 text-center">
-			<div class="icon-box-accent mx-auto mb-4">
-				<Icon name="star" size={20} />
-			</div>
-			<h2 class="text-lg font-semibold text-white mb-2">Search Reputation</h2>
-			<p class="text-neutral-500 text-sm">
-				Enter a username, display name, or public key to find accounts
-			</p>
-			<p class="text-xs text-neutral-600 mt-4">
-				All reputation data is public by design to encourage transparency and trust
 			</p>
 		</div>
 	{/if}

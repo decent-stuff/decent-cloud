@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { ProviderTrustMetrics, ProviderResponseMetrics, ProviderHealthSummary } from '$lib/services/api';
 	import { formatDuration } from '$lib/utils/contract-format';
-	import { hasEnoughTrustData } from '$lib/utils/trust-score';
+	import { hasEnoughTrustData, getScoreColor, getScoreBgColor, getScoreLabel } from '$lib/utils/trust-score';
 
 	interface Props {
 		metrics: ProviderTrustMetrics;
@@ -10,25 +10,6 @@
 	}
 
 	let { metrics, responseMetrics = null, healthSummary = null }: Props = $props();
-
-	// Trust score color based on value
-	function getScoreColor(score: number): string {
-		if (score >= 80) return 'text-green-400';
-		if (score >= 60) return 'text-yellow-400';
-		return 'text-red-400';
-	}
-
-	function getScoreBgColor(score: number): string {
-		if (score >= 80) return 'bg-green-500/20 border-green-500/50';
-		if (score >= 60) return 'bg-yellow-500/20 border-yellow-500/50';
-		return 'bg-red-500/20 border-red-500/50';
-	}
-
-	function getScoreLabel(score: number): string {
-		if (score >= 80) return 'Reliable';
-		if (score >= 60) return 'Caution';
-		return 'High Risk';
-	}
 
 	// Format last active time
 	function formatLastActive(ns: number): string {
