@@ -162,6 +162,12 @@ async fn provision_pending_resources(
         }
 
         let resource_id = resource.id;
+        // Capture the linked contract before `resource` is moved into
+        // provision_one. If provisioning fails AND this resource backs a
+        // contract, we proactively drive the contract to ProvisioningFailed
+        // (money-safe path: gated refund + teardown) instead of leaving it
+        // stuck in `provisioning` until the periodic timeout sweep. Issue #425.
+        let linked_contract_id = resource.contract_id.clone();
         let result = provision_one(
             database,
             resource,
@@ -183,6 +189,44 @@ async fn provision_pending_resources(
                 .await
             {
                 tracing::error!("Failed to mark resource {} as failed: {}", resource_id, e);
+            }
+
+            // Proactively close any contract backed by this resource so the
+            // customer is refunded immediately. mark_provisioning_failed is a
+            // clean no-op if the contract has already transitioned (e.g. a
+            // parallel provider failure report or user cancel).
+            if let Some(contract_id) = linked_contract_id {
+                let stripe_client = crate::stripe_client::stripe_client_or_warn();
+                match database
+                    .mark_provisioning_failed(
+                        &contract_id,
+                        &error_msg,
+                        stripe_client.as_ref(),
+                        b"system-cloud-resell",
+                    )
+                    .await
+                {
+                    Ok(Some(_)) => {
+                        tracing::warn!(
+                            contract_id = %hex::encode(&contract_id),
+                            resource_id = %resource_id,
+                            "Cloud-resell provisioning failed — contract closed and refund initiated"
+                        );
+                    }
+                    Ok(None) => {
+                        tracing::debug!(
+                            contract_id = %hex::encode(&contract_id),
+                            "Contract already transitioned; cloud-resell failure no-op"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            contract_id = %hex::encode(&contract_id),
+                            error = %format!("{:#}", e),
+                            "Failed to mark contract provisioning_failed after cloud-resell failure"
+                        );
+                    }
+                }
             }
         }
     }

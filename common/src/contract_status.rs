@@ -508,6 +508,32 @@ mod tests {
     }
 
     #[test]
+    fn test_provisioning_failed_wire_form_distinct_from_cancelled() {
+        // Issue #425 regression guard: the dc-agent now reports failures with
+        // the canonical wire form "provisioning_failed" (snake_case), which
+        // MUST parse to ProvisioningFailed. "cancelled" MUST stay Cancelled.
+        // These are distinct terminal states. This parsing invariant is what
+        // lets the update_provisioning_status handler route provider failures
+        // through the money-safe refund path WITHOUT migrating user-initiated
+        // cancels (which must remain Cancelled).
+        assert_eq!(
+            "provisioning_failed".parse::<ContractStatus>().unwrap(),
+            ContractStatus::ProvisioningFailed
+        );
+        assert_eq!(
+            "cancelled".parse::<ContractStatus>().unwrap(),
+            ContractStatus::Cancelled
+        );
+        assert_ne!(ContractStatus::ProvisioningFailed, ContractStatus::Cancelled);
+
+        // The old buggy wire form "provision-failed" (hyphen, no _failed
+        // suffix) MUST NOT parse — that's the ST-3 bug. Locking this in
+        // prevents the dc-agent wire string from silently regressing back to
+        // the un-parseable form.
+        assert!("provision-failed".parse::<ContractStatus>().is_err());
+    }
+
+    #[test]
     fn test_serialize() {
         let status = ContractStatus::Accepted;
         let json = serde_json::to_string(&status).unwrap();

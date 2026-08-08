@@ -207,7 +207,12 @@ impl TimeoutCleanupService {
             );
             match self
                 .database
-                .mark_provisioning_failed(&row.contract_id, &reason, stripe_ref)
+                .mark_provisioning_failed(
+                    &row.contract_id,
+                    &reason,
+                    stripe_ref,
+                    b"system-timeout",
+                )
                 .await
             {
                 Ok(Some(_)) => {

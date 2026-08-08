@@ -283,7 +283,11 @@ impl Database {
 
     /// Transition an `accepted`/`provisioning` contract to
     /// `provisioningfailed` and issue a full auto-refund. Idempotent: a row
-    /// already out of those states produces `Ok(false)` and no refund call.
+    /// already out of those states produces `Ok(None)` and no refund call.
+    /// `actor` is recorded in `status_updated_by` and the status-history
+    /// `changed_by` column so the audit trail can distinguish a system timeout
+    /// (`b"system-timeout"`), a provider-reported failure (the provider's
+    /// pubkey), or an internal cloud-resell failure (`b"system-cloud-resell"`).
     /// On the happy path:
     ///   1. Status flips to `provisioningfailed`,
     ///      `provisioning_failed_at_ns` and `provisioning_failure_reason`
@@ -308,11 +312,11 @@ impl Database {
         contract_id: &[u8],
         reason: &str,
         stripe_client: Option<&crate::stripe_client::StripeClient>,
+        actor: &[u8],
     ) -> Result<Option<i64>> {
         let now_ns = crate::now_ns()?;
-        let actor: &[u8] = b"system-timeout";
         let new_status = dcc_common::ContractStatus::ProvisioningFailed.to_string();
-        let memo = format!("Provisioning timeout: {}", reason);
+        let memo = format!("Provisioning failed: {}", reason);
 
         // Lock the row, capture its prior state, then transition. SELECT FOR
         // UPDATE prevents a parallel worker from overwriting the row between
@@ -723,7 +727,7 @@ mod tests {
         .await;
 
         let result = db
-            .mark_provisioning_failed(&contract_id, "test-no-op", None)
+            .mark_provisioning_failed(&contract_id, "test-no-op", None, b"system-timeout")
             .await
             .unwrap();
         assert!(result.is_none(), "must return None for replay");
@@ -764,7 +768,7 @@ mod tests {
         )
         .await;
         let fired_at_ns = db
-            .mark_provisioning_failed(&contract_id, "agent timeout 60m", None)
+            .mark_provisioning_failed(&contract_id, "agent timeout 60m", None, b"system-timeout")
             .await
             .unwrap()
             .expect("happy path must return Some(timestamp)");
@@ -831,6 +835,145 @@ mod tests {
         // attempted; an actual stripe call is exercised by issue_audited_refund's
         // own test suite.
         assert_eq!(audit.status, "requested");
+    }
+
+    #[tokio::test]
+    async fn test_mark_provisioning_failed_records_provider_actor_and_refund() {
+        // Issue #425: when the update_provisioning_status handler routes a
+        // provider/agent-reported failure, it passes the REPORTING provider's
+        // pubkey as `actor` (ST-1/ST-2). The audit trail must record that
+        // pubkey (so provider failures are distinguishable from system
+        // timeouts), and a refund_requests row must be created — proving the
+        // customer who never received service is refunded through the gated
+        // money-safe path rather than the bare update_contract_status.
+        let db = setup_test_db().await;
+        let contract_id = vec![0x51; 32];
+        insert_test_contract(
+            &db,
+            &contract_id,
+            "provisioning",
+            0,
+            Some(0),
+            "stripe",
+            "succeeded",
+            500_000_000, // $50.00 paid
+            Some("pi_test_provider_fail"),
+        )
+        .await;
+
+        // The reporting provider's 32-byte pubkey is the actor — exactly as
+        // the handler now passes it via mark_provisioning_failed(..., &auth.provider_pubkey).
+        let provider_pubkey: &[u8] = &[0xBB; 32];
+        db.mark_provisioning_failed(
+            &contract_id,
+            "provider: hetzner API rate-limited",
+            None,
+            provider_pubkey,
+        )
+        .await
+        .unwrap()
+        .expect("provider failure must transition");
+
+        let after = db.get_contract(&contract_id).await.unwrap().unwrap();
+        assert_eq!(after.status, "provisioningfailed");
+
+        // ST-1 load-bearing assertion: the audit actor is the provider pubkey,
+        // NOT the hardcoded system-timeout default.
+        let changed_by: Vec<u8> = sqlx::query_scalar(
+            "SELECT changed_by FROM contract_status_history \
+             WHERE contract_id = $1 ORDER BY changed_at_ns DESC LIMIT 1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            changed_by, provider_pubkey,
+            "provider-reported failure must record the provider pubkey as actor"
+        );
+
+        // Money-safe assertion (ST-2): a refund_requests row exists, proving
+        // the gated-refund path fired. With no Stripe client the refund is
+        // computed but not issued to Stripe, yet the reconciliation row is
+        // the proof the money-safe branch ran instead of bare update_contract_status.
+        let refund_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM refund_requests \
+             WHERE contract_id = $1 AND reason = 'provisioning_failed'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            refund_count, 1,
+            "gated refund must fire for provider-reported failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_user_cancel_during_provisioning_stays_cancelled() {
+        // Issue #425 regression guard: a user-initiated (or provider) cancel
+        // during provisioning MUST end in Cancelled — NOT be migrated to
+        // ProvisioningFailed. The update_provisioning_status handler routes
+        // ONLY the "provisioning_failed" wire status through mark_provisioning_failed;
+        // a "cancelled" status stays on the bare update_contract_status path.
+        // This test locks in that design intent: the cancel path leaves
+        // provisioning_failed_at_ns untouched (no money-safe teardown fired).
+        let db = setup_test_db().await;
+        let contract_id = vec![0x52; 32];
+        insert_test_contract(
+            &db,
+            &contract_id,
+            "provisioning",
+            0,
+            Some(0),
+            "stripe",
+            "succeeded",
+            500_000_000,
+            Some("pi_test_cancel_prov"),
+        )
+        .await;
+
+        // insert_test_contract stores provider_pubkey = [0xBB; 32]; that same
+        // pubkey authorizes the status update.
+        db.update_contract_status(
+            &contract_id,
+            "cancelled",
+            &[0xBB; 32],
+            Some("User cancelled during provisioning"),
+        )
+        .await
+        .unwrap();
+
+        let after = db.get_contract(&contract_id).await.unwrap().unwrap();
+        assert_eq!(after.status, "cancelled", "cancel must remain Cancelled");
+
+        // The money-safe failure path must NOT have fired: the failure
+        // timestamp column stays NULL, distinguishing Cancelled from
+        // ProvisioningFailed.
+        let failed_at_ns: Option<i64> = sqlx::query_scalar(
+            "SELECT provisioning_failed_at_ns FROM contract_sign_requests WHERE contract_id = $1",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert!(
+            failed_at_ns.is_none(),
+            "provisioning_failed_at_ns must be NULL for a cancel, not a failure"
+        );
+
+        // And no provisioning_failed refund row was created through the
+        // money-safe path.
+        let refund_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM refund_requests \
+             WHERE contract_id = $1 AND reason = 'provisioning_failed'",
+        )
+        .bind(&contract_id)
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(refund_count, 0, "cancel must not trigger the failure refund");
     }
 
     #[tokio::test]

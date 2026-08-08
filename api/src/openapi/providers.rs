@@ -20,6 +20,7 @@ use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::Deserialize;
 use serde::Serialize;
 use std::sync::Arc;
+use std::str::FromStr;
 use std::time::Duration;
 
 const SSE_POLL_INTERVAL: Duration = Duration::from_secs(5);
@@ -1899,6 +1900,46 @@ impl ProvidersApi {
                     })
                 }
             };
+
+        // Issue #425: a provider/agent reporting a provisioning failure must
+        // route through the money-safe path (gated refund + cloud-resource
+        // teardown) — NEVER the bare update_contract_status, which would flip
+        // the status without refunding a customer who never received service.
+        // mark_provisioning_failed is idempotent (FOR UPDATE on
+        // accepted/provisioning), so a duplicate provider report is a clean
+        // no-op. User-initiated cancellation during provisioning stays on the
+        // Cancelled path and is NOT migrated here.
+        if matches!(
+            dcc_common::ContractStatus::from_str(&req.status),
+            Ok(dcc_common::ContractStatus::ProvisioningFailed)
+        ) {
+            let reason = sanitized_details
+                .as_deref()
+                .unwrap_or("Provider reported provisioning failure");
+            let stripe_client = crate::stripe_client::stripe_client_or_warn();
+            return Json(match db
+                .mark_provisioning_failed(
+                    &contract_id,
+                    reason,
+                    stripe_client.as_ref(),
+                    &auth.provider_pubkey,
+                )
+                .await
+            {
+                Ok(_) => ApiResponse {
+                    success: true,
+                    data: Some(
+                        "Provisioning failed — contract closed and refund initiated".to_string(),
+                    ),
+                    error: None,
+                },
+                Err(e) => ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                },
+            });
+        }
 
         match db
             .update_contract_status(&contract_id, &req.status, &auth.provider_pubkey, None)

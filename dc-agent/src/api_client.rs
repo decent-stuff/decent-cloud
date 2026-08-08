@@ -436,7 +436,7 @@ impl ApiClient {
             contract_id
         );
         let request = ProvisionFailedRequest {
-            status: "provision-failed".to_string(),
+            status: "provisioning_failed".to_string(),
             instance_details: error.to_string(),
         };
         let body = serde_json::to_vec(&request)?;
@@ -1216,6 +1216,45 @@ mod tests {
         };
         let result = client.report_health("def456", &status).await;
         assert!(result.is_ok(), "report_health failed: {result:?}");
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_report_failed_sends_canonical_wire_status() {
+        // Issue #425: report_failed MUST send the canonical, parseable wire
+        // form "provisioning_failed" (snake_case) — NOT the old buggy
+        // "provision-failed" (hyphen), which the API's ContractStatus::from_str
+        // rejects. If this regresses, the API never reaches the money-safe
+        // refund path and the customer keeps a charge for service they never
+        // received.
+        let mut server = mockito::Server::new_async().await;
+        let mock = server
+            .mock(
+                "PUT",
+                "/api/v1/provider/rental-requests/abc123/provisioning",
+            )
+            .match_body(mockito::Matcher::PartialJsonString(
+                r#"{"status": "provisioning_failed"}"#.to_string(),
+            ))
+            .with_status(200)
+            .with_body(r#"{"success":true,"data":"Provisioning failed"}"#)
+            .create_async()
+            .await;
+
+        let signing_key = SigningKey::from_bytes(&[42u8; 32]);
+        let config = ApiConfig {
+            endpoint: server.url(),
+            provider_pubkey: "test_pubkey".to_string(),
+            agent_secret_key: None,
+            provider_secret_key: Some(hex::encode(signing_key.to_bytes())),
+            pool_id: None,
+        };
+        let client = ApiClient::new(&config).unwrap();
+
+        let result = client
+            .report_failed("abc123", "provisioner error: out of quota")
+            .await;
+        assert!(result.is_ok(), "report_failed failed: {result:?}");
         mock.assert_async().await;
     }
 }
