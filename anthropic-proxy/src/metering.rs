@@ -129,7 +129,21 @@ struct MessageResponse {
 /// Parse the top-level `usage` from a non-streaming Messages JSON response body.
 /// Returns `None` when the body is not valid JSON or carries no `usage` field.
 pub fn parse_response_usage(body: &str) -> Option<Usage> {
-    serde_json::from_str::<MessageResponse>(body).ok().and_then(|r| r.usage)
+    match serde_json::from_str::<MessageResponse>(body) {
+        Ok(r) => r.usage,
+        Err(e) => {
+            // Schema drift / malformed body: surface it so silent under-billing
+            // is observable rather than swallowed by `.ok()`. Truncate the body
+            // to keep the log bounded for large or error responses.
+            tracing::warn!(
+                target: "metering",
+                error = %e,
+                body_snippet = %body.chars().take(512).collect::<String>(),
+                "failed to parse non-streaming response usage; usage will NOT be metered"
+            );
+            None
+        }
+    }
 }
 
 /// Parse the terminal `message_delta` usage from a COMPLETE Anthropic SSE body.
@@ -163,7 +177,22 @@ fn parse_data_line_usage(line: &[u8]) -> Option<Usage> {
     if payload.is_empty() || payload == b"[DONE]" {
         return None;
     }
-    let ev: StreamEvent = serde_json::from_slice(payload).ok()?;
+    let ev = match serde_json::from_slice::<StreamEvent>(payload) {
+        Ok(ev) => ev,
+        Err(e) => {
+            // Schema drift on a streaming data line. Surface it (truncated) so a
+            // silently-dropped terminal message_delta is observable rather than
+            // swallowed by `.ok()?`.
+            let end = payload.len().min(512);
+            tracing::warn!(
+                target: "metering",
+                error = %e,
+                line_snippet = %String::from_utf8_lossy(&payload[..end]),
+                "failed to parse streaming data-line usage; usage for this event will NOT be metered"
+            );
+            return None;
+        }
+    };
     if ev.ty == "message_delta" {
         ev.usage
     } else {
@@ -258,6 +287,103 @@ mod tests {
     fn parse_nonstreaming_usage_none_for_invalid_json() {
         assert!(parse_response_usage("not json").is_none());
         assert!(parse_response_usage(r#"{"foo":"bar"}"#).is_none());
+    }
+
+    #[test]
+    fn parse_response_usage_logs_warn_on_schema_drift() {
+        // A body that fails to deserialize into MessageResponse must emit a
+        // metering warn (so schema drift is observable) AND still return None.
+        // Regression guard: previously the `.ok()` swallowed the error silently.
+        let buf = capture_warns(|| {
+            assert!(parse_response_usage("totally not json {{{").is_none());
+        });
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("failed to parse non-streaming response usage"),
+            "expected a metering warn, got log: {out}"
+        );
+        assert!(
+            out.contains("totally not json"),
+            "warn should echo the offending body, got log: {out}"
+        );
+    }
+
+    #[test]
+    fn parse_data_line_usage_logs_warn_on_malformed_data() {
+        // A `data:` line whose payload is not valid JSON must emit a metering
+        // warn (so a dropped terminal message_delta is observable) and return
+        // None. Regression guard: previously `.ok()?` swallowed the error.
+        let buf = capture_warns(|| {
+            assert!(parse_data_line_usage(b"data: {borked").is_none());
+        });
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains("failed to parse streaming data-line usage"),
+            "expected a metering warn, got log: {out}"
+        );
+        assert!(
+            out.contains("{borked"),
+            "warn should echo the offending line, got log: {out}"
+        );
+    }
+
+    #[test]
+    fn parse_data_line_usage_does_not_warn_for_non_data_lines() {
+        // Lines that are not `data:` payloads, or that carry `[DONE]`, are not
+        // parse failures and must NOT emit a metering warn (avoids log noise).
+        let buf = capture_warns(|| {
+            assert!(parse_data_line_usage(b"event: ping").is_none());
+            assert!(parse_data_line_usage(b"data: [DONE]").is_none());
+            assert!(parse_data_line_usage(b"").is_none());
+        });
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            !out.contains("failed to parse"),
+            "non-data/done lines must not warn, got log: {out}"
+        );
+    }
+
+    /// Run `f` under a thread-local tracing subscriber that captures all output
+    /// into a buffer; returns that buffer. Mirrors the capture pattern in
+    /// tests/integration.rs so log-emission assertions are isolated per test.
+    fn capture_warns<F: FnOnce()>(f: F) -> Vec<u8> {
+        use std::sync::{Arc, Mutex};
+        use std::io::Write;
+        use tracing_subscriber::fmt::MakeWriter;
+        use tracing_subscriber::prelude::*;
+
+        #[derive(Clone)]
+        struct Maker(Arc<Mutex<Vec<u8>>>);
+        struct Writer(Arc<Mutex<Vec<u8>>>);
+        impl Write for Writer {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl<'a> MakeWriter<'a> for Maker {
+            type Writer = Writer;
+            fn make_writer(&'a self) -> Self::Writer {
+                Writer(self.0.clone())
+            }
+        }
+
+        let buf = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_subscriber::filter::LevelFilter::WARN)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(Maker(buf.clone()))
+                    .with_ansi(false),
+            );
+        let guard = tracing::dispatcher::set_default(&tracing::Dispatch::new(subscriber));
+        f();
+        drop(guard);
+        let mut lock = buf.lock().unwrap();
+        std::mem::take(&mut *lock)
     }
 
     const STREAM_FIXTURE: &str = "\
