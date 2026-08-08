@@ -93,8 +93,7 @@
 	// Browse section - discovery and exploration
 	const browseItems: NavItem[] = [
 		{ href: '/dashboard/marketplace', icon: 'cart', label: 'Marketplace' },
-		{ href: '/dashboard/reputation', icon: 'star', label: 'Reputation' },
-		{ href: '/dashboard/validators', icon: 'check', label: 'Validators' }
+		{ href: '/dashboard/reputation', icon: 'star', label: 'Reputation' }
 	];
 
 	// My Activity section - user's rentals (customer perspective)
@@ -308,7 +307,11 @@
 			{/each}
 		{/if}
 
-		<!-- My Activity section - show to all users -->
+		<!-- My Activity section — hidden for signed-out users. The section is
+	     meaningless without an account (there is no activity to show), and
+	     surfacing it with disabled items + a "sign in" helper duplicates the
+	     single Sign In CTA already in the page header. -->
+	{#if isAuthenticated}
 		<button
 			type="button"
 			class="section-toggle mt-3"
@@ -319,31 +322,19 @@
 			<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.activity ? '-rotate-90' : ''}" />
 		</button>
 		{#if !sectionCollapsed.activity}
-			{#if isAuthenticated}
-				{#each activityItems as item}
-					{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
-					<a
-						href={item.href}
-						onclick={closeSidebar}
-						class="nav-item {isActive ? 'nav-item-active' : ''}"
-					>
-						<Icon name={item.icon} size={20} />
-						<span class="text-sm">{item.label}</span>
-					</a>
-				{/each}
-			{:else}
-				<div class="px-3 py-2">
-					<p class="text-xs text-neutral-500 mb-2">Sign in to access:</p>
-					{#each activityItems as item}
-						<div class="flex items-center gap-2 py-1 text-neutral-600">
-							<Icon name={item.icon} size={18} />
-							<span class="text-xs">{item.label}</span>
-						</div>
-					{/each}
-					<p class="mt-2 text-[11px] text-neutral-500">Use the top Sign In action to continue.</p>
-				</div>
-			{/if}
+			{#each activityItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="nav-item {isActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name={item.icon} size={20} />
+					<span class="text-sm">{item.label}</span>
+				</a>
+			{/each}
 		{/if}
+	{/if}
 
 		{#if isAuthenticated}
 			<!-- Provider section -->
