@@ -26,15 +26,16 @@ test.describe('/dashboard/reputation', () => {
 		);
 	});
 
-	test('shows the idle "Search Reputation" prompt before any query', async ({ page }) => {
-		// Empty-state copy unique to this route (only shown when no search yet)
-		await expect(page.getByRole('heading', { name: 'Search Reputation' })).toBeVisible();
-		await expect(
-			page.getByText(/Enter a username, display name, or public key to find accounts/i),
-		).toBeVisible();
-		await expect(
-			page.getByText(/All reputation data is public by design/i),
-		).toBeVisible();
+	test('shows the Top Providers leaderboard as the default view (no longer a dead-end)', async ({
+		page,
+	}) => {
+		// UX-006: the landing view is now a browseable reputation leaderboard,
+		// not the bare "Search Reputation" idle prompt. The section renders by
+		// default (the fetch fires on mount) even with zero seeded providers.
+		await expect(page.getByRole('heading', { name: 'Top Providers' })).toBeVisible({
+			timeout: 10_000,
+		});
+		await expect(page.getByText(/Ranked by trust score/i)).toBeVisible();
 	});
 
 	test('shows "No Results Found" for an unknown query', async ({ page }) => {
