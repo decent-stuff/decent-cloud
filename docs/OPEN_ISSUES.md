@@ -1,12 +1,51 @@
 # Open Issues
 
-**Snapshot:** 2026-08-06. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
+**Snapshot:** 2026-08-08. **Canonical source:** GitHub Issues at `decent-stuff/decent-cloud`
 (`gh issue list --repo decent-stuff/decent-cloud --state open`). This file is a categorized
 inventory for quick local reference; GitHub remains the source of truth. Re-sync with:
 
 ```bash
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
+
+## Next session priorities (2026-08-08)
+
+Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
+
+### A. Autonomously actionable (no human/credential/infra input needed)
+
+| Priority | Task | Detail |
+|----------|------|--------|
+| **A1** | **#451 — Chatwoot dedicated service-account token** | Was blocked (dev Chatwoot returned 500). Now UNBLOCKED — all 3 Chatwoot instances were fully reset this session (dev/stage/prod). Rails-runner access works (`docker exec` / `kubectl exec`). Create a dedicated `dc-api-bot` user in account 1, generate its access token, update SOPS + k8s secrets, restart API pods. See #451 body for exact steps. |
+| **A2** | **Fix 5 flaky e2e tests under parallel load** | 303/314 pass; 5 fail under parallel load but pass in isolation. Root-cause each (DB-state sharing, timing). The warm stack is up (api:59011, web:59010). Run serially (`--workers 1`) to identify, then fix with serial mode / better fixtures. |
+| **A3** | **#444 — continue large-file splits** | Ongoing. Current largest: `providers.rs` 4090L, `dc-agent/src/main.rs` 3674L, `database/offerings.rs` 2876L, `database/cloud_resources.rs` 2445L. Each verified byte-identical OpenAPI via `spec_snapshot.rs` guard. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
+| **A4** | **#425 — Audit Provisioning → Cancelled failure paths** | Migrate to `ProvisioningFailed`. Deferred Stripe/billing item, code-only — no external dep. |
+| **A5** | **#334 / #387 — DB test coverage / concurrent ticket processing** | #334: largely addressed (kept open on literal reading). #387: single-threaded poll loop, needs a design before work. Both code-only. |
+| **A6** | **Push 11 unpushed commits on `main`** | `origin/main` is 11 commits behind HEAD. Push when ready. Commits: `b5be319c` through `8b44cb6b` (all this session's fixes). |
+
+### B. Needs operator action (deploy / GitHub settings / infra)
+
+| Priority | Task | Detail |
+|----------|------|--------|
+| **B1** | **Close 4 fixed GH issues** | `gh issue close` FAILS (agent lacks permissions). Fixed but still open: **#466** (`bc692bdc`), **#452** (`71210f8e`), **#453** (no code change, commented), **#447** (`36f5e550`). Operator must close. |
+| **B2** | **#470 auto-merge prerequisite** | Needs GitHub repo settings: "Allow auto-merge" ON + `build-and-test` as branch-protection required check. Code is sound (`49843e48`). |
+| **B3** | **OP-1 — Redeploy prod** | Prod marketplace still serves 10 demo offerings (migration `053` never applied to prod DB). Redeploy at ≥ current commits; migrations auto-run at boot. |
+| **B4** | **OP-2 — Redeploy stage** | Stage (`dev-api`) is stale: `/auth/capabilities` 404, retired ICP currency. |
+| **B5** | **OP-4 — Complete stage DNS cutover** | `stage-*` hostnames don't resolve. Either complete `MIGRATION-CUTOVER.md` Step D or document `dev-*` as the only stage. |
+| **B6** | **OP-5 — Populate GitHub repo vars** | Set GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` so CI builds the website widget. Valid tokens now exist (Chatwoot reset this session). |
+| **B7** | **staging → k8s cutover** | 8 operator steps in `docs/MIGRATION-CUTOVER.md` (Steps A–G). PoC verified live; only the manual cutover remains. |
+
+### C. Large epics (multi-session, needs design forks)
+
+| Priority | Task | Detail |
+|----------|------|--------|
+| **C1** | **#418 — Decent Agents beta onboarding** | Magic-link auth → Stripe → GitHub App → demo PR → invite gate. Multi-week new product surface. Specs exist (`2026-04-25-decent-agents-*`). |
+| **C2** | **#427 — Anthropic API key proxy** | Core shipped (`anthropic-proxy` crate, 33 tests). Acceptance #3/#4 need identity-provisioning subsystem (#413 impl). |
+| **C3** | **#415/#416 — Decent Agents billing + metering** | Depends on #427 dispatch enforcement + `agent_runs`/metering tables. |
+
+### D. Deferred post-launch (≥20 paying customers)
+
+#429 (key exfiltration mitigation), #430 (CODEOWNERS deadlock UX), #431 (webhook secret rotation), #432 (per-identity observability).
 
 ## Real-deployment audit (2026-08-04)
 
@@ -52,6 +91,7 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 | **E2e suite verification** — full 314-test Playwright suite run against warm stack | 303 passed, 5 flaky under parallel load (all pass in isolation — documented in config), 6 cascade. No code bugs found. | — |
 | **#447** — Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion | Renamed `replay_orphan_dispute_pause` → `replay_orphan_dispute_lifecycle`; closed-lost orphans now get terminate+refund (same idempotent sequence as `handle_dispute_closed`). Previously only detected — refund was never recorded. | `36f5e550` |
 | **P0-B** — Path-A Hetzner offerings SILENTLY HIDDEN from marketplace | Already fixed in `a2a96862` — `is_marketplace_visible` includes `is_cloud_resell()`. Updated OPEN_ISSUES.md to reflect. | — |
+| **Chatwoot full reset (dev/stage/prod)** — all instances broken (Postgres not listening, missing DBs/roles, pgvector not installed) | Root cause: nuc Postgres only listened on `127.0.0.1`. Fixed: `listen_addresses='*'` + `pg_hba.conf` rules + pgvector built for PG14 + `chatwoot_dev`/`chatwoot_prod` DBs/roles created + migrations + full Rails initialization (SuperAdmin/Account/PlatformApp/Inbox/tokens). Dev SOPS updated; prod/stage k8s secrets patched live + persisted to nuc-k3s GitOps (`d3646f1`). All 3 instances verified working. | `8b44cb6b` (dev SOPS) + k8s repo `d3646f1` |
 
 ## Resolved this session (2026-08-06)
 
@@ -133,10 +173,10 @@ the sweep's new guards surfaced.
   env-gated — it renders ONLY when both `websiteToken`+`baseUrl` are set, and the hardcoded dead
   `support.decent-cloud.org` default is removed, so prod no longer emits console errors when the
   tunnel is down. The widget is still NOT functional in prod because `support.decent-cloud.org`
-  remains **dead-infra**. **ACTION:** restore the support tunnel OR point `CHATWOOT_BASE_URL` at
-  `dev-support` (the live Chatwoot host), re-create/restore the website token, set the allowed origin
-  / disable `X-Frame-Options` for decent-cloud.org, and populate the GitHub repo var/secret so the CI
-  build bakes the config (see OP-5).
+  remains **dead-infra**. **2026-08-08 UPDATE:** Chatwoot instances were fully reset (dev/stage/prod
+  all working with valid tokens). The widget infrastructure now works — the remaining steps are:
+  (1) disable `X-Frame-Options` / set allowed origin for decent-cloud.org in Chatwoot/Rails config;
+  (2) populate the GitHub repo vars so CI bakes the widget config (see OP-5, now unblocked).
 - **OP-4 — `stage-*` hostnames do not resolve (k8s dc-stage cutover incomplete).** Evidence:
   `stage-api.decent-cloud.org` + `stage.decent-cloud.org` DNS-fail; `dev-*` is the de-facto stage.
   **ACTION:** complete `docs/MIGRATION-CUTOVER.md` Step D (public tunnel/DNS cutover) OR update the
@@ -149,8 +189,10 @@ the sweep's new guards surfaced.
   those vars from the GitHub repo Variable (`CHATWOOT_BASE_URL`) + Actions Secret
   (`CHATWOOT_WEBSITE_TOKEN`). Until the operator populates both, CI builds a widget-less website
   (intentionally silent — the env-gate suppresses it), so the support widget cannot render even after
-  OP-3's tunnel is restored. **ACTION:** set both in the repo settings (Variables tab +
-  Secrets→Actions).
+  OP-3's tunnel is restored. **2026-08-08 UPDATE:** valid tokens now exist (Chatwoot reset this
+  session). **ACTION:** set both in the repo settings (Variables tab + Secrets→Actions) using the
+  prod values: `CHATWOOT_BASE_URL=https://support.decent-cloud.org`,
+  `CHATWOOT_WEBSITE_TOKEN=SrMbGvD1HMnN18BCLWm84EKE`.
 
 ## Future work
 
@@ -230,9 +272,9 @@ What shipped autonomously (DONE):
    (`cf/docker-compose.dev.yml`, `scripts/dc-secrets`, `repo/secrets/shared/`, the
    `dev` path in `cf/deploy.py`) — **separate commit, only after F** (Step G).
 8. **Minor follow-ups:** populate `TWILIO_AUTH_TOKEN` in `env.yaml` (empty — SMS
-   escalation disabled in stage); reconcile `CHATWOOT_PLATFORM_API_TOKEN` (stale →
-   401); optionally drop `SMTP_PASSWORD` from the api secret (unused — api sends
-   via MailChannels).
+   escalation disabled in stage); ~~reconcile `CHATWOOT_PLATFORM_API_TOKEN` (stale →
+   401)~~ **(RESOLVED 2026-08-08: Chatwoot fully reset, all tokens valid)**; optionally drop
+   `SMTP_PASSWORD` from the api secret (unused — api sends via MailChannels).
 
 Until the cutover completes, the live `dev` docker-compose host still serves
 staging traffic and the age store is still in the repo. Do not pre-delete.
@@ -273,7 +315,6 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 
 | # | Title |
 |---|-------|
-| 447 | Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion (filed 2026-07-25 from #426 scope decision) |
 | 425 | Audit existing Provisioning → Cancelled failure paths and migrate to ProvisioningFailed |
 
 > **#426 (RESOLVED 2026-07-25, `8ab75838`):** investigated real behavior — orphan disputes (delivered
@@ -281,18 +322,11 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 > reconciliation (`relink_orphan_disputes_for_payment_intent`, idempotent, no money-column writes).
 > The scoped-out retroactive pause/refund replay filed as **#447**.
 
-> **#447 (PARTIALLY SHIPPED 2026-07-26, `71732957`):** the missed effect was `pause_contract` (the
-> normal `handle_dispute_created` handler pauses the matched contract; an orphan missed that). PoC
-> confirmed the gap. Shipped `Database::replay_orphan_dispute_pause` — wired best-effort after the
-> relink in `checkout.session.completed`, it replays the missed non-money pause for re-linked OPEN
-> disputes (idempotent via `pause_contract`'s same-reason no-op), detects closed-`lost` orphans and
-> pages ops (no auto-refund), and fails gracefully when the contract is not yet pausable (the
-> realistic `requested` state). Money-safe: pause touches status/audit rows only, NEVER refund
-> columns; 3 DB-backed tests. **Deferred (money-path, needs operator sign-off):** (1) auto-replay of
-> terminate+refund for orphans that closed `lost` while orphaned — currently detected + ops-paged,
-> recommend an operator-triggered replay endpoint; (2) pause-on-activation for contracts that become
-> active after the replay ran (pre-existing gap, needs state-machine + dc-agent coordination). #447
-> stays **open** until the money-path follow-up lands.
+> **#447 (RESOLVED 2026-08-08, `36f5e550`):** full replay now ships — `replay_orphan_dispute_lifecycle`
+> (renamed from `_pause`) replays BOTH the pause for open orphans AND terminate+refund for closed-lost
+> orphans. Both paths are idempotent (terminal-state short-circuit + Stripe dispute idempotency key).
+> Money-safe: if normal `handle_dispute_closed` already processed a dispute, it would not be orphaned
+> — the replay is the first and only processing. All 10 webhooks_disputes tests pass.
 
 > **#443** (boot-gate asymmetry: no `require_icpay_in_prod`) and **#420** (ICPay automated payouts)
 > closed **2026-07-24 — moot**: the ICPay rail was fully retired (Stripe is the sole rail). See
