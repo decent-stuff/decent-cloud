@@ -17,11 +17,12 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 | Priority | Task | Detail |
 |----------|------|--------|
 | **A1** | **#451 — Chatwoot dedicated service-account token** | Was blocked (dev Chatwoot returned 500). Now UNBLOCKED — all 3 Chatwoot instances were fully reset this session (dev/stage/prod). Rails-runner access works (`docker exec` / `kubectl exec`). Create a dedicated `dc-api-bot` user in account 1, generate its access token, update SOPS + k8s secrets, restart API pods. See #451 body for exact steps. |
-| **A2** | **Fix 5 flaky e2e tests under parallel load** | 303/314 pass; 5 fail under parallel load but pass in isolation. Root-cause each (DB-state sharing, timing). The warm stack is up (api:59011, web:59010). Run serially (`--workers 1`) to identify, then fix with serial mode / better fixtures. |
 | **A3** | **#444 — continue large-file splits** | Ongoing. Current largest: `providers.rs` 4090L, `dc-agent/src/main.rs` 3674L, `database/offerings.rs` 2876L, `database/cloud_resources.rs` 2445L. Each verified byte-identical OpenAPI via `spec_snapshot.rs` guard. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
 | **A4** | **#425 — Audit Provisioning → Cancelled failure paths** | Migrate to `ProvisioningFailed`. Deferred Stripe/billing item, code-only — no external dep. |
 | **A5** | **#334 / #387 — DB test coverage / concurrent ticket processing** | #334: largely addressed (kept open on literal reading). #387: single-threaded poll loop, needs a design before work. Both code-only. |
-| **A6** | **Push 11 unpushed commits on `main`** | `origin/main` is 11 commits behind HEAD. Push when ready. Commits: `b5be319c` through `8b44cb6b` (all this session's fixes). |
+| **A6** | **Push 33 unpushed commits on `main`** | `origin/main` is 33 commits behind HEAD (`0beb2db1`). Push when `gh` is authenticated. Commits span round 1 (`b5be319c`–`a039dbe2`) + round 2 (`ee79347b`–`0beb2db1`). |
+| **A7** | **Remaining robustness items (ROB-005/006/009/012/013)** | MEDIUM/LOW — batch of remaining `.ok()`/timeout/magic-number items found in the robustness sweep but not yet fixed. ROB-005 (blocking `process::Command` w/o timeout in dc-agent async contexts), ROB-006 (anthropic-proxy upstream has no total timeout — deliberate for streaming, but non-streaming stall risk), ROB-009 (fs::remove_file `.ok()` cleanup unlogged), ROB-012 (magic-number poll intervals), ROB-013 (standardize `waitForResponse` timeouts in e2e tests). |
+| **A8** | **UX-009 — Dashboard banner wall consolidation** | Two stacked full-width colored banners (verify-email + seed-backup) dominate dashboard top real estate. Consolidate into a single compact dismissible notification indicator/tray. MEDIUM effort. |
 
 ### B. Needs operator action (deploy / GitHub settings / infra)
 
@@ -92,6 +93,61 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 | **#447** — Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion | Renamed `replay_orphan_dispute_pause` → `replay_orphan_dispute_lifecycle`; closed-lost orphans now get terminate+refund (same idempotent sequence as `handle_dispute_closed`). Previously only detected — refund was never recorded. | `36f5e550` |
 | **P0-B** — Path-A Hetzner offerings SILENTLY HIDDEN from marketplace | Already fixed in `a2a96862` — `is_marketplace_visible` includes `is_cloud_resell()`. Updated OPEN_ISSUES.md to reflect. | — |
 | **Chatwoot full reset (dev/stage/prod)** — all instances broken (Postgres not listening, missing DBs/roles, pgvector not installed) | Root cause: nuc Postgres only listened on `127.0.0.1`. Fixed: `listen_addresses='*'` + `pg_hba.conf` rules + pgvector built for PG14 + `chatwoot_dev`/`chatwoot_prod` DBs/roles created + migrations + full Rails initialization (SuperAdmin/Account/PlatformApp/Inbox/tokens). Dev SOPS updated; prod/stage k8s secrets patched live + persisted to nuc-k3s GitOps (`d3646f1`). All 3 instances verified working. | `8b44cb6b` (dev SOPS) + k8s repo `d3646f1` |
+
+## Resolved this session (2026-08-08) — round 2 (Phase 2 verification + A2 hang + Phase 3 UX/robustness sweep)
+
+20 commits total (`a039dbe2`→`e30b37d2`). All on `main`, ahead of `origin/main`. Stack never
+restarted during the sweep (HMR + warm-stack e2e). All gates green: `npm run check` 0/0, e2e
+smoke 32/32 (28.9s), clippy 0, nextest green on all touched crates.
+
+### Phase 2: recent-commit verification (8 code commits audited)
+
+| Finding | Fix | Commit |
+|---------|-----|--------|
+| Stale rustdoc intra-doc link `[replay_orphan_dispute_pause]` after the `36f5e550` rename | Updated to `[replay_orphan_dispute_lifecycle]` | `ee79347b` |
+| **All 8 code commits (`b5be319c`–`8b44cb6b`) verified CLEAN** — no dead/partially-wired code | Independent verifier subagent confirmed: race-guard callers handle `Result<bool>`, dispute replay idempotent, panic fixed with regression test, `--dev` flag correctly wired, SOPS values cleaned. | — |
+
+### A2: e2e parallel-hang root-caused + fixed
+
+| Finding | Fix | Commit |
+|---------|-----|--------|
+| **E2e smoke hangs under parallel workers** (~1 in 8+ runs, serial mode always passes) | Root cause: `seed-helpers.ts` `sql()` used `execFileAsync('psql')` with NO timeout; worker-scoped fixture teardown (`DELETE FROM accounts`) blocks on an FK lock from in-flight API traffic, and teardown runs OUTSIDE the per-test timeout → indefinite worker stall. Fix: centralized every `psql` call behind `psqlExec` (15s default timeout), bounded `signedApiCall`'s `fetch` with `AbortSignal.timeout`, added explicit timeouts to 3 unbounded `waitForResponse` calls in `keyboard-shortcuts.spec.ts`. Regression test proves IO is now bounded. ~20 consecutive 26/26 green parallel runs post-fix. | `a5d1ac94`, `ff87a05e` |
+
+### Phase 3a: UX audit (no-mock, real warm stack) — 13 issues found, 11 fixed
+
+| UX issue | Fix | Commit |
+|----------|-----|--------|
+| **UX-001** (CRITICAL) Homepage hero shows hardcoded FAKE provider trust data (`provider_alpha`, "87 Trust Score", "Verified Provider" badge) — violates PRODUCT-DIRECTION | Replaced with honest "Anatomy of a Trust Score" educational graphic | `25945664` |
+| **UX-002** (CRITICAL) Dead ICP "Validators" feature in primary nav + dead stats | Removed entirely (route, nav, client fn, type, ICP metrics) | `e2b97ed9` |
+| **UX-005** Homepage stats grid mixes live + dead metrics | Cleaned to 4 honest stats (dropped confusing "Active Providers: 0" + ICP metrics) | `e2b97ed9` |
+| **UX-007** ICP-era marketing copy overpromises; stale whitepaper in footer | Toned down absolutes; removed stale whitepaper link | `07c4121c` |
+| **UX-008** Unauth sidebar has redundant auth prompts + misleading "My Activity" | Collapsed to single Sign In CTA; "My Activity" hidden for signed-out | `2dd8e373` |
+| **UX-012** Auto-playing hero typing animation (motion accessibility) | Respects `prefers-reduced-motion` | `25945664` |
+| **UX-010** Focus indicators 1px (WCAG 2.2 borderline) | `:focus-visible` outline 1px→2px, offset 1px→2px | `ca98c3b5` |
+| **UX-013** Sign-up page titled "Sign In" | Relabeled "Sign In or Create Account" | `9bd2eebf` |
+| **UX-004** Dashboard shows raw IC principal as identity | Shows `@username` (principal preserved on Account→Profile) | `a2b10565` |
+| **UX-011** Keyboard shortcuts undiscoverable | Clickable `?` kbd badge next to "Ctrl K" palette trigger | `f1b0c3d8` |
+| **UX DEFERRED** UX-003 (seed-phrase friction + OAuth enablement), UX-006 (reputation leaderboard), UX-014 (footer community links unverified) | UX-003 needs OAuth config decision (FORK); UX-006 is HIGH effort (backend+UI); UX-014 needs live verification | — |
+
+### Phase 3c: Rust robustness sweep — 11 findings, 8 fixed
+
+| ROB issue | Fix | Commit |
+|-----------|-----|--------|
+| **ROB-001** (HIGH) `From<&str>` panics on malformed principal | Fallible `IcrcCompatibleAccount::parse()` + SAFETY comment; caller audit confirmed no untrusted input reaches panic | `aff8bd2c` |
+| **ROB-002** (HIGH) Metering `.ok()` silently drops usage (under-billing) | `tracing::warn!` (error + truncated body) before returning None; 3 tests | `ff181648` |
+| **ROB-003** (MED) Hetzner price parse silent drop | Per-field `tracing::warn!` (server_type_id/name + field + value + error); valid fields preserved | `e37e0dc6` |
+| **ROB-004** (MED) PublishScheduledService interval hardcoded | `parse_env_u64("PUBLISH_SCHEDULED_INTERVAL_SECS", 60)` + env examples updated | `73c8f4ff` |
+| **ROB-007** (MED) Docker metrics silent None | 5 sites match-style + `tracing::warn!`; 2 tracing_test tests | `e5bf5f96` |
+| **ROB-008** (LOW) `let _ = child.kill()` silent | Shared `best_effort_kill_and_reap()` helper logs at WARN (DRY) | `f7a19ebe` |
+| **ROB-010** (LOW) Fragile `.unwrap()` on just-constructed Option | Removed; direct method call instead | `7066d26d` |
+| **ROB-011** (LOW) `borsh::to_vec().unwrap()` in business logic | `.expect()` with type-specific invariant messages | `8304840f` |
+| **ROB DEFERRED** ROB-005 (blocking `process::Command` w/o timeout), ROB-006 (proxy total timeout — deliberate for streaming), ROB-009 (fs cleanup unlogged), ROB-012 (magic numbers), ROB-013 (e2e waitForResponse timeouts) | Tracked as **A7** in next-session priorities | — |
+
+### Phase 3b: E2e regression guards
+
+| Finding | Fix | Commit |
+|---------|-----|--------|
+| No e2e regression guards for the UX cleanup | 6 new `@smoke` tests in `ux-regression-guards.spec.ts` (UX-001/002/005/004/008/013); FLOWS.md §6 added; smoke 26→32 (29.5s). Coverage gaps documented (UX-010 computed-style fragile, UX-012 reduced-motion testable via context). | `e30b37d2` |
 
 ## Resolved this session (2026-08-06)
 
@@ -337,6 +393,10 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 | # | Title | Filed by |
 |---|-------|----------|
 | (F6) | Reputation page is search-only — no browseable leaderboard / "top providers" section (product-design fork) | 2026-08-03 sweep |
+| (UX-003) | Seed-phrase-only auth is a wall for non-crypto cloud buyers — needs inline education + OAuth enablement decision (FORK: should Google OAuth be enabled for the primary audience?) | 2026-08-08 UX audit |
+| (UX-006) | Reputation page dead-end (search-only, no browseable "Top Providers" leaderboard) — overlaps F6; product-direction mandates a leaderboard; HIGH effort (backend query + UI) | 2026-08-08 UX audit |
+| (UX-009) | Dashboard "banner wall" — two stacked full-width colored banners dominate top real estate; consolidate into a compact dismissible notification tray | 2026-08-08 UX audit |
+| (UX-014) | Footer community links (discord.gg/decentcloud, twitter.com/decentcloud) unverified — need live verification | 2026-08-08 UX audit |
 | (F9) | "Become a Provider" landing CTA lands on the support-account profile page, not a true provider-start (technical onboarding via `dc-agent`/CLI is not reachable from the web) | 2026-08-03 sweep |
 | (F2) | Seed/demo offerings carry a fake placeholder pubkey (`example-offering-provider-identifier`) — honestly labelled "Demo only" + excluded from stats, but would be nonsensical in a production deploy (seed-data-quality decision: env-gate demos out of prod, or refresh seed data with real identities) | 2026-08-03 sweep |
 
