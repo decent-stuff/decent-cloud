@@ -73,10 +73,14 @@ async fn main() -> Result<()> {
         "anthropic-proxy starting"
     );
 
-    // A connect timeout keeps startup/connect failures loud; NO total timeout so
-    // long streaming responses are not aborted.
+    // Connect timeout keeps startup/connect failures loud; tcp_keepalive lets
+    // the OS detect a half-open upstream socket instead of stalling the proxy
+    // thread indefinitely. NO total timeout is set so long streaming responses
+    // are not aborted mid-stream (deliberate trade-off for the SSE/streaming
+    // use case this proxy exists to serve). (ROB-006)
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(10))
+        .tcp_keepalive(Duration::from_secs(30))
         .build()
         .context("failed to build upstream HTTP client")?;
 
