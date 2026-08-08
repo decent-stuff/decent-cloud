@@ -20,21 +20,22 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 | **A3** | **#444 — continue large-file splits** | Ongoing. Current largest: `providers.rs` 4090L, `dc-agent/src/main.rs` 3674L, `database/offerings.rs` 2876L, `database/cloud_resources.rs` 2445L. Each verified byte-identical OpenAPI via `spec_snapshot.rs` guard. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
 | **A4** | **#425 — Audit Provisioning → Cancelled failure paths** | Migrate to `ProvisioningFailed`. Deferred Stripe/billing item, code-only — no external dep. |
 | **A5** | **#334 / #387 — DB test coverage / concurrent ticket processing** | #334: largely addressed (kept open on literal reading). #387: single-threaded poll loop, needs a design before work. Both code-only. |
-| **A6** | **Push 33 unpushed commits on `main`** | `origin/main` is 33 commits behind HEAD (`0beb2db1`). Push when `gh` is authenticated. Commits span round 1 (`b5be319c`–`a039dbe2`) + round 2 (`ee79347b`–`0beb2db1`). |
+| **A6** | **~~Push 33 unpushed commits~~** | **DONE by operator (2026-08-08).** Commits pushed; prod + stage deployed + verified. Origin now current. |
 | **A7** | **Remaining robustness items (ROB-005/006/009/012/013)** | MEDIUM/LOW — batch of remaining `.ok()`/timeout/magic-number items found in the robustness sweep but not yet fixed. ROB-005 (blocking `process::Command` w/o timeout in dc-agent async contexts), ROB-006 (anthropic-proxy upstream has no total timeout — deliberate for streaming, but non-streaming stall risk), ROB-009 (fs::remove_file `.ok()` cleanup unlogged), ROB-012 (magic-number poll intervals), ROB-013 (standardize `waitForResponse` timeouts in e2e tests). |
 | **A8** | **UX-009 — Dashboard banner wall consolidation** | Two stacked full-width colored banners (verify-email + seed-backup) dominate dashboard top real estate. Consolidate into a single compact dismissible notification indicator/tray. MEDIUM effort. |
+| **A9** | **UX-006 — Reputation leaderboard (user-confirmed must-have)** | Split HIGH into 3 MEDIUM subtasks: (a) Backend: `GET /api/v1/reputation/leaderboard` — top providers by trust score + completed contracts, paginated; (b) Frontend: browseable "Top Providers" section on `/dashboard/reputation` (currently search-only dead-end); (c) E2e: coverage for leaderboard rendering + search. The product direction mandates this (`docs/PRODUCT-DIRECTION.md`: "a top-providers leaderboard so reputation is browseable by default"). The trust-score calculator already exists (`website/src/lib/utils/trust-score.ts`). |
 
 ### B. Needs operator action (deploy / GitHub settings / infra)
 
 | Priority | Task | Detail |
 |----------|------|--------|
-| **B1** | **Close 4 fixed GH issues** | `gh issue close` FAILS (agent lacks permissions). Fixed but still open: **#466** (`bc692bdc`), **#452** (`71210f8e`), **#453** (no code change, commented), **#447** (`36f5e550`). Operator must close. |
+| **B1** | **~~Close 4 fixed GH issues~~** | **DONE by operator (2026-08-08).** Pushed + deployed. GH issues to close: #466, #452, #453, #447. |
 | **B2** | **#470 auto-merge prerequisite** | Needs GitHub repo settings: "Allow auto-merge" ON + `build-and-test` as branch-protection required check. Code is sound (`49843e48`). |
-| **B3** | **OP-1 — Redeploy prod** | Prod marketplace still serves 10 demo offerings (migration `053` never applied to prod DB). Redeploy at ≥ current commits; migrations auto-run at boot. |
-| **B4** | **OP-2 — Redeploy stage** | Stage (`dev-api`) is stale: `/auth/capabilities` 404, retired ICP currency. |
-| **B5** | **OP-4 — Complete stage DNS cutover** | `stage-*` hostnames don't resolve. Either complete `MIGRATION-CUTOVER.md` Step D or document `dev-*` as the only stage. |
-| **B6** | **OP-5 — Populate GitHub repo vars** | Set GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` so CI builds the website widget. Valid tokens now exist (Chatwoot reset this session). |
-| **B7** | **staging → k8s cutover** | 8 operator steps in `docs/MIGRATION-CUTOVER.md` (Steps A–G). PoC verified live; only the manual cutover remains. |
+| **B3** | **~~OP-1 — Redeploy prod~~** | **DONE (2026-08-08).** Prod verified: health 200, environment "prod", Google OAuth enabled, 2 REAL offerings (tada $7/mo + hetzner-reseller $6.82/mo, both USD — demos gone). |
+| **B4** | **~~OP-2 — Redeploy stage~~** | **DONE (2026-08-08).** Stage verified at `stage-api.decent-cloud.org`: health 200, environment "stage", 5 offerings (storage/compute/network, all USD). |
+| **B5** | **~~OP-4 — Complete stage DNS cutover~~** | **DONE (2026-08-08).** `stage-api.decent-cloud.org` resolves + serves 200. Legacy `dev-api.decent-cloud.org` returns 502 (dead, as expected post-cutover). |
+| **B6** | **OP-5 — Populate GitHub repo vars** | **OPTIONAL/OPEN.** Prod website build has NO Chatwoot widget (env-gated — renders only when `websiteToken`+`baseUrl` set). Set GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` so CI bakes the widget. Valid tokens exist (Chatwoot reset). Not a hard blocker — the widget is silent when unset. |
+| **B7** | **~~staging → k8s cutover~~** | **DONE (2026-08-08).** Stage serving at `stage-api.decent-cloud.org`. |
 
 ### C. Large epics (multi-session, needs design forks)
 
@@ -127,7 +128,8 @@ smoke 32/32 (28.9s), clippy 0, nextest green on all touched crates.
 | **UX-013** Sign-up page titled "Sign In" | Relabeled "Sign In or Create Account" | `9bd2eebf` |
 | **UX-004** Dashboard shows raw IC principal as identity | Shows `@username` (principal preserved on Account→Profile) | `a2b10565` |
 | **UX-011** Keyboard shortcuts undiscoverable | Clickable `?` kbd badge next to "Ctrl K" palette trigger | `f1b0c3d8` |
-| **UX DEFERRED** UX-003 (seed-phrase friction + OAuth enablement), UX-006 (reputation leaderboard), UX-014 (footer community links unverified) | UX-003 needs OAuth config decision (FORK); UX-006 is HIGH effort (backend+UI); UX-014 needs live verification | — |
+| **UX-003** Seed-phrase-only auth is a wall for non-crypto buyers (OAuth enablement = user decision: YES) | Frontend: inline "What is a seed phrase?" education on auth chooser + prominent permanent-loss warning on backup step + more discoverable recovery link. OAuth was already enabled server-side by operator (prod `{"google_oauth":true}`). 3 new `@smoke` e2e tests. | `5abeda55` |
+| **UX DEFERRED** UX-006 (reputation leaderboard — user confirmed must-have, scheduled as A9), UX-009 (dashboard banner wall — scheduled as A8), UX-014 (footer community links unverified) | UX-006 split into 3 MEDIUM subtasks (see A9); UX-014 needs live verification | — |
 
 ### Phase 3c: Rust robustness sweep — 11 findings, 8 fixed
 
