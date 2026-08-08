@@ -391,10 +391,39 @@ impl HetznerBackend {
             .prices
             .first()
             .map(|p| {
-                (
-                    p.price_monthly.gross.parse::<f64>().ok(),
-                    p.price_hourly.gross.parse::<f64>().ok(),
-                )
+                // Hetzner returns prices as strings ("3.9151000000"). A parse
+                // failure is schema drift that would silently yield a price-less
+                // offering — surface it (per field) so the operator can act,
+                // instead of silently dropping money-bearing data.
+                let monthly = match p.price_monthly.gross.parse::<f64>() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!(
+                            server_type_id = st.id,
+                            server_type_name = %st.name,
+                            field = "price_monthly.gross",
+                            raw = %p.price_monthly.gross,
+                            error = %e,
+                            "Hetzner server type has unparseable price; field will be dropped"
+                        );
+                        None
+                    }
+                };
+                let hourly = match p.price_hourly.gross.parse::<f64>() {
+                    Ok(v) => Some(v),
+                    Err(e) => {
+                        tracing::warn!(
+                            server_type_id = st.id,
+                            server_type_name = %st.name,
+                            field = "price_hourly.gross",
+                            raw = %p.price_hourly.gross,
+                            error = %e,
+                            "Hetzner server type has unparseable price; field will be dropped"
+                        );
+                        None
+                    }
+                };
+                (monthly, hourly)
             })
             .unwrap_or((None, None));
 
@@ -1001,6 +1030,35 @@ mod tests {
         let converted = backend.convert_server_type(st);
         assert_eq!(converted.price_monthly, None);
         assert_eq!(converted.price_hourly, None);
+    }
+
+    #[test]
+    fn test_hetzner_server_type_unparseable_price_still_returns_offering() {
+        // Schema drift: a non-numeric price string must not panic and must not
+        // silently corrupt the GOOD field. The unparseable field drops to None;
+        // the parseable field is preserved. (ROB-003: previously .ok() swallowed
+        // the error with no log, hiding money-bearing data loss.)
+        let backend = HetznerBackend::new("test_token".to_string()).unwrap();
+        let st = HetznerServerType {
+            id: 42,
+            name: "cx22".to_string(),
+            cores: 2,
+            memory: 4.0,
+            disk: 40,
+            prices: vec![HetznerPrice {
+                location: "fsn1".to_string(),
+                price_monthly: HetznerPriceDetail {
+                    gross: "not-a-number".to_string(),
+                },
+                price_hourly: HetznerPriceDetail {
+                    gross: "0.006".to_string(),
+                },
+            }],
+        };
+        let converted = backend.convert_server_type(st);
+        // Bad monthly dropped, good hourly preserved — no silent whole-row loss.
+        assert_eq!(converted.price_monthly, None);
+        assert_eq!(converted.price_hourly, Some(0.006));
     }
 
     #[test]
