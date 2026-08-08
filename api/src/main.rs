@@ -1582,12 +1582,19 @@ async fn serve_command() -> Result<(), std::io::Error> {
         sla_alert_service.run(sla_shutdown).await;
     });
 
-    // Start scheduled-offering publish service in background (runs every 60 seconds)
+    // Start scheduled-offering publish service in background (runs every 60s by
+    // default; env-tunable so ops can adjust the draft->published cadence).
+    let publish_scheduled_interval_secs =
+        parse_env_u64("PUBLISH_SCHEDULED_INTERVAL_SECS", 60)?;
+
     let db_for_publish = ctx.database.clone();
     let publish_shutdown = shutdown_tx.subscribe();
     let publish_scheduled_task = tokio::spawn(async move {
-        tracing::info!("Starting publish-scheduled-offerings service (interval: 60s)");
-        PublishScheduledService::new(db_for_publish, 60)
+        tracing::info!(
+            "Starting publish-scheduled-offerings service (interval: {}s)",
+            publish_scheduled_interval_secs
+        );
+        PublishScheduledService::new(db_for_publish, publish_scheduled_interval_secs)
             .run(publish_shutdown)
             .await;
     });
