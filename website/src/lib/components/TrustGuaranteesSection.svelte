@@ -7,7 +7,7 @@
 			fear: 'I pay and get nothing',
 			solution: 'Escrow Protection',
 			description:
-				'Your payment is held in escrow until the provider delivers. No delivery = automatic refund.',
+				'Your payment is held in escrow and released to the provider only on delivery. Disputes are resolved through the platform.',
 			icon: 'shield'
 		},
 		{
@@ -21,14 +21,14 @@
 			fear: 'Hidden problems emerge later',
 			solution: 'Pattern Detection',
 			description:
-				'Our system detects unusual cancellation spikes and service degradation in real-time. Red flags shown prominently.',
+				'We surface unusual cancellation spikes and service degradation from real delivery data, so provider performance stays visible.',
 			icon: 'alert'
 		},
 		{
 			fear: "I can't get my money back",
-			solution: 'Easy Refunds',
+			solution: 'Prorated Refunds',
 			description:
-				"Prorated refunds processed automatically. Cancel anytime, get back what you didn't use.",
+				"Cancel anytime and receive a prorated refund for the time you didn't use. Terms depend on the provider's offering.",
 			icon: 'wallet'
 		}
 	];
@@ -43,7 +43,7 @@
 			</h2>
 			<p class="section-subtitle mx-auto text-center">
 				We know what worries you about renting from unknown providers.
-				That's why we built a system that makes bad behavior impossible to hide.
+				That's why we built a trust system that keeps provider performance visible.
 			</p>
 		</div>
 

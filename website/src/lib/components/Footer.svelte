@@ -41,12 +41,6 @@
 				<h4 class="section-label mb-4">Resources</h4>
 				<ul class="space-y-2.5">
 					<li>
-						<a href="/docs/decent-cloud-whitepaper.pdf" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
-							Whitepaper
-							<Icon name="external" size={20} class="text-neutral-600" />
-						</a>
-					</li>
-					<li>
 						<a href="https://github.com/decent-stuff/decent-cloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
 							GitHub
 							<Icon name="external" size={20} class="text-neutral-600" />
