@@ -328,13 +328,44 @@ impl IcrcCompatibleAccount {
         }
         DccIdentity::new_verifying_from_bytes(&owner_bytes).ok()
     }
+
+    /// Fallibly construct an account from a textual IC principal.
+    ///
+    /// Use this for ANY caller that obtains the principal string from
+    /// untrusted/user-controlled input (CLI args, HTTP bodies, ...). The
+    /// infallible `From<&str>`/`From<&String>` impls below `panic!` on a bad
+    /// string and must only be fed pre-validated values.
+    pub fn parse(owner: &str) -> Result<Self, String> {
+        Ok(IcrcCompatibleAccount {
+            owner: Principal::from_text(owner).map_err(|e| {
+                format!("Invalid IC principal text '{owner}': {e}")
+            })?,
+            subaccount: None,
+        })
+    }
 }
 
+// SAFETY: the `From<&str>` / `From<&String>` impls cannot return `Result` (the
+// `From` trait is infallible), so a malformed principal string panics the
+// process. CALLER AUDIT (2026-08-08): the only untrusted input path — the CLI
+// `account --transfer-to <text>` command — validates the principal via
+// `Principal::from_text(...).map_err(...)` BEFORE constructing the account
+// (`cli/src/commands/account.rs`), and a regression test
+// (`account_transfer_to_with_invalid_principal_returns_clean_error` in
+// `cli/tests/cli_flows.rs`) asserts the CLI returns a clean error instead of
+// panicking. All other call sites feed `From` either an `icrc1::account::Account`
+// (routed to the fallible `From<Account>` impl, not this one) or a
+// statically-known-good principal literal. Any NEW caller of these impls must
+// either pass validated input or use [`IcrcCompatibleAccount::parse`] instead.
 impl From<&str> for IcrcCompatibleAccount {
     fn from(owner: &str) -> Self {
         IcrcCompatibleAccount {
-            owner: Principal::from_text(owner)
-                .expect("Invalid principal string in IcrcCompatibleAccount::from"),
+            owner: Principal::from_text(owner).unwrap_or_else(|e| {
+                panic!(
+                    "IcrcCompatibleAccount::from(&str): invalid IC principal text \
+                     '{owner}': {e} (use IcrcCompatibleAccount::parse for untrusted input)"
+                )
+            }),
             subaccount: None,
         }
     }
@@ -613,5 +644,62 @@ impl From<FundsTransfer> for Transaction {
                 timestamp: ft.created_at_time().unwrap_or_default(),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_accepts_valid_principal_text() {
+        // The ledger canister id (also the dev CANISTER_ID) is a valid textual principal.
+        let acct = IcrcCompatibleAccount::parse("ggi4a-wyaaa-aaaai-actqq-cai")
+            .expect("valid principal should parse");
+        assert_eq!(acct.subaccount, None);
+    }
+
+    #[test]
+    fn parse_rejects_invalid_principal_text_with_echoed_value() {
+        // A malformed principal must surface a descriptive error (echoing the bad
+        // value) rather than panicking the process — the whole point of the
+        // fallible constructor vs. the panicking `From<&str>` impl.
+        let err = IcrcCompatibleAccount::parse("not-a-valid-principal!")
+            .expect_err("malformed principal should be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not-a-valid-principal!"),
+            "error should echo the bad value, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn from_str_panics_on_invalid_input_with_descriptive_message() {
+        // The infallible From<&str> impl must panic (its contract is to produce a
+        // value, not a Result); this test pins that the panic message echoes the
+        // offending value so post-mortem debugging is possible.
+        let result = std::panic::catch_unwind(|| {
+            let _ = IcrcCompatibleAccount::from("oops-not-principal##");
+        });
+        let payload = result.expect_err("From<&str> should panic on bad input");
+        let msg = panic_message(&payload);
+        assert!(
+            msg.contains("oops-not-principal##"),
+            "panic message should echo the bad value, got: {msg}"
+        );
+        assert!(
+            msg.contains("IcrcCompatibleAccount::parse"),
+            "panic message should point at the fallible alternative, got: {msg}"
+        );
+    }
+
+    fn panic_message(p: &Box<dyn std::any::Any + Send>) -> String {
+        if let Some(s) = p.downcast_ref::<&'static str>() {
+            return (*s).to_string();
+        }
+        if let Some(s) = p.downcast_ref::<String>() {
+            return s.clone();
+        }
+        "<non-string panic payload>".to_string()
     }
 }
