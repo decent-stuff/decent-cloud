@@ -80,7 +80,22 @@ pub(crate) fn parse_mem_available_mb(meminfo: &str) -> Option<u64> {
     for line in meminfo.lines() {
         if let Some(rest) = line.strip_prefix("MemAvailable:") {
             // format: "MemAvailable:   12345678 kB"
-            let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
+            let raw = rest.split_whitespace().next()?;
+            let kb: u64 = match raw.parse() {
+                Ok(v) => v,
+                Err(e) => {
+                    // A non-numeric MemAvailable is kernel/procfs schema drift;
+                    // surface it so the silent fallback (reported available ->
+                    // total memory, over-reporting capacity) is observable.
+                    tracing::warn!(
+                        raw,
+                        error = %e,
+                        "MemAvailable value in /proc/meminfo is not a valid u64; \
+                         falling back to total memory for capacity reporting"
+                    );
+                    return None;
+                }
+            };
             return Some(kb / 1024);
         }
     }
@@ -90,7 +105,20 @@ pub(crate) fn parse_mem_available_mb(meminfo: &str) -> Option<u64> {
 /// Read the filesystem total and available space (in bytes) for `path` via
 /// statvfs.  Returns `(total_bytes, avail_bytes)`.
 fn fs_stats(path: &str) -> Option<(u64, u64)> {
-    let stat = nix::sys::statvfs::statvfs(path).ok()?;
+    let stat = match nix::sys::statvfs::statvfs(path) {
+        Ok(s) => s,
+        Err(e) => {
+            // A persistent statvfs failure silently degrades reported storage
+            // capacity (the storage pool is omitted). Surface it so the operator
+            // can fix the path/mount instead of flying blind.
+            tracing::warn!(
+                path,
+                error = %e,
+                "statvfs failed for Docker root path; storage pool will be omitted"
+            );
+            return None;
+        }
+    };
     Some((
         stat.blocks() * stat.fragment_size(),
         stat.blocks_available() * stat.fragment_size(),
@@ -316,18 +344,40 @@ impl DockerProvisioner {
                 ports
                     .iter()
                     .filter_map(|(key, bindings)| {
-                        let container_port: u16 = key.split('/').next()?.parse().ok()?;
-                        if container_port == self.config.ssh_port {
-                            bindings
-                                .as_ref()?
-                                .iter()
-                                .next()?
-                                .host_port
-                                .as_ref()?
-                                .parse()
-                                .ok()
-                        } else {
-                            None
+                        let port_part = key.split('/').next()?;
+                        let container_port: u16 = match port_part.parse() {
+                            Ok(p) => p,
+                            Err(e) => {
+                                tracing::warn!(
+                                    port_key = key.as_str(),
+                                    error = %e,
+                                    "Docker port-mapping key has an unparseable container \
+                                     port; entry skipped"
+                                );
+                                return None;
+                            }
+                        };
+                        if container_port != self.config.ssh_port {
+                            return None;
+                        }
+                        let host_port_str = bindings
+                            .as_ref()?
+                            .iter()
+                            .next()?
+                            .host_port
+                            .as_ref()?;
+                        match host_port_str.parse() {
+                            Ok(p) => Some(p),
+                            Err(e) => {
+                                tracing::warn!(
+                                    container_port,
+                                    host_port = host_port_str.as_str(),
+                                    error = %e,
+                                    "Docker host_port for ssh mapping is not a valid u16; \
+                                     instance will fall back to the configured ssh port"
+                                );
+                                None
+                            }
                         }
                     })
                     .next()
@@ -525,7 +575,18 @@ impl Provisioner for DockerProvisioner {
         if running {
             let started_at = state
                 .and_then(|s| s.started_at.as_deref())
-                .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok());
+                .and_then(|ts| match chrono::DateTime::parse_from_rfc3339(ts) {
+                    Ok(dt) => Some(dt),
+                    Err(e) => {
+                        tracing::warn!(
+                            started_at = ts,
+                            error = %e,
+                            "Docker container started_at is not valid RFC3339; \
+                             uptime will be reported as 0"
+                        );
+                        None
+                    }
+                });
 
             let uptime_seconds = started_at
                 .map(|t| {

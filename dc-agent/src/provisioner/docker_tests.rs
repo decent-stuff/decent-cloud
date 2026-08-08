@@ -794,6 +794,21 @@ fn test_parse_mem_available_mb_zero() {
     assert_eq!(avail, 0);
 }
 
+// ROB-007: a non-numeric MemAvailable must surface a warn (was silently dropped
+// via .parse().ok()?). Pinned with tracing_test so the regression is observable.
+#[tracing_test::traced_test]
+#[test]
+fn test_parse_mem_available_mb_unparseable_warns() {
+    let meminfo = "MemAvailable:   oops-not-a-number kB\n";
+    assert!(
+        super::parse_mem_available_mb(meminfo).is_none(),
+        "unparseable MemAvailable → None"
+    );
+    assert!(logs_contain("MemAvailable value in /proc/meminfo is not a valid u64"));
+    // The warn must echo the offending raw value so it is debuggable.
+    assert!(logs_contain("oops-not-a-number"));
+}
+
 // ── Ticket 347: collect_resources via mockito ────────────────────────────
 
 /// Mock the /info endpoint to confirm cpu_model, memory fields, and
@@ -846,6 +861,17 @@ fn test_fs_stats_nonexistent_path_returns_none() {
         super::fs_stats("/no/such/path/statvfs-test-347").is_none(),
         "statvfs on nonexistent path must return None"
     );
+}
+
+// ROB-007: a statvfs failure must surface a warn naming the path (was silently
+// dropped via .ok()?), so a silently-omitted storage pool is observable.
+#[tracing_test::traced_test]
+#[test]
+fn test_fs_stats_warns_on_failure() {
+    let bogus = "/no/such/path/rob-007-statvfs";
+    assert!(super::fs_stats(bogus).is_none(), "statvfs must fail");
+    assert!(logs_contain("statvfs failed for Docker root path"));
+    assert!(logs_contain(bogus));
 }
 
 #[tokio::test]
