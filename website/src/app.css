@@ -581,8 +581,8 @@ select option {
 
 /* === Focus Styles === */
 :focus-visible {
-	outline: 1px solid var(--color-primary-500);
-	outline-offset: 1px;
+	outline: 2px solid var(--color-primary-500);
+	outline-offset: 2px;
 }
 
 /* Remove outline for mouse users, keep for keyboard */
