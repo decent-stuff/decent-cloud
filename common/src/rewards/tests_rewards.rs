@@ -153,6 +153,32 @@ fn test_get_last_rewards_distribution_ts() {
 }
 
 #[test]
+fn test_get_last_rewards_distribution_ts_short_bytes_no_panic() {
+    // Regression: a stored timestamp shorter than 8 bytes must return a clear
+    // error instead of panicking on slice indexing (`value_bytes[..8]`).
+    let mut test_ledger = new_temp_ledger(None);
+
+    test_ledger
+        .upsert(
+            LABEL_REWARD_DISTRIBUTION,
+            KEY_LAST_REWARD_DISTRIBUTION_TS,
+            vec![1u8, 2, 3],
+        )
+        .unwrap();
+
+    let result = get_last_rewards_distribution_ts(&test_ledger);
+    let err = result.expect_err("expected an error for a sub-8-byte timestamp");
+    assert!(
+        err.contains("not 8 bytes"),
+        "error should explain the length problem, got: {err}"
+    );
+    assert!(
+        err.contains("(got 3)"),
+        "error should report the actual length 3, got: {err}"
+    );
+}
+
+#[test]
 fn test_rewards_distribute_no_eligible_providers() {
     let mut test_ledger = new_temp_ledger(None);
     set_timestamp_ns(FIRST_BLOCK_TIMESTAMP_NS + BLOCK_INTERVAL_SECS * 1_000_000_000);

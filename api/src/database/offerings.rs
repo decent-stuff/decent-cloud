@@ -1947,7 +1947,11 @@ impl Database {
         let count: i64 = query_builder.fetch_one(&self.pool).await?;
 
         if count != offering_ids.len() as i64 {
-            anyhow::bail!("Not all offerings belong to this provider or some IDs are invalid");
+            anyhow::bail!(
+                "Not all offerings belong to this provider or some IDs are invalid: expected {}, found {} owned",
+                offering_ids.len(),
+                count
+            );
         }
 
         // Update stock_status
@@ -2260,7 +2264,14 @@ impl Database {
                 .ok_or_else(|| format!("Missing column '{}'", name))?
                 .trim()
                 .parse::<f64>()
-                .map_err(|_| format!("Invalid number in column '{}'", name))
+                .map_err(|e| {
+                    format!(
+                        "Invalid number in column '{}' (value '{}'): {}",
+                        name,
+                        get(name).unwrap_or(""),
+                        e
+                    )
+                })
         };
         let get_bool = |name: &str| {
             get(name)

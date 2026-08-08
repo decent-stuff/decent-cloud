@@ -109,9 +109,13 @@ pub fn blocks_until_next_halving() -> u64 {
 pub fn get_last_rewards_distribution_ts(ledger: &LedgerMap) -> Result<u64, String> {
     match ledger.get(LABEL_REWARD_DISTRIBUTION, KEY_LAST_REWARD_DISTRIBUTION_TS) {
         Ok(value_bytes) => {
-            let bytes: [u8; 8] = value_bytes.as_slice()[..8]
-                .try_into()
-                .map_err(|_| "Stored timestamp is not 8 bytes".to_string())?;
+            if value_bytes.len() < 8 {
+                return Err(format!(
+                    "Stored timestamp is not 8 bytes (got {})",
+                    value_bytes.len()
+                ));
+            }
+            let bytes: [u8; 8] = value_bytes.as_slice()[..8].try_into().unwrap(); // safe — length checked above
             Ok(u64::from_le_bytes(bytes))
         }
         Err(_) => {

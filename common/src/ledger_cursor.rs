@@ -80,23 +80,42 @@ impl std::str::FromStr for LedgerCursor {
             match key {
                 "data_begin_position" => {
                     data_begin_position =
-                        Some(value.parse().map_err(|_| "Invalid begin_position value")?);
+                        Some(value.parse().map_err(|e| {
+                            format!("Invalid begin_position value '{}': {}", value, e)
+                        })?);
                 }
                 "position" => {
-                    position = Some(value.parse().map_err(|_| "Invalid position value")?);
+                    position = Some(
+                        value
+                            .parse()
+                            .map_err(|e| format!("Invalid position value '{}': {}", value, e))?,
+                    );
                 }
                 "data_end_position" => {
-                    end_position = Some(value.parse().map_err(|_| "Invalid end_position value")?);
+                    end_position =
+                        Some(value.parse().map_err(|e| {
+                            format!("Invalid end_position value '{}': {}", value, e)
+                        })?);
                 }
                 "response_bytes" => {
                     response_bytes =
-                        Some(value.parse().map_err(|_| "Invalid response_bytes value")?);
+                        Some(value.parse().map_err(|e| {
+                            format!("Invalid response_bytes value '{}': {}", value, e)
+                        })?);
                 }
                 "direction" => {
-                    direction = Some(value.parse().map_err(|_| "Invalid direction value")?);
+                    direction = Some(
+                        value
+                            .parse()
+                            .map_err(|e| format!("Invalid direction value '{}': {}", value, e))?,
+                    );
                 }
                 "more" => {
-                    more = Some(value.parse().map_err(|_| "Invalid more value")?);
+                    more = Some(
+                        value
+                            .parse()
+                            .map_err(|e| format!("Invalid more value '{}': {}", value, e))?,
+                    );
                 }
                 _ => return Err(format!("Unexpected key: {}", key)),
             }
@@ -275,7 +294,16 @@ mod tests {
     fn test_parse_ledger_cursor_invalid_value() {
         let input = "position=123&response_bytes=abc&direction=Forward&more=true";
         let cursor: Result<LedgerCursor, _> = input.parse();
-        assert!(cursor.is_err());
+        let err = cursor.expect_err("expected an error for a non-numeric response_bytes");
+        // Error should echo the offending value for debuggability.
+        assert!(
+            err.contains("abc"),
+            "error should contain the bad value 'abc', got: {err}"
+        );
+        assert!(
+            err.contains("response_bytes"),
+            "error should name the offending field, got: {err}"
+        );
     }
 
     #[test]

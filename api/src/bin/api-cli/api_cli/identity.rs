@@ -159,9 +159,10 @@ impl Identity {
     /// Get the signing key bytes
     pub fn secret_key_bytes(&self) -> Result<[u8; 32]> {
         let bytes = hex::decode(&self.secret_key_hex)?;
-        bytes
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid secret key length"))
+        let len = bytes.len();
+        bytes.try_into().map_err(|_| {
+            anyhow::anyhow!("Invalid secret key length: expected 32 bytes, got {}", len)
+        })
     }
 
     /// Get the public key bytes
