@@ -241,7 +241,7 @@
 {#if currentStep === 'seed'}
 	<div class="space-y-6">
 		<div class="text-center">
-			<h2 class="text-2xl font-bold text-white mb-2">Sign In</h2>
+			<h2 class="text-2xl font-bold text-white mb-2">Sign In or Create Account</h2>
 			<p class="text-neutral-500 text-sm">
 				{googleOAuthEnabled === false
 					? 'Use your seed phrase to sign in'
