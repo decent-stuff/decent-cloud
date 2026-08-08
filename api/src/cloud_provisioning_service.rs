@@ -311,7 +311,7 @@ async fn provision_one(
         None
     };
 
-    database
+    let updated = database
         .update_cloud_resource_provisioned(
             &resource_id,
             &result.server.id,
@@ -324,6 +324,27 @@ async fn provision_one(
             gateway_ssh_port, // no port range — end = ssh port
         )
         .await?;
+
+    if !updated {
+        // A cancel (or expiry) landed in the window between VM creation and this
+        // UPDATE: the resource is now 'deleting', so the guarded UPDATE was a
+        // no-op. Delete the just-created VM to avoid orphaning a billed resource.
+        // The resource stays 'deleting' and the termination loop processes it
+        // later (terminate_one handles a pending-external_id and a 404 on
+        // delete_server gracefully). The caller's mark_cloud_resource_failed is
+        // also a no-op against a 'deleting' resource.
+        tracing::warn!(
+            resource_id = %resource_id,
+            server_id = %result.server.id,
+            "Resource was concurrently cancelled during provisioning; cleaning up the created VM"
+        );
+        cleanup_failed_provision(&*backend, &result.server.id, &ssh_key_id).await;
+        anyhow::bail!(
+            "Resource {} was concurrently cancelled during provisioning; cleaned up VM {}",
+            resource_id,
+            result.server.id
+        );
+    }
 
     // If linked to a contract, update contract status to active
     if let Some(contract_id) = &resource.contract_id {

@@ -368,6 +368,14 @@ impl Database {
         Ok(CloudResource::from(row))
     }
 
+    /// Record that a cloud resource finished provisioning and is now running.
+    ///
+    /// Returns `Ok(true)` when the row was updated, or `Ok(false)` when the
+    /// resource concurrently transitioned to a terminal state (`deleting`,
+    /// `deleted`, `failed`) — e.g. a cancel that landed in the window between
+    /// VM creation and this call. A `false` result means the caller has just
+    /// created a real billable VM that is no longer tracked as `running` and
+    /// must clean it up.
     #[allow(clippy::too_many_arguments)]
     pub async fn update_cloud_resource_provisioned(
         &self,
@@ -380,7 +388,7 @@ impl Database {
         gateway_ssh_port: i32,
         gateway_port_range_start: i32,
         gateway_port_range_end: i32,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let rows_affected = sqlx::query(
             r#"
             UPDATE cloud_resources
@@ -395,6 +403,7 @@ impl Database {
                 gateway_port_range_end = $9,
                 updated_at = NOW()
             WHERE id = $1
+              AND status NOT IN ('deleting', 'deleted', 'failed')
             "#,
         )
         .bind(id)
@@ -410,11 +419,7 @@ impl Database {
         .await?
         .rows_affected();
 
-        if rows_affected == 0 {
-            return Err(anyhow!("Cloud resource not found"));
-        }
-
-        Ok(())
+        Ok(rows_affected > 0)
     }
 
     #[cfg(test)]
@@ -508,12 +513,18 @@ impl Database {
     }
 
     /// Mark a cloud resource as failed with an error message visible to the user.
+    ///
+    /// This is a no-op (returns `Ok(())`) when the resource has already reached a
+    /// terminal state (`deleting`, `deleted`) — e.g. a concurrent cancel. A
+    /// `failed` resource is also left as-is (it is already the target state via
+    /// the `status != 'failed'` exclusion implied by `SET status = 'failed'`).
     pub async fn mark_cloud_resource_failed(&self, id: &Uuid, error_message: &str) -> Result<()> {
         let rows_affected = sqlx::query(
             r#"
             UPDATE cloud_resources
             SET status = 'failed', error_message = $2, updated_at = NOW()
             WHERE id = $1
+              AND status NOT IN ('deleting', 'deleted')
             "#,
         )
         .bind(id)
@@ -523,7 +534,10 @@ impl Database {
         .rows_affected();
 
         if rows_affected == 0 {
-            return Err(anyhow!("Cloud resource not found"));
+            tracing::debug!(
+                resource_id = %id,
+                "mark_cloud_resource_failed was a no-op (resource already deleting/deleted/failed)"
+            );
         }
 
         Ok(())
@@ -1221,6 +1235,249 @@ mod tests {
             .await
             .unwrap();
         assert!(!marked);
+    }
+
+    /// Regression for #466: a cancel that lands between VM creation and
+    /// `update_cloud_resource_provisioned` must NOT be overwritten back to
+    /// 'running'. The guarded UPDATE must be a no-op (Ok(false)) and leave the
+    /// resource in 'deleting'.
+    #[tokio::test]
+    async fn test_update_cloud_resource_provisioned_refuses_concurrent_cancel() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("race_cancel", &[51u8; 32], "race-cancel@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "race-cancel-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let contract_id = vec![0x01u8; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[52u8; 32][..])
+        .bind(&[51u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-race-cancel",
+                "cx23",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Simulate a concurrent cancel: flip provisioning -> deleting via the real
+        // cancel path.
+        let marked = db
+            .mark_contract_resource_for_deletion(&contract_id)
+            .await
+            .unwrap();
+        assert!(marked, "cancel should have marked the resource deleting");
+
+        // Now provision_one finishes and tries to record the VM. This MUST be a
+        // no-op: the resource is 'deleting', so the guarded UPDATE matches 0 rows.
+        let updated = db
+            .update_cloud_resource_provisioned(
+                &resource_id,
+                "real-vm-id-123",
+                "203.0.113.55",
+                "ssh-key-1",
+                "raceslug",
+                Some("raceslug.hz-fsn1.dev-gw.decent-cloud.org"),
+                22,
+                22,
+                22,
+            )
+            .await
+            .unwrap();
+        assert!(
+            !updated,
+            "concurrent cancel must prevent the provisioned UPDATE from applying"
+        );
+
+        // The resource must still be 'deleting' (NOT overwritten to 'running') and
+        // the external_id must still be the pending placeholder.
+        let row: (String, String) =
+            sqlx::query_as("SELECT status, external_id FROM cloud_resources WHERE id = $1")
+                .bind(resource_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "deleting", "status must not be clobbered to running");
+        assert!(
+            row.1.starts_with("pending-"),
+            "external_id must stay as the pending placeholder, got: {}",
+            row.1
+        );
+    }
+
+    /// Regression for #466: marking a concurrently-cancelled resource as failed
+    /// must be a clean no-op (Ok(())), never an error, and must not overwrite
+    /// 'deleting'.
+    #[tokio::test]
+    async fn test_mark_cloud_resource_failed_no_op_on_deleting() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("race_fail", &[53u8; 32], "race-fail@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "race-fail-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let contract_id = vec![0x02u8; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[54u8; 32][..])
+        .bind(&[53u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-race-fail",
+                "cx23",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Concurrent cancel lands first.
+        db.mark_contract_resource_for_deletion(&contract_id)
+            .await
+            .unwrap();
+
+        // provision_one's error path calls mark_cloud_resource_failed after the
+        // bail. With the guard this is a clean no-op, never an error.
+        db.mark_cloud_resource_failed(&resource_id, "concurrent cancel during provision")
+            .await
+            .expect("marking a deleting resource as failed must be a clean no-op");
+
+        // Resource must still be 'deleting'.
+        let status: (String,) =
+            sqlx::query_as("SELECT status FROM cloud_resources WHERE id = $1")
+                .bind(resource_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            status.0, "deleting",
+            "mark_cloud_resource_failed must not clobber a deleting resource"
+        );
+    }
+
+    /// Positive control for #466: when there is NO concurrent cancel, the
+    /// guarded UPDATE still applies normally (Ok(true)) and sets 'running'.
+    #[tokio::test]
+    async fn test_update_cloud_resource_provisioned_normal_path() {
+        let db = setup_test_db().await;
+
+        let account = db
+            .create_account("race_ok", &[55u8; 32], "race-ok@example.com")
+            .await
+            .unwrap();
+        let cloud_account = db
+            .create_cloud_account(
+                &account.id,
+                crate::cloud::types::BackendType::Hetzner,
+                "race-ok-hetzner",
+                "encrypted",
+                None,
+            )
+            .await
+            .unwrap();
+        let cloud_account_uuid: uuid::Uuid = cloud_account.id.parse().unwrap();
+
+        let contract_id = vec![0x03u8; 32];
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns, end_timestamp_ns, duration_hours, original_duration_hours, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, '', '', $3, 'test', 0, 0, 0, 1, 1, '', 0, 'accepted', 'stripe', 'succeeded', 'USD')"
+        )
+        .bind(&contract_id)
+        .bind(&[56u8; 32][..])
+        .bind(&[55u8; 32][..])
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let resource_id = db
+            .create_cloud_resource_for_contract(
+                &contract_id,
+                &cloud_account_uuid,
+                "dc-race-ok",
+                "cx23",
+                "fsn1",
+                "ubuntu-24.04",
+                "ssh-ed25519 AAAA test",
+                None,
+            )
+            .await
+            .unwrap();
+
+        // No cancel — provision_one finishes normally.
+        let updated = db
+            .update_cloud_resource_provisioned(
+                &resource_id,
+                "real-vm-id-ok",
+                "203.0.113.56",
+                "ssh-key-ok",
+                "okslug",
+                Some("okslug.hz-fsn1.dev-gw.decent-cloud.org"),
+                22,
+                22,
+                22,
+            )
+            .await
+            .unwrap();
+        assert!(
+            updated,
+            "normal provisioning path must report the UPDATE applied"
+        );
+
+        let row: (String, String) =
+            sqlx::query_as("SELECT status, external_id FROM cloud_resources WHERE id = $1")
+                .bind(resource_id)
+                .fetch_one(&db.pool)
+                .await
+                .unwrap();
+        assert_eq!(row.0, "running");
+        assert_eq!(row.1, "real-vm-id-ok");
     }
 
     #[tokio::test]
