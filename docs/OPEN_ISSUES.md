@@ -86,7 +86,7 @@ all fixes are projections of existing data or build/config wiring.
 Also a read-only **k8s manifest audit** (no manifest changes needed): migrations auto-run
 unconditionally at boot (`database/core.rs:15`), website Chatwoot config is build-time-baked (no
 runtime env needed), stage overlay correct + isolated, probes adequate, image-tag policy sound. One
-flagged non-action → tracked as OP-5 below (`CHATWOOT_INBOX_ID` env unread by code).
+flagged non-action → tracked as OP-5 below (since resolved: a dead env var was dropped, #452).
 
 ## Operator / deploy blockers (need human)
 
@@ -140,9 +140,7 @@ the sweep's new guards surfaced.
   (`CHATWOOT_WEBSITE_TOKEN`). Until the operator populates both, CI builds a widget-less website
   (intentionally silent — the env-gate suppresses it), so the support widget cannot render even after
   OP-3's tunnel is restored. **ACTION:** set both in the repo settings (Variables tab +
-  Secrets→Actions). Also decide the flagged non-action from the 2026-08-06 k8s audit: the
-  `CHATWOOT_INBOX_ID` env var is **unread by code** (intended for the support bot) — either wire it
-  into a consumer or drop it from the k8s `dc-config`/`dc-stage-config` in the same change.
+  Secrets→Actions).
 
 ## Future work
 

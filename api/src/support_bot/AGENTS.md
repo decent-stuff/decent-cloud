@@ -58,9 +58,15 @@ Customer message → Chatwoot Widget → Inbox → Agent Bot webhook
 ### Agent Bot Configuration
 The agent bot MUST be:
 1. Created with `account_id` (not platform-level)
-2. Assigned to the inbox via `CHATWOOT_INBOX_ID`
+2. Assigned to inboxes
 
-Without inbox assignment, webhooks won't fire. See `api/src/main.rs` serve_command.
+At startup (and during `doctor`), the API enumerates **every** inbox in the
+account via `ChatwootClient::list_inboxes()` and calls
+`assign_agent_bot_to_inbox(inbox_id, bot_id)` for each one — there is no
+single-inbox scoping (no per-inbox env var; the bot is bound to every inbox).
+Without inbox assignment, webhooks won't fire. See `api/src/main.rs`
+(`serve_command` and the startup boot path) and `api/src/chatwoot/client.rs`
+(`list_inboxes`, `assign_agent_bot_to_inbox`).
 
 ### Escalation Triggers
 Bot escalates when:
@@ -77,7 +83,6 @@ Bot escalates when:
 | `CHATWOOT_API_TOKEN` | Yes | Account API token for sending messages |
 | `CHATWOOT_PLATFORM_API_TOKEN` | Yes | Platform token for agent bot management |
 | `CHATWOOT_ACCOUNT_ID` | Yes | Account ID (usually `1`) |
-| `CHATWOOT_INBOX_ID` | Yes | Inbox to assign bot to |
 | `DEFAULT_ESCALATION_USER` | No | Username to notify on escalation (e.g., `admin`) |
 | `API_PUBLIC_URL` | Yes | Public URL for webhook callbacks |
 | `LLM_API_KEY` | No | Anthropic API key (bot disabled if missing) |

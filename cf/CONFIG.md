@@ -172,7 +172,6 @@ manifest, `—`=not used in this env.
 | `CHATWOOT_POSTGRES_PASSWORD` | `D` | `sec` | prod host PG db `chatwoot_prod` |
 | `CHATWOOT_SECRET_KEY_BASE` | `D` | `sec` | Rails session key |
 | `CHATWOOT_ACCOUNT_ID` | `D` | `lit` | prod inline `1` |
-| `CHATWOOT_INBOX_ID` | — | `lit` | prod inline `1` |
 | `CHATWOOT_WEBSITE_TOKEN` | `D` | — | dev widget embed |
 | `OPENAI_API_KEY` | — | `sec` | chatwoot-worker (answer assist) |
 

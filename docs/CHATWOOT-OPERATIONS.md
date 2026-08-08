@@ -214,16 +214,7 @@ kubectl -n dc-prod logs deploy/dc-api | grep -iE 'chatwoot|agent bot'
 
 These are documented weaknesses, not runbook steps. Track/fix them separately.
 
-1. **`CHATWOOT_INBOX_ID` is dead config.** It is listed in `cf/CONFIG.md:175`
-   and `api/src/support_bot/AGENTS.md:80` as "required", but **no code path reads
-   it** — a workspace-wide grep for `std::env::var("CHATWOOT_INBOX_ID")` returns
-   zero hits. The boot loop instead enumerates **all** inboxes via
-   `ChatwootClient::list_inboxes()` (`api/src/chatwoot/client.rs:521-556`, called
-   at `api/src/main.rs:1257`) and assigns the bot to each. Setting
-   `CHATWOOT_INBOX_ID` has no effect; remove it from docs/config to avoid
-   confusing operators.
-
-2. **`POST /api/v1/webhooks/chatwoot` verifies no signature** — a latent
+1. **`POST /api/v1/webhooks/chatwoot` verifies no signature** — a latent
    security gap. The handler (`api/src/openapi/webhooks.rs:531-554`) parses the
    JSON body and acts on `message_created` events (triggering the support bot and
    DB writes) with **no** request-authentication step. Contrast this with the two
