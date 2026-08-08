@@ -52,9 +52,9 @@ fn run_command_with_timeout(cmd: &mut Command, timeout: Duration) -> Result<Time
             Some(status) => break status,
             None => {
                 if Instant::now() >= deadline {
-                    // Best-effort cleanup; ignore errors (process may have just exited).
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    // Best-effort cleanup; errors are logged (not silently
+                    // ignored) via the shared helper, then we bail.
+                    crate::setup::best_effort_kill_and_reap(&mut child);
                     bail!("Command timed out after {:?}", timeout);
                 }
                 std::thread::sleep(Duration::from_millis(50));

@@ -34,6 +34,21 @@ pub fn execute_command(cmd: &str) -> Result<CommandOutput> {
     execute_command_with_timeout(cmd, DEFAULT_COMMAND_TIMEOUT)
 }
 
+/// Best-effort `SIGKILL` + reap of a child whose deadline elapsed.
+///
+/// By the time this is called the deadline is already blown and the caller is
+/// about to `bail!`, so cleanup is genuinely best-effort. Per the project rule
+/// "NEVER silently ignore failures", kill/wait errors are surfaced at `WARN`
+/// (with the underlying error) instead of `let _ = ...`. (ROB-008)
+pub(crate) fn best_effort_kill_and_reap(child: &mut std::process::Child) {
+    if let Err(e) = child.kill() {
+        tracing::warn!(error = %e, "failed to SIGKILL child during deadline cleanup");
+    }
+    if let Err(e) = child.wait() {
+        tracing::warn!(error = %e, "failed to reap child during deadline cleanup");
+    }
+}
+
 /// Execute a shell command locally with an explicit timeout.
 ///
 /// Spawns `sh -c <cmd>`, polls the child, and `SIGKILL`s it if it does not
@@ -56,9 +71,9 @@ pub fn execute_command_with_timeout(cmd: &str, timeout: Duration) -> Result<Comm
             Some(status) => break status,
             None => {
                 if Instant::now() >= deadline {
-                    // Best-effort cleanup; ignore errors (process may have just exited).
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    // Best-effort cleanup; errors are logged (not silently
+                    // ignored) via best_effort_kill_and_reap, then we bail.
+                    best_effort_kill_and_reap(&mut child);
                     bail!("Command timed out after {:?}: {}", timeout, cmd);
                 }
                 std::thread::sleep(Duration::from_millis(50));
@@ -131,5 +146,34 @@ mod tests {
         let out = execute_command_with_timeout("sleep 0.05", Duration::from_secs(5))
             .expect("short sleep should complete");
         assert_eq!(out.exit_status, 0);
+    }
+
+    // ROB-008: deadline cleanup must not silently swallow kill/wait errors.
+    // best_effort_kill_and_reap logs them at WARN instead of `let _ = ...`.
+    //
+    // NOTE on coverage: the failure-logging branch is NOT deterministically
+    // reachable with std::process::Child — std caches the ExitStatus (a second
+    // wait() returns Ok), and kill() on a reaped PID is racy under PID
+    // recycling. So this test pins the SUCCESS path (running child → kill + reap
+    // succeed, NO spurious warn), which is the path the hot deadline-cleanup
+    // actually exercises. The Err→warn mapping is structurally obvious (if let
+    // Err = ...) and the helper is shared by both upgrade.rs and setup.
+    #[tracing_test::traced_test]
+    #[test]
+    fn best_effort_kill_and_reap_logs_nothing_on_success() {
+        // Spawn `sleep` directly (not via sh -c) so the PID we kill IS the
+        // long-running process — killing it leaves no orphaned child (a shell
+        // wrapper would fork sleep and survive our SIGKILL, leaking under
+        // nextest's leak detection).
+        let mut child = Command::new("sleep").arg("30").spawn().expect("spawn sleep");
+        best_effort_kill_and_reap(&mut child);
+        assert!(
+            !logs_contain("failed to SIGKILL child"),
+            "expected no cleanup error for a running child"
+        );
+        assert!(
+            !logs_contain("failed to reap child"),
+            "expected no reap error after a successful kill"
+        );
     }
 }
