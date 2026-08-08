@@ -6,8 +6,7 @@
 	import type { AccountInfo, IdentityInfo } from '$lib/stores/auth';
 	import DashboardSidebar from '$lib/components/DashboardSidebar.svelte';
 	import AuthPromptBanner from '$lib/components/AuthPromptBanner.svelte';
-	import EmailVerificationBanner from '$lib/components/EmailVerificationBanner.svelte';
-	import SeedPhraseBackupBanner from '$lib/components/SeedPhraseBackupBanner.svelte';
+	import ActionRequiredBanner from '$lib/components/ActionRequiredBanner.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import KeyboardHelpOverlay from '$lib/components/KeyboardHelpOverlay.svelte';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
@@ -76,44 +75,29 @@
 		}
 	}
 
-	// F4: confine the full-width verify-email + seed-backup banners to the
-	// dashboard landing and the account pages. They are actionable there (verify
-	// email / back up seed) but consumed vertical space and nagged on every
-	// /dashboard/* sub-route. Contextual notices now surface the prerequisite
-	// where it blocks action (e.g. the F3 rent-flow gate), so the global banner
-	// no longer needs to dominate every screen.
+	// F4: confine the action-required indicator to the dashboard landing and
+	// the account pages. It is actionable there (verify email / back up seed)
+	// but would nag on every /dashboard/* sub-route. Contextual notices now
+	// surface the prerequisite where it blocks action (e.g. the F3 rent-flow
+	// gate), so the indicator no longer needs to dominate every screen.
+	//
+	// A8 / UX-009: the previous two stacked full-width colored banners are
+	// merged into ONE compact, dismissible one-line bar that expands inline
+	// to reveal each action's CTA. Both actions retain independent dismissal
+	// (seed via localStorage, email via sessionStorage); the consolidated
+	// bar hides itself once every active action is dismissed.
 	const isBannerSurface = $derived(
 		$page.url.pathname === '/dashboard' ||
 		$page.url.pathname.startsWith('/dashboard/account')
 	);
 
-	const showEmailVerificationBanner = $derived(
-		isAuthenticated && account && !account.emailVerified && isBannerSurface && !emailBannerDismissed
+	const emailActionActive = $derived(
+		isAuthenticated && isBannerSurface && !!account && !account.emailVerified && !emailBannerDismissed
 	);
-	// #438: previously gated on `!showEmailVerificationBanner`, which meant a
-	// seed-phrase user with an unverified email NEVER saw the backup warning —
-	// exactly the high-risk account that needs it most. The two banners now
-	// stack independently inside a single fixed container; each has its own
-	// dismissal path (seed banner via localStorage flag, email banner via
-	// verification). Both are confined to the banner surfaces (F4).
-	const showSeedPhraseBackupBanner = $derived(
+	const seedActionActive = $derived(
 		isAuthenticated && isBannerSurface && activeIdentity?.type === 'seedPhrase' && !seedBackupDismissed
 	);
-
-	// <main> top padding must clear the fixed banner stack. Mobile sits under
-	// the h-14 (3.5rem) header; desktop starts at top-0. Each banner adds its
-	// own height; the both-banners case is the new path added by #438.
-	const mainTopPadding = $derived(
-		!isAuthenticated
-			? 'md:pt-20'
-			: showEmailVerificationBanner && showSeedPhraseBackupBanner
-				? 'pt-56 md:pt-36'
-				: showEmailVerificationBanner
-					? 'pt-44 md:pt-20'
-					: showSeedPhraseBackupBanner
-						? 'pt-28 md:pt-14'
-						: ''
-	);
+	const hasActions = $derived(emailActionActive || seedActionActive);
 
 	function dismissSeedPhraseBanner() {
 		seedBackupDismissed = true;
@@ -164,23 +148,20 @@
 	<!-- Auth prompt banner for anonymous users -->
 	{#if !isAuthenticated}
 		<AuthPromptBanner />
-	{:else if showEmailVerificationBanner || showSeedPhraseBackupBanner}
-		<!-- #438: banners stack independently inside one fixed container so they
-		can coexist (seed-phrase backup + unverified email). Each renders as a
-		static block sibling; the container owns positioning + z-index. -->
-		<div class="fixed top-14 md:top-0 left-0 md:left-60 right-0 z-40">
-		{#if showEmailVerificationBanner}
-			<EmailVerificationBanner onDismiss={dismissEmailBanner} />
-		{/if}
-			{#if showSeedPhraseBackupBanner}
-				<SeedPhraseBackupBanner onDismiss={dismissSeedPhraseBanner} />
-			{/if}
-		</div>
 	{/if}
 
 	<!-- Main content area -->
-	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6 {mainTopPadding}">
-		<div class="max-w-6xl mx-auto">
+	<main class="md:ml-60 p-4 md:p-6 pt-18 md:pt-6">
+		<div class="max-w-6xl mx-auto space-y-6">
+			{#if hasActions}
+				<ActionRequiredBanner
+					showEmailAction={emailActionActive}
+					hasEmail={!!account?.email}
+					showSeedAction={seedActionActive}
+					onDismissEmail={dismissEmailBanner}
+					onDismissSeed={dismissSeedPhraseBanner}
+				/>
+			{/if}
 			{@render children()}
 		</div>
 	</main>
