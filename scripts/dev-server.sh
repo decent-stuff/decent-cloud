@@ -7,19 +7,21 @@
 #
 # The API runs in RELEASE by default. Debug builds run Ed25519 curve math
 # ~150x slower than release (~17ms vs ~106us per auth), which both distorts
-# E2E timing and does not reflect production. Override with
-# API_BINARY=$ROOT/target/debug/api-server for fast Rust iteration only.
+# E2E timing and does not reflect production. Use --dev for fast Rust iteration
+# (incremental debug build ~1-44s vs ~6min release).
 #
 # Usage:
-#   scripts/dev-server.sh start [--e2e]   — start stack (idempotent)
-#   scripts/dev-server.sh stop            — stop stack (process-group kill)
-#   scripts/dev-server.sh status          — show running status with port health
-#   scripts/dev-server.sh restart [--e2e] — stop + start
-#   scripts/dev-server.sh logs [api|web]  — tail merged stdout log
+#   scripts/dev-server.sh start [--e2e|--dev]   — start stack (idempotent)
+#   scripts/dev-server.sh stop                  — stop stack (process-group kill)
+#   scripts/dev-server.sh status                — show running status with port health
+#   scripts/dev-server.sh restart [--e2e|--dev] — stop + start
+#   scripts/dev-server.sh logs [api|web]        — tail merged stdout log
 #
 # Modes:
 #   default   — website always local; API uses remote dev if no local binary.
-#   --e2e     — forces LOCAL api (no remote fallback), builds binary if missing,
+#   --dev     — serves the DEBUG api binary (fast iteration, honors CARGO_TARGET_DIR).
+#               Mutually exclusive with --e2e. Build first: cargo build -p api --bin api-server
+#   --e2e     — forces LOCAL RELEASE api (no remote fallback), builds binary if missing,
 #               disables rate limiting so parallel test workers don't 429.
 #
 # Test entrypoints (see website/package.json):
@@ -68,9 +70,8 @@ else
 fi
 
 # The env file's API_DATABASE_URL is a local-loop placeholder (hostname `postgres`).
-# A caller-provided DATABASE_URL (set by the Makefile website-e2e task via
-# detect-postgres.sh) names the real Postgres host, so when using the example
-# fallback prefer it over the placeholder to avoid pointing the API at the wrong DB.
+# A caller-provided DATABASE_URL names the real Postgres host, so when using the
+# example fallback prefer it over the placeholder to avoid pointing the API at the wrong DB.
 _caller_db_url="${DATABASE_URL:-}"
 # shellcheck disable=SC1090
 set -a
@@ -83,11 +84,25 @@ fi
 unset _env_file _using_example _caller_db_url
 
 E2E_MODE=0
+DEV_MODE=0
 for arg in "$@"; do
   case "$arg" in
     --e2e) E2E_MODE=1 ;;
+    --dev) DEV_MODE=1 ;;
   esac
 done
+if [ "$E2E_MODE" -eq 1 ] && [ "$DEV_MODE" -eq 1 ]; then
+  echo "error: --dev and --e2e are mutually exclusive (e2e needs release for correct auth timing)" >&2
+  exit 1
+fi
+if [ "$DEV_MODE" -eq 1 ]; then
+  API_BINARY="${CARGO_TARGET_DIR:-$ROOT/target}/debug/api-server"
+  if [ ! -x "$API_BINARY" ]; then
+    echo "error: --dev requires a debug binary at $API_BINARY" >&2
+    echo "       build it first: CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$ROOT/target} cargo build -p api --bin api-server" >&2
+    exit 1
+  fi
+fi
 
 # Resolve effective env for the API server.
 # API_DATABASE_URL (from cf/.env.dev) wins; DATABASE_URL is the fallback.
@@ -177,7 +192,7 @@ _announce_api_binary() {
       echo "  restarted — rebuilding does NOT hot-swap it. Rebuild after Rust edits:"
       echo "    cargo build -p api --bin api-server --release"
       echo "  (then: scripts/dev-server.sh restart). For fast Rust iteration without"
-      echo "   the ~6min release rebuild: API_BINARY=$ROOT/target/debug/api-server"
+      echo "   the ~6min release rebuild: scripts/dev-server.sh restart --dev"
       ;;
     DEBUG)
       echo "  Debug binary — Ed25519 is ~150x slower; e2e timing is distorted and"
@@ -394,7 +409,7 @@ case "${1:-start}" in
     tail -f "$PIDS/${2:-api}.log"
     ;;
   *)
-    echo "Usage: $0 start [--e2e]|stop|status|restart [--e2e]|logs [api|web]" >&2
+    echo "Usage: $0 start [--e2e|--dev]|stop|status|restart [--e2e|--dev]|logs [api|web]" >&2
     exit 1
     ;;
 esac
