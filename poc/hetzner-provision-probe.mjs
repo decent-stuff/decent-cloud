@@ -12,7 +12,7 @@
 // service creates VM → contract active. Then cancel → termination service deletes VM.
 //
 // Usage:
-//   HETZNER_API_TOKEN=... timeout 600 node poc/hetzner-provision-probe.mjs
+//   HETZNER_API_TOKEN_DEV=... timeout 600 node poc/hetzner-provision-probe.mjs
 
 import { execFileSync } from 'node:child_process';
 import { ed25519ph } from '../website/node_modules/@noble/curves/esm/ed25519.js';
@@ -22,13 +22,13 @@ import { generateMnemonic, mnemonicToSeedSync } from '../website/node_modules/bi
 
 const API_URL = process.env.API_URL || 'http://localhost:59011';
 const DB_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
-const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN;
+const HETZNER_TOKEN = process.env.HETZNER_API_TOKEN_DEV;
 const SSH_PUBKEY = process.env.SSH_PUBKEY || execFileSync('cat', ['/tmp/dc-probe-key/id_ed25519.pub']).toString().trim();
 const SIGN_CONTEXT = new TextEncoder().encode('decent-cloud');
 
 if (!HETZNER_TOKEN) {
-  console.error('FAIL: HETZNER_API_TOKEN env var is required.');
-  process.exit(2);
+	console.error('FAIL: HETZNER_API_TOKEN_DEV env var is required (the read-write dev token agents use for ALL Hetzner dev/experimentation).');
+	process.exit(2);
 }
 
 const T = () => Date.now(); // epoch ms
