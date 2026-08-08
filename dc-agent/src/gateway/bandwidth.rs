@@ -6,7 +6,11 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::Command;
+use std::time::Duration;
+
+use crate::setup::run_command_with_timeout;
+
+const IPTABLES_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Bandwidth statistics for a VM
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -34,39 +38,47 @@ impl BandwidthMonitor {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
         // Create chain if it doesn't exist (ignores "chain already exists" error)
-        if let Err(e) = Command::new("iptables").args(["-N", &chain_name]).output() {
+        if let Err(e) =
+            run_command_with_timeout("iptables", &["-N", &chain_name], IPTABLES_TIMEOUT)
+        {
             tracing::debug!("iptables chain {chain_name} creation: {e}");
         }
 
         // Flush any existing rules
-        Command::new("iptables")
-            .args(["-F", &chain_name])
-            .output()
+        run_command_with_timeout("iptables", &["-F", &chain_name], IPTABLES_TIMEOUT)
             .context("Failed to flush iptables chain")?;
 
         // Add rules to count traffic to/from this VM
         // Incoming traffic (to VM)
-        Command::new("iptables")
-            .args(["-A", &chain_name, "-d", internal_ip, "-j", "RETURN"])
-            .output()
-            .context("Failed to add incoming traffic rule")?;
+        run_command_with_timeout(
+            "iptables",
+            &["-A", &chain_name, "-d", internal_ip, "-j", "RETURN"],
+            IPTABLES_TIMEOUT,
+        )
+        .context("Failed to add incoming traffic rule")?;
 
         // Outgoing traffic (from VM)
-        Command::new("iptables")
-            .args(["-A", &chain_name, "-s", internal_ip, "-j", "RETURN"])
-            .output()
-            .context("Failed to add outgoing traffic rule")?;
+        run_command_with_timeout(
+            "iptables",
+            &["-A", &chain_name, "-s", internal_ip, "-j", "RETURN"],
+            IPTABLES_TIMEOUT,
+        )
+        .context("Failed to add outgoing traffic rule")?;
 
         // Insert jump to our chain from FORWARD chain (if not already present)
-        let check = Command::new("iptables")
-            .args(["-C", "FORWARD", "-j", &chain_name])
-            .output();
+        let check = run_command_with_timeout(
+            "iptables",
+            &["-C", "FORWARD", "-j", &chain_name],
+            IPTABLES_TIMEOUT,
+        );
 
         if check.map(|o| !o.status.success()).unwrap_or(true) {
-            Command::new("iptables")
-                .args(["-I", "FORWARD", "-j", &chain_name])
-                .output()
-                .context("Failed to insert jump rule")?;
+            run_command_with_timeout(
+                "iptables",
+                &["-I", "FORWARD", "-j", &chain_name],
+                IPTABLES_TIMEOUT,
+            )
+            .context("Failed to insert jump rule")?;
         }
 
         tracing::debug!("Setup iptables accounting for {} ({})", slug, internal_ip);
@@ -79,20 +91,25 @@ impl BandwidthMonitor {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
         // Remove jump from FORWARD chain (may not exist if setup failed)
-        if let Err(e) = Command::new("iptables")
-            .args(["-D", "FORWARD", "-j", &chain_name])
-            .output()
-        {
+        if let Err(e) = run_command_with_timeout(
+            "iptables",
+            &["-D", "FORWARD", "-j", &chain_name],
+            IPTABLES_TIMEOUT,
+        ) {
             tracing::debug!("iptables FORWARD jump removal for {chain_name}: {e}");
         }
 
         // Flush chain (may not exist)
-        if let Err(e) = Command::new("iptables").args(["-F", &chain_name]).output() {
+        if let Err(e) =
+            run_command_with_timeout("iptables", &["-F", &chain_name], IPTABLES_TIMEOUT)
+        {
             tracing::debug!("iptables chain {chain_name} flush: {e}");
         }
 
         // Delete chain (may not exist or may have references)
-        if let Err(e) = Command::new("iptables").args(["-X", &chain_name]).output() {
+        if let Err(e) =
+            run_command_with_timeout("iptables", &["-X", &chain_name], IPTABLES_TIMEOUT)
+        {
             tracing::debug!("iptables chain {chain_name} deletion: {e}");
         }
 
@@ -105,10 +122,12 @@ impl BandwidthMonitor {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
         // Get stats with exact byte counts: iptables -L <chain> -v -n -x
-        let output = Command::new("iptables")
-            .args(["-L", &chain_name, "-v", "-n", "-x"])
-            .output()
-            .context("Failed to query iptables")?;
+        let output = run_command_with_timeout(
+            "iptables",
+            &["-L", &chain_name, "-v", "-n", "-x"],
+            IPTABLES_TIMEOUT,
+        )
+        .context("Failed to query iptables")?;
 
         if !output.status.success() {
             return Ok(BandwidthStats::default());
@@ -123,10 +142,9 @@ impl BandwidthMonitor {
         let mut stats = HashMap::new();
 
         // List all chains
-        let output = Command::new("iptables")
-            .args(["-L", "-n"])
-            .output()
-            .context("Failed to list iptables chains")?;
+        let output =
+            run_command_with_timeout("iptables", &["-L", "-n"], IPTABLES_TIMEOUT)
+                .context("Failed to list iptables chains")?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -194,9 +212,7 @@ impl BandwidthMonitor {
     pub fn reset_counters(slug: &str) -> Result<()> {
         let chain_name = format!("{}{}", Self::CHAIN_PREFIX, slug);
 
-        Command::new("iptables")
-            .args(["-Z", &chain_name])
-            .output()
+        run_command_with_timeout("iptables", &["-Z", &chain_name], IPTABLES_TIMEOUT)
             .context("Failed to reset iptables counters")?;
 
         tracing::debug!("Reset bandwidth counters for {}", slug);

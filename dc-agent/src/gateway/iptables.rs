@@ -5,7 +5,11 @@
 
 use super::port_allocator::PortAllocation;
 use anyhow::{bail, Context, Result};
-use std::process::Command;
+use std::time::Duration;
+
+use crate::setup::run_command_with_timeout;
+
+const IPTABLES_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Chain name for our DNAT rules
 const CHAIN_NAME: &str = "DC_GATEWAY";
@@ -18,23 +22,28 @@ impl IptablesNat {
     /// Called once during gateway manager initialization.
     pub fn init_chain() -> Result<()> {
         // Create chain if it doesn't exist (ignores "chain already exists" error)
-        if let Err(e) = Command::new("iptables")
-            .args(["-t", "nat", "-N", CHAIN_NAME])
-            .output()
-        {
+        if let Err(e) = run_command_with_timeout(
+            "iptables",
+            &["-t", "nat", "-N", CHAIN_NAME],
+            IPTABLES_TIMEOUT,
+        ) {
             tracing::debug!("iptables NAT chain {CHAIN_NAME} creation: {e}");
         }
 
         // Ensure jump from PREROUTING to our chain (idempotent)
-        let check = Command::new("iptables")
-            .args(["-t", "nat", "-C", "PREROUTING", "-j", CHAIN_NAME])
-            .output();
+        let check = run_command_with_timeout(
+            "iptables",
+            &["-t", "nat", "-C", "PREROUTING", "-j", CHAIN_NAME],
+            IPTABLES_TIMEOUT,
+        );
 
         if check.map(|o| !o.status.success()).unwrap_or(true) {
-            let result = Command::new("iptables")
-                .args(["-t", "nat", "-I", "PREROUTING", "-j", CHAIN_NAME])
-                .output()
-                .context("Failed to insert PREROUTING jump")?;
+            let result = run_command_with_timeout(
+                "iptables",
+                &["-t", "nat", "-I", "PREROUTING", "-j", CHAIN_NAME],
+                IPTABLES_TIMEOUT,
+            )
+            .context("Failed to insert PREROUTING jump")?;
 
             if !result.status.success() {
                 bail!(
@@ -103,8 +112,10 @@ impl IptablesNat {
         let comment = format!("DC_VM_{}_{}", slug, ext_port);
 
         // Check if rule already exists
-        let check = Command::new("iptables")
-            .args([
+        let to_dest = format!("{}:{}", internal_ip, int_port);
+        let check = run_command_with_timeout(
+            "iptables",
+            &[
                 "-t",
                 "nat",
                 "-C",
@@ -116,21 +127,23 @@ impl IptablesNat {
                 "-j",
                 "DNAT",
                 "--to-destination",
-                &format!("{}:{}", internal_ip, int_port),
+                &to_dest,
                 "-m",
                 "comment",
                 "--comment",
                 &comment,
-            ])
-            .output();
+            ],
+            IPTABLES_TIMEOUT,
+        );
 
         if check.map(|o| o.status.success()).unwrap_or(false) {
             // Rule already exists
             return Ok(());
         }
 
-        let result = Command::new("iptables")
-            .args([
+        let result = run_command_with_timeout(
+            "iptables",
+            &[
                 "-t",
                 "nat",
                 "-A",
@@ -142,14 +155,15 @@ impl IptablesNat {
                 "-j",
                 "DNAT",
                 "--to-destination",
-                &format!("{}:{}", internal_ip, int_port),
+                &to_dest,
                 "-m",
                 "comment",
                 "--comment",
                 &comment,
-            ])
-            .output()
-            .context("Failed to execute iptables")?;
+            ],
+            IPTABLES_TIMEOUT,
+        )
+        .context("Failed to execute iptables")?;
 
         if !result.status.success() {
             bail!(
@@ -169,10 +183,12 @@ impl IptablesNat {
     /// Removes all DNAT rules for this slug.
     pub fn cleanup_forwarding(slug: &str) -> Result<()> {
         // List all rules with line numbers
-        let output = Command::new("iptables")
-            .args(["-t", "nat", "-L", CHAIN_NAME, "-n", "--line-numbers"])
-            .output()
-            .context("Failed to list iptables rules")?;
+        let output = run_command_with_timeout(
+            "iptables",
+            &["-t", "nat", "-L", CHAIN_NAME, "-n", "--line-numbers"],
+            IPTABLES_TIMEOUT,
+        )
+        .context("Failed to list iptables rules")?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let comment_pattern = format!("DC_VM_{}_", slug);
@@ -194,9 +210,11 @@ impl IptablesNat {
         // Delete in reverse order to preserve line numbers
         lines_to_delete.sort_by(|a, b| b.cmp(a));
         for line_num in lines_to_delete {
-            let result = Command::new("iptables")
-                .args(["-t", "nat", "-D", CHAIN_NAME, &line_num.to_string()])
-                .output();
+            let result = run_command_with_timeout(
+                "iptables",
+                &["-t", "nat", "-D", CHAIN_NAME, &line_num.to_string()],
+                IPTABLES_TIMEOUT,
+            );
 
             if let Err(e) = result {
                 tracing::warn!("Failed to delete iptables rule {}: {}", line_num, e);
@@ -209,36 +227,32 @@ impl IptablesNat {
 
     /// Check if forwarding is setup for a specific slug.
     pub fn has_forwarding(slug: &str) -> bool {
-        let output = Command::new("iptables")
-            .args(["-t", "nat", "-L", CHAIN_NAME, "-n"])
-            .output();
-
-        match output {
-            Ok(o) => {
-                let stdout = String::from_utf8_lossy(&o.stdout);
-                stdout.contains(&format!("DC_VM_{}_", slug))
-            }
-            Err(_) => false,
-        }
+        run_command_with_timeout(
+            "iptables",
+            &["-t", "nat", "-L", CHAIN_NAME, "-n"],
+            IPTABLES_TIMEOUT,
+        )
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout).contains(&format!("DC_VM_{}_", slug))
+        })
+        .unwrap_or(false)
     }
 
     /// Get count of active port forwarding rules.
     pub fn count_rules() -> usize {
-        let output = Command::new("iptables")
-            .args(["-t", "nat", "-L", CHAIN_NAME, "-n"])
-            .output();
-
-        match output {
-            Ok(o) => {
-                let stdout = String::from_utf8_lossy(&o.stdout);
-                stdout
-                    .lines()
-                    .skip(2) // Skip headers
-                    .filter(|l| l.contains("DC_VM_"))
-                    .count()
-            }
-            Err(_) => 0,
-        }
+        run_command_with_timeout(
+            "iptables",
+            &["-t", "nat", "-L", CHAIN_NAME, "-n"],
+            IPTABLES_TIMEOUT,
+        )
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .skip(2) // Skip headers
+                .filter(|l| l.contains("DC_VM_"))
+                .count()
+        })
+        .unwrap_or(0)
     }
 }
 

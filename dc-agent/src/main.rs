@@ -11,7 +11,7 @@ use dc_agent::{
         ProvisionRequest, Provisioner,
     },
     registration::{default_agent_dir, generate_agent_keypair},
-    setup::{detect_public_ip, GatewaySetup},
+    setup::{detect_public_ip, run_command_with_timeout, GatewaySetup},
 };
 use dcc_common::ssh_exec::execute_post_provision_script;
 use std::collections::{HashMap, HashSet};
@@ -24,6 +24,9 @@ type ProvisionerMap = HashMap<String, Box<dyn Provisioner>>;
 type OptionalGatewayManager = Option<std::sync::Arc<tokio::sync::Mutex<GatewayManager>>>;
 use tokio::time::{interval, Duration};
 use tracing::{error, info, warn};
+
+const SYSTEMCTL_OP_TIMEOUT: Duration = Duration::from_secs(30);
+const QUICK_QUERY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Parser)]
 #[command(name = "dc-agent", version)]
@@ -733,63 +736,73 @@ WantedBy=multi-user.target
     }
 
     // Reload systemd to pick up new service file
-    let reload_status = std::process::Command::new("systemctl")
-        .arg("daemon-reload")
-        .status()
-        .context("Failed to run systemctl daemon-reload")?;
-    if !reload_status.success() {
+    let reload_status = run_command_with_timeout(
+        "systemctl",
+        &["daemon-reload"],
+        SYSTEMCTL_OP_TIMEOUT,
+    )
+    .context("Failed to run systemctl daemon-reload")?;
+    if !reload_status.status.success() {
         anyhow::bail!(
             "systemctl daemon-reload failed with exit code {:?}",
-            reload_status.code()
+            reload_status.status.code()
         );
     }
     println!("[ok] Systemd daemon reloaded");
 
     // Enable service
-    let enable_status = std::process::Command::new("systemctl")
-        .args(["enable", SERVICE_FILE])
-        .status()
-        .context("Failed to run systemctl enable")?;
-    if !enable_status.success() {
+    let enable_status = run_command_with_timeout(
+        "systemctl",
+        &["enable", SERVICE_FILE],
+        SYSTEMCTL_OP_TIMEOUT,
+    )
+    .context("Failed to run systemctl enable")?;
+    if !enable_status.status.success() {
         anyhow::bail!(
             "systemctl enable failed with exit code {:?}",
-            enable_status.code()
+            enable_status.status.code()
         );
     }
     println!("[ok] Service enabled");
 
     // Use restart if service existed (to pick up new config), otherwise start
     let action = if service_existed { "restart" } else { "start" };
-    let start_status = std::process::Command::new("systemctl")
-        .args([action, SERVICE_FILE])
-        .status()
-        .context("Failed to run systemctl")?;
-    if !start_status.success() {
+    let start_status = run_command_with_timeout(
+        "systemctl",
+        &[action, SERVICE_FILE],
+        SYSTEMCTL_OP_TIMEOUT,
+    )
+    .context("Failed to run systemctl")?;
+    if !start_status.status.success() {
         anyhow::bail!(
             "systemctl {} failed with exit code {:?}",
             action,
-            start_status.code()
+            start_status.status.code()
         );
     }
 
     // Wait briefly and verify service is actually running (not just started and crashed)
     std::thread::sleep(std::time::Duration::from_secs(2));
-    let status_output = std::process::Command::new("systemctl")
-        .args(["is-active", SERVICE_FILE])
-        .output()
-        .context("Failed to check service status")?;
+    let status_output = run_command_with_timeout(
+        "systemctl",
+        &["is-active", SERVICE_FILE],
+        QUICK_QUERY_TIMEOUT,
+    )
+    .context("Failed to check service status")?;
     let status = String::from_utf8_lossy(&status_output.stdout)
         .trim()
         .to_string();
 
     if status != "active" {
         // Get the last few lines of journal for diagnosis
-        let journal = std::process::Command::new("journalctl")
-            .args(["-u", SERVICE_FILE, "-n", "10", "--no-pager"])
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
+        let journal = run_command_with_timeout(
+            "journalctl",
+            &["-u", SERVICE_FILE, "-n", "10", "--no-pager"],
+            QUICK_QUERY_TIMEOUT,
+        )
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+        .unwrap_or_default();
         anyhow::bail!(
             "Service failed to start (status: {}). Check config and logs:\n\
              journalctl -u dc-agent -n 20\n\n\
@@ -815,14 +828,10 @@ fn is_proxmox_host() -> bool {
     // 1. pvesm command exists (Proxmox storage manager)
     // 2. pveversion command exists
     // 3. /etc/pve directory exists (Proxmox config dir)
-    std::process::Command::new("which")
-        .arg("pvesm")
-        .output()
+    run_command_with_timeout("which", &["pvesm"], QUICK_QUERY_TIMEOUT)
         .map(|o| o.status.success())
         .unwrap_or(false)
-        || std::process::Command::new("which")
-            .arg("pveversion")
-            .output()
+        || run_command_with_timeout("which", &["pveversion"], QUICK_QUERY_TIMEOUT)
             .map(|o| o.status.success())
             .unwrap_or(false)
         || std::path::Path::new("/etc/pve").exists()
@@ -2903,9 +2912,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
             }
 
             // Check if Caddy is running
-            match std::process::Command::new("systemctl")
-                .args(["is-active", "caddy"])
-                .output()
+            match run_command_with_timeout("systemctl", &["is-active", "caddy"], QUICK_QUERY_TIMEOUT)
             {
                 Ok(output) => {
                     let status = String::from_utf8_lossy(&output.stdout);
@@ -2913,7 +2920,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                         println!("  [ok] Caddy service is running");
 
                         // Check if Caddy is listening on expected ports
-                        match std::process::Command::new("ss").args(["-tlnp"]).output() {
+                        match run_command_with_timeout("ss", &["-tlnp"], QUICK_QUERY_TIMEOUT) {
                             Ok(ss_output) => {
                                 let ss = String::from_utf8_lossy(&ss_output.stdout);
                                 if ss.contains(":443") && ss.contains("caddy") {

@@ -57,13 +57,46 @@ pub(crate) fn best_effort_kill_and_reap(child: &mut std::process::Child) {
 /// proxmox) route through [`execute_command`]; new callers that need a
 /// non-default budget should call this directly.
 pub fn execute_command_with_timeout(cmd: &str, timeout: Duration) -> Result<CommandOutput> {
-    let mut child = Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
+    let output = spawn_with_timeout(
+        Command::new("sh").arg("-c").arg(cmd),
+        timeout,
+        cmd,
+    )?;
+    Ok(CommandOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        exit_status: output.status.code().unwrap_or(-1),
+    })
+}
+
+/// Run `program` with `args` locally, killing it if it does not exit before
+/// `timeout` elapses. Captures stdout, stderr, and exit status. Use this for
+/// calls that must pass a specific binary + arg list (e.g. `iptables -N ...`,
+/// `systemctl is-active ...`) instead of routing through `sh -c`. (ROB-005)
+pub fn run_command_with_timeout(
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<std::process::Output> {
+    let description = format!("{program} {}", args.join(" "));
+    spawn_with_timeout(Command::new(program).args(args), timeout, &description)
+}
+
+/// Core spawn / poll / SIGKILL-on-deadline loop shared by the `sh -c` and
+/// direct-arg entry points. Pipes are captured; the captured [`Output`] is
+/// returned on normal exit. Shared with [`crate::upgrade`] and the gateway
+/// iptables/bandwidth/sysctl call sites so every blocking process spawn in the
+/// agent has a bounded budget. (ROB-005)
+fn spawn_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+    description: &str,
+) -> Result<std::process::Output> {
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("Failed to execute command: {}", cmd))?;
+        .with_context(|| format!("Failed to execute command: {description}"))?;
 
     let deadline = Instant::now() + timeout;
     let status = loop {
@@ -74,7 +107,7 @@ pub fn execute_command_with_timeout(cmd: &str, timeout: Duration) -> Result<Comm
                     // Best-effort cleanup; errors are logged (not silently
                     // ignored) via best_effort_kill_and_reap, then we bail.
                     best_effort_kill_and_reap(&mut child);
-                    bail!("Command timed out after {:?}: {}", timeout, cmd);
+                    bail!("Command timed out after {:?}: {description}", timeout);
                 }
                 std::thread::sleep(Duration::from_millis(50));
             }
@@ -83,21 +116,21 @@ pub fn execute_command_with_timeout(cmd: &str, timeout: Duration) -> Result<Comm
 
     // Drain captured pipes now that the child has exited; EOF is guaranteed
     // because the child's write ends are closed.
-    let mut stdout = String::new();
+    let mut stdout = Vec::new();
     if let Some(mut s) = child.stdout.take() {
-        s.read_to_string(&mut stdout)
-            .with_context(|| format!("Failed to read stdout for command: {}", cmd))?;
+        s.read_to_end(&mut stdout)
+            .with_context(|| format!("Failed to read stdout for command: {description}"))?;
     }
-    let mut stderr = String::new();
+    let mut stderr = Vec::new();
     if let Some(mut s) = child.stderr.take() {
-        s.read_to_string(&mut stderr)
-            .with_context(|| format!("Failed to read stderr for command: {}", cmd))?;
+        s.read_to_end(&mut stderr)
+            .with_context(|| format!("Failed to read stderr for command: {description}"))?;
     }
 
-    Ok(CommandOutput {
+    Ok(std::process::Output {
+        status,
         stdout,
         stderr,
-        exit_status: status.code().unwrap_or(-1),
     })
 }
 
@@ -146,6 +179,32 @@ mod tests {
         let out = execute_command_with_timeout("sleep 0.05", Duration::from_secs(5))
             .expect("short sleep should complete");
         assert_eq!(out.exit_status, 0);
+    }
+
+    // ROB-005: run_command_with_timeout must capture stdout+stderr and kill a
+    // hung child on deadline — the same guarantees execute_command_with_timeout
+    // gives, but for callers that pass a program + arg list directly.
+    #[test]
+    fn run_command_with_timeout_captures_output() {
+        let out = run_command_with_timeout("echo", &["hi"], Duration::from_secs(5))
+            .expect("echo should succeed");
+        assert!(out.status.success());
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "hi\n");
+    }
+
+    #[test]
+    fn run_command_with_timeout_kills_long_running_command() {
+        let started = Instant::now();
+        let err = run_command_with_timeout("sleep", &["30"], Duration::from_millis(150))
+            .expect_err("sleep 30 must time out");
+        let elapsed = started.elapsed();
+        assert!(elapsed < Duration::from_secs(2), "elapsed: {:?}", elapsed);
+        let msg = format!("{:#}", err);
+        assert!(
+            msg.contains("timed out"),
+            "expected timeout error, got: {}",
+            msg
+        );
     }
 
     // ROB-008: deadline cleanup must not silently swallow kill/wait errors.

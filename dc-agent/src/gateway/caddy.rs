@@ -7,7 +7,11 @@
 use super::port_allocator::PortAllocation;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
-use std::process::Command;
+use std::time::Duration;
+
+use crate::setup::run_command_with_timeout;
+
+const SYSTEMCTL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Manager for Caddy site configuration files.
 pub struct CaddyConfigManager {
@@ -71,10 +75,12 @@ impl CaddyConfigManager {
 
     /// Reload Caddy configuration.
     fn reload_caddy(&self) -> Result<()> {
-        let output = Command::new("systemctl")
-            .args(["reload", "caddy"])
-            .output()
-            .context("Failed to execute systemctl reload caddy")?;
+        let output = run_command_with_timeout(
+            "systemctl",
+            &["reload", "caddy"],
+            SYSTEMCTL_TIMEOUT,
+        )
+        .context("Failed to execute systemctl reload caddy")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
