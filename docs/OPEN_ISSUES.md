@@ -43,6 +43,15 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 - **In scope**: labeled `launch`, `stripe`, or `decent-agents` WITHOUT `deferred-post-launch`.
 - **Deferred**: labeled `deferred-post-launch`. Valid but parked until ≥20 paying customers.
 
+## Resolved this session (2026-08-08)
+
+| Issue / finding | Fix | Commit |
+|-----------------|-----|--------|
+| **#466** — Cloud-resell race between cancel and in-flight provisioning can orphan a VM | 3 coordinated state-machine guards: `update_cloud_resource_provisioned` refuses to overwrite terminal states (returns `Result<bool>`); `mark_cloud_resource_failed` is a no-op on `deleting`/`deleted`; `provision_one` cleans up the just-created VM on concurrent-cancel detection. 3 DB-level regression tests. | `bc692bdc` |
+| **#452** — Dead `CHATWOOT_INBOX_ID` config (never read by code) | Removed from `.env.example`(×2), `docker-compose.dev.yml`, `CONFIG.md`, `deploy.py` `NON_SECRET_VARS`; rewrote `support_bot/AGENTS.md` to describe the real `list_inboxes()` assign-to-all loop. | `71210f8e` |
+| **#453** — `api/.sqlx` gitignored | Already resolved: workspace-root `.sqlx/` is the single committed source of truth (299 tracked query files); `api/.sqlx/` correctly gitignored (`.gitignore:120`). GH issue commented; no code change needed. | — |
+| Verification finding — `poc/hetzner-provision-probe.mjs` reads bare `HETZNER_API_TOKEN` (stranded-VM foot-gun in operator-local runs) | Hard-switched to `HETZNER_API_TOKEN_DEV` (consistent with #467 agent rule). | `b5be319c` |
+
 ## Resolved this session (2026-08-06)
 
 Findings fixed by the 2026-08-05 sweep (branch `sweep-2026-08-05`); see plan
