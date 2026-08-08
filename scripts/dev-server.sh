@@ -120,7 +120,12 @@ load_secrets_env() {
     [ -n "$line" ] || continue
     case "$line" in
       *='<set-me>') continue ;;   # placeholder — leave unset so the feature disables cleanly
-      *=*) SECRETS_ENV+=("$line"); n=$((n + 1)) ;;
+      *=*)
+        # dc-secrets export is eval-formatted (designed for `source`). Inline
+        # comments (KEY=val  # note) are stripped by bash but passed literally
+        # by `env`, so "30  # default" would fail u64 parsing. Strip them.
+        line="${line%% *# *}"
+        SECRETS_ENV+=("$line"); n=$((n + 1)) ;;
     esac
   done <<< "$output"
   echo "Loaded $n secret(s) from SOPS store (placeholders skipped)."
