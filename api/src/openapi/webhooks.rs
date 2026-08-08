@@ -254,17 +254,16 @@ pub async fn stripe_webhook(
                             linked = n,
                             "Reconciled orphan dispute(s) to contract after late checkout completion"
                         );
-                        // #447: replay the dispute-lifecycle pause that the
-                        // normal `charge.dispute.created` handler applies but
-                        // was missed while the dispute was orphaned. Money-safe
-                        // (pause is a status change only; refund columns are NOT
-                        // touched) and idempotent (pause_contract with the same
-                        // reason is a no-op). Closed-lost orphans are detected
-                        // and ops is paged -- their terminate+refund replay is a
-                        // money-path decision, intentionally deferred. Best-effort:
+                        // #447: replay the dispute-lifecycle actions that the
+                        // normal `charge.dispute.created` + `charge.dispute.closed`
+                        // handlers apply but were missed while the dispute was
+                        // orphaned. Money-safe (pause is status-only; terminate
+                        // short-circuits on terminal state; refund uses the fixed
+                        // `dispute:<id>` Stripe idempotency key). Best-effort:
                         // a replay failure MUST NOT fail the webhook (payment
                         // already succeeded), mirroring the relink above.
-                        match db.replay_orphan_dispute_pause(&contract_id_bytes, pi).await {
+                        let stripe_client = crate::stripe_client::stripe_client_or_warn();
+                        match db.replay_orphan_dispute_lifecycle(&contract_id_bytes, pi, stripe_client.as_ref()).await {
                             Ok(outcome) => {
                                 if outcome.paused > 0 {
                                     tracing::info!(
@@ -274,20 +273,18 @@ pub async fn stripe_webhook(
                                         "Replayed missed dispute pause for re-linked orphan(s)"
                                     );
                                 }
-                                if outcome.closed_lost_detected > 0 {
-                                    tracing::warn!(
+                                if outcome.terminated > 0 || outcome.refunded > 0 {
+                                    tracing::info!(
                                         contract_id = %contract_id_hex,
                                         payment_intent = %pi,
-                                        closed_lost_detected = outcome.closed_lost_detected,
-                                        "Re-linked orphan dispute(s) closed LOST while orphaned; \
-                                         refund replay deferred (money-path) -- operator review required"
+                                        terminated = outcome.terminated,
+                                        refunded = outcome.refunded,
+                                        "Replayed missed dispute-lost terminate+refund for re-linked orphan(s)"
                                     );
                                     crate::notifications::telegram::send_ops_alert(&format!(
                                         "Stripe dispute re-linked after late checkout for contract {} \
-                                         had {} dispute(s) CLOSED LOST while orphaned. \
-                                         Terminate+refund replay is deferred (money-path). \
-                                         REVIEW + issue the prorated refund manually.",
-                                        contract_id_hex, outcome.closed_lost_detected
+                                         replayed {} terminate(s) + {} refund(s) for orphan dispute(s) closed LOST.",
+                                        contract_id_hex, outcome.terminated, outcome.refunded
                                     ))
                                     .await;
                                 }

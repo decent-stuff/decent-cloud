@@ -949,12 +949,12 @@ mod tests {
 
         // 4. The #447 replay applies the missed pause.
         let outcome = db
-            .replay_orphan_dispute_pause(&contract_id, "pi_447_open")
+            .replay_orphan_dispute_lifecycle(&contract_id, "pi_447_open", None)
             .await
             .expect("replay must not error");
         assert_eq!(outcome.paused, 1, "exactly one open dispute must be paused");
         assert_eq!(
-            outcome.closed_lost_detected, 0,
+            outcome.terminated, 0,
             "no closed-lost dispute in this scenario"
         );
 
@@ -977,7 +977,7 @@ mod tests {
         // 5. IDEMPOTENCY: replaying the pause is a no-op (pause_contract with
         //    the same reason returns Ok without a second transition).
         let outcome_again = db
-            .replay_orphan_dispute_pause(&contract_id, "pi_447_open")
+            .replay_orphan_dispute_lifecycle(&contract_id, "pi_447_open", None)
             .await
             .expect("idempotent replay must not error");
         assert_eq!(outcome_again.paused, 1, "replay re-confirms the pause");
@@ -1011,23 +1011,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_orphan_dispute_closed_lost_is_detected_not_auto_refunded() {
-        // #447 money-path guard: if a dispute CLOSED as `lost` while it was
-        // orphaned, the terminate+refund replay is a MONEY decision and is
-        // intentionally NOT auto-applied (would need the idempotency-key path
-        // + Stripe client + operator sign-off). The replay MUST:
-        //  * detect the closed-lost orphan and surface it (so the webhook can
-        //    page ops to review), and
-        //  * NOT pause the contract (a lost dispute should terminate, not
-        //    pause), and
-        //  * NOT touch any refund column (no auto-refund -> no double-refund).
+    async fn test_orphan_dispute_closed_lost_is_terminated_and_refunded() {
+        // #447 full replay: if a dispute CLOSED as `lost` while it was
+        // orphaned, the replay MUST apply the same terminate+refund sequence
+        // as `handle_dispute_closed`. Money-safety is guaranteed by:
+        //  * `terminate_contract_for_dispute_lost` short-circuits on terminal state
+        //  * `process_dispute_lost_refund` uses `dispute:<id>` idempotency key
+        //  * If the normal handler already processed this, the dispute would NOT
+        //    be orphaned — so the replay is the FIRST and ONLY processing.
         let db = setup_test_db().await;
         let contract_id = vec![0xD2; 32];
         insert_active_contract(&db, &contract_id, None).await;
 
         // Orphan dispute that has already CLOSED LOST while orphaned.
-        // Runtime query (not `query!`) to avoid churning `.sqlx` for a
-        // test-only insert; the dispute schema is stable.
         let now_ns = crate::now_ns().unwrap();
         sqlx::query(
             "INSERT INTO contract_disputes \
@@ -1057,41 +1053,47 @@ mod tests {
             .unwrap();
 
         let outcome = db
-            .replay_orphan_dispute_pause(&contract_id, "pi_447_lost")
+            .replay_orphan_dispute_lifecycle(&contract_id, "pi_447_lost", None)
             .await
             .expect("replay must not error on closed-lost orphan");
 
-        // The closed-lost orphan is surfaced for operator review.
+        // The closed-lost orphan is terminated (not paused).
         assert_eq!(
-            outcome.closed_lost_detected, 1,
-            "closed-lost orphan MUST be detected so ops can review the deferred refund"
+            outcome.terminated, 1,
+            "closed-lost orphan MUST be terminated"
         );
         assert_eq!(
             outcome.paused, 0,
-            "a lost dispute MUST NOT be paused (terminate is the correct action, deferred)"
+            "a lost dispute MUST NOT be paused (terminate is the correct action)"
         );
 
-        // Contract stays active: we neither paused nor terminated.
+        // Contract is now cancelled (terminated).
         assert_eq!(
             read_status(&db, &contract_id).await,
-            "active",
-            "closed-lost orphan replay MUST NOT transition the contract"
+            "cancelled",
+            "closed-lost orphan replay MUST terminate the contract"
         );
 
-        // MONEY-SAFETY: no refund columns mutated (the money replay is deferred).
-        let money: (Option<i64>, Option<String>) = sqlx::query_as(
-            "SELECT refund_amount_e9s, stripe_refund_id \
-             FROM contract_sign_requests WHERE contract_id = $1",
+        // Refund: terminate set payment_status='disputed', so
+        // process_dispute_lost_refund computes a prorated amount and writes
+        // refund_amount_e9s to the DB. No Stripe client in the test, so no
+        // actual Stripe Refund is issued (stripe_refund_id is NULL) — but the
+        // accounting is correct, which is what matters.
+        assert_eq!(
+            outcome.refunded, 1,
+            "prorated refund computed and recorded for closed-lost orphan"
+        );
+        let payment_status: String = sqlx::query_scalar(
+            "SELECT payment_status FROM contract_sign_requests WHERE contract_id = $1",
         )
         .bind(&contract_id)
         .fetch_one(&db.pool)
         .await
         .unwrap();
         assert_eq!(
-            money.0, None,
-            "NO auto-refund -- the closed-lost money replay is deferred"
+            payment_status, "disputed",
+            "terminate sets payment_status='disputed'"
         );
-        assert_eq!(money.1, None, "NO stripe_refund_id written");
     }
 
     #[tokio::test]
@@ -1159,14 +1161,14 @@ mod tests {
 
         // Replay MUST NOT error even though the contract is not pausable.
         let outcome = db
-            .replay_orphan_dispute_pause(&contract_id, "pi_447_req")
+            .replay_orphan_dispute_lifecycle(&contract_id, "pi_447_req", None)
             .await
             .expect("replay MUST NOT error when contract is not pausable");
         assert_eq!(
             outcome.paused, 0,
             "pause MUST NOT be counted as applied when the contract cannot transition to paused"
         );
-        assert_eq!(outcome.closed_lost_detected, 0);
+        assert_eq!(outcome.terminated, 0);
 
         // Contract stays `requested`; pause_reason stays NULL (nothing to pause).
         assert_eq!(read_status(&db, &contract_id).await, "requested");
@@ -1204,7 +1206,7 @@ mod tests {
 
         // IDEMPOTENT: re-running the replay is still a no-op.
         let outcome_again = db
-            .replay_orphan_dispute_pause(&contract_id, "pi_447_req")
+            .replay_orphan_dispute_lifecycle(&contract_id, "pi_447_req", None)
             .await
             .unwrap();
         assert_eq!(outcome_again.paused, 0);

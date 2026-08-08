@@ -53,20 +53,26 @@ pub struct ResumeOutcome {
     pub credited_pause_ns: i64,
 }
 
-/// Outcome of [`Database::replay_orphan_dispute_pause`] (#447). Each field is a
-/// count of re-linked orphan disputes that fell into one of three buckets.
+/// Outcome of [`Database::replay_orphan_dispute_lifecycle`] (#447). Each field
+/// is a count of re-linked orphan disputes whose missed lifecycle action was
+/// replayed.
 ///
-/// Money-path note: the `closed_lost_detected` count signals disputes whose
-/// terminate+refund replay was INTENTIONALLY deferred (money-path decision).
-/// The caller MUST page ops to review them.
+/// Money-safety: the replay mirrors the normal `handle_dispute_closed` flow —
+/// `terminate_contract_for_dispute_lost` is idempotent (short-circuits on
+/// terminal state) and `process_dispute_lost_refund` uses the fixed
+/// `dispute:<id>` Stripe idempotency key (no double-refund).
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct OrphanDisputeReplayOutcome {
     /// Open disputes whose pause was replayed (newly applied or re-confirmed
     /// idempotently on an already-paused contract).
     pub paused: u64,
-    /// Disputes that closed as `lost` while orphaned. The terminate+refund
-    /// replay is deferred (money-path); surfaced for operator review.
-    pub closed_lost_detected: u64,
+    /// Closed-`lost` disputes whose terminate was replayed (contract moved to
+    /// cancelled, or was already terminal — idempotent either way).
+    pub terminated: u64,
+    /// Closed-`lost` disputes where a prorated refund was actually issued
+    /// (`refund_amount_e9s > 0`). May be less than `terminated` when nothing
+    /// was owed (no succeeded payment, or full paused interval = full refund).
+    pub refunded: u64,
 }
 
 impl Database {
@@ -483,7 +489,7 @@ impl Database {
         Ok(result.rows_affected())
     }
 
-    /// Replay the missed dispute-lifecycle effect for orphans re-linked after
+    /// Replay the missed dispute-lifecycle effects for orphans re-linked after
     /// late checkout completion (#447).
     ///
     /// When `charge.dispute.created` arrives BEFORE `checkout.session.completed`,
@@ -491,33 +497,34 @@ impl Database {
     /// (`contract_id = NULL`). The normal `handle_dispute_created` handler
     /// pauses the matched contract; an orphan misses that pause entirely. Once
     /// `relink_orphan_disputes_for_payment_intent` backfills the FK, this method
-    /// replays the missed non-money effect: it pauses the contract for each
-    /// re-linked OPEN dispute, exactly as the normal handler would have.
+    /// replays the missed lifecycle effect for each re-linked orphan:
+    ///
+    ///  * **OPEN** dispute → replay `pause_contract` (same as `handle_dispute_created`).
+    ///  * **CLOSED-LOST** dispute → replay `terminate_contract_for_dispute_lost` +
+    ///    `process_dispute_lost_refund` (same as `handle_dispute_closed`). Both
+    ///    are idempotent: terminate short-circuits on terminal state, and the
+    ///    refund uses the fixed `dispute:<id>` Stripe idempotency key.
+    ///  * **CLOSED-WON** / **warning_closed** → no action needed (nothing was missed).
     ///
     /// Money-safety (non-negotiable):
-    ///  * `pause_contract` is a status change only -- it touches `status`,
+    ///  * `pause_contract` is a status change only — it touches `status`,
     ///    `paused_at_ns`, `pause_reason`, and audit rows, NEVER a money column.
-    ///  * `pause_contract` is idempotent: the same `stripe_dispute:{id}` reason
-    ///    is a no-op on an already-paused contract. Re-running this replay (or a
-    ///    Stripe webhook replay) is safe.
-    ///  * Closed-`lost` orphans are DETECTED and surfaced via
-    ///    [`OrphanDisputeReplayOutcome::closed_lost_detected`] but their
-    ///    terminate+refund replay is a MONEY-PATH decision and is intentionally
-    ///    NOT auto-applied here (risk of double-refund / wrong lifecycle). The
-    ///    caller MUST page ops to review those rows.
-    ///  * Closed-`won` / `warning_closed` orphans need no action (nothing was
-    ///    missed -- the dispute resolved without a loss).
+    ///  * `terminate_contract_for_dispute_lost` short-circuits when already terminal.
+    ///  * `process_dispute_lost_refund` keys on `dispute:<id>` — replays collapse
+    ///    onto a single Stripe Refund + a single `refund_audit` row.
+    ///  * If the normal `charge.dispute.closed` already processed the dispute
+    ///    (because the contract was findable at closed time), the dispute would
+    ///    NOT be orphaned — so the replay is the FIRST and ONLY processing.
     ///
-    /// When the contract is not yet pausable at replay time (e.g. it is still
-    /// `requested`/`pending` at checkout-completion, which is the realistic
-    /// orphan state), the pause is attempted and fails gracefully (logged); the
-    /// linked dispute row keeps the dispute visible until a later event or an
-    /// operator acts. This mirrors exactly what the normal handler does when a
-    /// dispute arrives on a pre-active contract.
-    pub async fn replay_orphan_dispute_pause(
+    /// When the contract is not yet pausable/terminable at replay time (e.g. it
+    /// is still `requested`/`pending`), the action fails gracefully (logged);
+    /// the linked dispute row keeps the dispute visible until a later event or
+    /// an operator acts. This mirrors what the normal handlers do.
+    pub async fn replay_orphan_dispute_lifecycle(
         &self,
         contract_id: &[u8],
         payment_intent_id: &str,
+        stripe_client: Option<&crate::stripe_client::StripeClient>,
     ) -> Result<OrphanDisputeReplayOutcome> {
         // Fetch the disputes linked to this contract via this PaymentIntent --
         // the orphans just backfilled by `relink_orphan_disputes_for_payment_intent`
@@ -537,9 +544,50 @@ impl Database {
         let mut outcome = OrphanDisputeReplayOutcome::default();
         for (stripe_dispute_id, status) in disputes {
             if status == "lost" {
-                // Closed-lost while orphaned: terminate+refund is a money-path
-                // decision -- surface for operator review, do NOT auto-refund.
-                outcome.closed_lost_detected += 1;
+                // Closed-lost while orphaned: replay terminate+refund (same
+                // sequence as handle_dispute_closed). Both are idempotent.
+                // Terminate FIRST (sets payment_status='disputed', emits audit
+                // event, marks resource for deletion). Refund SECOND so it sees
+                // the final paused interval.
+                match self
+                    .terminate_contract_for_dispute_lost(contract_id, &stripe_dispute_id)
+                    .await
+                {
+                    Ok(()) => {
+                        outcome.terminated += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            contract_id = %hex::encode(contract_id),
+                            stripe_dispute_id = %stripe_dispute_id,
+                            error = %format!("{:#}", e),
+                            "Failed to terminate contract for orphan dispute-lost replay; \
+                             manual intervention required"
+                        );
+                    }
+                }
+                // Best-effort prorated refund (idempotent: dispute:<id> key).
+                match self
+                    .process_dispute_lost_refund(
+                        contract_id,
+                        &stripe_dispute_id,
+                        stripe_client,
+                    )
+                    .await
+                {
+                    Ok((Some(_), _)) => {
+                        outcome.refunded += 1;
+                    }
+                    Ok((None, _)) => {} // nothing owed
+                    Err(e) => {
+                        tracing::error!(
+                            contract_id = %hex::encode(contract_id),
+                            stripe_dispute_id = %stripe_dispute_id,
+                            error = %format!("{:#}", e),
+                            "Failed to compute/issue dispute-lost refund for orphan replay"
+                        );
+                    }
+                }
                 continue;
             }
             if !is_open_dispute_status(&status) {
@@ -702,7 +750,7 @@ pub fn dispute_refund_idempotency_key(stripe_dispute_id: &str) -> String {
 /// matched contract SHOULD be paused. Returns `false` for terminal outcomes
 /// (`won`, `lost`, `warning_closed`) where a pause replay is wrong or moot:
 ///  * `won` -- resolved in our favor; nothing to pause.
-///  * `lost` -- should terminate+refund (deferred money path); pause is wrong.
+///  * `lost` -- should terminate+refund (replayed by `replay_orphan_dispute_lifecycle`); pause is wrong.
 ///  * `warning_closed` -- inquiry withdrawn; nothing to pause.
 ///
 /// Any unrecognized status is treated as open: pausing for an active dispute is
