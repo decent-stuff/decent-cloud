@@ -24,15 +24,10 @@ Hetzner operator console mapped **19 findings** (no VM rented; cloud spend $0). 
   renamed SOPS file. (DONE: the unused `HETZNER_API_TOKEN` secretKeyRef stub was removed from
   `base/dc-api.yaml` + the stage overlay in the k8s repo — committed locally; operator pushes
   nuc-k3s. The api-server never read it from env; only `api/src/bin/api-cli/e2e.rs` reads `_DEV`.)
-- **P0-B — Path-A Hetzner offerings SILENTLY HIDDEN from the marketplace (OPEN — the big product
-  blocker):** `search_offerings`/`search_offerings_dsl`
-  (`api/src/database/offerings.rs:695`/`:1052`) post-filter requires
-  `resolved_pool_id.is_some() || offering_source == "self_provisioned"`; a Path-A Hetzner offering
-  has NEITHER (no agent pool; `offering_source` NULL because
-  `website/src/routes/dashboard/offerings/create/+page.svelte:273` submits
-  `offering_source: undefined`). The entire "Resell a managed cloud" Path A is a dead end — you can
-  list an offering nobody can see or rent. Fix: set `offering_source:"self_provisioned"` for
-  `provisioner_type IN ('hetzner','vultr')` at create, OR add that as an OR-branch in the filter.
+- **P0-B — Path-A Hetzner offerings SILENTLY HIDDEN from the marketplace (RESOLVED — commit `a2a96862`):**
+  `is_marketplace_visible` (`offerings.rs:42-46`) now includes `is_cloud_resell(o.provisioner_type)` —
+  Hetzner/Vultr offerings are visible regardless of `offering_source` or pool membership. Provider-online
+  status (`offerings.rs:807`) also marks cloud-resell offerings as always-online.
 
 The remaining 17 findings (P1–P3: token-creation pitfalls, catalog/mismatch issues, console
 errors, onboarding sequencing, etc.) + a `dc-stage` staging note + the full operator action list
@@ -55,6 +50,8 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 | Latent panic + terse error messages (rewards.rs `[..8]` on short slice; ledger_cursor FromStr discards value+error; identity.rs, offerings.rs) | Bound-check before slice + echo bad value + error in all 6 cursor-parse sites + 3 more error-message improvements. New regression test for the panic guard. | `86227dc6` |
 | Dev-cycle: no fast debug-binary path; broken `_announce_api_binary` suggestion; entrypoint missing `CARGO_TARGET_DIR` workaround | Added `--dev` flag to `dev-server.sh` (debug binary, honors `CARGO_TARGET_DIR`); fixed broken path suggestion; entrypoint error now leads with the no-sudo workaround. | `c5b19c67` |
 | **E2e suite verification** — full 314-test Playwright suite run against warm stack | 303 passed, 5 flaky under parallel load (all pass in isolation — documented in config), 6 cascade. No code bugs found. | — |
+| **#447** — Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion | Renamed `replay_orphan_dispute_pause` → `replay_orphan_dispute_lifecycle`; closed-lost orphans now get terminate+refund (same idempotent sequence as `handle_dispute_closed`). Previously only detected — refund was never recorded. | `36f5e550` |
+| **P0-B** — Path-A Hetzner offerings SILENTLY HIDDEN from marketplace | Already fixed in `a2a96862` — `is_marketplace_visible` includes `is_cloud_resell()`. Updated OPEN_ISSUES.md to reflect. | — |
 
 ## Resolved this session (2026-08-06)
 
