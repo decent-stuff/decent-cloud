@@ -249,10 +249,11 @@
 						{/if}
 					</h2>
 					<p class="text-neutral-500 text-xs mt-1">
+						{#if currentIdentity.account?.username}
+							<span class="text-neutral-400">@{currentIdentity.account.username}</span>
+							<span class="text-neutral-600 mx-1.5">·</span>
+						{/if}
 						Logged in via {currentIdentity.type === 'oauth' ? 'OAuth' : 'Seed Phrase'}
-					</p>
-					<p class="text-neutral-600 text-[10px] font-mono mt-2 truncate" title={currentIdentity.principal.toString()}>
-						{currentIdentity.principal.toString()}
 					</p>
 				</div>
 			</div>
