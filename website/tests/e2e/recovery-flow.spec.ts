@@ -26,11 +26,11 @@ test.describe('Recovery Flow', () => {
 		setupConsoleLogging(page);
 	});
 
-	test('should show "Lost access?" link on login page that navigates to /recover', async ({ page }) => {
+	test('should show "Lost your seed phrase?" link on login page that navigates to /recover', async ({ page }) => {
 		await page.goto('/login');
 
-		// Verify "Lost access?" link is visible
-		const recoveryLink = page.locator('a:has-text("Lost access? Recover your account")');
+		// Verify the seed-phrase-specific recovery link is visible
+		const recoveryLink = page.locator('a:has-text("Lost your seed phrase? Recover account")');
 		await expect(recoveryLink).toBeVisible();
 
 		// Click the link

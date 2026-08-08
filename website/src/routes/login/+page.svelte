@@ -81,8 +81,8 @@
 		<!-- Footer links -->
 		<div class="text-center mt-6 space-y-2">
 			<div>
-				<a href="/recover" class="text-neutral-600 hover:text-neutral-400 transition-colors text-xs">
-					Lost access? Recover your account
+				<a href="/recover" class="text-neutral-500 hover:text-neutral-300 transition-colors text-sm">
+					Lost your seed phrase? Recover account
 				</a>
 			</div>
 			<div>

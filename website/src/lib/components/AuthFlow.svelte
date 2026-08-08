@@ -249,6 +249,13 @@
 			</p>
 		</div>
 
+		{#snippet seedEducation()}
+			<p class="p-3 bg-info/5 border border-info/15 text-xs text-neutral-400 leading-relaxed">
+				A seed phrase is a recovery code that gives you full control of your
+				account. Choose this for passwordless, decentralized access.
+			</p>
+		{/snippet}
+
 		{#if googleOAuthEnabled}
 			<GoogleSignInButton />
 		{/if}
@@ -261,6 +268,7 @@
 			>
 				Sign in with seed phrase instead
 			</button>
+			{@render seedEducation()}
 		{:else}
 			{#if googleOAuthEnabled}
 				<div class="relative">
@@ -272,6 +280,8 @@
 					</div>
 				</div>
 			{/if}
+
+			{@render seedEducation()}
 
 		<!-- Key on the requested mode so the component remounts when the user
 		picks "Create an account" (generate) vs "Sign in with seed phrase" (choose).

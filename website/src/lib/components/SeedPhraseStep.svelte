@@ -163,6 +163,20 @@
 			<span>Copy to Clipboard</span>
 		</button>
 
+		<!-- Permanent-loss warning: a lost seed phrase has NO recovery path.
+		     Uses bg-red-500/20 (SeedPhraseStep's convention), NOT bg-danger/10,
+		     which recover/+page.svelte reserves for its page-level error div
+		     (recovery-flow.spec.ts disambiguates the two by that class). -->
+		<div class="p-4 bg-red-500/20 border border-red-500/40 flex gap-3">
+			<div class="text-red-300 shrink-0">
+				<Icon name="alert" size={20} />
+			</div>
+			<p class="text-sm text-red-300">
+				<span class="font-semibold">⚠️ If you lose your seed phrase, your account CANNOT be recovered.</span>
+				Write it down and store it safely.
+			</p>
+		</div>
+
 		<!-- Warning -->
 		<div class="p-4 bg-yellow-500/10 border border-yellow-500/30 ">
 			<div class="flex gap-3">
