@@ -20,7 +20,12 @@
 	import ThemeToggle from './ThemeToggle.svelte';
 	import UnreadBadge from './UnreadBadge.svelte';
 
-	let { isOpen = $bindable(false), isAuthenticated = false, openPalette = () => {} } = $props();
+	let {
+		isOpen = $bindable(false),
+		isAuthenticated = false,
+		openPalette = () => {},
+		openKeyboardHelp = () => {}
+	} = $props();
 
 	// Platform-aware shortcut hint for the command-palette trigger: ⌘ on
 	// Apple platforms, Ctrl everywhere else. The trigger advertises the
@@ -261,22 +266,34 @@
 
 	<!-- Command palette trigger: the only visible affordance for Cmd/Ctrl+K
 	     on desktop. Mirrors the mobile header's search button so the palette
-	     is discoverable without knowing the keyboard shortcut. -->
+	     is discoverable without knowing the keyboard shortcut. The `?` badge
+	     makes the keyboard-help overlay (and all shortcuts) discoverable too. -->
 	<div class="px-3 pt-3">
-		<button
-			type="button"
-			onclick={() => { openPalette(); closeSidebar(); }}
-			class="nav-item w-full justify-between group"
-			aria-label="Open command palette"
-		>
-			<span class="flex items-center">
-				<Icon name="search" size={20} />
-				<span class="text-sm text-neutral-400 group-hover:text-white transition-colors">Search</span>
-			</span>
-			<kbd class="text-[10px] font-mono text-neutral-500 border border-neutral-700 rounded px-1.5 py-0.5 leading-none">
-				{modKey} K
-			</kbd>
-		</button>
+		<div class="flex items-center gap-1.5">
+			<button
+				type="button"
+				onclick={() => { openPalette(); closeSidebar(); }}
+				class="nav-item flex-1 justify-between group"
+				aria-label="Open command palette"
+			>
+				<span class="flex items-center">
+					<Icon name="search" size={20} />
+					<span class="text-sm text-neutral-400 group-hover:text-white transition-colors">Search</span>
+				</span>
+				<kbd class="text-[10px] font-mono text-neutral-500 border border-neutral-700 rounded px-1.5 py-0.5 leading-none">
+					{modKey} K
+				</kbd>
+			</button>
+			<button
+				type="button"
+				onclick={() => { openKeyboardHelp(); closeSidebar(); }}
+				class="nav-item !gap-0 !px-2 text-neutral-500 hover:text-white transition-colors"
+				aria-label="Show keyboard shortcuts (press question mark)"
+				title="Press ? for shortcuts"
+			>
+				<kbd class="text-[10px] font-mono border border-neutral-700 rounded px-1.5 py-0.5 leading-none">?</kbd>
+			</button>
+		</div>
 	</div>
 
 	<!-- Navigation -->
