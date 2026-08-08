@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~26 critical-path tests, <35s (dev loop)
+npm run test:e2e:fast:smoke                 # ~32 critical-path tests, <35s (dev loop)
 npm run test:e2e:fast                       # full suite (all specs)
 ```
 
@@ -170,6 +170,26 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Admin actions (account mutations) | ✅ | `@admin` | `admin-account-mutations.spec.ts` | `setEmailVerified flips the target account email_verified flag` · `setAdminStatus grants and then revokes admin privileges` · `deleteAccount removes a non-admin target and a re-fetch reports it gone` — real signed mutations via the admin handlers. (Send Test Email still ❌ — needs MAILCHANNELS_API_KEY.) |
 | Admin: refund approval gate | ✅ | `@admin` | `admin-refund-requests.spec.ts` | `admin API lists pending refund requests with correct fields` · `admin UI shows pending request and decline works end-to-end` · `status filter shows auto_issued without action buttons` — refund requests DB-seeded (cancel→gate covered by Rust integration tests with stripe_client=None); UI decline tested fully e2e; approve path needs Stripe test mode or stripe_client=None. |
 
+### 6. UX regression guards
+
+Fast pins for the post-ICP UX cleanup (commits 25945664..2dd8e373). Each test
+fails if its fix is reverted. All live in one spec (`ux-regression-guards.spec.ts`)
+so the set is trivial to list and extend; the spec uses `baseTest`
+(`@playwright/test`) for the anonymous assertions and `authTest`
+(`fixtures/test-account`) for the single authenticated one (UX-004), so the
+anonymous pages are not silently authenticated.
+
+| Flow | Status | Tags | Spec | Test |
+|------|--------|------|------|------|
+| No fabricated provider data on hero (UX-001) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-001 homepage hero shows the "Anatomy of a Trust Score" graphic, not fabricated provider data` — asserts the educational graphic IS present and the fake-card signatures (`provider_alpha`, `87 Trust Score`, `1,247 Contracts`) are gone. A substring check for "Verified Provider" is intentionally omitted: the hero's typing animation legitimately spells "Verified Provider Track Records", so a substring assertion would false-positive; the fabricated handle + numbers fully cover the regression. |
+| Validators route retired (UX-002) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-002 /dashboard/validators is retired (404) and no sidebar link remains` — `/dashboard/validators` returns HTTP 404; the sidebar has no Validators link or label. |
+| Honest marketplace stats (UX-005) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-005 homepage stats grid omits dead ICP metrics (Validators / Transfers)` — the "Marketplace Statistics" grid contains neither "Active Validators" nor "Total Transfers". |
+| Dashboard welcome card uses @username (UX-004) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-004 dashboard welcome card shows @username, not a raw principal` — authenticated `.card-accent` shows `@<username>` and no dashed textual principal (`xxxxx-xxxxx-xxxxx`). |
+| Unauth sidebar hides "My Activity" (UX-008) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-008 unauthenticated sidebar hides "My Activity" (single Sign In CTA)` — the auth-gated section is absent for anonymous users; a Sign In CTA remains. |
+| Login heading "Sign In or Create Account" (UX-013) | ✅ | `@smoke` | `ux-regression-guards.spec.ts` | `@smoke UX-013 login page heading reads "Sign In or Create Account"` — the AuthFlow h2 advertises account creation, not sign-in only. |
+| Focus-visible outline 2px (UX-010) | ❌ | — | — | **gap** — a computed-style assertion (`outline-width: 2px` on a focused focusable element) is feasible but fragile across theme/UA defaults; not yet added. |
+| Hero typing respects prefers-reduced-motion (UX-012) | ❌ | — | — | **gap** — testable via a `reducedMotion: 'reduce'` context asserting the blinking `_` cursor span is absent; not yet added. |
+
 ### Cross-cutting
 
 | Flow | Status | Tags | Spec | Test |
@@ -181,12 +201,13 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~26 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~32 tests,
 **<35s** against the warm stack). Selection rules:
 
 - **Critical path only** — landing/anonymous browse, dashboard overview, sign-in,
   verify-email, onboarding, provider create + SLA,
-  keyboard shortcuts, auth modal. (Full registration, sign-out, profile edit,
+  keyboard shortcuts, auth modal, UX regression guards (§6).
+  (Full registration, sign-out, profile edit,
   add-device, and rent/cancel actions are full-suite-only — too slow for the loop.)
 - **Fast** — each test <5s. Exclude anything that drives a slow multi-step flow
   or needs `networkidle`.
@@ -225,6 +246,12 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 24 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
 | 25 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
 | 26 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
+| 27 | UX-001 no fake provider data | `ux-regression-guards.spec.ts` › `@smoke UX-001 homepage hero shows the "Anatomy of a Trust Score"...` |
+| 28 | UX-002 validators route retired | `ux-regression-guards.spec.ts` › `@smoke UX-002 /dashboard/validators is retired (404)...` |
+| 29 | UX-005 honest homepage stats | `ux-regression-guards.spec.ts` › `@smoke UX-005 homepage stats grid omits dead ICP metrics...` |
+| 30 | UX-008 unauth sidebar clean | `ux-regression-guards.spec.ts` › `@smoke UX-008 unauthenticated sidebar hides "My Activity"...` |
+| 31 | UX-013 login heading | `ux-regression-guards.spec.ts` › `@smoke UX-013 login page heading reads "Sign In or Create Account"` |
+| 32 | UX-004 dashboard @username | `ux-regression-guards.spec.ts` › `@smoke UX-004 dashboard welcome card shows @username, not a raw principal` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
@@ -241,6 +268,13 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 > so the implicit landing was a wasted second page load per test. Each test now
 > navigates exactly where it needs and gates on a page-specific element. Smoke
 > dropped from ~40s to a reliable ~27s (6 clean runs at 26–28s), still 26/26.
+>
+> **2026-08-08 UX regression guards.** Added `ux-regression-guards.spec.ts`
+> (6 `@smoke` tests pinning the post-ICP UX cleanup, UX-001/002/004/005/008/013).
+> Smoke grew 26→32 and stayed at ~29s (still <35s): the 6 guards are almost all
+> anonymous/SSR reads (~0.7–1s each) and parallelize into existing workers, so
+> the marginal wall-clock cost was ~1.6s. UX-010 (2px focus outline) and UX-012
+> (reduced-motion typing) are documented gaps in §6.
 
 ## Mock inventory
 
