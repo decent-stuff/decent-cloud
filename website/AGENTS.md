@@ -84,3 +84,15 @@ E2E_AUTO_SERVER=1 npm run test:e2e  # one-shot mode (spawns + tears down its own
   `deleteSavedOfferingsForUser()` / `sql()` in seed-helpers.ts. Reuse, don't copy-paste.
 - **Mock policy**: only Stripe SDK and outbound external HTTP may be mocked. Never mock
   first-party API code — if you need error-path injection, do it DB-side or document an exception.
+- **Every I/O path needs an explicit timeout — especially in fixture teardown** (A2). Worker-scoped
+  fixture setup/teardown (e.g. the `testAccount` fixture's `deleteAccountByUsername`) and
+  `beforeAll`/`afterAll` hooks run OUTSIDE the per-test `timeout`, so an unbounded op there hangs
+  the whole suite for minutes with no output (one stalled worker blocks every test queued on it).
+  The historical bug: `sql()`/`psql` had no timeout, so a teardown `DELETE FROM accounts` that
+  blocked on a row lock held by an in-flight API transaction (FOR-KEY-SHARE via the
+  `signature_audit` FK) waited forever under 2+ workers (serial mode never hit the race). Rules:
+  - All `psql`/DB calls go through `sql()` / `psqlExec` (bounded by `DEFAULT_PSQL_TIMEOUT_MS`,
+    overridable via `sql(query, { timeoutMs })`) — never spawn a bare `execFile('psql', …)`.
+  - All `fetch()` calls (e.g. `signedApiCall`) use `AbortSignal.timeout(ms)`.
+  - All `page.waitForResponse`/`waitForSelector`/`waitForURL` pass an explicit `{ timeout }`.
+  Regression guard: `tests/e2e/db-helper-bounded.spec.ts`.

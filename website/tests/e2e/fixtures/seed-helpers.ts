@@ -22,6 +22,19 @@ const execFileAsync = promisify(execFile);
 
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://test:test@postgres:5432/test';
 
+/**
+ * Bounded timeout for every psql invocation. Without it, a `psql` process that
+ * blocks on a DB row lock — e.g. the worker-scoped `testAccount` teardown's
+ * `DELETE FROM accounts` racing an in-flight API transaction that took a
+ * FOR-KEY-SHARE lock on the parent accounts row — waits forever. Worker-scoped
+ * fixture teardown runs OUTSIDE the per-test timeout, so that single stuck
+ * `psql` hung the whole suite (A2: smoke stalled under 2+ workers; serial mode
+ * always passed because there was no parallel API traffic to create the race).
+ * 15s is generous for any legitimate seed op while still failing fast on a
+ * stuck query; override per-call via `sql({ timeoutMs })`.
+ */
+const DEFAULT_PSQL_TIMEOUT_MS = 15_000;
+
 function psqlArgs(): { args: string[]; env: NodeJS.ProcessEnv } {
 	const url = new URL(DATABASE_URL);
 	const args = [
@@ -38,6 +51,25 @@ function psqlArgs(): { args: string[]; env: NodeJS.ProcessEnv } {
 }
 
 /**
+ * Run one `psql --command` and return trimmed stdout, bounded by `timeoutMs`.
+ * Centralized so EVERY seed/cleanup query inherits the timeout (A2 fix): a
+ * stuck query is SIGTERM'd at the timeout instead of hanging the worker.
+ * `sql()` exposes `timeoutMs` for callers/tests; the RETURNING-id helpers use
+ * the default.
+ */
+async function psqlExec(
+	command: string,
+	timeoutMs: number = DEFAULT_PSQL_TIMEOUT_MS,
+): Promise<string> {
+	const { args, env } = psqlArgs();
+	const { stdout } = await execFileAsync('psql', [...args, '--command', command], {
+		env,
+		timeout: timeoutMs,
+	});
+	return stdout.trim();
+}
+
+/**
  * Run a SQL command via psql; returns trimmed stdout.
  * Throws on non-zero exit. Use $1/$2/... placeholders in `sql` and pass
  * values in `params` — they're bound safely via psql --v variables.
@@ -45,11 +77,15 @@ function psqlArgs(): { args: string[]; env: NodeJS.ProcessEnv } {
  * For tests we only need INSERTs/UPDATEs with bytea literals; building them
  * from hex with `decode(..., 'hex')` is safe against SQL injection because
  * callers control all inputs (test code, not user input).
+ *
+ * `timeoutMs` bounds the underlying `psql` process so a query that blocks on a
+ * DB lock rejects in seconds instead of hanging the worker indefinitely (A2).
  */
-export async function sql(query: string): Promise<string> {
-	const { args, env } = psqlArgs();
-	const { stdout } = await execFileAsync('psql', [...args, '--command', query], { env });
-	return stdout.trim();
+export async function sql(
+	query: string,
+	opts?: { timeoutMs?: number },
+): Promise<string> {
+	return psqlExec(query, opts?.timeoutMs);
 }
 
 /** Derive the 32-byte ed25519 public key (lowercase hex) from a BIP39 seed. */
@@ -129,6 +165,10 @@ export function signApiRequest(
  * Make a real signed API call from a Node spec. Resolves the API base from the
  * same `api-base.ts` rules (PLAYWRIGHT_API_URL → baseURL port+1 → 59011) so it
  * hits the same stack the browser is driving. Returns the raw Response.
+ *
+ * The fetch is bounded by `timeoutMs` (AbortSignal.timeout) so a request that
+ * stalls — e.g. the API wedged on a DB lock — aborts instead of hanging the
+ * test/worker indefinitely (A2: every I/O path needs a timeout).
  */
 export async function signedApiCall(
 	identity: Ed25519KeyIdentity,
@@ -136,12 +176,14 @@ export async function signedApiCall(
 	path: string,
 	bodyData?: unknown,
 	apiBaseUrl = API_BASE_URL,
+	timeoutMs = 15_000,
 ): Promise<Response> {
 	const { headers, body } = signApiRequest(identity, method, path, bodyData);
 	return fetch(`${apiBaseUrl}${path}`, {
 		method,
 		headers,
 		body: method === 'GET' || method === 'HEAD' ? undefined : body,
+		signal: AbortSignal.timeout(timeoutMs),
 	});
 }
 
@@ -403,10 +445,7 @@ export async function seedRefundRequest(opts: {
 	const createdAt = nowNs().toString();
 	const idempotencyKey = `seed-${opts.contractIdHex.slice(0, 16)}-${opts.reason}`;
 
-	const { stdout } = await execFileAsync('psql', [
-		...psqlArgs().args,
-		'--command',
-		`INSERT INTO refund_requests (
+	const out = await psqlExec(`INSERT INTO refund_requests (
 			contract_id, requester_pubkey, refund_amount_e9s, reason, status,
 			user_latest_payment_e9s, cap_exceeded, payment_intent_id, currency,
 			idempotency_key, created_at_ns
@@ -422,9 +461,8 @@ export async function seedRefundRequest(opts: {
 			'${currency}',
 			'${idempotencyKey}',
 			${createdAt}
-		) RETURNING id`,
-	], { env: psqlArgs().env });
-	return stdout.trim().split('\n')[0];
+		) RETURNING id`);
+	return out.split('\n')[0];
 }
 
 /** Insert a token_transfers row. Returns the new row id. */
@@ -439,12 +477,7 @@ export async function seedTransfer(opts: {
 	const fee = opts.feeE9s ?? 10_000;
 	const memo = opts.memo ? `'${opts.memo.replace(/'/g, "''")}'` : 'NULL';
 	const createdAt = nowNs().toString();
-	const { stdout } = await execFileAsync('psql', [
-		...psqlArgs().args,
-		'--command',
-		`INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES ('${opts.fromAccount}', '${opts.toAccount}', ${amount}, ${fee}, ${memo}, ${createdAt}) RETURNING id`,
-	], { env: psqlArgs().env });
-	return stdout.trim();
+	return psqlExec(`INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES ('${opts.fromAccount}', '${opts.toAccount}', ${amount}, ${fee}, ${memo}, ${createdAt}) RETURNING id`);
 }
 
 /** Delete contracts for a requester pubkey (cleanup).
