@@ -480,11 +480,11 @@ We need to design and implement a flexible, generic offerings system that:
 
 ## Current State Analysis Required
 
-### API Layer (`/home/sat/projects/decent-cloud/api/`)
+### API Layer (`api/`)
 
 **Existing Data Model:**
-- `/home/sat/projects/decent-cloud/api/src/database/offerings.rs` - `Offering` struct (48 fields)
-- `/home/sat/projects/decent-cloud/api/migrations/001_original_schema.sql` - Database schema
+- `api/src/database/offerings.rs` - `Offering` struct (48 fields)
+- `api/migrations/001_original_schema.sql` - Database schema
   - `provider_offerings` table (48 columns)
   - Normalized tables: `provider_offerings_payment_methods`, `provider_offerings_features`, `provider_offerings_operating_systems`
 
@@ -503,11 +503,11 @@ We need to design and implement a flexible, generic offerings system that:
 
 **Missing:** No create/update/delete endpoints exist yet
 
-### Website Layer (`/home/sat/projects/decent-cloud/website-svelte/`)
+### Website Layer (`website/`)
 
 **Existing UI:**
-- `/home/sat/projects/decent-cloud/website-svelte/src/routes/dashboard/offerings/+page.svelte` - Provider offerings dashboard (grid view, placeholders for Create/Edit/Disable)
-- `/home/sat/projects/decent-cloud/website-svelte/src/routes/dashboard/marketplace/+page.svelte` - Buyer marketplace (search/filter, grid display)
+- `website/src/routes/dashboard/offerings/+page.svelte` - Provider offerings dashboard (grid view, placeholders for Create/Edit/Disable)
+- `website/src/routes/dashboard/marketplace/+page.svelte` - Buyer marketplace (search/filter, grid display)
 
 **Existing Patterns for Form Components:**
 - `UserProfileEditor.svelte`, `ContactsEditor.svelte`, `SocialsEditor.svelte`, `PublicKeysEditor.svelte`

@@ -40,7 +40,7 @@ mailchannels._domainkey.decent-cloud.org TXT "v=DKIM1; k=rsa; p=<your_public_key
 Test that MailChannels API key is working:
 
 ```bash
-cd /home/sat/projects/decent-cloud
+cd <path-to-decent-cloud>
 cargo run --bin test-email -- --to your@email.com
 ```
 
