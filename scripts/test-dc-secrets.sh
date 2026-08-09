@@ -43,9 +43,8 @@ assert_eq "creates sops config" "true" "$([[ -f "$TEST_DIR/.sops.yaml" ]] && ech
 assert_eq "creates shared dir" "true" "$([[ -d "$TEST_DIR/shared" ]] && echo true || echo false)"
 assert_eq "creates agents dir" "true" "$([[ -d "$TEST_DIR/agents" ]] && echo true || echo false)"
 # NOTE: `hires/` is the GENERIC dc-secrets per-name overlay layer (still created
-# by `init`). GitHub persona data no longer lives in `hires/` — it was
-# consolidated into `shared/gh.yaml` as namespaced keys (`<LOGIN_UPPER>_<FIELD>`).
-# This assertion checks the tool's `init` behaviour, not persona storage.
+# by `init`). This assertion checks the tool's `init` behaviour, not any
+# particular storage policy.
 assert_eq "creates hires dir" "true" "$([[ -d "$TEST_DIR/hires" ]] && echo true || echo false)"
 # Idempotent
 "$DC_SECRETS" init >/dev/null 2>&1

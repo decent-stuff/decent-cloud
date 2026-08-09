@@ -124,11 +124,8 @@ def test_init_creates_store_with_generated_key(tmp_path):
     assert (store / ".sops.yaml").is_file()
     for sub in ("shared", "agents", "hires", ".locks"):
         # NOTE: `hires/` here is the GENERIC dc-secrets per-name overlay layer
-        # (still created by `init` and overlaid by `export --agent`). GitHub
-        # persona data no longer lives in `hires/` — it was consolidated into
-        # `shared/gh.yaml` as flat namespaced keys (see outer AGENTS.md
-        # "## GITHUB IDENTITIES"). This assertion checks tool behaviour, not
-        # persona storage.
+        # (still created by `init` and overlaid by `export --agent`). This
+        # assertion checks tool behaviour, not any particular storage policy.
         assert (store / sub).is_dir()
     assert "Initialized secrets store at" in r.stdout
     assert "Recipient:" in r.stdout
@@ -385,10 +382,8 @@ def test_export_agent_overlays_after_env(tmp_path):
     under shell `eval`. Missing agent/hires files are NOT fatal.
 
     NOTE: `hires/` here is the GENERIC dc-secrets overlay layer exercised by
-    `export --agent <n>` (the tool still supports it). It is NOT GitHub persona
-    data — personas were consolidated into `shared/gh.yaml` as namespaced keys
-    (`<LOGIN_UPPER>_<FIELD>`). This test covers overlay ordering, not persona
-    storage."""
+    `export --agent <n>` (the tool still supports it). This test covers overlay
+    ordering, not any particular storage policy."""
     store = tmp_path / "store"
     init_store(store)
     run_dc(["set", "shared/common", "K=common"], dc_dir=store)
