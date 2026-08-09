@@ -7,10 +7,7 @@
 	} from "$lib/services/api-user-activity";
 	import {
 		getReputation,
-		getAccountBalance,
-		getAccountTransfers,
 		type ReputationInfo,
-		type TokenTransfer,
 	} from "$lib/services/api-reputation";
 	import {
 		getUserProfile,
@@ -48,8 +45,6 @@
 	let username = $state<string | null>(null);
 	let activity = $state<PublicUserActivity | null>(null);
 	let reputation = $state<ReputationInfo | null>(null);
-	let balance = $state<number>(0);
-	let transfers = $state<TokenTransfer[]>([]);
 	let profile = $state<UserProfile | null>(null);
 	let contacts = $state<UserContact[]>([]);
 	let socials = $state<UserSocial[]>([]);
@@ -86,31 +81,6 @@
 			}
 		})(),
 	);
-
-	function formatBalance(balanceE9s: number, currency: string): string {
-		return (balanceE9s / 1_000_000_000).toFixed(4);
-	}
-
-	function formatTimestamp(timestampNs: number): string {
-		const date = new Date(timestampNs / 1_000_000);
-		return date.toLocaleString();
-	}
-
-	function calculateTransactionStats(transfers: TokenTransfer[], account: string) {
-		let totalSent = 0;
-		let totalReceived = 0;
-
-		for (const transfer of transfers) {
-			if (transfer.from_account === account) {
-				totalSent += transfer.amount_e9s + transfer.fee_e9s;
-			}
-			if (transfer.to_account === account) {
-				totalReceived += transfer.amount_e9s;
-			}
-		}
-
-		return { totalSent, totalReceived };
-	}
 
 	function calculateCancellationMetrics(contracts: any[]) {
 		if (contracts.length === 0) return null;
@@ -212,8 +182,6 @@
 			const [
 				activityData,
 				reputationData,
-				balanceData,
-				transfersData,
 				profileData,
 				socialsData,
 				contactsData,
@@ -223,8 +191,6 @@
 			] = await Promise.all([
 				getPublicUserActivity(pubkey).catch(() => null),
 				getReputation(pubkey).catch(() => null),
-				getAccountBalance(pubkey).catch(() => 0),
-				getAccountTransfers(pubkey, 100).catch(() => []),
 				getUserProfile(pubkey).catch(() => null),
 				getUserSocials(pubkey).catch(() => []),
 				getUserContacts(pubkey).catch(() => []),
@@ -235,8 +201,6 @@
 
 			activity = activityData;
 			reputation = reputationData;
-			balance = balanceData;
-			transfers = transfersData;
 			profile = profileData;
 			contacts = contactsData;
 			socials = socialsData;
@@ -263,8 +227,6 @@
 				!accountExists &&
 				!hasActivity &&
 				!reputation &&
-				balance === 0 &&
-				transfers.length === 0 &&
 				!profile
 			) {
 				isNotFound = true;
@@ -286,11 +248,6 @@
 		}
 	});
 
-	const txStats = $derived(
-		transfers.length > 0
-			? calculateTransactionStats(transfers, pubkey)
-			: null,
-	);
 	const totalContracts = $derived(
 		(activity?.rentals_as_requester.length ?? 0) +
 			(activity?.rentals_as_provider.length ?? 0),
@@ -426,15 +383,7 @@
 		</div>
 
 		<!-- Overview Stats -->
-		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-			<div class="metric-card">
-				<div class="metric-label">Balance</div>
-				<div class="metric-value">
-					{formatBalance(balance, 'dct')}
-					<span class="text-lg text-neutral-500">DC</span>
-				</div>
-			</div>
-
+		<div class="grid grid-cols-2 md:grid-cols-3 gap-3">
 			<div class="metric-card">
 				<div class="metric-label">Reputation</div>
 				<div class="metric-value">{reputation?.total_reputation ?? 0}</div>
@@ -576,70 +525,6 @@
 							</div>
 						</div>
 					{/if}
-				</div>
-			</div>
-		{/if}
-
-		<!-- Transaction Statistics -->
-		{#if txStats}
-			<div class="card p-5">
-				<h2 class="text-lg font-semibold text-white mb-4">Transaction Statistics</h2>
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-					<div>
-						<div class="data-label mb-1">Total Spent</div>
-						<div class="text-xl font-semibold text-danger">{formatBalance(txStats.totalSent, 'dct')} DC</div>
-					</div>
-					<div>
-						<div class="data-label mb-1">Total Received</div>
-						<div class="text-xl font-semibold text-success">{formatBalance(txStats.totalReceived, 'dct')} DC</div>
-					</div>
-					<div>
-						<div class="data-label mb-1">Total Transactions</div>
-						<div class="text-xl font-semibold text-white">{transfers.length}</div>
-					</div>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Recent Transactions -->
-		{#if transfers.length > 0}
-			<div class="card p-5">
-				<h2 class="text-lg font-semibold text-white mb-4">Recent Transactions</h2>
-				<div class="space-y-3 max-h-96 overflow-y-auto">
-					{#each transfers.slice(0, 20) as transfer}
-						<div class="bg-surface-elevated p-4 border border-neutral-800">
-							<div class="flex justify-between items-start mb-2">
-								<div class="flex-1">
-									<div class="flex items-center gap-2 mb-1">
-										<span class="text-neutral-500 text-sm">From:</span>
-										<a
-											href="/dashboard/reputation/{transfer.from_account}"
-											class="font-mono text-sm text-primary-400 hover:text-primary-300"
-										>
-											{truncatePubkey(transfer.from_account)}
-										</a>
-									</div>
-									<div class="flex items-center gap-2">
-										<span class="text-neutral-500 text-sm">To:</span>
-										<a
-											href="/dashboard/reputation/{transfer.to_account}"
-											class="font-mono text-sm text-primary-400 hover:text-primary-300"
-										>
-											{truncatePubkey(transfer.to_account)}
-										</a>
-									</div>
-								</div>
-								<div class="text-right">
-									<div class="text-lg font-semibold text-white">{formatBalance(transfer.amount_e9s, 'dct')} DC</div>
-									<div class="text-xs text-neutral-600">Fee: {formatBalance(transfer.fee_e9s, 'dct')} DC</div>
-								</div>
-							</div>
-							<div class="text-xs text-neutral-600">{formatTimestamp(transfer.created_at_ns)}</div>
-							{#if transfer.memo}
-								<div class="mt-2 text-sm text-neutral-400 italic">{transfer.memo}</div>
-							{/if}
-						</div>
-					{/each}
 				</div>
 			</div>
 		{/if}

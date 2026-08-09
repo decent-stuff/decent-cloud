@@ -615,7 +615,6 @@ const AUTHED_STATIC = [
 	'/dashboard/rentals',
 	'/dashboard/reputation',
 	'/dashboard/saved',
-	'/dashboard/transfers',
 ] as const;
 
 // Dynamic routes: title is the route PATTERN (stable test name, also the

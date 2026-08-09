@@ -465,21 +465,6 @@ export async function seedRefundRequest(opts: {
 	return out.split('\n')[0];
 }
 
-/** Insert a token_transfers row. Returns the new row id. */
-export async function seedTransfer(opts: {
-	fromAccount: string;
-	toAccount: string;
-	amountE9s?: number | string;
-	feeE9s?: number | string;
-	memo?: string;
-}): Promise<string> {
-	const amount = opts.amountE9s ?? 1_000_000_000;
-	const fee = opts.feeE9s ?? 10_000;
-	const memo = opts.memo ? `'${opts.memo.replace(/'/g, "''")}'` : 'NULL';
-	const createdAt = nowNs().toString();
-	return psqlExec(`INSERT INTO token_transfers (from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns) VALUES ('${opts.fromAccount}', '${opts.toAccount}', ${amount}, ${fee}, ${memo}, ${createdAt}) RETURNING id`);
-}
-
 /** Delete contracts for a requester pubkey (cleanup).
  *
  * contract_sign_requests is referenced by several tables without ON DELETE
@@ -503,11 +488,6 @@ export async function deleteContractsForRequester(requesterPubkeyHex: string): P
 			WHERE contract_id IN (SELECT contract_id FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex'));
 		DELETE FROM contract_sign_requests WHERE requester_pubkey = decode('${requesterPubkeyHex}', 'hex');
 	`);
-}
-
-/** Delete transfers where account is sender or receiver. */
-export async function deleteTransfersForAccount(account: string): Promise<void> {
-	await sql(`DELETE FROM token_transfers WHERE from_account = '${account.replace(/'/g, "''")}' OR to_account = '${account.replace(/'/g, "''")}'`);
 }
 
 /**

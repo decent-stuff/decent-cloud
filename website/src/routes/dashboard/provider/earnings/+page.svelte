@@ -19,7 +19,6 @@
 		type OfferingStatsWeek,
 	} from "$lib/services/api";
 	import ProviderSetupBanner from "$lib/components/ProviderSetupBanner.svelte";
-	import { getAccountBalance } from "$lib/services/api-reputation";
 	import { signRequest } from "$lib/services/auth-api";
 	import { getUserActivity } from "$lib/services/api-user-activity";
 	import { authStore } from "$lib/stores/auth";
@@ -32,7 +31,6 @@
 	let offeringStatsHistory = $state<OfferingStatsWeek[]>([]);
 	let revenueByMonth = $state<RevenueByMonth[]>([]);
 	let providerContracts = $state<Contract[]>([]);
-	let tokenBalance = $state<number>(0);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let isAuthenticated = $state(false);
@@ -68,10 +66,6 @@
 
 	function formatRevenue(e9s: number): string {
 		return (e9s / 1_000_000_000).toFixed(2);
-	}
-
-	function formatBalance(e9s: number): string {
-		return (e9s / 1_000_000_000).toFixed(4);
 	}
 
 	function formatBytes(bytes: number): string {
@@ -176,18 +170,16 @@
 				})(),
 			]);
 
-			const [providerStats, feedback, balance, onboarding, revenueData] = await Promise.all([
-				getProviderStats(providerHex),
-				getProviderFeedbackStats(providerHex).catch(() => null),
-				getAccountBalance(providerHex).catch(() => 0),
-				getProviderOnboarding(providerHex).catch(() => null),
-				getProviderRevenueByMonth(providerHex).catch(() => []),
-			]);
+		const [providerStats, feedback, onboarding, revenueData] = await Promise.all([
+			getProviderStats(providerHex),
+			getProviderFeedbackStats(providerHex).catch(() => null),
+			getProviderOnboarding(providerHex).catch(() => null),
+			getProviderRevenueByMonth(providerHex).catch(() => []),
+		]);
 
-			stats = providerStats;
-			feedbackStats = feedback;
-			tokenBalance = balance;
-			bandwidthStats = bandwidthStats_;
+		stats = providerStats;
+		feedbackStats = feedback;
+		bandwidthStats = bandwidthStats_;
 			offeringStats = offeringStats_;
 			offeringStatsHistory = offeringStatsHistory_;
 			onboardingCompleted = !!onboarding?.onboarding_completed_at;
@@ -253,13 +245,7 @@
 					</div>
 				</div>
 				<!-- Contract stats -->
-				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-					<div class="bg-surface-elevated border border-neutral-800 p-6">
-						<p class="text-neutral-500 text-sm">Token Balance</p>
-						<p class="text-3xl font-bold text-white mt-1">
-							{formatBalance(tokenBalance)}
-						</p>
-					</div>
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Total Contracts</p>
 						<p class="text-3xl font-bold text-white mt-1">

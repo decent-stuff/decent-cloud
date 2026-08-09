@@ -134,7 +134,6 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Account error recovery | ✅ | `@account` | `account.spec.ts` | `shows error card with Retry and Logout when account fetch fails (#6)` |
 | Billing settings (address/VAT) | ✅ | `@billing` `@account` | `billing-settings.spec.ts` | `billing settings: save billing address` (+spending alerts) |
 | Invoices | ✅ | `@billing` | `invoices.spec.ts` | `populated state: shows invoice table with one row per invoiceable contract` |
-| Transfers | ✅ | `@billing` | `transfers.spec.ts` | `populated state: shows sent and received transfers with direction icons` |
 | Notifications (bell + channels) | ✅ | `@account` | `notification-bell.spec.ts` · `account-notifications.spec.ts` | `badge displays the correct unread count from the DB` |
 | Cloud accounts | ✅ | `@account` | `cloud.spec.ts` | `populated state: a DB-seeded cloud account renders in the list` + `disconnect: the modal delete flow removes the cloud account` — empty state, Add-Account modal, populated list render, AND the modal-based signed-DELETE disconnect. No real Hetzner/Proxmox connection (cloud_accounts is a plain DB row seeded under the testAccount). |
 | Keyboard shortcut (focus search) | ✅ | `@smoke` `@marketplace` | `keyboard-shortcuts.spec.ts` | `@smoke / focuses marketplace search input` |
@@ -203,7 +202,7 @@ anonymous pages are not silently authenticated.
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~32 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~31 tests,
 **<35s** against the warm stack). Selection rules:
 
 - **Critical path only** — landing/anonymous browse, dashboard overview, sign-in,
@@ -241,19 +240,18 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 17 | Keyboard help overlay | `keyboard-shortcuts.spec.ts` › `@smoke ? opens help overlay listing all shortcuts` |
 | 18 | Rentals list (empty state) | `rentals.spec.ts` › `@smoke empty state...` |
 | 19 | Invoices empty state | `invoices.spec.ts` › `@smoke empty state: fresh user sees FAQ and marketplace CTA` |
-| 20 | Transfers empty state | `transfers.spec.ts` › `@smoke empty state: fresh user sees 0 balance and empty transfer list` |
-| 21 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
-| 22 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint returns a well-formed boolean @smoke` |
-| 23 | Login default surface matches server (#436) | `auth-capabilities.spec.ts` › `login page default surface matches the server capability @smoke` |
-| 24 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
-| 25 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
-| 26 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
-| 27 | UX-001 no fake provider data | `ux-regression-guards.spec.ts` › `@smoke UX-001 homepage hero shows the "Anatomy of a Trust Score"...` |
-| 28 | UX-002 validators route retired | `ux-regression-guards.spec.ts` › `@smoke UX-002 /dashboard/validators is retired (404)...` |
-| 29 | UX-005 honest homepage stats | `ux-regression-guards.spec.ts` › `@smoke UX-005 homepage stats grid omits dead ICP metrics...` |
-| 30 | UX-008 unauth sidebar clean | `ux-regression-guards.spec.ts` › `@smoke UX-008 unauthenticated sidebar hides "My Activity"...` |
-| 31 | UX-013 login heading | `ux-regression-guards.spec.ts` › `@smoke UX-013 login page heading reads "Sign In or Create Account"` |
-| 32 | UX-004 dashboard @username | `ux-regression-guards.spec.ts` › `@smoke UX-004 dashboard welcome card shows @username, not a raw principal` |
+| 20 | Sign in | `signin-flow.spec.ts` › `@smoke should sign in successfully...` |
+| 21 | Auth capability endpoint (#436) | `auth-capabilities.spec.ts` › `capability endpoint returns a well-formed boolean @smoke` |
+| 22 | Login default surface matches server (#436) | `auth-capabilities.spec.ts` › `login page default surface matches the server capability @smoke` |
+| 23 | Verify-email missing token | `verify-email.spec.ts` › `@smoke shows a missing-token error...` |
+| 24 | 404 error page | `error-page.spec.ts` › `@smoke 404 renders branded error page with navigation, not blank screen` |
+| 25 | Checkout cancel page | `checkout.spec.ts` › `@smoke renders the cancelled-payment page without a contract_id` |
+| 26 | UX-001 no fake provider data | `ux-regression-guards.spec.ts` › `@smoke UX-001 homepage hero shows the "Anatomy of a Trust Score"...` |
+| 27 | UX-002 validators route retired | `ux-regression-guards.spec.ts` › `@smoke UX-002 /dashboard/validators is retired (404)...` |
+| 28 | UX-005 honest homepage stats | `ux-regression-guards.spec.ts` › `@smoke UX-005 homepage stats grid omits dead ICP metrics...` |
+| 29 | UX-008 unauth sidebar clean | `ux-regression-guards.spec.ts` › `@smoke UX-008 unauthenticated sidebar hides "My Activity"...` |
+| 30 | UX-013 login heading | `ux-regression-guards.spec.ts` › `@smoke UX-013 login page heading reads "Sign In or Create Account"` |
+| 31 | UX-004 dashboard @username | `ux-regression-guards.spec.ts` › `@smoke UX-004 dashboard welcome card shows @username, not a raw principal` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**

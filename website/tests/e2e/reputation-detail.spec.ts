@@ -41,11 +41,13 @@ anonymousTest.describe('/dashboard/reputation/[identifier] (anonymous)', () => {
 			await expect(main.getByText('Public Key')).toBeVisible({ timeout: 10000 });
 			await expect(main.getByText(pubkey, { exact: true })).toBeVisible();
 
-			// The overview metrics grid must render. "Balance" as a metric label
-			// exists only in the populated profile branch, not the not-found
-			// branch — so its visibility pins which branch rendered.
-			await expect(main.getByText('Balance', { exact: true })).toBeVisible();
+			// The overview metrics grid must render. A contract-based metric label
+			// ("Contracts") exists only in the populated profile branch, not the
+			// not-found branch — so its visibility pins which branch rendered.
+			// (Previously pinned on "Balance", removed with the dead ICP
+			// token-transfers feature; "Contracts" is the real reputation signal.)
 			await expect(main.getByText('Contracts', { exact: true })).toBeVisible();
+			await expect(main.getByText('Reputation', { exact: true })).toBeVisible();
 		} finally {
 			await deleteAccountByUsername(username);
 		}
@@ -107,6 +109,6 @@ test.describe('/dashboard/reputation/[identifier] (authenticated)', () => {
 		await expect(main.getByText(pubkey, { exact: true })).toBeVisible();
 
 		// The overview metrics grid must render (populated-but-empty branch).
-		await expect(main.getByText('Balance', { exact: true })).toBeVisible();
+		await expect(main.getByText('Contracts', { exact: true })).toBeVisible();
 	});
 });
