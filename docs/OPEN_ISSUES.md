@@ -35,7 +35,7 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 | **B3** | **~~OP-1 — Redeploy prod~~** | **DONE (2026-08-08).** Prod verified: health 200, environment "prod", Google OAuth enabled, 2 REAL offerings (tada $7/mo + hetzner-reseller $6.82/mo, both USD — demos gone). |
 | **B4** | **~~OP-2 — Redeploy stage~~** | **DONE (2026-08-08).** Stage verified at `stage-api.decent-cloud.org`: health 200, environment "stage", 5 offerings (storage/compute/network, all USD). |
 | **B5** | **~~OP-4 — Complete stage DNS cutover~~** | **DONE (2026-08-08).** `stage-api.decent-cloud.org` resolves + serves 200. Legacy `dev-api.decent-cloud.org` returns 502 (dead, as expected post-cutover). |
-| **B6** | **OP-5 — Populate GitHub repo vars** | **OPTIONAL/OPEN.** Prod website build has NO Chatwoot widget (env-gated — renders only when `websiteToken`+`baseUrl` set). Set GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` so CI bakes the widget. Valid tokens exist (Chatwoot reset). Not a hard blocker — the widget is silent when unset. |
+| **B6** | **~~OP-5 — Populate GitHub repo vars~~** | **DONE (2026-08-09).** GitHub repo Variable `CHATWOOT_BASE_URL=https://dev-support.decent-cloud.org` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` set. CI uses the **dev** Chatwoot instance (verified-working tokens; prod Chatwoot tokens not recoverable from agent env — in k8s only). Architecture decision: CI builds use dev Chatwoot; prod deploy gets prod config separately. Outer SOPS store synced with verified dev Chatwoot tokens (5 keys updated). |
 | **B7** | **~~staging → k8s cutover~~** | **DONE (2026-08-08).** Stage serving at `stage-api.decent-cloud.org`. |
 
 ### C. Large epics (multi-session, needs design forks)
@@ -256,15 +256,15 @@ the sweep's new guards surfaced.
   cutover blocker tracked below (see "Infrastructure — staging → k8s … consolidation"); it is the
   public-DNS slice of that same cutover, not a separate plan.
 - **OP-5 — Populate GitHub repo Variable `CHATWOOT_BASE_URL` + Actions Secret `CHATWOOT_WEBSITE_TOKEN`
-  (for the release.yml website build).** Surfaced by round 2/3 (`2978b0ad`): the website Chatwoot
-  widget is now build-time-baked from `VITE_CHATWOOT_*` vars, and `release.yml` + `cf/deploy.py` wire
-  those vars from the GitHub repo Variable (`CHATWOOT_BASE_URL`) + Actions Secret
-  (`CHATWOOT_WEBSITE_TOKEN`). Until the operator populates both, CI builds a widget-less website
-  (intentionally silent — the env-gate suppresses it), so the support widget cannot render even after
-  OP-3's tunnel is restored. **2026-08-08 UPDATE:** valid tokens now exist (Chatwoot reset this
-  session). **ACTION:** set both in the repo settings (Variables tab + Secrets→Actions) using the
-  prod values: `CHATWOOT_BASE_URL=https://support.decent-cloud.org`,
-  `CHATWOOT_WEBSITE_TOKEN=SrMbGvD1HMnN18BCLWm84EKE`.
+  (for the release.yml website build).** **RESOLVED (2026-08-09):** both set in `decent-stuff/decent-cloud`.
+  CI uses the **dev** Chatwoot instance (`dev-support.decent-cloud.org` + dev website token) — the
+  verified-working instance. Architecture decision: CI/dev/stage use dev Chatwoot; prod gets prod
+  Chatwoot config at the prod deploy step (separate from CI). Outer SOPS store synced with the 5
+  verified dev Chatwoot keys (API/platform/website tokens, account ID, Postgres password).
+  **Prod Chatwoot tokens** (`support.decent-cloud.org` — live, 302) are in k8s secrets only; not
+  recoverable from the agent env. If prod needs its own widget baked into the prod image, extract
+  the prod website token from k8s (`kubectl -n dc-prod get secret dc-secret -o jsonpath='{.data.CHATWOOT_WEBSITE_TOKEN}' | base64 -d`) and either build a separate prod image or make the widget
+  runtime-configurable.
 
 ## Future work
 
