@@ -54,7 +54,7 @@ YAML with `flock` concurrency; values round-trip byte-identical through pyyaml.
 | `get <path> <key>` | Read **one** credential value to stdout. |
 | `set <path> <key>=<value>...` | Write one or more credentials (flock-protected). |
 | `delete <path> <key>` | Remove one credential. |
-| `export [<env>] [--agent <n>]` | Print credentials as `KEY=value`, layered: `shared/common.yaml` + `shared/<env>.yaml` (+ `agents/<n>` + `hires/<n>`). `<env>` ∈ `{common, play, dev, prod}`. Bare `export` is **common-only** (never leaks another env). Last file wins under shell `eval`. |
+| `export [<env>] [--agent <n>]` | Print credentials as `KEY=value`, layered: `shared/common.yaml` + `shared/<env>.yaml` (+ `agents/<n>` + `hires/<n>` generic overlay). `<env>` ∈ `{common, play, dev, prod}`. Bare `export` is **common-only** (never leaks another env). Last file wins under shell `eval`. **GitHub persona data does NOT live in `hires/`** — it lives as flat namespaced keys in `shared/gh.yaml` (see "GitHub identities" below). |
 | `list [<path>]` | No args: **aggregated credential discovery** (names only — see above). With a path: key names within one file. |
 | `import <env-file> <path>` | Import a `.env` file into encrypted storage. |
 | `edit <path>` | Open a SOPS file in `$EDITOR` (decrypt, edit, re-encrypt). |
@@ -84,7 +84,7 @@ the next agent discovers it.
 | Stage deploy (`dev.decent-cloud.org`) | `secrets/shared/dev.yaml` | **yes** (encrypted) | stage |
 | Production | `secrets/shared/prod.yaml` | **yes** (encrypted) | prod |
 | Per-agent overrides | `secrets/agents/<name>.yaml` | yes | overlay |
-| Per-hire overrides | `secrets/hires/<name>.yaml` | yes | overlay |
+| Per-hire overlay (generic) | `secrets/hires/<name>.yaml` | yes | generic overlay only — **GitHub persona data no longer lives here** (consolidated into `shared/gh.yaml` on 2026-08-09; see "GitHub identities" below) |
 
 **Committed SOPS files** (`common.yaml`, `dev.yaml`, `play.yaml`) live in
 `repo/secrets/shared/` and are tracked in git — SOPS encrypts the values so the
@@ -149,7 +149,8 @@ store.
 - `env` — injected into the session environment each run.
 - `common.yaml` / `dev.yaml` / `play.yaml` — committed encrypted SOPS file under `repo/secrets/shared/`.
 - `env.yaml` / `gh.yaml` — local-only SOPS file under the operator `$DC_SECRETS_DIR`.
-- `agents/<n>.yaml` / `hires/<n>.yaml` — per-agent / per-hire overlay.
+- `agents/<n>.yaml` — per-agent overlay.
+- `hires/<n>.yaml` — generic per-name overlay (the dc-secrets tool still creates + overlays it). **GitHub persona data no longer lives here**: the 5 personas were consolidated into `gh.yaml` as flat namespaced keys (`<LOGIN_UPPER>_<FIELD>`, e.g. `ANDRIS_K85_GITHUB_PAT`, `RKALEJS79_GITHUB_EMAIL`). See the "GitHub" table below + outer `AGENTS.md` "## GITHUB IDENTITIES".
 
 **Scope**: `all` (env-agnostic / spans envs) · `dev` (local slim stack) · `stage`
 (`dc-stage` / `dev.decent-cloud.org`) · `prod`.
@@ -262,7 +263,27 @@ store.
 |---|---|---|---|
 | `GITHUB_API_TOKEN` | env; common.yaml; env.yaml | GitHub API token (automation) | all |
 | `GITHUB_TEST_PAT` | env; common.yaml; env.yaml | GitHub test PAT | all |
-| `GITHUB_PAT` | gh.yaml | GitHub PAT (release CI) | all |
+| `GITHUB_PAT` | gh.yaml | GitHub PAT (release CI service token — currently **dead**; operator to refresh) | all |
+
+**GitHub personas (5) — canonical file `shared/gh.yaml`, flat namespaced keys.**
+Each persona field is stored as `<LOGIN_UPPER>_<FIELD>` where `LOGIN_UPPER` is the
+gh login uppercased with non-alphanumerics → `_`. Personas + their key prefixes:
+
+| gh login | key prefix | role | PAT health |
+|---|---|---|---|
+| `andris-k85` | `ANDRIS_K85_*` (11 keys) | SoftwareEngineer1 | **valid** |
+| `rkalejs79` | `RKALEJS79_*` (12 keys) | SoftwareEngineer2 | **valid** |
+| `mozols959` | `MOZOLS959_*` (12 keys) | recovery-account | **valid** |
+| `elena-vogt` | `ELENA_VOGT_*` (7 keys) | AutomationExpert | **dead (401)** — operator refresh via `dc-secrets set shared/gh ELENA_VOGT_GITHUB_PAT=...` |
+| `yanliu38` | `YANLIU38_*` (5 keys) | Owner | **dead (401)** — operator refresh via `dc-secrets set shared/gh YANLIU38_GITHUB_PAT=...` |
+
+Example fields per persona: `*_GITHUB_PAT`, `*_GITHUB_USERNAME`, `*_GITHUB_EMAIL`,
+`*_GITHUB_PASSWORD`, `*_DISPLAY_NAME`, `*_ROLE`, `*_CREATED`, `*_NOTES`, plus
+per-provider mailbox keys (`ANDRIS_K85_PROTON_EMAIL`, `RKALEJS79_TUTA_EMAIL`,
+`MOZOLS959_INBOX_LV_EMAIL`, …). Read one with:
+`DC_SECRETS_DIR=/home/sat/projects/decent-cloud/secrets repo/scripts/dc-secrets get shared/gh <KEY>`.
+The full roster, ssh aliases, and the gh-CLI switching procedure live in outer
+`AGENTS.md` "## GITHUB IDENTITIES".
 
 **Repo-only (NOT in env or SOPS)** — these MUST be set in the GitHub repo
 **Settings → Secrets and variables → Actions** for the `release.yml` workflow;

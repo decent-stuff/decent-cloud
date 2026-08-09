@@ -81,7 +81,12 @@ Non-goals (each filed or noted as `deferred-post-launch`):
   primitive. Each identity has a slug (`andris-kalns`,
   `roberts-kalejs`, ...), a HOME under `tools/homes/dc-<slug>/`,
   GitHub PAT and credentials sourced from
-  `secrets/hires/<slug>/env.yaml` via SOPS. Decent Agents
+  `secrets/hires/<slug>/env.yaml` via SOPS.
+  NOTE (2026-08-09): the per-persona `secrets/hires/<slug>/` files have been
+  consolidated — persona data now lives as flat namespaced keys
+  (`<LOGIN_UPPER>_<FIELD>`, e.g. `ANDRIS_K85_GITHUB_PAT`) in the canonical
+  `secrets/shared/gh.yaml` of the outer store; `hires/` is no longer used for
+  persona storage. See outer `AGENTS.md` "## GITHUB IDENTITIES". Decent Agents
   productizes the slug/HOME/container shape, but replaces persistent
   per-identity PATs with #414 GitHub App installation tokens minted
   per dispatch.
