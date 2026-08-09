@@ -127,6 +127,70 @@ impl StripeClient {
             .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
     }
 
+    /// Creates a Stripe Checkout Session for a wallet top-up (stored-value
+    /// credit). Distinct from `create_checkout_session` (contract payment):
+    /// metadata carries `type=wallet_topup` + `pubkey` so the webhook handler
+    /// credits the wallet instead of processing a contract; redirect URLs go to
+    /// the wallet page; no invoice creation (prepayment, not a purchase).
+    ///
+    /// # Arguments
+    /// * `amount_cents` - Amount to charge in cents (e.g., 1000 = $10.00)
+    /// * `currency` - Currency code (e.g., "usd")
+    /// * `pubkey_hex` - Hex-encoded user pubkey, stored in metadata for the
+    ///   webhook to identify which wallet to credit.
+    ///
+    /// # Returns
+    /// Checkout Session URL for redirect on success.
+    pub async fn create_wallet_topup_session(
+        &self,
+        amount_cents: i64,
+        currency: &str,
+        pubkey_hex: &str,
+    ) -> Result<String> {
+        let currency = currency.parse::<Currency>()?;
+
+        let frontend_url =
+            std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
+
+        let success_url = format!(
+            "{}/dashboard/wallet?topup=success&session_id={{CHECKOUT_SESSION_ID}}",
+            frontend_url
+        );
+        let cancel_url = format!("{}/dashboard/wallet?topup=cancel", frontend_url);
+
+        let mut params = CreateCheckoutSession::new();
+        params.mode = Some(CheckoutSessionMode::Payment);
+        params.line_items = Some(vec![CreateCheckoutSessionLineItems {
+            price_data: Some(CreateCheckoutSessionLineItemsPriceData {
+                currency,
+                unit_amount: Some(amount_cents),
+                product_data: Some(CreateCheckoutSessionLineItemsPriceDataProductData {
+                    name: "Wallet Top-up".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            quantity: Some(1),
+            ..Default::default()
+        }]);
+        params.success_url = Some(&success_url);
+        params.cancel_url = Some(&cancel_url);
+        params.metadata = Some(
+            [
+                ("type".to_string(), "wallet_topup".to_string()),
+                ("pubkey".to_string(), pubkey_hex.to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        );
+
+        let session = CheckoutSession::create(&self.client, params).await?;
+
+        session
+            .url
+            .ok_or_else(|| anyhow::anyhow!("Wallet top-up Checkout Session missing URL"))
+    }
+
     /// Creates a refund for a payment intent.
     ///
     /// `idempotency_key` is required: every refund call site must collapse

@@ -80,6 +80,7 @@ impl Database {
     /// insufficient funds.
     ///
     /// `amount_e9s` must be strictly positive.
+    #[allow(dead_code)] // wired in Unit 4 (rentals → balance debit)
     pub async fn debit_wallet_balance(
         &self,
         pubkey_hex: &str,
