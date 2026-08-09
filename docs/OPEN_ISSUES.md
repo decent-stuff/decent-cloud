@@ -363,7 +363,7 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 > 2026-07-25 session entries below):** the old "blocked" status was re-verified and is **FALSE**.
 > (a) **All credentials are present** in the consolidated `secrets/shared/env.yaml` store
 > (`ANTHROPIC_API_KEY`+`ANTHROPIC_BASE_URL`+`ANTHROPIC_MODEL`, `STRIPE_SECRET_KEY`+publishable+webhook,
-> `GOOGLE_OAUTH_CLIENT_ID`+secret+redirect, `GITHUB_API_TOKEN`+`GITHUB_TEST_PAT`, `MAILCHANNELS_API_KEY`,
+> `GOOGLE_OAUTH_CLIENT_ID`+secret+redirect, ~~`GITHUB_API_TOKEN`+`GITHUB_TEST_PAT`~~ **(PURGED 2026-08-09: unused — zero CI/code consumers)**, `MAILCHANNELS_API_KEY`,
 > `SMTP_*`, `TELEGRAM_BOT_TOKEN`, `CF_API_TOKEN`+`CF_ZONE_ID`, `HETZNER_API_TOKEN`, …). (b) **#413 was
 > already declared closed as a blocker** in the 2026-07-26 session, and the architecture is decided in
 > the **2026-04-25 specs** (`docs/specs/2026-04-25-decent-agents-identity-provisioning-spec.md` +

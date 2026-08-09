@@ -298,9 +298,9 @@ through the website sign-up flow.
     age-tier `env.yaml` (operator-local outer store — NOT in any public git repo,
     NOT in the k8s PGP-SOPS secret, NOT in this product repo). NEVER print, echo,
     log, or commit the seed value.
-  - **Threat model:** `env.yaml` already guards push-capable (`GITHUB_TEST_PAT`)
-    + spend-capable (`HETZNER_API_TOKEN_*`) + Stripe creds under the same age key;
-    a master seed there is consistent with that tier.
+  - **Threat model:** `env.yaml` already guards spend-capable
+    (`HETZNER_API_TOKEN_*`) + Stripe creds under the same age key; a master
+    seed there is consistent with that tier.
   - When done with a derived keypair, drop in-memory references; NEVER persist a
     derived private key to disk.
   - **Future:** a non-custodial API/service-token feature (see
