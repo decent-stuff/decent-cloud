@@ -116,6 +116,63 @@ impl Database {
         Ok(new_balance)
     }
 
+    /// Atomically debit the wallet AND mark the contract as paid via wallet,
+    /// in a single DB transaction. This is the money-safe rental-payment
+    /// primitive: the wallet debit, the ledger row, and the contract
+    /// `payment_status='succeeded'` + `payment_method='wallet'` update all
+    /// commit together, so a crash can never leave the wallet debited but the
+    /// contract unpaid (or vice-versa).
+    ///
+    /// Returns `Ok(())` on success, or `Err` if the user has no wallet /
+    /// insufficient balance. `amount_e9s` must be strictly positive.
+    pub async fn debit_wallet_for_contract(
+        &self,
+        requester_pubkey_hex: &str,
+        contract_id: &[u8],
+        amount_e9s: i64,
+    ) -> Result<()> {
+        ensure!(amount_e9s > 0, "debit amount must be positive");
+        let mut tx = self.pool.begin().await?;
+
+        // Debit wallet row-level (rejects overdraft via WHERE balance >= amount).
+        let new_balance = sqlx::query_scalar!(
+            r#"UPDATE wallet_balances
+               SET balance_e9s = balance_e9s - $2, updated_at = NOW()
+               WHERE pubkey = $1 AND balance_e9s >= $2
+               RETURNING balance_e9s as "balance_e9s!: i64""#,
+            requester_pubkey_hex,
+            amount_e9s,
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("Insufficient wallet balance"))?;
+
+        let contract_id_hex = hex::encode(contract_id);
+
+        // Append immutable ledger entry (signed negative amount).
+        sqlx::query!(
+            r#"INSERT INTO wallet_ledger (pubkey, amount_e9s, balance_after_e9s, entry_type, reference)
+               VALUES ($1, $2, $3, 'rental_debit', $4)"#,
+            requester_pubkey_hex,
+            -amount_e9s,
+            new_balance,
+            contract_id_hex,
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        // Mark the contract as paid via wallet (no Stripe session/PI).
+        sqlx::query(
+            "UPDATE contract_sign_requests SET payment_status = 'succeeded', payment_method = 'wallet' WHERE contract_id = $1",
+        )
+        .bind(contract_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// Get recent wallet ledger entries for a user (newest first).
     pub async fn get_wallet_ledger(
         &self,
@@ -154,6 +211,7 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
+    use super::Database;
     use crate::database::test_helpers::setup_test_db;
 
     /// Deterministic hex pubkey for wallet tests (distinct from other suites).
@@ -325,5 +383,92 @@ mod tests {
             db.get_wallet_balance(&pk(11)).await.unwrap(),
             Some(5_000_000_000)
         );
+    }
+
+    // ===== debit_wallet_for_contract tests =====
+
+    /// Insert a minimal unpaid contract row for wallet-payment tests.
+    async fn insert_unpaid_contract(db: &Database, contract_id: &[u8], requester_hex: &str, amount_e9s: i64) {
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-1', $4, 'memo', 0, 'requested', 'stripe', 'pending', 'usd')",
+            contract_id,
+            hex::decode(requester_hex).unwrap(),
+            hex::decode(pk(99)).unwrap(),
+            amount_e9s,
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
+    /// Read a contract's payment_status + payment_method.
+    async fn contract_payment_info(db: &Database, contract_id: &[u8]) -> (String, String) {
+        let row = sqlx::query!(
+            "SELECT payment_status as \"ps!\", payment_method as \"pm!\" FROM contract_sign_requests WHERE contract_id = $1",
+            contract_id,
+        )
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        (row.ps, row.pm)
+    }
+
+    #[tokio::test]
+    async fn debit_for_contract_marks_paid_and_debits_wallet() {
+        let db = setup_test_db().await;
+        db.credit_wallet_balance(&pk(20), 10_000_000_000, "topup", None)
+            .await
+            .unwrap();
+        let cid = hex::decode("aabbccdd").unwrap();
+        insert_unpaid_contract(&db, &cid, &pk(20), 4_000_000_000).await;
+
+        db.debit_wallet_for_contract(&pk(20), &cid, 4_000_000_000)
+            .await
+            .unwrap();
+
+        // Wallet debited.
+        assert_eq!(db.get_wallet_balance(&pk(20)).await.unwrap(), Some(6_000_000_000));
+        // Contract marked paid via wallet.
+        let (ps, pm) = contract_payment_info(&db, &cid).await;
+        assert_eq!(ps, "succeeded");
+        assert_eq!(pm, "wallet");
+        // Ledger has the rental_debit entry.
+        let ledger = db.get_wallet_ledger(&pk(20), 5).await.unwrap();
+        assert_eq!(ledger.len(), 2); // topup + rental_debit
+        assert_eq!(ledger[0].entry_type, "rental_debit");
+        assert_eq!(ledger[0].amount_e9s, -4_000_000_000);
+    }
+
+    #[tokio::test]
+    async fn debit_for_contract_fails_on_insufficient_balance() {
+        let db = setup_test_db().await;
+        db.credit_wallet_balance(&pk(21), 1_000_000_000, "topup", None)
+            .await
+            .unwrap(); // $1.00
+        let cid = hex::decode("11223344").unwrap();
+        insert_unpaid_contract(&db, &cid, &pk(21), 5_000_000_000).await; // $5.00
+
+        let err = db.debit_wallet_for_contract(&pk(21), &cid, 5_000_000_000).await;
+        assert!(err.is_err(), "must fail: $1 wallet < $5 contract");
+
+        // Wallet unchanged.
+        assert_eq!(db.get_wallet_balance(&pk(21)).await.unwrap(), Some(1_000_000_000));
+        // Contract NOT marked paid (atomic rollback).
+        let (ps, pm) = contract_payment_info(&db, &cid).await;
+        assert_eq!(ps, "pending");
+        assert_eq!(pm, "stripe");
+    }
+
+    #[tokio::test]
+    async fn debit_for_contract_fails_with_no_wallet() {
+        let db = setup_test_db().await;
+        let cid = hex::decode("55667788").unwrap();
+        insert_unpaid_contract(&db, &cid, &pk(22), 1_000_000_000).await;
+
+        assert!(db.debit_wallet_for_contract(&pk(22), &cid, 1_000_000_000)
+            .await
+            .is_err());
+        let (ps, _) = contract_payment_info(&db, &cid).await;
+        assert_eq!(ps, "pending", "contract must stay unpaid");
     }
 }

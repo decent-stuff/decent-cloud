@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT payment_status as \"ps!\", payment_method as \"pm!\" FROM contract_sign_requests WHERE contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ps!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "pm!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2803ad81dfb15d545732c0a10a21948109fd18940288606729086d64fd2fb88d"
+}
