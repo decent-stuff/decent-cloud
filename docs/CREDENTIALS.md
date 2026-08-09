@@ -259,13 +259,10 @@ store.
 
 ### GitHub
 
-| Name | Source | Purpose | Scope |
-|---|---|---|---|
-| `GITHUB_API_TOKEN` | env; common.yaml; env.yaml | GitHub API token (automation) | all |
-| `GITHUB_TEST_PAT` | env; common.yaml; env.yaml | GitHub test PAT | all |
-| `GITHUB_PAT` | gh.yaml | GitHub PAT (release CI service token — currently **dead**; operator to refresh) | all |
+The legacy bare service tokens (`GITHUB_API_TOKEN`, `GITHUB_TEST_PAT`,
+`GITHUB_PAT`) were removed as unused — they had zero CI/code consumers. GitHub
+access is via the persona PATs described below.
 
-**GitHub personas (5) — canonical file `shared/gh.yaml`, flat namespaced keys.**
 Each persona field is stored as `<LOGIN_UPPER>_<FIELD>` where `LOGIN_UPPER` is the
 gh login uppercased with non-alphanumerics → `_`. Personas + their key prefixes:
 
