@@ -62,24 +62,38 @@ repo/
 > working subset is injected as env vars each session. Re-asking wastes a
 > round-trip.
 
+### ALWAYS look in the OUTER store first
+
+There are **two SOPS stores** — check the outer one FIRST:
+
+| Store | Location | Contents |
+|-------|----------|----------|
+| **OUTER (primary)** | `/project/decent-cloud/secrets/shared/env.yaml` + `gh.yaml` | **ALL** integration secrets (Chatwoot, Hetzner, Stripe, OAuth, SMTP, GitHub PATs, Telegram, Cloudflare, `DC_PROD_RESELLER_SEED`, …) + env-level config |
+| **REPO-INTERNAL** | `secrets/shared/{common,dev,play}.yaml` | Deploy-level secrets for the `dev` docker-compose stack + k8s stage/play configs (subset) |
+
+In the agent container, `DC_SECRETS_DIR=/project/decent-cloud/secrets` (the outer
+store) by default — so `dc-secrets list` and `dc-secrets get shared/env KEY`
+scan the outer store. To scan the repo-internal store, prefix with
+`DC_SECRETS_DIR=secrets`.
+
 - **Discover what exists (one command, names only — never values):**
   ```bash
-  scripts/dc-secrets list           # every credential NAME across env + SOPS, grouped by source
-  scripts/dc-secrets list shared/env # key names within one file
+  scripts/dc-secrets list                        # OUTER store (default DC_SECRETS_DIR)
+  scripts/dc-secrets list shared/env             # names within the outer env.yaml
+  DC_SECRETS_DIR=secrets scripts/dc-secrets list # ALSO scan repo-internal store
   ```
 - **Inject SOPS creds into your shell:** `eval "$(scripts/dc-secrets export)"`
-  (add `play` / `dev` / `prod` for an env layer; bare `export` is common-only).
+  (bare `export` = common-only from outer store; `export play`/`dev`/`prod` layers
+  repo-internal on top).
+- **Read one value (never paste into chat):** `scripts/dc-secrets get shared/env KEY`
 - **Persist a new user-provided cred:** `scripts/dc-secrets set shared/env KEY="$VAL"`,
   then add its name + source to `docs/CREDENTIALS.md`.
-- `scripts/dc-secrets` reads whatever `$DC_SECRETS_DIR` points at — the committed
-  `repo/secrets/shared/*.yaml` (common/dev/play) AND the operator-local outer
-  `/project/decent-cloud/secrets/shared/{env,gh}.yaml`. Every store encrypts to
-  **both** the agent `age` key (agent decrypts via `$SOPS_AGE_KEY_FILE`) AND the
-  operator `gpg` key `FA5814CF1935EE80C454C9F1660DCCF069EC9176` (operator decrypts
-  via their gpg keyring); override the pgp recipient with `DC_SOPS_PGP_RECIPIENT`
-  + `sops updatekeys`. Full manifest, store layout, and the k8s counterpart
-  (`third_party/k8s/scripts/manage-secrets.py`) are in `docs/CREDENTIALS.md`.
-  Never paste, echo, log, or commit a value.
+- Every store encrypts to **both** the agent `age` key (agent decrypts via
+  `$SOPS_AGE_KEY_FILE`) AND the operator `gpg` key
+  `FA5814CF1935EE80C454C9F1660DCCF069EC9176`; override the pgp recipient with
+  `DC_SOPS_PGP_RECIPIENT` + `sops updatekeys`. Full manifest, store layout, and
+  the k8s counterpart (`third_party/k8s/scripts/manage-secrets.py`) are in
+  `docs/CREDENTIALS.md`. Never paste, echo, log, or commit a value.
 
 - **Hetzner tokens (load-bearing for dev/experimentation):** AI agents use
   `HETZNER_API_TOKEN_DEV` (read-write) for ALL Hetzner dev/experimentation API
