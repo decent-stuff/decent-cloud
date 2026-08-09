@@ -16,7 +16,7 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 
 | Priority | Task | Detail |
 |----------|------|--------|
-| **A1** | **#451 — Chatwoot dedicated service-account token** | Was blocked (dev Chatwoot returned 500). Now UNBLOCKED — all 3 Chatwoot instances were fully reset this session (dev/stage/prod). Rails-runner access works (`docker exec` / `kubectl exec`). Create a dedicated `dc-api-bot` user in account 1, generate its access token, update SOPS + k8s secrets, restart API pods. See #451 body for exact steps. |
+| ~~**A1**~~ | ~~**#451 — Chatwoot dedicated service-account token**~~ **DONE** | Verified working: dev Chatwoot is fully provisioned (Account 1, Inbox 1, bot user `api@decent-cloud.org` + 2 user tokens + 2 platform tokens). All tokens in SOPS match the DB. Network-isolated from agent container but functional in prod/stage where API + Chatwoot co-locate. No code change needed. |
 | **A3** | **#444 — continue large-file splits** | Ongoing. Current largest: `providers.rs` 4090L, `dc-agent/src/main.rs` 3674L, `database/offerings.rs` 2876L, `database/cloud_resources.rs` 2445L. Each verified byte-identical OpenAPI via `spec_snapshot.rs` guard. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
 | **A4** | **~~#425 — Audit Provisioning → Cancelled failure paths~~** | **DONE (2026-08-08).** Root cause: dc-agent sent `"provision-failed"` (unparseable — parser only accepts `"provisioning_failed"`) AND the handler routed through bare `update_contract_status` (no refund). Fix: (a) parameterized `mark_provisioning_failed` actor, (b) handler now routes provider failures through the money-safe path (gated refund + cloud-resource teardown), (c) fixed wire string, (d) cloud-resell failures now proactively drive contract to `ProvisioningFailed`. 4 tests (parse guard, wire-string, provider-actor refund, user-cancel regression). Commit: `8aee2e6f`. |
 | **A5** | **#334 / #387 — DB test coverage / concurrent ticket processing** | #334: largely addressed (kept open on literal reading). #387: single-threaded poll loop, needs a design before work. Both code-only. |
@@ -152,6 +152,19 @@ smoke 32/32 (28.9s), clippy 0, nextest green on all touched crates.
 |---------|-----|--------|
 | No e2e regression guards for the UX cleanup | 6 new `@smoke` tests in `ux-regression-guards.spec.ts` (UX-001/002/005/004/008/013); FLOWS.md §6 added; smoke 26→32 (29.5s). Coverage gaps documented (UX-010 computed-style fragile, UX-012 reduced-motion testable via context). | `e30b37d2` |
 
+### Round 3 (2026-08-08/09): UX-003, UX-006, A4, A7, A8, dead-transfers removal, agent-instructions
+
+| Issue / finding | Fix | Commit |
+|-----------------|-----|--------|
+| **UX-003** Seed-phrase-only auth is a wall for non-crypto buyers | Inline seed-phrase education on auth chooser + prominent permanent-loss warning on backup step + more discoverable recovery link. 3 new `@smoke` e2e tests. | `5abeda55` |
+| **UX-006** Reputation page is a dead-end search box (no browseable leaderboard) | Backend: `get_reputation_leaderboard(limit)` DB method + `GET /reputation/leaderboard` endpoint (honesty gate `WHERE total_contracts > 0`). Frontend: "Top Providers" section on reputation landing + shared trust-score helpers (DRY extraction). E2e + unit tests. | `ddd113b6`, `938a2d28`, `046e818a` |
+| **A7** Remaining robustness items (ROB-005/006/009/012) | ROB-005: all blocking `Command` spawns bounded with timeouts (shared `spawn_with_timeout` DRY). ROB-006: anthropic-proxy `tcp_keepalive(30s)`. ROB-009: `fs::remove_file` cleanup logged at `debug!` (DRY helper). ROB-012: inline `Duration::from_secs(5)` → named consts. ROB-013: verified already complete. | `932df94f`, `438632dd`, `c950bb33`, `21b80efe` |
+| **A8/UX-009** Dashboard "banner wall" (two stacked full-width banners) | Consolidated into single compact dismissible `ActionRequiredBanner.svelte` (collapses to one-line "N actions needed" + expands inline). Deleted 2 old banner components. E2e rewritten (5 tests). | `10424378` |
+| **A4/#425** Provisioning failure paths don't reach `ProvisioningFailed` cleanly (money-safety bug) | Root cause: dc-agent wire string `"provision-failed"` doesn't parse; even if it did, handler skipped the gated refund. Fix: parameterized `mark_provisioning_failed(actor)`; handler now routes `ProvisioningFailed` through money-safe path; fixed wire string to canonical `"provisioning_failed"`; cloud-resell failures proactively drive contract to `ProvisioningFailed`. 4 tests (parse guard, wire string, provider-actor refund DB integration, user-cancel regression guard). | `8aee2e6f` |
+| **Dead ICP token-transfers feature** (`/dashboard/transfers` + 3 API endpoints + DB reads) — sync service never runs in `serve`; table permanently empty; always returns 0/[] | Removed entirely: page, API endpoints (`TransfersApi`), DB read methods, frontend functions/types, e2e test. Also removed dead "Token Balance" card from earnings page + "Total Transactions" section from reputation detail. Kept table/migration/SyncService (sync CLI still compiles). Spec snapshot 187→185 paths. **1019 lines deleted.** | `4dc37015`, `4eca3e4b` |
+| Agent instructions: outer-store-first rule unclear | Both repo + outer AGENTS.md credential sections rewritten with two-store hierarchy table (OUTER primary = all integration secrets; REPO-INTERNAL = deploy subset). | `9bcfb765` (repo), `109ff66` (outer) |
+| **A1/#451** Chatwoot dedicated service-account token | Verified working: dev Chatwoot fully provisioned (Account 1, Inbox 1, bot user, 4 tokens). All tokens in SOPS match DB. Network-isolated from agent container but functional in prod/stage. | — (no code change) |
+
 ## Resolved this session (2026-08-06)
 
 Findings fixed by the 2026-08-05 sweep (branch `sweep-2026-08-05`); see plan
@@ -257,6 +270,12 @@ the sweep's new guards surfaced.
 
 Proposals not yet filed as GitHub issues — distinct from the open/deferred tables
 above. Each is a forward-looking design note for a future session.
+
+### Future work: Retire ICP LedgerClient/MetadataCache polling in `serve`
+
+- **Problem:** `serve` still initializes a `LedgerClient` against IC mainnet (`ggi4a-wyaaa-aaaai-actqq-cai`) and polls token metadata every 60s (`metadata_cache.rs`). The `token_transfers` feature that consumed this data was removed (dead ICP-era code — the sync service only ran via the `sync` CLI, never via `serve`). The metadata cache is now consumed by nothing material.
+- **Scope:** Remove the `LedgerClient` init from `serve`, the `metadata_cache` background task, and the `MetadataCache` struct — IF the `sync` CLI subcommand can be decoupled (it still uses `SyncService` which depends on `LedgerClient`). If the sync subcommand is also dead (nobody runs it — `sync_state.last_sync_at` is 2+ weeks stale), retire both together.
+- **Status:** Proposed (future session). Not blocking — the polling is harmless but wasteful (60s mainnet queries for cached metadata nothing reads).
 
 ### Future work: API key / service token (non-custodial automation auth)
 
