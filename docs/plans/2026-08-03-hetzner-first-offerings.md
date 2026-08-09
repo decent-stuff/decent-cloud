@@ -1,7 +1,7 @@
 # Hetzner first-offerings milestone — operator resells Hetzner
 
 **Created:** 2026-08-03
-**Status:** Proposed — needs operator's Hetzner creds + provider identity to execute.
+**Status:** Ready — direct cloud-backend resell path confirmed (2026-08-10); needs operator's Hetzner creds + provider identity to execute.
 **Aligns to:** `docs/PRODUCT-DIRECTION.md` (the authoritative north star — "OpenRouter,
 but for cloud resources").
 **Related:** `docs/OPEN_ISSUES.md` § "Real-deployment smoke audit (2026-08-03)"
@@ -62,13 +62,13 @@ offerings with real specs/prices/currency, and the operator's Hetzner creds atta
 3. **Currency / pricing.** Stripe-supported currencies only — `usd` / `eur` / `gbp` /
    `jpy` / `cad` (per `is_stripe_supported_currency`; ICP is retired as both a payment
    rail and an offering currency).
-4. **(Investigation) Gateway vs. direct-resell path.** Confirm whether listing a
-   Hetzner-backed offering **requires** the operator to run a dc-agent/Proxmox gateway
-   host (the provider-side model: Proxmox + Caddy + acme-dns + port-range routing),
-   or whether the **direct cloud-backend path** (`api/src/cloud/hetzner.rs` +
-   `cloud_provisioning_service.rs`, which already provisions Hetzner VMs from the
-   central API without a gateway) is sufficient for a pure-resell offering. See open
-   questions.
+4. **~~(Investigation) Gateway vs. direct-resell path~~ — RESOLVED (2026-08-10): direct cloud-backend.**
+   The **direct path** (`api/src/cloud/hetzner.rs` + `cloud_provisioning_service.rs`) is a
+   complete pure-resell path. No dc-agent, no Proxmox gateway host, no `agent_pool_id`
+   needed — a cloud-resell offering provisions a Hetzner VM from the central API, assigns
+   it a public IP, injects the requester's SSH key, and the renter SSHes directly to port 22.
+   The provider-side gateway model (Proxmox + Caddy + acme-dns + port-range routing) is a
+   separate path for self-hosted capacity, NOT required for operator reselling.
 
 ## Steps (high-level, ordered)
 
@@ -77,8 +77,9 @@ offerings with real specs/prices/currency, and the operator's Hetzner creds atta
 2. **Attach the Hetzner credential** to that provider (`cloud_account`,
    `BackendType::Hetzner`, `HETZNER_API_TOKEN_DEV` — read-write; required so the
    VMs it creates can also be deleted).
-3. **Provision via dc-agent / cloud-backend** with the Hetzner creds and confirm a VM
-   can be created + destroyed against the operator's account.
+3. **Provision via the cloud-backend** with the Hetzner creds and confirm a VM
+   can be created + destroyed against the operator's account (no dc-agent involved —
+   the direct resell path provisions server-side via `cloud_provisioning_service.rs`).
 4. **Create the real offerings** (CLI `create-offering` or the website
    create-offering flow) with **real specs / real prices / Stripe-supported currency**,
    mapped to the operator's provider + pool/dc. Price auto-suggest (`#442`, cost × 1.15
@@ -97,12 +98,12 @@ These need a concrete read of the offering↔backend wiring + the operator's set
 before execution; they are **not** blockers to writing this plan, but they must be
 answered (or explicitly deferred) before step 1:
 
-1. **Gateway model.** Does listing a Hetzner-backed offering require the operator to
-   run a Proxmox gateway host (dc-agent provider-side model), or is the **direct
-   cloud-backend path** (`api/src/cloud/hetzner.rs`) a complete pure-resell path with
-   no gateway VM? The direct path exists and is wired into contract provisioning, but
-   whether a marketplace offering can target it **without** a registered gateway/pool
-   is unconfirmed. **This is the key question for "how little the operator must run."**
+1. **~~Gateway model~~ — ANSWERED (2026-08-10): direct cloud-backend, no gateway VM.**
+   The direct path (`api/src/cloud/hetzner.rs`) is a complete pure-resell path with no
+   gateway/pool required. Cloud-resell offerings carry `provisioner_type='hetzner'` and no
+   `agent_pool_id`; `is_marketplace_visible` includes `is_cloud_resell()` (commit `a2a96862`)
+   so they list regardless of pool membership, and `try_trigger_cloud_provisioning` provisions
+   the VM server-side with the requester's SSH key on port 22. The operator runs nothing.
 2. **Offering → provider pool / dc mapping.** How does a specific offering bind to a
    specific provider's pool / datacenter (so a renter is routed to the operator's
    Hetzner capacity, not a generic pool)? Confirm the offering-create fields and the

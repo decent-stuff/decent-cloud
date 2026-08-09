@@ -8,9 +8,14 @@ inventory for quick local reference; GitHub remains the source of truth. Re-sync
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
 
-## Next session priorities (2026-08-08)
+## Next session priorities (2026-08-10)
 
-Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
+Decisions recorded 2026-08-10: (1) Hetzner resell = **direct cloud-backend** path (no
+gateway VM — see `docs/plans/2026-08-03-hetzner-first-offerings.md`); (2) **Decent Agents
+epic de-prioritized but NOT stopped** — handled next, after the Hetzner resell path lands;
+(3) two stale specs **killed** (catalog verification/claim flow + author-commission — see
+"Killed / obsolete" below); (4) **#470 done** (PR merged). Everything remaining, ordered by
+autonomy level.
 
 ### A. Autonomously actionable (no human/credential/infra input needed)
 
@@ -25,21 +30,29 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 | **A7** | **~~Remaining robustness items (ROB-005/006/009/012/013)~~** | **DONE (2026-08-08).** All 5 items addressed: ROB-005 (bounded all blocking Command spawns with timeouts via shared helper), ROB-006 (tcp_keepalive on proxy upstream), ROB-009 (logged fs::remove_file cleanup), ROB-012 (named poll-interval consts), ROB-013 (verified already complete — all waitForResponse calls had timeouts). Commits: `932df94f`, `438632dd`, `c950bb33`, `21b80efe`. |
 | **A8** | **~~UX-009 — Dashboard banner wall consolidation~~** | **DONE (2026-08-08).** Two stacked full-width banners replaced with a single compact dismissible one-line action indicator (`ActionRequiredBanner.svelte`) that expands inline. Old banner components deleted. Commit: `10424378`. |
 | **A9** | **~~UX-006 — Reputation leaderboard~~** | **DONE (2026-08-08).** Full-stack: `GET /api/v1/reputation/leaderboard` endpoint (honesty-gated `WHERE total_contracts > 0`, sorted by trust_score), "Top Providers" section on `/dashboard/reputation`, shared trust-score helper extracted (DRY), e2e coverage. Commits: `ddd113b6`, `938a2d28`, `046e818a`. |
-| **A9** | **UX-006 — Reputation leaderboard (user-confirmed must-have)** | Split HIGH into 3 MEDIUM subtasks: (a) Backend: `GET /api/v1/reputation/leaderboard` — top providers by trust score + completed contracts, paginated; (b) Frontend: browseable "Top Providers" section on `/dashboard/reputation` (currently search-only dead-end); (c) E2e: coverage for leaderboard rendering + search. The product direction mandates this (`docs/PRODUCT-DIRECTION.md`: "a top-providers leaderboard so reputation is browseable by default"). The trust-score calculator already exists (`website/src/lib/utils/trust-score.ts`). |
+| **A9** | **~~UX-006 — Reputation leaderboard (user-confirmed must-have)~~** | **DONE (2026-08-08)** — see row above. |
+| **A11** | **VM-reconciliation legacy dead-code cleanup** | Reconcile loop is live (`reconcile_instances`), but the old `pending-termination` path is dormant dead code: `ApiClient::get_pending_terminations` (`dc-agent/src/api_client.rs:501`), `get_pending_termination_contracts` (`contracts/mod.rs:395`), `get_pending_termination_resources` (`cloud_resources.rs:626`). Remove/deprecate. Surfaced from spec `2025-12-19-vm-reconciliation`. |
+| **A12** | **Retire ICP `LedgerClient`/`MetadataCache` polling in `serve`** | Dead code: `serve` still inits `LedgerClient` against IC mainnet, polls token metadata every 60s (`metadata_cache.rs`); no material consumer (`token_transfers` removed). Harmless but wasteful. Scope: remove LedgerClient init from `serve` + MetadataCache if sync CLI is decouplable. |
+| **A13** | **Minor tech-debt** | (a) Stale doctor hint `dc-agent/src/main.rs:3075` references non-existent `dc-agent setup proxmox` (should be `setup token`); (b) residual `let _ =` review (~6 sites, per `2026-01-01 production-readiness`). |
 
 ### B. Needs operator action (deploy / GitHub settings / infra)
 
 | Priority | Task | Detail |
 |----------|------|--------|
 | **B1** | **~~Close 4 fixed GH issues~~** | **DONE by operator (2026-08-08).** Pushed + deployed. GH issues to close: #466, #452, #453, #447. |
-| **B2** | **#470 auto-merge prerequisite** | Needs GitHub repo settings: "Allow auto-merge" ON + `build-and-test` as branch-protection required check. Code is sound (`49843e48`). |
+| **B2** | **~~#470 auto-merge prerequisite~~** | **DONE (2026-08-10).** PR #470 MERGED; auto-merge + `build-and-test` required-check configured. |
+| **B8** | **Hetzner first-offerings (operator)** | The product north star. Code 100% ready (direct cloud-backend resell path confirmed). Needs operator to: register as provider (`/dashboard/provider/start`), attach `HETZNER_API_TOKEN_DEV` as a `cloud_account`, create real offerings (Stripe currency), verify discover→rent→provision→SSH→cancel (cheapest `cx23`, delete immediately), seed to prod. Plan: `docs/plans/2026-08-03-hetzner-first-offerings.md`. |
 | **B3** | **~~OP-1 — Redeploy prod~~** | **DONE (2026-08-08).** Prod verified: health 200, environment "prod", Google OAuth enabled, 2 REAL offerings (tada $7/mo + hetzner-reseller $6.82/mo, both USD — demos gone). |
 | **B4** | **~~OP-2 — Redeploy stage~~** | **DONE (2026-08-08).** Stage verified at `stage-api.decent-cloud.org`: health 200, environment "stage", 5 offerings (storage/compute/network, all USD). |
 | **B5** | **~~OP-4 — Complete stage DNS cutover~~** | **DONE (2026-08-08).** `stage-api.decent-cloud.org` resolves + serves 200. Legacy `dev-api.decent-cloud.org` returns 502 (dead, as expected post-cutover). |
 | **B6** | **~~OP-5 — Populate GitHub repo vars~~** | **DONE (2026-08-09).** GitHub repo Variable `CHATWOOT_BASE_URL=https://dev-support.decent-cloud.org` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` set. CI uses the **dev** Chatwoot instance (verified-working tokens; prod Chatwoot tokens not recoverable from agent env — in k8s only). Architecture decision: CI builds use dev Chatwoot; prod deploy gets prod config separately. Outer SOPS store synced with verified dev Chatwoot tokens (5 keys updated). |
 | **B7** | **~~staging → k8s cutover~~** | **DONE (2026-08-08).** Stage serving at `stage-api.decent-cloud.org`. |
 
-### C. Large epics (multi-session, needs design forks)
+### C. Large epics (multi-session, needs design forks) — DE-PRIORITIZED 2026-08-10
+
+> **Decision:** the Decent Agents epic (C1/C2/C3) is **de-prioritized but NOT stopped**.
+> It will be handled **next**, after the Hetzner operator-resell path (the current product
+> north star) lands real offerings on the marketplace. Specs remain valid and unblocked.
 
 | Priority | Task | Detail |
 |----------|------|--------|
@@ -50,6 +63,14 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 ### D. Deferred post-launch (≥20 paying customers)
 
 #429 (key exfiltration mitigation), #430 (CODEOWNERS deadlock UX), #431 (webhook secret rotation), #432 (per-identity observability).
+
+### E. Killed / obsolete (deliberately not pursuing — 2026-08-10)
+
+| Spec | Reason |
+|------|--------|
+| `2025-12-07-provider-catalog-seeding` Phase 1/2 (catalog verification + provider claim flow: `provider_claims` table, DNS/file domain-ownership verification, "Verified"/"Claim this provider" UI) | Predates the operator-resell product direction; curated seeding + claim flow not on the roadmap. Phase 1A scraper kept. |
+| `2026-02-14-decent-recipes` author-commission revenue model (`author_commission_percent`/platform_fee) | Superseded by the operator-resell model. Recipe execution itself is implemented and kept; only the author-commission/payout split is killed. |
+| `2025-12-25-provider-tunnel-relay` (frp relay) | Superseded by the public-IP-per-host gateway architecture. |
 
 ## Real-deployment audit (2026-08-04)
 
