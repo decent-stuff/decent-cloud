@@ -104,6 +104,20 @@
 		return { thisMonth, lastMonth, trend, top3, projected, daysLeftInMonth };
 	});
 
+	// Lifetime spend as requester + active earnings as provider (USD).
+	// Single derivation reused by the tenant/provider/new-user stat cards so the
+	// financial position is always surfaced — including the $0.00 starting point
+	// for brand-new users who have no contracts yet.
+	let lifetimeSpentUsd = $derived(
+		(activity?.rentals_as_requester ?? [])
+			.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+	);
+	let activeEarningsUsd = $derived(
+		(activity?.rentals_as_provider ?? [])
+			.filter(c => c.status === 'active' || c.status === 'provisioned')
+			.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+	);
+
 	async function loadDashboard(identity: IdentityInfo | null) {
 		// Single authenticated call replaces the previous 5-endpoint fan-out
 		// (trust/response/health metrics, my-offerings, activity). Each section
@@ -361,6 +375,27 @@
 			</div>
 		</div>
 	{:else if userRole === 'new'}
+		<!-- New user: financial position is always surfaced so the spending/earnings
+		     surfaces are discoverable from the very first visit. Both start at $0.00. -->
+		<div class="grid grid-cols-2 gap-3">
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="download" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Spending</span>
+				</div>
+				<p class="metric-value text-base">{lifetimeSpentUsd.toFixed(2)}</p>
+				<p class="metric-subtext">USD lifetime · <a href="/dashboard/account/billing" class="text-primary-400 hover:text-primary-300">Set cap</a></p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="check" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Earnings</span>
+				</div>
+				<p class="metric-value text-base">{activeEarningsUsd.toFixed(2)}</p>
+				<p class="metric-subtext">USD active · <a href="/dashboard/provider/earnings" class="text-primary-400 hover:text-primary-300">Details</a></p>
+			</div>
+		</div>
+
 		<!-- New user: prominent Get Started CTAs -->
 		<div class="card p-6 border-primary-500/30 bg-primary-500/5">
 			<h2 class="text-base font-semibold text-white mb-1">Ready to get started?</h2>
@@ -415,7 +450,7 @@
 					<span class="metric-label mb-0">Total Spent</span>
 				</div>
 			<p class="metric-value text-base">
-				{((activity?.rentals_as_requester ?? []).reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				{lifetimeSpentUsd.toFixed(2)}
 			</p>
 			<p class="metric-subtext">USD lifetime</p>
 			</div>
@@ -537,7 +572,7 @@
 					<span class="metric-label mb-0">Earnings</span>
 				</div>
 			<p class="metric-value text-base">
-				{((activity?.rentals_as_provider ?? []).filter(c => c.status === 'active' || c.status === 'provisioned').reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				{activeEarningsUsd.toFixed(2)}
 			</p>
 			<p class="metric-subtext">USD active</p>
 			</div>

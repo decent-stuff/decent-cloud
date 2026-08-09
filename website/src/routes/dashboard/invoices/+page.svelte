@@ -165,7 +165,7 @@
 						<span>Can I get a refund?</span>
 						<span class="text-neutral-600 group-open:rotate-180 transition-transform">&#9660;</span>
 					</summary>
-					<p class="px-4 pb-4 text-sm text-neutral-500">Contracts are prepaid; contact your provider for partial refunds.</p>
+					<p class="px-4 pb-4 text-sm text-neutral-500">Contracts are billed per billing cycle via Stripe. If a contract fails to provision or is terminated early, you may be eligible for a refund — contact your provider.</p>
 				</details>
 				<details class="group">
 					<summary class="flex items-center justify-between px-4 py-3 cursor-pointer text-sm text-neutral-400 hover:text-white transition-colors select-none">
