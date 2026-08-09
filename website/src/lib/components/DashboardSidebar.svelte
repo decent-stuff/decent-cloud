@@ -48,10 +48,11 @@
 	let loadedPrincipal: string | null = null;
 
 	// Section keys and their default collapsed state (false = expanded by default)
-	type SectionKey = 'discover' | 'activity' | 'provider';
+	type SectionKey = 'discover' | 'activity' | 'cloud' | 'provider';
 	const SECTION_DEFAULTS: Record<SectionKey, boolean> = {
 		discover: false,
 		activity: false,
+		cloud: false,
 		provider: false
 	};
 
@@ -107,6 +108,14 @@
 		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' }
 	];
 
+	// Cloud section - self-provisioning (connect cloud accounts, provision VMs,
+	// list on marketplace). Always available to authenticated users; not gated
+	// behind provider onboarding so anyone can resell their own cloud capacity.
+	const cloudItems: NavItem[] = [
+		{ href: '/dashboard/cloud/accounts', icon: 'cloud', label: 'Cloud Accounts' },
+		{ href: '/dashboard/cloud/resources', icon: 'server', label: 'Cloud Resources' }
+	];
+
 	// Provider section - for users who provide services
 	const providerSetupItem: NavItem = {
 		href: '/dashboard/provider/support',
@@ -121,8 +130,7 @@
 		{ href: '/dashboard/provider/ssh-key-rotations', icon: 'key', label: 'SSH Key Rotations' },
 		{ href: '/dashboard/provider/password-resets', icon: 'key', label: 'Password Resets' },
 		{ href: '/dashboard/provider/agents', icon: 'bot', label: 'Agents' },
-		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' },
-		{ href: '/dashboard/cloud/accounts', icon: 'cloud', label: 'Cloud Accounts' }
+		{ href: '/dashboard/provider/reseller', icon: 'briefcase', label: 'Reseller' }
 	];
 
 	const isAdmin = $derived(currentIdentity?.account?.isAdmin ?? false);
@@ -340,6 +348,32 @@
 		</button>
 		{#if !sectionCollapsed.activity}
 			{#each activityItems as item}
+				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
+				<a
+					href={item.href}
+					onclick={closeSidebar}
+					class="nav-item {isActive ? 'nav-item-active' : ''}"
+				>
+					<Icon name={item.icon} size={20} />
+					<span class="text-sm">{item.label}</span>
+				</a>
+			{/each}
+		{/if}
+	{/if}
+
+	{#if isAuthenticated}
+		<!-- Cloud section - self-provisioning, available to all authenticated users -->
+		<button
+			type="button"
+			class="section-toggle mt-3"
+			onclick={() => toggleSection('cloud')}
+			aria-expanded={!sectionCollapsed.cloud}
+		>
+			<span class="section-label">Cloud</span>
+			<Icon name="chevron-down" size={14} class="ml-auto text-neutral-500 transition-transform {sectionCollapsed.cloud ? '-rotate-90' : ''}" />
+		</button>
+		{#if !sectionCollapsed.cloud}
+			{#each cloudItems as item}
 				{@const isActive = currentPath === item.href || currentPath.startsWith(item.href)}
 				<a
 					href={item.href}

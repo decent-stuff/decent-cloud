@@ -248,16 +248,16 @@
 			return { text: "Payment failed. Please try again or contact support.", isWaiting: false };
 		}
 		if (s === "requested" && ps === "succeeded") {
-			return { text: "Waiting for provider to accept your request (typically within a few hours)", isWaiting: true };
+			return { text: "Preparing your rental — provisioning will start shortly", isWaiting: true };
 		}
 		if (s === "pending") {
-			return { text: "Waiting for provider response", isWaiting: true };
+			return { text: "Your rental request is being processed", isWaiting: true };
 		}
 		if (s === "accepted") {
-			return { text: "Provider accepted! Waiting for provisioning to start...", isWaiting: true };
+			return { text: "Request accepted! Provisioning will begin momentarily...", isWaiting: true };
 		}
 		if (s === "provisioning") {
-			return { text: "Provider is setting up your resource (typically 5–20 minutes)", isWaiting: true };
+			return { text: "Your resource is being provisioned (this can take a few minutes)", isWaiting: true };
 		}
 		if (s === "provisioned" || s === "active") {
 			return { text: "Your resource is ready! See connection details below.", isWaiting: false };

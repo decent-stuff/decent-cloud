@@ -78,7 +78,7 @@
 					Your payment has been processed successfully. Your rental request is now being prepared.
 				</p>
 				<p class="text-neutral-500 text-sm mb-8">
-					You will receive an email confirmation shortly. The provider will review your request and provision your resources.
+					You will receive an email confirmation shortly. Your resource will be provisioned automatically.
 				</p>
 				<div class="flex flex-col sm:flex-row gap-3 justify-center">
 					<Button variant="primary" onclick={navigateToContract}>

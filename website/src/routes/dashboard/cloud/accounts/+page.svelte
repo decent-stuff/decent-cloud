@@ -162,6 +162,13 @@
 				<p class="text-neutral-400 mt-1">
 					Connect your Hetzner or Proxmox accounts for self-provisioning
 				</p>
+				<a
+					href="/dashboard/cloud/resources"
+					class="inline-flex items-center gap-1 text-sm text-primary-400 hover:text-primary-300 mt-2"
+				>
+					Manage provisioned resources
+					<Icon name="arrow-right" size={16} />
+				</a>
 			</div>
 			<button
 				type="button"
