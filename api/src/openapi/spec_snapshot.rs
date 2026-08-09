@@ -79,14 +79,17 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-06. Refreshed after removing the dead `is_example`
-    // field from the `Offering` schema (migration 053 dropped all example-provider
-    // seed data, so `is_example` was always false). Path/schema counts are
-    // unchanged (187/327); the only diff is the removal of the `is_example`
-    // property + its `required` entry on `Offering`.
-    const EXPECTED_PATHS: usize = 187;
+    // Capture date: 2026-08-09. Refreshed after removing the dead ICP-era
+    // `TransfersApi` (3 GET endpoints: /transfers, /accounts/:account/transfers,
+    // /accounts/:account/balance) and its `Transfers` tag. Paths dropped
+    // 187->185; schemas stay at 327 (the `TokenTransfer` row model was inlined
+    // in the removed responses, never a named component). Backend DB read
+    // methods + the `TokenTransfer` struct were also removed; the
+    // `token_transfers` table + `insert_token_transfers` + `SyncService` are
+    // kept (the `sync` CLI subcommand still compiles against them).
+    const EXPECTED_PATHS: usize = 185;
     const EXPECTED_SCHEMAS: usize = 327;
-    const EXPECTED_HASH: &str = "f4b3cfd966aa0e7250a9ac75023b71d0a19ca3ee6f433a5532932c2d61d5c843";
+    const EXPECTED_HASH: &str = "d39cca59e7061782df501f9508d92e74e8571ea3c39dd76196a9093fa47debbd";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");

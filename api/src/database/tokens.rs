@@ -1,21 +1,7 @@
 use super::types::{Database, LedgerEntryData};
 use anyhow::Result;
 use dcc_common::{FundsTransfer, FundsTransferApproval};
-use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
-#[oai(skip_serializing_if_is_none)]
-pub struct TokenTransfer {
-    pub from_account: String,
-    pub to_account: String,
-    pub amount_e9s: i64,
-    pub fee_e9s: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[oai(skip_serializing_if_is_none)]
-    pub memo: Option<String>,
-    pub created_at_ns: i64,
-}
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 #[allow(dead_code)]
@@ -28,62 +14,6 @@ pub struct TokenApproval {
 }
 
 impl Database {
-    /// Get token transfers for an account
-    pub async fn get_account_transfers(
-        &self,
-        account: &str,
-        limit: i64,
-    ) -> Result<Vec<TokenTransfer>> {
-        let transfers = sqlx::query_as!(
-            TokenTransfer,
-            r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
-             FROM token_transfers
-             WHERE from_account = $1 OR to_account = $2
-             ORDER BY created_at_ns DESC LIMIT $3"#,
-            account,
-            account,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(transfers)
-    }
-
-    /// Get recent token transfers
-    pub async fn get_recent_transfers(&self, limit: i64) -> Result<Vec<TokenTransfer>> {
-        let transfers = sqlx::query_as!(
-            TokenTransfer,
-            r#"SELECT from_account, to_account, amount_e9s, fee_e9s, memo, created_at_ns
-             FROM token_transfers
-             ORDER BY created_at_ns DESC LIMIT $1"#,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(transfers)
-    }
-
-    /// Get account balance (sum of all transfers)
-    pub async fn get_account_balance(&self, account: &str) -> Result<i64> {
-        let received: i64 = sqlx::query_scalar!(
-            r#"SELECT COALESCE(SUM(amount_e9s), 0)::BIGINT as "total!" FROM token_transfers WHERE to_account = $1"#,
-            account
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        let sent: i64 = sqlx::query_scalar!(
-            r#"SELECT COALESCE(SUM(amount_e9s + fee_e9s), 0)::BIGINT as "total!" FROM token_transfers WHERE from_account = $1"#,
-            account
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(received - sent)
-    }
-
     /// Get token approvals for an account
     #[allow(dead_code)]
     pub async fn get_account_approvals(&self, account: &str) -> Result<Vec<TokenApproval>> {

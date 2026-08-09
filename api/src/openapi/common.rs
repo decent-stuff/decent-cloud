@@ -850,8 +850,6 @@ pub enum ApiTags {
     Contracts,
     /// User profile endpoints
     Users,
-    /// Token transfer endpoints
-    Transfers,
     /// Platform statistics endpoints
     Stats,
     /// Chatwoot integration endpoints

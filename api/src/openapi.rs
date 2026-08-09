@@ -23,10 +23,9 @@ pub mod resellers;
 pub mod signature;
 pub mod sla;
 pub mod stats;
-pub mod system;
-pub mod totp;
-pub mod transfers;
-pub mod users;
+	pub mod system;
+	pub mod totp;
+	pub mod users;
 pub mod validators;
 pub mod vat;
 pub mod webhooks;
@@ -56,7 +55,6 @@ pub use resellers::ResellersApi;
 pub use sla::SlaApi;
 pub use stats::StatsApi;
 pub use system::SystemApi;
-pub use transfers::TransfersApi;
 pub use totp::TotpApi;
 pub use users::UsersApi;
 pub use validators::ValidatorsApi;
@@ -91,7 +89,6 @@ pub fn create_combined_api() -> impl OpenApi {
             ContractsApi,
             InvoicesApi,
             UsersApi,
-            TransfersApi,
             StatsApi,
             ResellersApi,
             VatApi,
