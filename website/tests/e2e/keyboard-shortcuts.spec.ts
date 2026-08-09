@@ -97,24 +97,33 @@ test.describe('/ keyboard shortcut + email banner dismiss', () => {
 		});
 	});
 
-	test('email verification banner can be dismissed per-session', async ({ page }) => {
-		// The banner is client-rendered (reads authStore), so toBeVisible already
-		// gates hydration — no networkidle needed. The Dismiss button lives in the
-		// same component, so it is hydrated once the banner is visible.
+	test('email verification action stays dismissed across navigation (per-session)', async ({ page }) => {
+		// After A8/UX-009 the email reminder lives inside the consolidated
+		// ActionRequiredBanner (data-testid="action-required-banner"). The
+		// test-account identity has an unverified email, so the indicator
+		// surfaces a 'verify your email' action. Dismissing it persists for the
+		// browser session (sessionStorage), so it must NOT reappear on a
+		// subsequent dashboard navigation. (dashboard-banners.spec.ts covers the
+		// collapsed/expanded presentation; this guards the per-session part.)
 		await page.goto('/dashboard');
+		await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible({ timeout: 15000 });
 
-		// Banner should be visible (test account has unverified email)
-		const banner = page.getByText('Verify Your Email Address');
-		await expect(banner).toBeVisible({ timeout: 10000 });
+		const indicator = page.getByTestId('action-required-banner');
+		await expect(indicator).toBeVisible({ timeout: 10000 });
+		await expect(indicator).toContainText('verify your email');
 
-		// Dismiss it
-		await page.getByRole('button', { name: 'Dismiss reminder' }).click();
+		// Expand to reveal the per-action CTAs and dismiss only the email action.
+		await page.getByRole('button', { name: 'Review' }).click();
+		await page
+			.getByRole('button', { name: 'Dismiss verify your email', exact: true })
+			.click();
 
-		// Banner should disappear
-		await expect(banner).not.toBeVisible();
+		// Email action dismissed; the indicator must no longer mention it.
+		await expect(indicator).not.toContainText('verify your email');
 
-		// Navigate to another page — banner stays dismissed
+		// Navigate to another banner surface — the per-session dismissal persists.
 		await page.goto('/dashboard/account');
-		await expect(banner).not.toBeVisible();
+		await expect(indicator).toBeVisible({ timeout: 10000 });
+		await expect(indicator).not.toContainText('verify your email');
 	});
 });
