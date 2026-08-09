@@ -105,7 +105,8 @@
 	// My Activity section - user's rentals (customer perspective)
 	const activityItems: NavItem[] = [
 		{ href: '/dashboard/saved', icon: 'bookmark', label: 'Saved' },
-		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' }
+		{ href: '/dashboard/rentals', icon: 'file', label: 'My Rentals' },
+		{ href: '/dashboard/wallet', icon: 'wallet', label: 'Wallet' }
 	];
 
 	// Cloud section - self-provisioning (connect cloud accounts, provision VMs,

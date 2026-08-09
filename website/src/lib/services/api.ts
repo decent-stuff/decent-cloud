@@ -3866,6 +3866,78 @@ export async function deleteSpendingAlert(
 	}
 }
 
+// ============ Wallet Endpoints ============
+
+export interface WalletLedgerEntry {
+	id: number;
+	amountE9s: number;
+	balanceAfterE9s: number;
+	entryType: string;
+	reference: string | null;
+	createdAt: number;
+}
+
+export interface WalletResponse {
+	balanceE9s: number | null;
+	recentLedger: WalletLedgerEntry[];
+}
+
+export interface WalletTopupResponse {
+	checkoutUrl: string;
+}
+
+/** Convert e9s (nano-USD) to a USD display string. 1 USD = 1e9 e9s. */
+export function formatE9sAsUsd(e9s: number | null | undefined): string {
+	return ((e9s ?? 0) / 1_000_000_000).toFixed(2);
+}
+
+export async function getWallet(
+	headers: SignedRequestHeaders,
+	pubkey: string
+): Promise<WalletResponse> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/wallet`;
+	const response = await fetch(url, { method: 'GET', headers });
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to fetch wallet: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<WalletResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to fetch wallet');
+	}
+
+	return payload.data;
+}
+
+export async function topupWallet(
+	headers: SignedRequestHeaders,
+	pubkey: string,
+	amountUsd: number
+): Promise<WalletTopupResponse> {
+	const url = `${API_BASE_URL}/api/v1/users/${pubkey}/wallet/topup`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers,
+		body: JSON.stringify({ amountUsd })
+	});
+
+	if (!response.ok) {
+		const errorMsg = await getErrorMessage(response, `Failed to start top-up: ${response.status}`);
+		throw new Error(errorMsg);
+	}
+
+	const payload = (await response.json()) as ApiResponse<WalletTopupResponse>;
+
+	if (!payload.success || !payload.data) {
+		throw new Error(payload.error ?? 'Failed to start top-up');
+	}
+
+	return payload.data;
+}
+
 /**
  * Track a view for a marketplace offering (fire-and-forget, public, no auth).
  * Deduplication is handled server-side by hashed IP + day.
