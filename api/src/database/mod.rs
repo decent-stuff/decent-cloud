@@ -34,6 +34,7 @@ pub mod types;
 pub mod user_notifications;
 pub mod users;
 pub mod visibility_allowlist;
+pub mod wallet;
 
 // Re-export main types
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
