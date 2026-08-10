@@ -506,8 +506,8 @@ async function cmdSeedContracts(args) {
   async function cancelContract(contractId) {
     const cancelPath = `/api/v1/contracts/${contractId}/cancel`;
     const cancelBody = JSON.stringify({ memo: 'UX test cancellation' });
-    const cancelHdrs = buildHeaders(sk, 'POST', cancelPath, cancelBody);
-    return apiRequest('POST', cancelPath, cancelHdrs, cancelBody);
+    const cancelHdrs = buildHeaders(sk, 'PUT', cancelPath, cancelBody);
+    return apiRequest('PUT', cancelPath, cancelHdrs, cancelBody);
   }
 
   const contractIds = [];
