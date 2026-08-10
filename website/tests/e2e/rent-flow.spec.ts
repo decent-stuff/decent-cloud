@@ -93,6 +93,8 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 
 		// Wallet is the default (and only) payment method for paid rentals.
 		await page.locator('textarea[placeholder*="ssh-ed25519"]').fill(SSH_KEY);
+		// Contact + Notes live in the collapsed "Advanced (optional)" disclosure.
+		await page.getByText('Advanced (optional)').click();
 		await page.locator('input[placeholder*="email:you@example.com"]').fill(CONTACT);
 		const memo = page.locator('textarea[placeholder*="special requirements"]');
 		if (await memo.isVisible().catch(() => false)) await memo.fill(MEMO);

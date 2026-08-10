@@ -136,6 +136,51 @@
 		selectedOperatingSystem = availableOperatingSystems[0] ?? "";
 	});
 
+	// --- Dialog accessibility (mirrors KeyboardHelpOverlay.svelte) ---
+	// Real modal semantics: role="dialog"/aria-modal, focus moves in on open,
+	// Escape closes from anywhere, and Tab/Shift-Tab cycle within the dialog.
+	let dialogEl = $state<HTMLDivElement | null>(null);
+
+	// Move focus into the dialog on open. We focus the Duration field (the
+	// first input the user might change) rather than the SSH textarea: Duration
+	// sits high enough that focusing it does NOT scroll the dialog, so the cost
+	// summary stays visible on open. Subscription offerings have no Duration
+	// field, so fall back to the SSH key.
+	$effect(() => {
+		if (offering && dialogEl) {
+			dialogEl.querySelector<HTMLElement>('#duration, #ssh-key')?.focus();
+		}
+	});
+
+	// Trap Tab/Shift-Tab inside the dialog and close on Escape from any focused
+	// element within it (not just the backdrop).
+	function handleDialogKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			onClose();
+			return;
+		}
+		if (e.key !== 'Tab' || !dialogEl) return;
+		const focusable = Array.from(
+			dialogEl.querySelectorAll<HTMLElement>(
+				'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((el) => el.offsetParent !== null); // skip hidden (e.g. closed <details>)
+		if (focusable.length === 0) return;
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		const activeEl = document.activeElement as HTMLElement | null;
+		if (e.shiftKey) {
+			if (activeEl === first || !dialogEl.contains(activeEl)) {
+				e.preventDefault();
+				last.focus();
+			}
+		} else if (activeEl === last) {
+			e.preventDefault();
+			first.focus();
+		}
+	}
+
 	// Validate SSH public key format
 	function validateSshKey(key: string): string | null {
 		if (!key.trim()) {
@@ -302,18 +347,29 @@
 </script>
 
 {#if offering}
-	<!-- Backdrop -->
+	<!-- Backdrop: click to dismiss. The dialog stops propagation so inner clicks
+	do not close. Escape + Tab are handled on the dialog container (below). -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
+		role="presentation"
 		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
 		onclick={(e) => e.target === e.currentTarget && onClose()}
-		role="button"
-		tabindex="0"
-		onkeydown={(e) => e.key === "Escape" && onClose()}
 	>
-		<!-- Dialog -->
+		<!-- Dialog: real modal semantics mirroring KeyboardHelpOverlay.svelte -->
 		<div
-			class="bg-gradient-to-br from-base to-gray-800  max-w-2xl w-full border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
+			bind:this={dialogEl}
+			data-testid="rent-dialog"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Rent resource"
+			tabindex="-1"
+			onkeydown={handleDialogKeydown}
+			onclick={(e) => e.stopPropagation()}
+			class="bg-gradient-to-br from-base to-gray-800 max-w-2xl w-full border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
 		>
+			<!-- The whole dialog body is a real form so Enter submits and the
+			primary button is type="submit". -->
+			<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
 			<!-- Header -->
 			<div
 				class="flex items-center justify-between p-6 border-b border-neutral-800"
@@ -325,6 +381,7 @@
 					</p>
 				</div>
 				<button
+					type="button"
 					onclick={onClose}
 					class="text-neutral-500 hover:text-white transition-colors"
 					aria-label="Close dialog"
@@ -464,7 +521,7 @@
 							{:else}
 								<span class="text-neutral-400 text-sm">One-Time Payment</span>
 								<p class="text-xs text-neutral-500 mt-1">
-									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
+									{formatHours(durationHours ?? 720)} @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
 								</p>
 							{/if}
 						</div>
@@ -537,31 +594,6 @@
 								<span class="text-yellow-400">Contact the provider for custom arrangements.</span>
 							</div>
 						{/if}
-					</div>
-				{/if}
-
-				<!-- Operating System Selection -->
-				{#if hasOperatingSystems}
-					<div>
-						<label
-							for="operating-system"
-							class="block text-sm font-medium text-white mb-2"
-						>
-							Operating System
-						</label>
-						<select
-							id="operating-system"
-							bind:value={selectedOperatingSystem}
-							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
-						>
-							<option value="">Select an OS...</option>
-							{#each availableOperatingSystems as os}
-								<option value={os}>{os}</option>
-							{/each}
-						</select>
-						<p class="text-xs text-neutral-500 mt-1">
-							Choose the operating system for your server
-						</p>
 					</div>
 				{/if}
 
@@ -742,71 +774,106 @@
 					{/if}
 				</div>
 
-				<!-- Contact Method -->
-				<div>
-					<label
-						for="contact"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Contact Method <span class="text-neutral-500"
-							>(optional)</span
-						>
-					</label>
-					<input
-						id="contact"
-						type="text"
-						bind:value={contactMethod}
-						placeholder="email:you@example.com or matrix:@user:server"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					/>
-					<p class="text-xs text-neutral-500 mt-1">
-						How the provider should reach you (e.g.,
-						email:you@example.com)
-					</p>
-				</div>
+				<!-- Advanced (optional): rarely-used fields collapsed by default so
+				the essentials (duration, SSH key, cost, Pay) stay above the fold. -->
+				<details class="border border-neutral-800 rounded">
+					<summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-neutral-300 hover:text-white">
+						Advanced (optional)
+					</summary>
+					<div class="p-4 space-y-4 border-t border-neutral-800">
+						<!-- Operating System (pre-defaulted to the offering's first OS) -->
+						{#if hasOperatingSystems}
+							<div>
+								<label
+									for="operating-system"
+									class="block text-sm font-medium text-white mb-2"
+								>
+									Operating System
+								</label>
+								<select
+									id="operating-system"
+									bind:value={selectedOperatingSystem}
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
+								>
+									<option value="">Select an OS...</option>
+									{#each availableOperatingSystems as os}
+										<option value={os}>{os}</option>
+									{/each}
+								</select>
+								<p class="text-xs text-neutral-500 mt-1">
+									Choose the operating system for your server
+								</p>
+							</div>
+						{/if}
 
-				<!-- Billing Address (for B2B invoices) -->
-				<div>
-					<label
-						for="buyer-address"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Billing Address <span class="text-neutral-500"
-							>(optional, for invoices)</span
-						>
-					</label>
-					<textarea
-						id="buyer-address"
-						bind:value={buyerAddress}
-						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-					<p class="text-xs text-neutral-500 mt-1">
-						Required for B2B invoices with VAT
-					</p>
-				</div>
+						<!-- Contact Method -->
+						<div>
+							<label
+								for="contact"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Contact Method <span class="text-neutral-500"
+									>(optional)</span
+								>
+							</label>
+							<input
+								id="contact"
+								type="text"
+								bind:value={contactMethod}
+								placeholder="email:you@example.com or matrix:@user:server"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							/>
+							<p class="text-xs text-neutral-500 mt-1">
+								How the provider should reach you (e.g.,
+								email:you@example.com)
+							</p>
+						</div>
 
-				<!-- Memo -->
-				<div>
-					<label
-						for="memo"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Notes <span class="text-neutral-500">(optional)</span>
-					</label>
-					<textarea
-						id="memo"
-						bind:value={memo}
-						placeholder="Any special requirements or notes for the provider..."
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-				</div>
+						<!-- Billing Address (for B2B invoices) -->
+						<div>
+							<label
+								for="buyer-address"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Billing Address <span class="text-neutral-500"
+									>(optional, for invoices)</span
+								>
+							</label>
+							<textarea
+								id="buyer-address"
+								bind:value={buyerAddress}
+								placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
+								rows="3"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							></textarea>
+							<p class="text-xs text-neutral-500 mt-1">
+								Required for B2B invoices with VAT
+							</p>
+						</div>
+
+						<!-- Memo -->
+						<div>
+							<label
+								for="memo"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Notes <span class="text-neutral-500">(optional)</span>
+							</label>
+							<textarea
+								id="memo"
+								bind:value={memo}
+								placeholder="Any special requirements or notes for the provider..."
+								rows="3"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							></textarea>
+						</div>
+					</div>
+				</details>
 
 				<!-- Error Message -->
 				{#if error}
 					<div
+						data-testid="rent-dialog-error"
 						class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
 					>
 						<p class="font-semibold">Error</p>
@@ -818,6 +885,7 @@
 			<!-- Footer -->
 			<div class="flex gap-3 p-6 border-t border-neutral-800 bg-surface-elevated">
 				<button
+					type="button"
 					onclick={onClose}
 					disabled={loading}
 					class="flex-1 px-4 py-3 bg-surface-elevated text-white  font-semibold hover:bg-surface-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -825,7 +893,7 @@
 					Cancel
 				</button>
 			<button
-				onclick={handleSubmit}
+				type="submit"
 				disabled={loading || !emailVerified || (generatedPrivateKey !== null && !privateKeyDownloaded)}
 				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 			>
@@ -841,6 +909,7 @@
 					{/if}
 				</button>
 			</div>
+			</form>
 		</div>
 	</div>
 {/if}

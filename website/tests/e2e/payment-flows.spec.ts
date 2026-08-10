@@ -138,8 +138,10 @@ test.describe('Payment Flows', () => {
 		await expect(page.getByText(/debited from your prepaid wallet/i)).toBeVisible();
 		await expect(page.getByRole('link', { name: '/dashboard/wallet' })).toBeVisible();
 
-		// Rental form fields are present below the payment section.
+		// Rental form fields: SSH key is in the main flow; Contact + Notes are
+		// collapsed inside the "Advanced (optional)" disclosure.
 		await expect(page.locator('textarea[placeholder*="ssh-ed25519"]')).toBeVisible();
+		await page.getByText('Advanced (optional)').click();
 		await expect(page.locator('input[placeholder*="email:you@example.com"]')).toBeVisible();
 		await expect(page.locator('textarea[placeholder*="special requirements"]')).toBeVisible();
 	});
