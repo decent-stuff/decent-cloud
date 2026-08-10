@@ -5,6 +5,7 @@ import {
 	seedContract,
 	deleteContractsForRequester,
 	sql,
+	randomHex,
 	type ContractSeed,
 } from './fixtures/seed-helpers';
 
@@ -293,11 +294,72 @@ test.describe('/dashboard/rentals', () => {
 			const card = page.locator(`a[href="/dashboard/rentals/${contractId}"]`);
 			await expect(card).toBeVisible();
 
-			// The pending-gateway hint must surface an ETA hint.
-			await expect(card.getByText(/gateway routing is being configured/i)).toBeVisible();
-			await expect(card.getByText(/1.{0,3}3 minutes|typically/i)).toBeVisible();
-			// And an inline Refresh button must exist on the card.
-			await expect(card.getByRole('button', { name: /refresh/i })).toBeVisible();
+		// The pending-gateway hint must surface an ETA hint.
+		await expect(card.getByText(/gateway routing is being configured/i)).toBeVisible();
+		await expect(card.getByText(/1.{0,3}3 minutes|typically/i)).toBeVisible();
+		// And an inline Refresh button must exist on the card.
+		await expect(card.getByRole('button', { name: /refresh/i })).toBeVisible();
+	} finally {
+		await deleteContractsForRequester(pubkey);
+	}
+});
+
+	test('detail: provider name links to provider profile page (matches marketplace, not reputation)', async ({ page, testAccount }) => {
+		// The provider name on the rental detail page must jump to the SAME
+		// provider profile destination the marketplace uses
+		// (/dashboard/providers/{username || pubkey}), not the reputation page.
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		const providerPubkey = randomHex(32);
+		try {
+			const contractId = await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'active',
+				paymentStatus: 'succeeded',
+				providerPubkeyHex: providerPubkey,
+			});
+
+			await page.goto(`/dashboard/rentals/${contractId}`);
+
+			// Seeded provider has no account → provider_username is undefined,
+			// so the href resolves to the raw pubkey (the marketplace fallback
+			// branch of `owner_username || pubkey`).
+			await expect(
+				page.locator(`a[href="/dashboard/providers/${providerPubkey}"]`),
+			).toBeVisible();
+			// And it must NOT point at the legacy reputation route.
+			await expect(
+				page.locator(`a[href="/dashboard/reputation/${providerPubkey}"]`),
+			).toHaveCount(0);
+		} finally {
+			await deleteContractsForRequester(pubkey);
+		}
+	});
+
+	test('list: provider name on a card navigates to provider profile page', async ({ page, testAccount }) => {
+		// The provider name on a rentals list card must navigate to the provider
+		// profile page (/dashboard/providers/...), matching the marketplace link
+		// destination — not the reputation page.
+		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+		const providerPubkey = randomHex(32);
+		try {
+			await seedContract({
+				requesterPubkeyHex: pubkey,
+				status: 'active',
+				paymentStatus: 'succeeded',
+				providerPubkeyHex: providerPubkey,
+			});
+
+			await page.goto('/dashboard/rentals');
+			const card = page.locator('a[href^="/dashboard/rentals/"]').first();
+			await expect(card).toBeVisible();
+
+			// The provider name renders as the truncated pubkey (no username on
+			// the seeded provider): first6...last6.
+			const truncated = `${providerPubkey.slice(0, 6)}...${providerPubkey.slice(-6)}`;
+			// Clicking the provider name navigates to the provider profile page.
+			const nav = page.waitForURL(`**/dashboard/providers/${providerPubkey}`, { timeout: 10_000 });
+			await card.getByRole('button', { name: truncated }).click();
+			await nav;
 		} finally {
 			await deleteContractsForRequester(pubkey);
 		}
