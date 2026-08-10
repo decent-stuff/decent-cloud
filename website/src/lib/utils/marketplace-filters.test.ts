@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterInStock, isOfferingPaused, filterOfflineOfferings } from './marketplace-filters';
+import { filterInStock, isOfferingPaused, filterOfflineOfferings, isOfferingRentable } from './marketplace-filters';
 
 // ---------- isOfferingPaused ----------
 describe('isOfferingPaused', () => {
@@ -242,5 +242,32 @@ describe('filterOfflineOfferings', () => {
 	it('returns empty array for empty input', () => {
 		expect(filterOfflineOfferings([], false)).toEqual([]);
 		expect(filterOfflineOfferings([], true)).toEqual([]);
+	});
+});
+
+// ---------- isOfferingRentable ----------
+describe('isOfferingRentable', () => {
+	it('returns true for an online offering without critical flags', () => {
+		expect(isOfferingRentable({ provider_online: true, has_critical_flags: false })).toBe(true);
+	});
+
+	it('returns false when provider_online is false (offline = dead end)', () => {
+		expect(isOfferingRentable({ provider_online: false, has_critical_flags: false })).toBe(false);
+	});
+
+	it('returns false when has_critical_flags is true', () => {
+		expect(isOfferingRentable({ provider_online: true, has_critical_flags: true })).toBe(false);
+	});
+
+	it('returns false when BOTH offline AND flagged', () => {
+		expect(isOfferingRentable({ provider_online: false, has_critical_flags: true })).toBe(false);
+	});
+
+	it('treats undefined provider_online as rentable (unknown is not offline)', () => {
+		expect(isOfferingRentable({ provider_online: undefined, has_critical_flags: false })).toBe(true);
+	});
+
+	it('treats undefined has_critical_flags as rentable (no flags)', () => {
+		expect(isOfferingRentable({ provider_online: true, has_critical_flags: undefined })).toBe(true);
 	});
 });

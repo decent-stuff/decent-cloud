@@ -6,6 +6,8 @@ type OfferingWithCurrency = {
 	product_type: string;
 	currency: string;
 	monthly_price?: number;
+	provider_online?: boolean;
+	has_critical_flags?: boolean;
 };
 
 describe('filterSimilarOfferings', () => {
@@ -133,6 +135,60 @@ describe('filterSimilarOfferings', () => {
 			const result = filterSimilarOfferings(allOfferings, { id: 99, product_type: 'vps', currency: 'USD' });
 
 			expect(result).toHaveLength(4);
+		});
+	});
+
+	// Liveness guard: a "Similar Offerings" link must never route a buyer to a
+	// dead/offline detail page. Mirrors the marketplace list's own offline-hiding
+	// (provider_online === false) and additionally drops offerings carrying
+	// critical flags — these are not "genuinely rentable alternatives".
+	describe('liveness filtering (no dead-end links)', () => {
+		it('excludes offerings where provider_online is false', () => {
+			const allOfferings: OfferingWithCurrency[] = [
+				{ id: 10, product_type: 'vps', currency: 'USD', provider_online: true },
+				{ id: 11, product_type: 'vps', currency: 'USD', provider_online: false },
+			];
+
+			const result = filterSimilarOfferings(allOfferings, { id: 1, product_type: 'vps', currency: 'USD' });
+
+			expect(result.map((o) => o.id)).toEqual([10]);
+		});
+
+		it('excludes offerings with has_critical_flags true', () => {
+			const allOfferings: OfferingWithCurrency[] = [
+				{ id: 10, product_type: 'vps', currency: 'USD', has_critical_flags: false },
+				{ id: 11, product_type: 'vps', currency: 'USD', has_critical_flags: true },
+			];
+
+			const result = filterSimilarOfferings(allOfferings, { id: 1, product_type: 'vps', currency: 'USD' });
+
+			expect(result.map((o) => o.id)).toEqual([10]);
+		});
+
+		it('excludes offline offerings even when they carry has_critical_flags', () => {
+			// Real-world catalog state: the demo/seeded offline alternatives are
+			// BOTH offline AND flagged. Regression for the 1628 detail page, which
+			// previously surfaced 956/1206/957/1207 as "similar" — all dead ends.
+			const allOfferings: OfferingWithCurrency[] = [
+				{ id: 956, product_type: 'vps', currency: 'USD', provider_online: false, has_critical_flags: true },
+				{ id: 1206, product_type: 'vps', currency: 'USD', provider_online: false, has_critical_flags: true },
+				{ id: 957, product_type: 'vps', currency: 'USD', provider_online: false, has_critical_flags: true },
+				{ id: 1207, product_type: 'vps', currency: 'USD', provider_online: false, has_critical_flags: true },
+			];
+
+			const result = filterSimilarOfferings(allOfferings, { id: 1628, product_type: 'vps', currency: 'USD' });
+
+			expect(result).toHaveLength(0);
+		});
+
+		it('includes offerings with unknown online status (undefined) — unknown is not offline', () => {
+			const allOfferings: OfferingWithCurrency[] = [
+				{ id: 10, product_type: 'vps', currency: 'USD' /* provider_online undefined */ },
+			];
+
+			const result = filterSimilarOfferings(allOfferings, { id: 1, product_type: 'vps', currency: 'USD' });
+
+			expect(result.map((o) => o.id)).toEqual([10]);
 		});
 	});
 });
