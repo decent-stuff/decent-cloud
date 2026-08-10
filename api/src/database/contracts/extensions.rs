@@ -171,6 +171,29 @@ impl Database {
         Ok(contracts)
     }
 
+    /// Cancel a freshly-created, never-paid contract so it cannot linger as an
+    /// unprovisionable zombie (DB CHECK `provisioning_requires_payment` blocks
+    /// provisioning while `payment_status='pending'`, and the code-level gate in
+    /// `update_contract_status` refuses to deliver a VM on an unpaid contract).
+    ///
+    /// Used by auto-renewal: when a renewed wallet-method contract's debit fails
+    /// (insufficient balance), the just-created contract is still
+    /// `status='requested'` + `payment_status='pending'`. This scoped UPDATE
+    /// cancels it — acting ONLY on `requested`+`pending` rows, so it can never
+    /// touch a contract that was ever paid or ever left the requested state.
+    /// Returns `true` if a row was cancelled, `false` if the contract had
+    /// already moved on (in which case the caller should investigate).
+    pub async fn cancel_unpaid_contract(&self, contract_id: &[u8]) -> Result<bool> {
+        let result = sqlx::query!(
+            "UPDATE contract_sign_requests SET status = 'cancelled' \
+             WHERE contract_id = $1 AND status = 'requested' AND payment_status = 'pending'",
+            contract_id,
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
     /// Set auto_renew flag on a contract.
     ///
     /// Only the original requester may change this setting.

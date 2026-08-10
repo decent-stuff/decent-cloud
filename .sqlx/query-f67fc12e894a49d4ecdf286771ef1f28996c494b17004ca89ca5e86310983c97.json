@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE contract_sign_requests SET status = 'cancelled' WHERE contract_id = $1 AND status = 'requested' AND payment_status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f67fc12e894a49d4ecdf286771ef1f28996c494b17004ca89ca5e86310983c97"
+}

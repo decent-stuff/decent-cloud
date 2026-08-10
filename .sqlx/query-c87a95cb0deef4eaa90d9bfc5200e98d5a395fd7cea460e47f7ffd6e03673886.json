@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_offerings (\n                id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee,\n                visibility, product_type, billing_interval, stock_status,\n                datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns\n            ) VALUES ($1, $2, $3, 'Renewal Test', 'USD', $4, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c87a95cb0deef4eaa90d9bfc5200e98d5a395fd7cea460e47f7ffd6e03673886"
+}

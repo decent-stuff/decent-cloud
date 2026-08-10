@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO contract_sign_requests (\n                contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact,\n                provider_pubkey, offering_id, payment_amount_e9s, start_timestamp_ns,\n                end_timestamp_ns, duration_hours, original_duration_hours, request_memo,\n                created_at_ns, status, payment_method, payment_status, currency, auto_renew\n            ) VALUES (\n                $1, $2, 'ssh-ed25519 AAAAC1', 'email:test@example.com', $3, $4, $5, $6, $7,\n                720, 720, 'original contract', $8, 'active', 'wallet', 'succeeded', 'USD', TRUE\n            )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b2ab492d1f3d1ff535726abdb47c9c790dc3fffc659be69dbbfa0b0fe7a6e6e1"
+}
