@@ -3072,7 +3072,7 @@ async fn run_doctor(config: Config, verify_api: bool, test_provision: bool) -> R
                                 println!(
                                     "       Template may be missing qemu-guest-agent package."
                                 );
-                                println!("       Re-run setup to fix: dc-agent setup proxmox ...");
+                                println!("       Re-run setup to fix: dc-agent setup token ...");
                                 true
                             }
                             Some(ip) => {
