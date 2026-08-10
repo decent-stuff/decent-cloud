@@ -17,9 +17,22 @@ pub fn is_production(environment: &str) -> bool {
     environment == "prod"
 }
 
+/// Reads `ENVIRONMENT` and reports whether this process is running in
+/// production. Centralizes the env-var read so callers (account creation,
+/// rate limiter, Stripe-at-boot, …) cannot drift on the default value.
+///
+/// Missing `ENVIRONMENT` is treated as non-production (`dev`) — matching the
+/// slim local stack and the test runner, neither of which sets it.
+pub fn is_production_env() -> bool {
+    let environment =
+        std::env::var("ENVIRONMENT").unwrap_or_else(|_| "dev".to_string());
+    is_production(&environment)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_prod_is_production() {
@@ -41,5 +54,32 @@ mod tests {
         // re-create the silent-mismatch footgun. Only `prod` counts.
         assert!(!is_production("production"));
         assert!(!is_production(""));
+    }
+
+    // is_production_env reads/writes the process-wide ENVIRONMENT var, so these
+    // must not run concurrently with each other (or with any other test that
+    // touches ENVIRONMENT).
+    #[test]
+    #[serial(env)]
+    fn test_is_production_env_prod() {
+        std::env::set_var("ENVIRONMENT", "prod");
+        assert!(is_production_env());
+        std::env::remove_var("ENVIRONMENT");
+    }
+
+    #[test]
+    #[serial(env)]
+    fn test_is_production_env_non_prod() {
+        // Unset → treated as dev (non-prod): the local/test stack never sets it.
+        std::env::remove_var("ENVIRONMENT");
+        assert!(!is_production_env());
+
+        std::env::set_var("ENVIRONMENT", "dev");
+        assert!(!is_production_env());
+
+        std::env::set_var("ENVIRONMENT", "test");
+        assert!(!is_production_env());
+
+        std::env::remove_var("ENVIRONMENT");
     }
 }

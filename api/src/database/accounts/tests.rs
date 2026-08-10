@@ -1889,3 +1889,56 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .expect("Failed to fetch from database");
     assert_eq!(audit_count.0, 0, "Signature audit should be deleted");
 }
+
+// === Email-verification dev bypass (BUG-2) ===
+//
+// Schema default is email_verified=FALSE (migrations_pg/001_schema.sql:269) and
+// create_rental_request blocks renting until verified
+// (api/src/openapi/contracts.rs:659-668). Locally there is no email-sending /
+// verification path, so every fresh account is permanently blocked from
+// renting. The dev bypass auto-verifies email at account creation when NOT in
+// production, unblocking local + automation flows WITHOUT touching prod.
+
+use serial_test::serial;
+
+/// In non-production (the local/test default), a freshly created account must
+/// be email-verified so the rental-time email gate does not block it.
+#[tokio::test]
+#[serial(env)]
+async fn test_create_account_auto_verifies_email_in_dev() {
+    // Force the non-production state explicitly (the local stack default).
+    std::env::remove_var("ENVIRONMENT");
+
+    let db = setup_test_db().await;
+    let account = db
+        .create_account("dev_buyer", &[0xA1u8; 32], "dev_buyer@example.com")
+        .await
+        .expect("Failed to create account");
+
+    assert!(
+        account.email_verified,
+        "dev-mode accounts must be auto email-verified so the rental gate does not block them"
+    );
+}
+
+/// In production, account creation must NOT auto-verify email — the operator's
+/// email-verification flow is the only legitimate path to email_verified=TRUE.
+/// This guards the bypass against accidentally shipping to prod.
+#[tokio::test]
+#[serial(env)]
+async fn test_create_account_does_not_auto_verify_email_in_prod() {
+    std::env::set_var("ENVIRONMENT", "prod");
+
+    let db = setup_test_db().await;
+    let account = db
+        .create_account("prod_buyer", &[0xA2u8; 32], "prod_buyer@example.com")
+        .await
+        .expect("Failed to create account");
+
+    std::env::remove_var("ENVIRONMENT");
+
+    assert!(
+        !account.email_verified,
+        "prod accounts must NOT be auto email-verified — the email gate must hold in production"
+    );
+}
