@@ -74,7 +74,7 @@ const DEFAULT_BADGE: ContractStatusBadge = {
  * Get display status badge based on contract status and payment status.
  *
  * State machine for display:
- * - status='requested' + payment_status='pending' → 'Awaiting Payment' (Stripe not paid yet)
+ * - status='requested' + payment_status='pending' → 'Awaiting Payment' (wallet debit pending)
  * - status='requested' + payment_status='failed' → 'Payment Failed'
  * - status='requested' + payment_status='succeeded' → 'Requested' (paid, waiting for provider)
  * - Other statuses → use status directly

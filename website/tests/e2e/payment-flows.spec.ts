@@ -24,11 +24,11 @@ import { createHmac } from 'crypto';
  *   verify the test-signed payload.
  *
  * Test Coverage:
- * - Stripe payment-method option visibility for supported currencies
- * - Stripe Checkout redirect UI rendering after Credit Card selection
- * - Stripe `checkout.session.completed` webhook → contract activation (the
- *   money path: signature verification → update_checkout_session_payment →
- *   payment_status flip). No real Stripe Checkout round-trip required.
+ * - Wallet payment-method UI visibility for supported currencies
+ * - Submit button rendering for the wallet-debit flow
+ * - Stripe `checkout.session.completed` webhook → contract payment_status flip
+ *   (legacy per-contract path; still exercised DB-side. The wallet top-up
+ *   webhook branch is covered in wallet-api.spec.ts). No real Stripe round-trip.
  */
 
 /**
@@ -126,17 +126,17 @@ test.describe('Payment Flows', () => {
 		await expect(page.getByRole('heading', { name: 'Rent Resource' })).toBeVisible({ timeout: 5000 });
 	}
 
-	test('Stripe payment UI - renders the credit card (Stripe) section for supported currencies', async ({
+	test('Wallet payment UI - renders the prepaid wallet section for paid rentals', async ({
 		page,
 	}) => {
-		// Stripe is the sole paid rail. The rental dialog renders the
-		// "Credit Card Payment via Stripe" section directly (no payment-method
-		// toggle), with the Stripe Checkout redirect explainer.
+		// The prepaid wallet is the sole paid rail (self-rental stays free). The
+		// rental dialog renders the "Wallet Payment" section with a debit explainer
+		// and a link to top up, instead of the old Stripe Checkout redirect.
 		await openRentalDialog(page, usdOffering.offeringName);
 
-		// Stripe Checkout section renders with the redirect explainer.
-		await expect(page.getByRole('heading', { name: 'Credit Card Payment via Stripe' })).toBeVisible({ timeout: 5000 });
-		await expect(page.getByText("You will be redirected to Stripe's secure checkout")).toBeVisible();
+		await expect(page.getByRole('heading', { name: 'Wallet Payment' })).toBeVisible({ timeout: 5000 });
+		await expect(page.getByText(/debited from your prepaid wallet/i)).toBeVisible();
+		await expect(page.getByRole('link', { name: '/dashboard/wallet' })).toBeVisible();
 
 		// Rental form fields are present below the payment section.
 		await expect(page.locator('textarea[placeholder*="ssh-ed25519"]')).toBeVisible();
@@ -144,19 +144,11 @@ test.describe('Payment Flows', () => {
 		await expect(page.locator('textarea[placeholder*="special requirements"]')).toBeVisible();
 	});
 
-	test('Stripe Payment UI - shows DEV test cards and Pay now for fiat currencies', async ({
-		page,
-	}) => {
-		// The Stripe integration is redirect-based (Stripe Checkout), NOT embedded
-		// Stripe Elements — there is no in-page card-entry iframe. The dialog shows
-		// a redirect explainer (+ test card reference in DEV). Submitting hands off
-		// to Stripe's hosted checkout page.
+	test('Wallet payment UI - shows Pay now for fiat-currency rentals', async ({ page }) => {
+		// Submit button shows "Pay now" (payment is required up front via wallet
+		// debit at contract creation — there is no redirect to an external checkout).
 		await openRentalDialog(page, usdOffering.offeringName);
 
-		// DEV-only test card reference is shown against the warm (vite dev) stack.
-		await expect(page.getByText('4242 4242 4242 4242')).toBeVisible();
-
-		// Submit button shows "Pay now" (payment is required up front).
 		await expect(page.locator('button:has-text("Pay now")')).toBeVisible();
 	});
 

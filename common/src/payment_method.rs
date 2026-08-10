@@ -21,6 +21,8 @@ pub const STRIPE_SUPPORTED_CURRENCIES: &[&str] = &[
 #[serde(rename_all = "lowercase")]
 pub enum PaymentMethod {
     Stripe,
+    /// Prepaid wallet debit — balance is debited atomically at contract creation.
+    Wallet,
     /// Test payment method for E2E/testing - auto-succeeds without checkout
     Test,
 }
@@ -28,6 +30,10 @@ pub enum PaymentMethod {
 impl PaymentMethod {
     pub fn is_stripe(&self) -> bool {
         matches!(self, PaymentMethod::Stripe)
+    }
+
+    pub fn is_wallet(&self) -> bool {
+        matches!(self, PaymentMethod::Wallet)
     }
 
     pub fn is_test(&self) -> bool {
@@ -39,6 +45,7 @@ impl std::fmt::Display for PaymentMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PaymentMethod::Stripe => write!(f, "stripe"),
+            PaymentMethod::Wallet => write!(f, "wallet"),
             PaymentMethod::Test => write!(f, "test"),
         }
     }
@@ -50,6 +57,7 @@ impl std::str::FromStr for PaymentMethod {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "stripe" => Ok(PaymentMethod::Stripe),
+            "wallet" => Ok(PaymentMethod::Wallet),
             "test" => Ok(PaymentMethod::Test),
             _ => Err(format!("Invalid payment method: {}", s)),
         }
@@ -125,6 +133,18 @@ mod tests {
             PaymentMethod::Stripe
         );
         assert_eq!(
+            "wallet".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Wallet
+        );
+        assert_eq!(
+            "Wallet".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Wallet
+        );
+        assert_eq!(
+            "WALLET".parse::<PaymentMethod>().unwrap(),
+            PaymentMethod::Wallet
+        );
+        assert_eq!(
             "test".parse::<PaymentMethod>().unwrap(),
             PaymentMethod::Test
         );
@@ -149,6 +169,7 @@ mod tests {
     #[test]
     fn test_payment_method_display() {
         assert_eq!(PaymentMethod::Stripe.to_string(), "stripe");
+        assert_eq!(PaymentMethod::Wallet.to_string(), "wallet");
         assert_eq!(PaymentMethod::Test.to_string(), "test");
     }
 
@@ -157,6 +178,10 @@ mod tests {
         let stripe = PaymentMethod::Stripe;
         let json = serde_json::to_string(&stripe).unwrap();
         assert_eq!(json, r#""stripe""#);
+
+        let wallet = PaymentMethod::Wallet;
+        let json = serde_json::to_string(&wallet).unwrap();
+        assert_eq!(json, r#""wallet""#);
 
         let test = PaymentMethod::Test;
         let json = serde_json::to_string(&test).unwrap();
@@ -167,6 +192,9 @@ mod tests {
     fn test_payment_method_deserialize() {
         let stripe: PaymentMethod = serde_json::from_str(r#""stripe""#).unwrap();
         assert_eq!(stripe, PaymentMethod::Stripe);
+
+        let wallet: PaymentMethod = serde_json::from_str(r#""wallet""#).unwrap();
+        assert_eq!(wallet, PaymentMethod::Wallet);
 
         let test: PaymentMethod = serde_json::from_str(r#""test""#).unwrap();
         assert_eq!(test, PaymentMethod::Test);

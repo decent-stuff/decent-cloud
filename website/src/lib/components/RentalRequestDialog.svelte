@@ -156,8 +156,8 @@
 		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
 	);
 
-	// Stripe is the only paid rail (self-rental stays free).
-	let paymentMethod = $state<"stripe">("stripe");
+	// The prepaid wallet is the only paid rail (self-rental stays free).
+	let paymentMethod = $state<"wallet">("wallet");
 
 	// Self-rental: user renting their own offering (no payment needed)
 	let isSelfRental = $derived(() => {
@@ -167,7 +167,7 @@
 		return bytesToHex(active.publicKeyBytes) === offering.pubkey;
 	});
 
-	// Payment is required unless it's a self-rental (Stripe is the only paid path)
+	// Payment is required unless it's a self-rental (wallet is the only paid path)
 	let paymentRequired = $derived(!isSelfRental());
 
 	// Subscription offering helpers
@@ -273,7 +273,9 @@
 
 			const response = await createRentalRequest(params, signed.headers);
 
-			// Stripe: redirect to Checkout
+			// Wallet payment: balance is debited atomically by the API; no
+			// redirect. checkoutUrl is null on success. (Legacy Stripe
+			// per-contract redirect retained for any non-wallet path.)
 			if (response.checkoutUrl) {
 				// Persist SSH key save intent in localStorage so the rentals page
 				// can complete the save after returning from Stripe Checkout.
@@ -284,7 +286,7 @@
 				return;
 			}
 
-			// Self-rental / no-checkout path
+			// Wallet / self-rental: payment succeeded inline, finish the flow.
 			await maybeSaveKeyToProfile();
 			onSuccess(response.contractId);
 		} catch (e) {
@@ -576,31 +578,21 @@
 						at no cost.
 					</p>
 				</div>
-			{:else}
-				<div
-					class="bg-surface-elevated  p-4 border border-neutral-800"
-				>
-					<h3 class="text-sm font-semibold text-neutral-400 mb-2">
-						Credit Card Payment via Stripe
-					</h3>
-					<p class="text-sm text-neutral-500">
-						You will be redirected to Stripe's secure checkout
-						page to complete your payment. Tax will be
-						calculated automatically based on your location.
-					</p>
-					{#if import.meta.env.DEV}
-						<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300 space-y-1">
-							<p class="font-semibold">Test mode — sample card numbers:</p>
-							<p>4242 4242 4242 4242 — succeeds immediately, no authentication</p>
-							<p>4000 0025 0000 3155 — requires 3D Secure 2 authentication</p>
-							<p>4000 0000 0000 9995 — declined: insufficient_funds</p>
-							<p>4000 0000 0000 0002 — declined: generic</p>
-							<p>4000 0000 0000 0069 — declined: expired card</p>
-							<p>4000 0000 0000 0127 — declined: incorrect CVC</p>
-						</div>
-					{/if}
-				</div>
-			{/if}
+		{:else}
+			<div
+				class="bg-surface-elevated  p-4 border border-neutral-800"
+			>
+				<h3 class="text-sm font-semibold text-neutral-400 mb-2">
+					Wallet Payment
+				</h3>
+				<p class="text-sm text-neutral-500">
+					The rental cost will be debited from your prepaid wallet
+					balance. Top up at
+					<a href="/dashboard/wallet" class="text-primary-400 underline">/dashboard/wallet</a>
+					if your balance is insufficient.
+				</p>
+			</div>
+		{/if}
 
 				<!-- SSH Key (Required) - positioned after payment for better UX -->
 				<div>
