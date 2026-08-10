@@ -8,7 +8,43 @@ inventory for quick local reference; GitHub remains the source of truth. Re-sync
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
 
-## Next session priorities (2026-08-10)
+## Next session priorities (2026-08-11)
+
+> ╔══════════════════════════════════════════════════════════════════════╗
+> ║  **#0 — ABSOLUTE TOP PRIORITY (non-negotiable, iterates every session)**  ║
+> ╠══════════════════════════════════════════════════════════════════════╣
+> ║                                                                        ║
+> ║  **MARKETPLACE BUY FLOW must be dead simple + silky smooth.**          ║
+> ║                                                                        ║
+> ║  A new user must be able to:                                           ║
+> ║    1. Find resources in the marketplace                                ║
+> ║    2. Click to buy                                                     ║
+> ║    3. Answer a few questions if needed (SSH key, duration, etc.)       ║
+> ║    4. Click → done → start using the resource                          ║
+> ║                                                                        ║
+> ║  The operator will add real Hetzner-backed offerings as a provider.    ║
+> ║  The flow must then be exercised end-to-end (discover → contract →     ║
+> ║  payment → provision → gateway → SSH → use → cancel) and iterated      ║
+> ║  until frictionless. This is the PRODUCT NORTH STAR — every session    ║
+> ║  must advance it until there is nothing left to smooth out.            ║
+> ║                                                                        ║
+> ║  **Status (2026-08-11):** Infrastructure plumbing VERIFIED (Hetzner    ║
+> ║  VM create/delete/SSH/gateway/DNS all work via `api-cli cloud          ║
+> ║  provision` — cx23 provisioned in ~31s, clean termination in ~4s,     ║
+> ║  zero orphans). BUT the REAL product flow (marketplace → contract →    ║
+> ║  payment → provision → gateway → SSH → cancel) has NOT been tested     ║
+> ║  yet — local DB has 0 Hetzner-linked offerings. Next steps: operator   ║
+> ║  publishes Hetzner-backed offering → exercise full rental lifecycle →  ║
+> ║  identify + fix every friction point in the UI flow.                   ║
+> ║                                                                        ║
+> ║  **No further avoiding is acceptable. This is worked on every session.**  ║
+> ╚══════════════════════════════════════════════════════════════════════╝
+
+Decisions recorded 2026-08-11: the **marketplace buy flow** (item #0 above) is now the
+**absolute #1 priority**, above everything else in this document. All other work is
+subordinate to making the discover→buy→use flow frictionless. The Hetzner infrastructure
+verification proved the plumbing works; the remaining work is UX flow quality (B8 below is
+the operator entry point for this).
 
 Decisions recorded 2026-08-10: (1) Hetzner resell = **direct cloud-backend** path (no
 gateway VM — see `docs/plans/2026-08-03-hetzner-first-offerings.md`); (2) **Decent Agents
@@ -599,6 +635,14 @@ Recommended `JoinSet`+`Semaphore` with `max_concurrent_provisioning` knob (defau
 
 **12 `database::contracts::tests` flakes** in full-suite runs = pre-existing environmental
 (parallel DB-test contention, tests take 158-168s); pass in isolation (254/254). NOT a regression.
+
+**B8 Hetzner infrastructure verification (PARTIAL)**: proved the plumbing works via
+`api-cli cloud provision` — direct cloud-account/cloud-resource API path. cx23 VM provisioned
+in ~31s (IP `46.225.238.4`, SSH reachable), gateway/DNS auto-created (`yws9n5.hz-nbg1.gw.decent-cloud.org`),
+clean termination in ~4s, zero orphaned resources. **BUT the real product flow was NOT tested** —
+local DB has 0 Hetzner-linked offerings; the rental/marketplace path (contract → payment → provision →
+gateway → SSH → cancel) is untested end-to-end. **Operator decision: marketplace buy flow is now
+ABSOLUTE #1 PRIORITY (item #0 above).** Infrastructure works; the UX flow must now be made silky smooth.
 
 ### 2026-08-03 session (k8s migration autonomous portion + #444 Wave 12 + real-app UX fixes + robustness sweep)
 
