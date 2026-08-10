@@ -1,5 +1,5 @@
 use crate::chatwoot::ChatwootClient;
-use crate::database::Database;
+use crate::database::{Database, WalletCreditResult};
 use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::openapi::common::decode_hex_path;
 use crate::support_bot::handler::handle_customer_message;
@@ -206,11 +206,16 @@ pub async fn stripe_webhook(
                 }
                 let amount_e9s = amount_cents * 10_000_000;
 
+                // Idempotent credit keyed on the Stripe checkout session id:
+                // if Stripe replays `checkout.session.completed` for the same
+                // session, the wallet is credited exactly ONCE (the second
+                // delivery is an idempotent no-op that still 200s so Stripe
+                // stops retrying). See migration 056 + `credit_wallet_balance_idempotent`.
                 match db
-                    .credit_wallet_balance(pubkey_hex, amount_e9s, "topup", Some(&session.id))
+                    .credit_wallet_balance_idempotent(pubkey_hex, amount_e9s, &session.id)
                     .await
                 {
-                    Ok(new_balance) => {
+                    Ok(WalletCreditResult::NewlyCredited { balance_e9s: new_balance }) => {
                         tracing::info!(
                             "Wallet top-up credited: pubkey={} session={} amount_cents={} new_balance_e9s={}",
                             pubkey_hex,
@@ -219,6 +224,17 @@ pub async fn stripe_webhook(
                             new_balance
                         );
                         return Ok("wallet_topup_credited".into());
+                    }
+                    Ok(WalletCreditResult::AlreadyProcessed { balance_e9s: existing_balance }) => {
+                        tracing::info!(
+                            "Wallet top-up already processed (idempotent replay): \
+                             pubkey={} session={} existing_balance_e9s={}",
+                            pubkey_hex,
+                            session.id,
+                            existing_balance
+                        );
+                        // 200 OK so Stripe stops retrying — NOT an error.
+                        return Ok("wallet_topup_already_processed".into());
                     }
                     Err(e) => {
                         tracing::error!(

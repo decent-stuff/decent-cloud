@@ -1,5 +1,5 @@
 use super::types::Database;
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use poem_openapi::Object;
 use serde::{Deserialize, Serialize};
 
@@ -19,6 +19,27 @@ pub struct WalletLedgerEntry {
     pub reference: Option<String>,
     /// Creation time (Unix seconds).
     pub created_at: i64,
+}
+
+/// Outcome of an idempotent wallet credit (used for Stripe top-ups).
+///
+/// A Stripe `checkout.session.completed` webhook is delivered at-least-once.
+/// Re-delivery for the same session id MUST NOT credit the balance a second
+/// time — see the partial unique index on `wallet_ledger(reference)` for
+/// `entry_type='topup'` (migration 056).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WalletCreditResult {
+    /// This call credited the wallet for the first time for this reference.
+    NewlyCredited {
+        /// Wallet balance immediately after this credit (e9s).
+        balance_e9s: i64,
+    },
+    /// A credit with this reference was already processed; this call was a
+    /// no-op replay that returned the existing balance without re-crediting.
+    AlreadyProcessed {
+        /// Current committed wallet balance (unchanged by this call) in e9s.
+        balance_e9s: i64,
+    },
 }
 
 impl Database {
@@ -74,7 +95,99 @@ impl Database {
         Ok(new_balance)
     }
 
-    /// Debit the wallet (rental payment). Atomically decrements the balance,
+    /// Idempotent wallet top-up credit, keyed on the Stripe checkout session
+    /// id (`reference`). The underlying `wallet_ledger` partial unique index
+    /// (migration 056) guarantees a session can only credit the balance ONCE,
+    /// even when Stripe replays the `checkout.session.completed` webhook.
+    ///
+    /// On a replay (same `reference` already credited) this returns
+    /// [`WalletCreditResult::AlreadyProcessed`] with the current balance,
+    /// having re-credited nothing. The balance upsert + ledger insert run in
+    /// ONE transaction, so a unique violation on the ledger INSERT aborts the
+    /// whole transaction (the balance upsert is rolled back too) — the money
+    /// is credited exactly once.
+    ///
+    /// Use [`credit_wallet_balance`] for non-topup credits (refunds), which are
+    /// NOT keyed on reference uniqueness.
+    ///
+    /// `amount_e9s` must be strictly positive.
+    pub async fn credit_wallet_balance_idempotent(
+        &self,
+        pubkey_hex: &str,
+        amount_e9s: i64,
+        reference: &str,
+    ) -> Result<WalletCreditResult> {
+        ensure!(amount_e9s > 0, "credit amount must be positive");
+        let mut tx = self.pool.begin().await?;
+
+        // Balance upsert first (same as the non-idempotent credit).
+        let new_balance = sqlx::query_scalar!(
+            r#"INSERT INTO wallet_balances (pubkey, balance_e9s)
+               VALUES ($1, $2)
+               ON CONFLICT (pubkey) DO UPDATE
+               SET balance_e9s = wallet_balances.balance_e9s + $2,
+                   updated_at = NOW()
+               RETURNING balance_e9s as "balance_e9s!: i64""#,
+            pubkey_hex,
+            amount_e9s,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        // Append the ledger row. Migration 056's partial unique index
+        // (reference WHERE entry_type='topup') rejects a duplicate session id
+        // with SQLSTATE 23505 unique_violation — that is the replay signal.
+        // Reusing the exact SQL string of `credit_wallet_balance` keeps a
+        // single cached query plan (entry_type/reference stay bound params).
+        let insert = sqlx::query!(
+            r#"INSERT INTO wallet_ledger (pubkey, amount_e9s, balance_after_e9s, entry_type, reference)
+               VALUES ($1, $2, $3, $4, $5)"#,
+            pubkey_hex,
+            amount_e9s,
+            new_balance,
+            "topup",
+            reference,
+        )
+        .execute(&mut *tx)
+        .await;
+
+        match insert {
+            Ok(_) => {
+                tx.commit().await?;
+                Ok(WalletCreditResult::NewlyCredited {
+                    balance_e9s: new_balance,
+                })
+            }
+            Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
+                // Idempotent replay: this session id already credited the
+                // wallet. The ledger INSERT above failed on the partial unique
+                // index, which also aborted the transaction (so the balance
+                // upsert was rolled back automatically — the money is never
+                // double-counted). Roll back explicitly to release the
+                // connection cleanly, then return the committed balance.
+                tx.rollback()
+                    .await
+                    .context("rollback after idempotent top-up replay")?;
+                let balance = self
+                    .get_wallet_balance(pubkey_hex)
+                    .await?
+                    .context("wallet balance row missing after idempotent top-up replay")?;
+                Ok(WalletCreditResult::AlreadyProcessed {
+                    balance_e9s: balance,
+                })
+            }
+            Err(e) => {
+                // Any other ledger INSERT failure must not leave the balance
+                // upsert committed without its audit row.
+                tx.rollback()
+                    .await
+                    .context("rollback after ledger insert failure")?;
+                Err(e.into())
+            }
+        }
+    }
+
+
     /// rejecting overdrafts at the row level (`WHERE balance_e9s >= amount`).
     /// Returns the new balance, or an error if the user has no wallet /
     /// insufficient funds.
@@ -211,7 +324,7 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
-    use super::Database;
+    use super::{Database, WalletCreditResult};
     use crate::database::test_helpers::setup_test_db;
 
     /// Deterministic hex pubkey for wallet tests (distinct from other suites).
@@ -470,5 +583,134 @@ mod tests {
             .is_err());
         let (ps, _) = contract_payment_info(&db, &cid).await;
         assert_eq!(ps, "pending", "contract must stay unpaid");
+    }
+
+    // ===== top-up idempotency tests (Stripe webhook replay) =====
+
+    /// Money-safety regression: crediting the SAME pubkey + amount + top-up
+    /// reference twice (as happens when Stripe replays `checkout.session.
+    /// completed`) must credit the balance exactly ONCE. The second call must
+    /// be an idempotent no-op, NOT a second credit.
+    #[tokio::test]
+    async fn topup_idempotent_on_replay_does_not_double_credit() {
+        let db = setup_test_db().await;
+        let pubkey = pk(30);
+        let amount = 5_000_000_000; // $5.00
+        let reference = "cs_test_session_123";
+
+        // First credit: a genuine top-up.
+        let first = db
+            .credit_wallet_balance_idempotent(&pubkey, amount, reference)
+            .await
+            .expect("first top-up must succeed");
+        assert_eq!(
+            first,
+            WalletCreditResult::NewlyCredited {
+                balance_e9s: 5_000_000_000
+            },
+            "first credit must be NewlyCredited"
+        );
+
+        // Second credit with the SAME reference: idempotent replay (Stripe
+        // redelivered the webhook). Must NOT add money again, and must NOT
+        // hard-error (the webhook handler returns 200 so Stripe stops retrying).
+        let second = db
+            .credit_wallet_balance_idempotent(&pubkey, amount, reference)
+            .await
+            .expect("replay must not hard-error (webhook must 200)");
+        assert_eq!(
+            second,
+            WalletCreditResult::AlreadyProcessed {
+                balance_e9s: 5_000_000_000
+            },
+            "second credit with same reference must be AlreadyProcessed (replay)"
+        );
+
+        // Money-safety: balance reflects a SINGLE credit, never doubled.
+        assert_eq!(
+            db.get_wallet_balance(&pubkey).await.unwrap(),
+            Some(5_000_000_000),
+            "balance must reflect one credit, not a double credit"
+        );
+
+        // The ledger must contain exactly ONE top-up row for this reference.
+        let ledger = db.get_wallet_ledger(&pubkey, 10).await.unwrap();
+        let topups: Vec<_> = ledger.iter().filter(|e| e.entry_type == "topup").collect();
+        assert_eq!(topups.len(), 1, "exactly one top-up ledger row on replay");
+        assert_eq!(topups[0].reference.as_deref(), Some(reference));
+        assert_eq!(topups[0].amount_e9s, amount);
+    }
+
+    /// Distinct Stripe sessions (distinct references) must each credit
+    /// independently — the idempotency key is the reference, not the pubkey.
+    #[tokio::test]
+    async fn topup_distinct_references_each_credit() {
+        let db = setup_test_db().await;
+        let pubkey = pk(31);
+
+        let a = db
+            .credit_wallet_balance_idempotent(&pubkey, 2_000_000_000, "cs_session_A")
+            .await
+            .unwrap();
+        assert_eq!(
+            a,
+            WalletCreditResult::NewlyCredited {
+                balance_e9s: 2_000_000_000
+            }
+        );
+
+        let b = db
+            .credit_wallet_balance_idempotent(&pubkey, 3_000_000_000, "cs_session_B")
+            .await
+            .unwrap();
+        assert_eq!(
+            b,
+            WalletCreditResult::NewlyCredited {
+                balance_e9s: 5_000_000_000
+            }
+        );
+
+        assert_eq!(
+            db.get_wallet_balance(&pubkey).await.unwrap(),
+            Some(5_000_000_000)
+        );
+    }
+
+    /// The top-up idempotency index (migration 056) is scoped to
+    /// `entry_type='topup'`. Refunds (`rental_refund`) are keyed on the
+    /// contract id, and a contract may legitimately accrue multiple refund
+    /// entries — the unique index MUST NOT block them. This guards against
+    /// an over-broad unique constraint that would break the refund path.
+    #[tokio::test]
+    async fn refunds_with_same_reference_are_not_blocked_by_topup_index() {
+        let db = setup_test_db().await;
+        let pubkey = pk(32);
+
+        // Seed a balance via a top-up (distinct reference, not the refund's).
+        db.credit_wallet_balance(&pubkey, 10_000_000_000, "topup", Some("cs_seed"))
+            .await
+            .unwrap();
+
+        // Two refunds referencing the SAME contract id must both succeed.
+        db.credit_wallet_balance(&pubkey, 1_000_000_000, "rental_refund", Some("contract-7"))
+            .await
+            .expect("first refund must succeed");
+        db.credit_wallet_balance(&pubkey, 2_000_000_000, "rental_refund", Some("contract-7"))
+            .await
+            .expect("second refund with same reference must succeed (refunds are not unique-keyed)");
+
+        // Both refunds credited: 10e9 + 1e9 + 2e9 = 13e9.
+        assert_eq!(
+            db.get_wallet_balance(&pubkey).await.unwrap(),
+            Some(13_000_000_000)
+        );
+
+        let ledger = db.get_wallet_ledger(&pubkey, 10).await.unwrap();
+        let refunds: Vec<_> = ledger
+            .iter()
+            .filter(|e| e.entry_type == "rental_refund")
+            .collect();
+        assert_eq!(refunds.len(), 2, "both refund ledger rows must be present");
+        assert!(refunds.iter().all(|e| e.reference.as_deref() == Some("contract-7")));
     }
 }

@@ -44,6 +44,7 @@ pub use cloud_resources::CloudResourceWithDetails;
 pub use contracts::ContractDisputeUpsert;
 pub use notification_config::UserNotificationConfig;
 pub use types::{Database, LedgerEntryData};
+pub use wallet::WalletCreditResult;
 
 // Import all handler implementations
 
