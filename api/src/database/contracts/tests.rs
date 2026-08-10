@@ -2006,6 +2006,47 @@ async fn test_try_auto_accept_contract_disabled() {
     assert_eq!(contract.status, "requested");
 }
 
+/// cloud-resell (Model B) rentals: operator-provisioned offering with NO
+/// human provider to accept/reject. There is no provider_profiles row, so the
+/// rental's fate depends on get_provider_auto_accept_rentals's default. The
+/// schema default for auto_accept_rentals is TRUE, so the rental MUST
+/// auto-advance past 'requested' to 'accepted' (BUG-3).
+#[tokio::test]
+async fn test_try_auto_accept_contract_advances_without_provider_profile() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![5u8; 32];
+    let requester_pk = vec![6u8; 32];
+    let contract_id = vec![7u8; 32];
+
+    // Deliberately NO provider_profiles row — this is the cloud-resell case.
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "cloud-resell-offering",
+        0,
+        "requested",
+    )
+    .await;
+
+    let accepted = db
+        .try_auto_accept_contract(&contract_id)
+        .await
+        .unwrap();
+    assert!(
+        accepted,
+        "cloud-resell rental with no provider profile must auto-advance \
+         (schema default auto_accept_rentals=TRUE)"
+    );
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(
+        contract.status, "accepted",
+        "cloud-resell rental must advance past 'requested'"
+    );
+}
+
 #[tokio::test]
 async fn test_try_auto_accept_contract_idempotent() {
     let db = setup_test_db().await;

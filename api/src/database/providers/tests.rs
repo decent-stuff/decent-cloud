@@ -723,3 +723,56 @@ async fn test_check_auto_accept_rule_delete_reverts_to_accept_all() {
         "After rule deletion, should revert to accept-all"
     );
 }
+
+// === auto_accept default must match the schema default (BUG-3) ===
+//
+// provider_profiles.auto_accept_rentals has schema default TRUE
+// (migrations_pg/001_schema.sql:64). get_provider_auto_accept_rentals
+// returned FALSE when no profile row existed, contradicting the schema and
+// strangling cloud-resell (Model B) rentals — which are operator-provisioned
+// with no human provider to accept them — at 'requested' forever. The
+// function's default MUST agree with the column's default.
+
+#[tokio::test]
+async fn test_get_provider_auto_accept_rentals_defaults_true_without_profile() {
+    let db = setup_test_db().await;
+    let pubkey = vec![91u8; 32];
+
+    // Deliberately NO provider_profiles row — this is the cloud-resell
+    // (Model B) case: operator-provisioned offering whose provider pubkey was
+    // never run through the human onboarding flow.
+    let result = db.get_provider_auto_accept_rentals(&pubkey).await.unwrap();
+    assert!(
+        result,
+        "Without a provider_profiles row, auto-accept must default to TRUE \
+         to match the schema default (auto_accept_rentals BOOLEAN DEFAULT TRUE). \
+         A FALSE default contradicts the column default and strangles \
+         cloud-resell rentals at 'requested' forever."
+    );
+}
+
+#[tokio::test]
+async fn test_get_provider_auto_accept_rentals_respects_explicit_disable() {
+    let db = setup_test_db().await;
+    let pubkey = vec![92u8; 32];
+
+    // Provider explicitly opts OUT — must be honored even though the
+    // no-row default is now TRUE.
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals) VALUES ($1, 'Opted Out', 'v1', '1.0', $2, FALSE)",
+    )
+    .bind(&pubkey)
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let result = db.get_provider_auto_accept_rentals(&pubkey).await.unwrap();
+    assert!(
+        !result,
+        "Explicit auto_accept_rentals=FALSE must be honored"
+    );
+}
