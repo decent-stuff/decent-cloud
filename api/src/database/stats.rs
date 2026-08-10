@@ -1,6 +1,8 @@
+use super::offerings::is_cloud_resell;
 use super::types::Database;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use ts_rs::TS;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -37,44 +39,71 @@ impl Database {
         Ok(result)
     }
 
-    /// Get platform-wide statistics
+    /// Get platform-wide statistics.
+    ///
+    /// The three marketplace headline numbers — `total_offerings`,
+    /// `total_providers`, and `active_providers` — all derive from ONE
+    /// resolution of the **rentable-right-now** offerings (marketplace-visible
+    /// AND `provider_online`; see [`Database::resolve_rentable_offerings`]).
+    /// That is exactly what a user sees in the marketplace's DEFAULT view (the
+    /// frontend hides `provider_online == false` offerings behind a toggle), so
+    /// the headline can never advertise a healthy number next to a near-empty
+    /// listing — the #1 credibility hit for an "honest catalog".
+    ///
+    /// Concretely, this drops:
+    ///   - dead `provider_profiles` rows whose offerings are all offline / draft
+    ///     / pool-less (they don't appear in the rentable set, so they don't
+    ///     inflate `total_providers`);
+    ///   - offline-pool offerings the marketplace's default view hides (they
+    ///     don't inflate `total_offerings`);
+    ///   - and it ADDS cloud-resell providers (always-online, no dc-agent) to
+    ///     `active_providers`, which the heartbeat-only query used to miss.
     pub async fn get_platform_stats(&self) -> Result<PlatformStats> {
-        // Total providers = all who have ever checked in or created a profile
-        let total_providers: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(DISTINCT pubkey) as "count!" FROM (
-                SELECT pubkey FROM provider_profiles
-                UNION
-                SELECT pubkey FROM provider_check_ins
-            ) AS combined"#
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        // Active providers = those with at least one agent online within the
-        // marketplace's liveness window. This MUST read the same live source the
-        // marketplace uses for `provider_online` — `provider_agent_status` with
-        // `online = TRUE AND last_heartbeat_ns > now - 5min` (see
-        // offerings.rs::search_offerings / agent_pools.rs::list_agent_pools_with_stats)
-        // — NOT the retired ICP `provider_check_ins` table, which is empty/stale
-        // forever on every real deployment and reported 0 active providers while
-        // the marketplace showed online providers.
+        // The marketplace liveness window — same 5-minute cutoff the marketplace
+        // list uses for `provider_online` (offerings.rs / agent_pools.rs).
         let now_ns = crate::now_ns()?;
         let five_mins_ns: i64 = 5 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
-        let active_providers: i64 = sqlx::query_scalar!(
-            r#"SELECT COUNT(DISTINCT s.provider_pubkey) as "count!" FROM provider_agent_status s
-               WHERE s.online = TRUE AND s.last_heartbeat_ns > $1"#,
-            heartbeat_cutoff
-        )
-        .fetch_one(&self.pool)
-        .await?;
 
-        // Total offerings MUST match what the marketplace list actually shows.
-        // The list drops offerings whose provider has no resolvable agent pool, so
-        // the count applies that same rule (single source of truth in
-        // offerings.rs::count_marketplace_visible_offerings). Otherwise stats can
-        // advertise 1 listing while the marketplace shows 0.
-        let total_offerings = self.count_marketplace_visible_offerings().await?;
+        // Single source of truth: the rentable-right-now offerings. total_offerings
+        // is its length; total_providers is its distinct provider set; the
+        // cloud-resell providers in it feed the active-provider union below.
+        let rentable = self.resolve_rentable_offerings().await?;
+        let total_offerings = rentable.len() as i64;
+
+        let rentable_providers: HashSet<String> =
+            rentable.iter().map(|o| o.pubkey.clone()).collect();
+        let total_providers = rentable_providers.len() as i64;
+
+        // Cloud-resell providers (Hetzner/Vultr/Proxmox-API) are always-online:
+        // the central CloudProvisioningService provisions them on demand from
+        // the API server with NO per-host dc-agent, so they never appear in
+        // provider_agent_status. They MUST count as active.
+        let cloud_resell_providers: HashSet<String> = rentable
+            .iter()
+            .filter(|o| is_cloud_resell(o.provisioner_type.as_deref()))
+            .map(|o| o.pubkey.clone())
+            .collect();
+
+        // Active providers = those with a live agent heartbeat (the SAME live
+        // source the marketplace uses for `provider_online`) UNION the
+        // always-online cloud-resell providers. Raw (non-macro) query so no
+        // sqlx-cache regen is needed for this stats-only read.
+        let heartbeat_provider_pubkeys: Vec<Vec<u8>> = sqlx::query_scalar(
+            "SELECT DISTINCT provider_pubkey FROM provider_agent_status \
+             WHERE online = TRUE AND last_heartbeat_ns > $1",
+        )
+        .bind(heartbeat_cutoff)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("stats: active-provider heartbeat query failed: {e:#}"))?;
+
+        let mut active: HashSet<String> = heartbeat_provider_pubkeys
+            .into_iter()
+            .map(hex::encode)
+            .collect();
+        active.extend(cloud_resell_providers);
+        let active_providers = active.len() as i64;
 
         let total_contracts: i64 =
             sqlx::query_scalar!(r#"SELECT COUNT(*) as "count!" FROM contract_sign_requests"#)

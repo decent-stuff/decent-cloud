@@ -21,7 +21,7 @@ use ts_rs::TS;
 /// (e.g. `"proxmox"` for LXC, never `"proxmox_api"`), so parsing against
 /// `BackendType` cleanly separates the two models and never admits a pool-less
 /// self-hosted offering.
-fn is_cloud_resell(provisioner_type: Option<&str>) -> bool {
+pub(crate) fn is_cloud_resell(provisioner_type: Option<&str>) -> bool {
     provisioner_type
         .and_then(|pt| pt.parse::<BackendType>().ok())
         .is_some()
@@ -37,16 +37,40 @@ fn is_cloud_resell(provisioner_type: Option<&str>) -> bool {
 ///
 /// Applied identically by [`Database::search_offerings`],
 /// [`Database::search_offerings_dsl`], and
-/// [`Database::count_marketplace_visible_offerings`] so the headline count and
-/// the listing one click away can never disagree.
+/// [`Database::resolve_public_offerings_with_status`] (the shared read path the
+/// stats count derives from) so the headline count and the listing one click
+/// away can never disagree.
 fn is_marketplace_visible(o: &Offering) -> bool {
     o.resolved_pool_id.is_some()
         || o.offering_source.as_deref() == Some("self_provisioned")
         || is_cloud_resell(o.provisioner_type.as_deref())
 }
 
+/// The stats honesty predicate: an offering counts toward the platform's
+/// headline numbers iff it is **rentable right now** — marketplace-visible AND
+/// `provider_online`. This is a strict subset of [`is_marketplace_visible`]
+/// (never hides something the list shows) and matches what a user actually sees
+/// in the marketplace: the frontend's DEFAULT view filters out
+/// `provider_online == false` offerings (they sit behind a "show offline" toggle).
+///
+/// Why this matters: an agent-backed offering whose pool exists but has NO
+/// online agents is `is_marketplace_visible` (it has a `resolved_pool_id`) yet
+/// `provider_online == false` — it cannot be rented this instant. Counting it
+/// in "Available Offerings" / "Total Providers" would advertise a healthy
+/// number next to a near-empty default listing — the #1 credibility hit for an
+/// "honest catalog". Cloud-resell and self-provisioned offerings are always
+/// online, so they always count.
+///
+/// Used by [`Database::resolve_rentable_offerings`], the single source the
+/// platform-stats `total_offerings`, `total_providers`, and the cloud-resell
+/// `active_providers` branch all derive from.
+fn is_rentable_now(o: &Offering) -> bool {
+    is_marketplace_visible(o) && o.provider_online.unwrap_or(false)
+}
+
 /// Base SELECT for the public marketplace offering list. Shared by `search_offerings`,
-/// `search_offerings_dsl`, and `count_marketplace_visible_offerings` so the column set (and thus the
+/// `search_offerings_dsl`, and `resolve_public_offerings_with_status` (the read
+/// path behind the stats rentable count) so the column set (and thus the
 /// `Offering` row mapping) stays identical across all three read paths.
 /// Bindings: `$1` = agent liveness cutoff in nanoseconds (`now_ns - 5min`).
 const OFFERING_BASE_SELECT: &str = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, p.reliability_score, o.is_draft, o.publish_at, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, p.name as provider_name, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, EXISTS(SELECT 1 FROM provider_agent_status s WHERE s.provider_pubkey = o.pubkey AND s.online = TRUE AND s.last_heartbeat_ns > $1) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id";
@@ -1012,16 +1036,12 @@ impl Database {
             .expect("Example provider pubkey hex should always decode successfully")
     }
 
-    /// Count public, non-draft offerings that are actually visible in the
-    /// marketplace — i.e. they pass the SAME visibility predicate that
-    /// [`search_offerings`] applies post-fetch ([`is_marketplace_visible`]:
-    /// pool-backed, self-provisioned, or cloud-resell).
-    ///
-    /// This is the single source of truth the platform-stats `total_offerings`
-    /// field reads, so the headline count can never contradict the marketplace
-    /// listing one click away (a provider with offerings but no agent pool would
-    /// otherwise be counted here yet dropped from the list).
-    pub async fn count_marketplace_visible_offerings(&self) -> Result<i64> {
+    /// Resolve all public, non-draft offerings with their `provider_online`
+    /// status computed via the SAME resolver the marketplace list uses
+    /// ([`compute_provider_online_status`]). This is the shared read path behind
+    /// both the marketplace-visible count and the rentable-now snapshot, so the
+    /// two can never drift.
+    async fn resolve_public_offerings_with_status(&self) -> Result<Vec<Offering>> {
         let now_ns = crate::now_ns()?;
         let five_mins_ns = 5i64 * 60 * 1_000_000_000;
         let heartbeat_cutoff = now_ns - five_mins_ns;
@@ -1035,15 +1055,32 @@ impl Database {
             .bind(heartbeat_cutoff)
             .fetch_all(&self.pool)
             .await?;
+        self.compute_provider_online_status(offerings).await
+    }
 
-        // Apply the IDENTICAL visibility rule the marketplace applies, via the
-        // same resolver the marketplace uses.
-        let with_status = self.compute_provider_online_status(offerings).await?;
-        let count = with_status
-            .into_iter()
-            .filter(is_marketplace_visible)
-            .count() as i64;
-        Ok(count)
+    /// The set of offerings that are **rentable right now** — marketplace-visible
+    /// AND `provider_online` (see [`is_rentable_now`]); i.e. exactly what a user
+    /// sees in the marketplace's default view.
+    ///
+    /// This is the single source the platform-stats headline numbers derive
+    /// from: `total_offerings` (its length), `total_providers` (its distinct
+    /// provider pubkeys), and the cloud-resell branch of `active_providers`
+    /// (its cloud-resell pubkeys). Deriving all three from one resolution pass
+    /// guarantees they can never disagree with the listing one click away — an
+    /// "honest catalog" invariant.
+    pub async fn resolve_rentable_offerings(&self) -> Result<Vec<Offering>> {
+        let offerings = self.resolve_public_offerings_with_status().await?;
+        Ok(offerings.into_iter().filter(is_rentable_now).collect())
+    }
+
+    /// Count public, non-draft offerings that are rentable right now
+    /// (marketplace-visible AND `provider_online`). Thin test-facing wrapper
+    /// around [`resolve_rentable_offerings`]; production callers derive the same
+    /// number (and more) from the resolved vec directly. (cfg(test) so the
+    /// non-test build doesn't carry an unused method.)
+    #[cfg(test)]
+    pub async fn count_rentable_offerings(&self) -> Result<i64> {
+        Ok(self.resolve_rentable_offerings().await?.len() as i64)
     }
 
     /// Search offerings using DSL query
