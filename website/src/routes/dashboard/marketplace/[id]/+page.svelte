@@ -68,6 +68,22 @@
 	// "Email verification required" error only after opening the rental dialog.
 	const needsEmailVerification = $derived(isAuthenticated && !emailVerified);
 
+	// The SLA summary endpoint returns `null` (not `undefined`) for every field
+	// when there are no reports yet, so a `!== undefined` check is truthy for
+	// null and the card used to render as a wall of em-dashes — "Promised SLA —%,
+	// 30d Compliance —%, Avg Uptime —%, Latest Report: No report yet". `!= null`
+	// catches both null and undefined; when nothing is present we show a warm,
+	// honest "new provider" message instead of the skeletal grid (no fabricated
+	// numbers — see #marketplace-buy-flow).
+	const slaHasAnyData = $derived(
+		!!offeringSlaSummary &&
+			(offeringSlaSummary.slaTargetPercent != null ||
+				offeringSlaSummary.compliance30dPercent != null ||
+				offeringSlaSummary.averageUptime30d != null ||
+				offeringSlaSummary.latestUptimePercent != null ||
+				offeringSlaSummary.reports30d > 0)
+	);
+
 	onMount(async () => {
 		try {
 			offering = await getOffering(offeringId);
@@ -519,8 +535,9 @@
 			</div>
 		</div>
 
-		{#if offeringSlaSummary && (offeringSlaSummary.slaTargetPercent !== undefined || offeringSlaSummary.reports30d > 0)}
-			<div class="card p-5 border border-neutral-800 space-y-4">
+	{#if offeringSlaSummary}
+		<div class="card p-5 border border-neutral-800 space-y-4">
+			{#if slaHasAnyData}
 				<div class="flex items-start justify-between gap-4">
 					<div>
 						<h2 class="text-lg font-semibold text-white">SLA & Reported Reliability</h2>
@@ -568,6 +585,22 @@
 					</p>
 				</div>
 			{/if}
+		{:else}
+			<!-- Warm, honest empty state: no SLA data yet for this new provider.
+			     No fabricated numbers — just sets the expectation that metrics
+			     arrive once the provider submits the first SLI report. -->
+			<div class="flex items-start gap-3">
+				<span class="text-neutral-400 shrink-0 leading-none mt-0.5">
+					<Icon name="shield" size={20} class="text-neutral-400" />
+				</span>
+				<div class="min-w-0">
+					<h2 class="text-lg font-semibold text-white">SLA & Reported Reliability</h2>
+					<p class="text-sm text-neutral-400 mt-1">
+						No SLA reports yet — this provider is new. Promised SLA, 30-day compliance, average uptime, and breach history will appear here once the first report is submitted.
+					</p>
+				</div>
+			</div>
+		{/if}
 		</div>
 	{/if}
 
