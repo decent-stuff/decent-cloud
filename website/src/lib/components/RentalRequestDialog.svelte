@@ -2,6 +2,8 @@
 	import type { Offering } from "$lib/services/api";
 	import {
 		createRentalRequest,
+		getWallet,
+		formatE9sAsUsd,
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
@@ -215,6 +217,48 @@
 	// Payment is required unless it's a self-rental (wallet is the only paid path)
 	let paymentRequired = $derived(!isSelfRental());
 
+	// Wallet balance for the payment step. Reuses the exact same API path as the
+	// wallet page (signRequest + getWallet) so there is one source of truth.
+	let walletBalanceE9s = $state<number | null>(null);
+	let walletLoading = $state(false);
+	let walletError = $state<string | null>(null);
+
+	async function loadWalletBalance() {
+		const identityInfo = get(authStore.activeIdentity);
+		if (!identityInfo?.identity) return;
+		walletLoading = true;
+		walletError = null;
+		try {
+			const pubkeyHex = bytesToHex(identityInfo.publicKeyBytes);
+			const { headers } = await signRequest(
+				identityInfo.identity as Ed25519KeyIdentity,
+				"GET",
+				`/api/v1/users/${pubkeyHex}/wallet`,
+			);
+			const wallet = await getWallet(headers, pubkeyHex);
+			walletBalanceE9s = wallet.balanceE9s;
+		} catch (e) {
+			// Debuggable: surface the failure instead of silently hiding the balance.
+			walletError = e instanceof Error ? e.message : "Couldn't load wallet balance";
+		} finally {
+			walletLoading = false;
+		}
+	}
+
+	// Cost (USD) of this rental, used to compare against the wallet balance.
+	let costUsd = $derived(() => {
+		if (!offering || isSelfRental()) return 0;
+		if (isSubscriptionOffering) return offering.monthly_price;
+		return parseFloat(calculatePrice());
+	});
+	let balanceUsd = $derived(
+		walletBalanceE9s !== null ? parseFloat(formatE9sAsUsd(walletBalanceE9s)) : null
+	);
+	// null balance (not loaded / error) → unknown, never block; only flag insufficient.
+	let balanceSufficient = $derived(
+		balanceUsd === null ? null : balanceUsd >= costUsd()
+	);
+
 	// Subscription offering helpers
 	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
 	let subscriptionIntervalLabel = $derived(() => {
@@ -344,6 +388,20 @@
 			loading = false;
 		}
 	}
+
+	// Fetch the wallet balance when a PAID rental dialog opens (offering set).
+	// Done as an $effect on `offering`, not in onMount: the component mounts with
+	// offering=null (only renders when the user clicks Rent), and the auth
+	// identity may not be hydrated yet at mount time. By the time `offering` is
+	// set, the user is on an authenticated page, so the identity is available.
+	// `walletFetchedFor` guards against duplicate fetches for the same offering.
+	let walletFetchedFor: string | number | null = null;
+	$effect(() => {
+		if (offering && paymentRequired && offering.id !== walletFetchedFor) {
+			walletFetchedFor = offering.id ?? null;
+			loadWalletBalance();
+		}
+	});
 </script>
 
 {#if offering}
@@ -612,17 +670,43 @@
 				</div>
 		{:else}
 			<div
-				class="bg-surface-elevated  p-4 border border-neutral-800"
+				class="bg-surface-elevated p-4 border border-neutral-800 space-y-2"
+				data-testid="rent-dialog-wallet"
 			>
-				<h3 class="text-sm font-semibold text-neutral-400 mb-2">
+				<h3 class="text-sm font-semibold text-neutral-400">
 					Wallet Payment
 				</h3>
-				<p class="text-sm text-neutral-500">
-					The rental cost will be debited from your prepaid wallet
-					balance. Top up at
-					<a href="/dashboard/wallet" class="text-primary-400 underline">/dashboard/wallet</a>
-					if your balance is insufficient.
-				</p>
+				<div class="flex justify-between text-sm">
+					<span class="text-neutral-500">This rental</span>
+					<span class="text-white font-medium">
+						${costUsd().toFixed(2)} <span class="text-neutral-500">{offering.currency}</span>
+					</span>
+				</div>
+				<div class="flex justify-between text-sm">
+					<span class="text-neutral-500">Wallet balance</span>
+					{#if walletLoading}
+						<span class="text-neutral-500">Loading…</span>
+					{:else if walletError}
+						<span class="text-amber-400" title={walletError}>Couldn't load balance</span>
+					{:else}
+						<span class="text-white font-medium">
+							${formatE9sAsUsd(walletBalanceE9s)} <span class="text-neutral-500">USD</span>
+						</span>
+					{/if}
+				</div>
+				<!-- Sufficient / insufficient indicator (one-glance confirmation) -->
+				{#if !walletLoading && !walletError && balanceSufficient !== null}
+					{#if balanceSufficient}
+						<p data-testid="rent-dialog-balance-ok" class="text-xs text-green-400 pt-1 border-t border-neutral-800">
+							✓ Sufficient balance — the cost will be debited when you rent.
+						</p>
+					{:else}
+						<p data-testid="rent-dialog-balance-low" class="text-xs text-amber-400 pt-1 border-t border-neutral-800">
+							⚠ Insufficient balance —
+							<a href="/dashboard/wallet" class="text-primary-400 underline font-medium">Top up your wallet →</a>
+						</p>
+					{/if}
+				{/if}
 			</div>
 		{/if}
 

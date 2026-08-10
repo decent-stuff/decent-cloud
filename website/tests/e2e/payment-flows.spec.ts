@@ -130,13 +130,19 @@ test.describe('Payment Flows', () => {
 		page,
 	}) => {
 		// The prepaid wallet is the sole paid rail (self-rental stays free). The
-		// rental dialog renders the "Wallet Payment" section with a debit explainer
-		// and a link to top up, instead of the old Stripe Checkout redirect.
+		// rental dialog renders a "Wallet Payment" section showing this rental's
+		// cost and the user's wallet balance side by side, with a sufficient /
+		// insufficient indicator — so the user can confirm in one glance instead
+		// of opening /dashboard/wallet in another tab.
 		await openRentalDialog(page, usdOffering.offeringName);
 
-		await expect(page.getByRole('heading', { name: 'Wallet Payment' })).toBeVisible({ timeout: 5000 });
-		await expect(page.getByText(/debited from your prepaid wallet/i)).toBeVisible();
-		await expect(page.getByRole('link', { name: '/dashboard/wallet' })).toBeVisible();
+		const wallet = page.getByTestId('rent-dialog-wallet');
+		await expect(wallet).toBeVisible({ timeout: 5000 });
+		await expect(wallet.getByText('This rental')).toBeVisible();
+		await expect(wallet.getByText('Wallet balance')).toBeVisible();
+		// The friendly top-up link (no longer a raw route as link text) appears
+		// only when the balance is insufficient.
+		await expect(page.getByRole('link', { name: '/dashboard/wallet' })).toHaveCount(0);
 
 		// Rental form fields: SSH key is in the main flow; Contact + Notes are
 		// collapsed inside the "Advanced (optional)" disclosure.
