@@ -762,6 +762,15 @@ impl ContractsApi {
                                 hex::encode(&contract_id),
                                 e
                             );
+                            if let Err(cancel_err) =
+                                db.cancel_unpaid_contract(&contract_id).await
+                            {
+                                tracing::error!(
+                                    "Failed to cancel unpaid contract {}: {}",
+                                    hex::encode(&contract_id),
+                                    cancel_err
+                                );
+                            }
                             return Json(ApiResponse {
                                 success: false,
                                 data: None,
