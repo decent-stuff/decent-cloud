@@ -918,57 +918,6 @@ impl ProvidersApi {
         }
     }
 
-    /// Get contracts pending termination
-    ///
-    /// Returns cancelled contracts that had VMs provisioned and need termination.
-    /// Requires agent authentication - agent can only access their delegated provider's contracts.
-    #[oai(
-        path = "/providers/:pubkey/contracts/pending-termination",
-        method = "get",
-        tag = "ApiTags::Providers"
-    )]
-    async fn get_pending_termination_contracts(
-        &self,
-        db: Data<&Arc<Database>>,
-        auth: AgentAuthenticatedUser,
-        pubkey: Path<String>,
-    ) -> Json<ApiResponse<Vec<crate::database::contracts::ContractPendingTermination>>> {
-        let pubkey_bytes = match decode_pubkey(&pubkey.0) {
-            Ok(pk) => pk,
-            Err(msg) => {
-                return Json(ApiResponse {
-                    success: false,
-                    data: None,
-                    error: Some(msg),
-                })
-            }
-        };
-
-        // Authorization: agent can only access contracts for their delegated provider
-        if auth.provider_pubkey != pubkey_bytes {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(
-                    "Unauthorized: can only access your delegated provider's contracts".to_string(),
-                ),
-            });
-        }
-
-        match db.get_pending_termination_contracts(&pubkey_bytes).await {
-            Ok(contracts) => Json(ApiResponse {
-                success: true,
-                data: Some(contracts),
-                error: None,
-            }),
-            Err(e) => Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e.to_string()),
-            }),
-        }
-    }
-
     /// Get contracts pending password reset
     ///
     /// Returns active contracts where the user has requested a password reset.

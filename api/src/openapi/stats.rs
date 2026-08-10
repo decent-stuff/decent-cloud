@@ -1,10 +1,8 @@
 use super::common::{decode_pubkey, ApiResponse, ApiTags};
-use crate::{database::Database, metadata_cache::MetadataCache};
+use crate::database::Database;
 use poem::web::Data;
 use poem_openapi::{param::Path, param::Query, payload::Json, OpenApi};
 use serde::Serialize;
-use serde_json::Value as JsonValue;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, ts_rs::TS, poem_openapi::Object)]
@@ -30,9 +28,6 @@ pub struct PlatformOverview {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]
     pub latest_block_timestamp_ns: Option<u64>,
-    // All canister metadata (flexible, future-proof)
-    #[ts(type = "Record<string, any>")]
-    pub metadata: BTreeMap<String, JsonValue>,
 }
 
 pub struct StatsApi;
@@ -46,10 +41,7 @@ impl StatsApi {
     async fn get_platform_stats(
         &self,
         db: Data<&Arc<Database>>,
-        metadata_cache: Data<&Arc<MetadataCache>>,
     ) -> Json<ApiResponse<PlatformOverview>> {
-        use std::collections::BTreeMap;
-
         let base_stats = match db.get_platform_stats().await {
             Ok(stats) => stats,
             Err(e) => {
@@ -95,12 +87,6 @@ impl StatsApi {
             _ => None,
         };
 
-        // Get all metadata from cache as JSON
-        let metadata_map = match metadata_cache.get() {
-            Ok(m) => m.to_json_map(),
-            Err(_) => BTreeMap::new(),
-        };
-
         let response = PlatformOverview {
             total_providers: base_stats.total_providers,
             active_providers: base_stats.active_providers,
@@ -110,7 +96,6 @@ impl StatsApi {
             total_volume_e9s: base_stats.total_volume_e9s,
             validator_count_24h: validator_count.0,
             latest_block_timestamp_ns,
-            metadata: metadata_map,
         };
 
         Json(ApiResponse {
@@ -237,7 +222,6 @@ mod tests {
             total_volume_e9s: 1_000_000_000_000,
             validator_count_24h: 3,
             latest_block_timestamp_ns: Some(1_700_000_000_000_000_000),
-            metadata: BTreeMap::new(),
         };
         let json = serde_json::to_value(&overview).unwrap();
         assert_eq!(
@@ -258,32 +242,9 @@ mod tests {
             total_volume_e9s: 0,
             validator_count_24h: 0,
             latest_block_timestamp_ns: None,
-            metadata: BTreeMap::new(),
         };
         let json = serde_json::to_value(&overview).unwrap();
         assert!(json.get("latest_block_timestamp_ns").is_none());
-    }
-
-    #[test]
-    fn test_platform_overview_metadata_serialization() {
-        let mut metadata = BTreeMap::new();
-        metadata.insert("version".to_string(), JsonValue::String("1.0".to_string()));
-        metadata.insert("block_height".to_string(), JsonValue::Number(42.into()));
-
-        let overview = PlatformOverview {
-            total_providers: 1,
-            active_providers: 1,
-            total_offerings: 1,
-            total_contracts: 0,
-            total_transfers: 0,
-            total_volume_e9s: 0,
-            validator_count_24h: 0,
-            latest_block_timestamp_ns: None,
-            metadata,
-        };
-        let json = serde_json::to_value(&overview).unwrap();
-        assert_eq!(json["metadata"]["version"], "1.0");
-        assert_eq!(json["metadata"]["block_height"], 42);
     }
 
     /// Helper that mirrors the handler's limit clamping: `limit.unwrap_or(50).min(100)`

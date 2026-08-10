@@ -18,7 +18,6 @@ mod invoices;
 mod ledger_client;
 mod ledger_path;
 mod llm_client;
-mod metadata_cache;
 mod notifications;
 mod oauth_simple;
 mod openapi;
@@ -125,7 +124,6 @@ use database::Database;
 use email_processor::EmailProcessor;
 use email_service::EmailService;
 use ledger_client::LedgerClient;
-use metadata_cache::MetadataCache;
 use openapi::create_combined_api;
 use timeout_cleanup_service::TimeoutCleanupService;
 use poem::web::{Data, Redirect};
@@ -194,9 +192,7 @@ enum SetupService {
 
 struct AppContext {
     database: Arc<Database>,
-    ledger_client: Arc<LedgerClient>,
     sync_interval_secs: u64,
-    metadata_cache: Arc<MetadataCache>,
     email_service: Option<Arc<EmailService>>,
     cloudflare_dns: Option<Arc<cloudflare_dns::CloudflareDns>>,
 }
@@ -220,59 +216,8 @@ async fn setup_app_context(command: &str) -> Result<AppContext, std::io::Error> 
         }
     };
 
-    // Ledger client setup
-    let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://icp-api.io".to_string());
-    // Default to the deployed decent-cloud ledger canister on IC mainnet.
-    // Production deploys override via env; development almost always uses this value.
-    const DEFAULT_CANISTER_ID: &str = "ggi4a-wyaaa-aaaai-actqq-cai";
-    let canister_id_str = env::var("CANISTER_ID").unwrap_or_else(|_| {
-        tracing::warn!(
-            "CANISTER_ID not set — defaulting to {}. Set CANISTER_ID to override.",
-            DEFAULT_CANISTER_ID
-        );
-        DEFAULT_CANISTER_ID.to_string()
-    });
-    let canister_id = match canister_id_str.parse::<Principal>() {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!(
-                "Invalid CANISTER_ID {:?}: {:#}. Expected a valid IC Principal (e.g. '{}').",
-                canister_id_str,
-                e,
-                DEFAULT_CANISTER_ID
-            );
-            return Err(std::io::Error::other(format!(
-                "Invalid CANISTER_ID: {}",
-                e
-            )));
-        }
-    };
-    let ledger_client = match LedgerClient::new(&network_url, canister_id).await {
-        Ok(c) => Arc::new(c),
-        Err(e) => {
-            tracing::error!(
-                "Failed to initialize ledger client for canister {} at {}: {:#}",
-                canister_id,
-                network_url,
-                e
-            );
-            return Err(std::io::Error::other(format!(
-                "Ledger client initialization failed: {}",
-                e
-            )));
-        }
-    };
-    tracing::info!("Ledger client initialized for canister {}", canister_id);
-
     // Sync interval setup
     let sync_interval_secs = parse_env_u64("SYNC_INTERVAL_SECS", 30)?;
-
-    // Metadata cache setup
-    let metadata_refresh_interval = parse_env_u64("METADATA_REFRESH_INTERVAL_SECS", 60)?;
-    let metadata_cache = Arc::new(MetadataCache::new(
-        ledger_client.clone(),
-        metadata_refresh_interval,
-    ));
 
     // Email service setup (optional)
     let email_service = env::var("MAILCHANNELS_API_KEY").ok().map(|api_key| {
@@ -307,9 +252,7 @@ async fn setup_app_context(command: &str) -> Result<AppContext, std::io::Error> 
 
     Ok(AppContext {
         database,
-        ledger_client,
         sync_interval_secs,
-        metadata_cache,
         email_service,
         cloudflare_dns,
     })
@@ -1440,7 +1383,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
         .at("/api/v1/acme-dns/update", post(acme_dns_update))
         // NOTE: CSV operations are now included in OpenAPI schema above
         .data(ctx.database.clone())
-        .data(ctx.metadata_cache.clone())
         .data(ctx.email_service.clone())
         .data(ctx.cloudflare_dns.clone())
         .with(CookieJarManager::new())
@@ -1451,15 +1393,14 @@ async fn serve_command() -> Result<(), std::io::Error> {
     // Graceful shutdown: all background tasks share a shutdown signal.
     // On SIGTERM/SIGINT, the server stops accepting connections and tasks
     // finish their current work cycle before exiting.
-    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    //
+    // The primary `shutdown_rx` is unused: each background task derives its own
+    // receiver via `shutdown_tx.subscribe()`. (Previously the metadata-cache
+    // polling task consumed this receiver; that task was removed in issue A12
+    // when the ICP rail was retired.)
+    let (shutdown_tx, _shutdown_rx) = tokio::sync::watch::channel(false);
 
     let drain_timeout_secs: u64 = parse_env_u64("GRACEFUL_SHUTDOWN_TIMEOUT_SECS", 30)?;
-
-    // Start metadata cache service in background
-    let cache_for_task = ctx.metadata_cache.clone();
-    let metadata_cache_task = tokio::spawn(async move {
-        cache_for_task.run(shutdown_rx).await;
-    });
 
     // Issues #409 + #410: timeout-driven contract cleanup. Fail fast on
     // malformed values so a malformed deploy refuses to start instead of
@@ -1658,7 +1599,6 @@ async fn serve_command() -> Result<(), std::io::Error> {
 
     // Collect all task handles for awaiting
     let mut tasks: Vec<tokio::task::JoinHandle<()>> = vec![
-        metadata_cache_task,
         cleanup_task,
         timeout_cleanup_task,
         auto_renewal_task,
@@ -1695,9 +1635,57 @@ async fn serve_command() -> Result<(), std::io::Error> {
 async fn sync_command() -> Result<(), std::io::Error> {
     let ctx = setup_app_context("sync").await?;
 
+    // Ledger client setup — the `sync` CLI is the ONLY remaining consumer of
+    // the IC ledger canister now that the ICP payment rail is retired and
+    // `serve` no longer initializes a LedgerClient or polls token metadata
+    // (issue A12). Kept here, scoped to `sync`, so a `serve` boot no longer
+    // touches IC mainnet.
+    let network_url = env::var("NETWORK_URL").unwrap_or_else(|_| "https://icp-api.io".to_string());
+    // Default to the deployed decent-cloud ledger canister on IC mainnet.
+    // Production deploys override via env; development almost always uses this value.
+    const DEFAULT_CANISTER_ID: &str = "ggi4a-wyaaa-aaaai-actqq-cai";
+    let canister_id_str = env::var("CANISTER_ID").unwrap_or_else(|_| {
+        tracing::warn!(
+            "CANISTER_ID not set — defaulting to {}. Set CANISTER_ID to override.",
+            DEFAULT_CANISTER_ID
+        );
+        DEFAULT_CANISTER_ID.to_string()
+    });
+    let canister_id = match canister_id_str.parse::<Principal>() {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!(
+                "Invalid CANISTER_ID {:?}: {:#}. Expected a valid IC Principal (e.g. '{}').",
+                canister_id_str,
+                e,
+                DEFAULT_CANISTER_ID
+            );
+            return Err(std::io::Error::other(format!(
+                "Invalid CANISTER_ID: {}",
+                e
+            )));
+        }
+    };
+    let ledger_client = match LedgerClient::new(&network_url, canister_id).await {
+        Ok(c) => Arc::new(c),
+        Err(e) => {
+            tracing::error!(
+                "Failed to initialize ledger client for canister {} at {}: {:#}",
+                canister_id,
+                network_url,
+                e
+            );
+            return Err(std::io::Error::other(format!(
+                "Ledger client initialization failed: {}",
+                e
+            )));
+        }
+    };
+    tracing::info!("Ledger client initialized for canister {}", canister_id);
+
     // Run sync service
     let sync_service = SyncService::new(
-        ctx.ledger_client.clone(),
+        ledger_client,
         ctx.database.clone(),
         ctx.sync_interval_secs,
     )

@@ -60,14 +60,6 @@ pub struct PendingContract {
     pub post_provision_script: Option<String>,
 }
 
-/// Contract pending termination (cancelled with VM still running)
-#[derive(Debug, Deserialize)]
-pub struct ContractPendingTermination {
-    pub contract_id: String,
-    /// Instance details JSON (contains external_id needed for termination)
-    pub instance_details: String,
-}
-
 /// Contract pending password reset
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -495,17 +487,6 @@ impl ApiClient {
         let response: ApiResponse<HeartbeatResponse> =
             self.request(Method::Post, &path, Some(&body)).await?;
         Self::unwrap_response(response, "Heartbeat failed")
-    }
-
-    /// Get contracts pending termination.
-    pub async fn get_pending_terminations(&self) -> Result<Vec<ContractPendingTermination>> {
-        let path = format!(
-            "/api/v1/providers/{}/contracts/pending-termination",
-            self.provider_pubkey
-        );
-        let response: ApiResponse<Vec<ContractPendingTermination>> =
-            self.request(Method::Get, &path, None).await?;
-        Self::unwrap_response(response, "API error")
     }
 
     /// Get contracts pending password reset.

@@ -277,15 +277,6 @@ pub struct ContractWithSpecs {
     pub post_provision_script: Option<String>,
 }
 
-/// Contract pending termination for dc-agent
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
-#[serde(rename_all = "camelCase")]
-pub struct ContractPendingTermination {
-    pub contract_id: String,
-    /// Instance details JSON (contains external_id needed for termination)
-    pub instance_details: String,
-}
-
 /// Contract pending SSH key rotation for dc-agent.
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow, Object)]
 #[serde(rename_all = "camelCase")]
@@ -381,33 +372,6 @@ impl Database {
                LEFT JOIN accounts racc ON rapk.account_id = racc.id
                WHERE c.provider_pubkey = $1 AND c.status IN ('requested', 'pending') ORDER BY c.created_at_ns DESC"#,
             pubkey
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(contracts)
-    }
-
-    /// Get cancelled contracts pending termination
-    ///
-    /// Returns contracts that are cancelled, have instance details (were provisioned),
-    /// and have not yet been terminated by dc-agent.
-    pub async fn get_pending_termination_contracts(
-        &self,
-        provider_pubkey: &[u8],
-    ) -> Result<Vec<ContractPendingTermination>> {
-        let contracts = sqlx::query_as!(
-            ContractPendingTermination,
-            r#"SELECT
-               lower(encode(contract_id, 'hex')) as "contract_id!: String",
-               provisioning_instance_details as "instance_details!: String"
-               FROM contract_sign_requests
-               WHERE provider_pubkey = $1
-               AND status = 'cancelled'
-               AND provisioning_instance_details IS NOT NULL
-               AND terminated_at_ns IS NULL
-               ORDER BY status_updated_at_ns ASC"#,
-            provider_pubkey
         )
         .fetch_all(&self.pool)
         .await?;
