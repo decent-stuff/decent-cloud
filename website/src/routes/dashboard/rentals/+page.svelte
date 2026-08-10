@@ -969,11 +969,16 @@
 								Provider
 							</div>
 							<div class="flex items-center gap-2">
+								<!-- Provider name → provider profile page. Mirrors the marketplace
+								     href (`/dashboard/providers/{username || pubkey}`). The card itself
+								     is an <a> to the rental detail, so the name stays a button+goto
+								     (nested <a> is invalid HTML); it still resolves to the same profile
+								     destination as a real marketplace link (cmd/middle-click aside). -->
 								<button
 									onclick={(e) => {
 										e.preventDefault();
 										e.stopPropagation();
-										goto(`/dashboard/reputation/${contract.provider_pubkey}`);
+										goto(`/dashboard/providers/${contract.provider_username || contract.provider_pubkey}`);
 									}}
 									class="text-white text-sm hover:text-primary-400 transition-colors text-left {contract.provider_username ? '' : 'font-mono'}"
 								>
