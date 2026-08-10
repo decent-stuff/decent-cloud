@@ -1215,9 +1215,12 @@
 				</div>
 			<div class="flex items-center justify-end gap-2">
 				<!-- Desktop sort pills (hidden below md). The <select> mirror below
-				     is the single sort affordance on mobile and an a11y alternative
-				     on desktop. Both bind to the same sortField/sortDir state and
-				     share syncFiltersToUrl(), so they stay in sync (#439). -->
+				     is the ONLY sort affordance on mobile; on desktop the pills are
+				     the single affordance (the select is `md:hidden`, so there is no
+				     duplicate sort control and no phantom-focus on a hidden element).
+				     Both still bind to the same sortField/sortDir state and share
+				     syncFiltersToUrl(), so they stay in sync across viewports (#439,
+				     #marketplace-buy-flow). -->
 				<div class="hidden md:flex items-center gap-1">
 					<button
 						onclick={() => setSortPrice("asc")}
@@ -1232,14 +1235,14 @@
 						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
 					>Reliability ↓</button>
 				</div>
-				<!-- Sort <select>: visible on mobile as the only sort affordance
-				     (the pills are hidden below md) and on desktop as a
-				     keyboard/screen-reader-friendly alternative. -->
-				<label class="md:sr-only text-xs text-neutral-500" for="marketplace-sort-select">Sort</label>
+				<!-- Sort <select>: the ONLY sort affordance on mobile (the pills are
+				     `hidden md:flex`). `md:hidden` removes it from desktop so the
+				     pills are the single desktop affordance — no duplicate control. -->
+				<label class="md:hidden text-xs text-neutral-500" for="marketplace-sort-select">Sort</label>
 				<select
 					id="marketplace-sort-select"
 					aria-label="Sort offerings"
-					class="bg-surface border border-neutral-700 text-white text-sm rounded px-2 py-1 focus:border-primary-400 focus:outline-none w-36 md:w-40"
+					class="md:hidden bg-surface border border-neutral-700 text-white text-sm rounded px-2 py-1 focus:border-primary-400 focus:outline-none w-36"
 					value="{sortField === 'trust' ? 'Reliability ↓' : sortField === 'price' && sortDir === 'desc' ? 'Price ↓' : 'Price ↑'}"
 					onchange={(e) => {
 						const v = (e.currentTarget as HTMLSelectElement).value;

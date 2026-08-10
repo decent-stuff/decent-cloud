@@ -5,13 +5,18 @@ import {
 } from './fixtures/seed-helpers';
 
 /**
- * E2E tests for marketplace sort controls (#439).
+ * E2E tests for marketplace sort controls (#439, #marketplace-buy-flow).
  *
  * Regression: the desktop sort pills were wrapped in `hidden md:flex`, so mobile
  * users (viewport < 768px) had no way to change sort order. The fix adds a
- * `<select>` visible on mobile (and as an a11y alternative on desktop) that
- * shares the same `sortField` / `sortDir` state and `syncFiltersToUrl` path as
- * the desktop pills.
+ * `<select>` visible on mobile that shares the same `sortField` / `sortDir`
+ * state and `syncFiltersToUrl` path as the desktop pills.
+ *
+ * Desktop contract (buy-flow fix): the pills are the ONLY sort affordance on
+ * desktop — the `<select>` is `md:hidden` there so the two controls never
+ * duplicate on the same screen and keyboard users get no phantom focus on a
+ * hidden element. The pills are real `<button>`s, so desktop a11y is fully
+ * served by them. The `<select>` is the sole affordance on mobile.
  *
  * The drop-demos pivot (migration 053) left the marketplace empty, so this spec
  * self-seeds two is_example (demo) offerings under the example provider pubkey.
@@ -82,36 +87,48 @@ test.describe('Marketplace sort', () => {
 		await expect(page).toHaveURL(/\bsort=trust\b/);
 	});
 
-	test('desktop keeps the pill UI and exposes the <select> as an a11y alternative (#439)', async ({ page }) => {
-		// Desktop must keep the original pill UI (regression guard) AND expose
-		// the new <select> as a keyboard/screen-reader-friendly alternative.
+	test('desktop uses ONLY the pill UI; the <select> is hidden (buy-flow fix)', async ({ page }) => {
+		// Desktop must keep the pill UI as the SOLE sort affordance. The <select>
+		// is `md:hidden` on desktop so the two never duplicate (regression: both
+		// used to render, creating two competing sort controls). The pills are
+		// real <button>s, so keyboard/AT users are served by them.
 		await page.setViewportSize(DESKTOP);
 
 		await expect(page.getByRole('button', { name: /^Price ↑$/ })).toBeVisible();
 		await expect(page.getByRole('button', { name: /^Price ↓$/ })).toBeVisible();
 		await expect(page.getByRole('button', { name: /^Reliability ↓$/ })).toBeVisible();
 
-		// The <select> must remain reachable on desktop as well.
+		// The <select> must NOT render on desktop (no duplicate control).
 		const sortSelect = page.getByRole('combobox', { name: /sort/i });
-		await expect(sortSelect).toBeVisible();
+		await expect(sortSelect).toBeHidden();
 
-		// Driving the select must keep the pills in sync (single source of truth).
-		await sortSelect.selectOption('Reliability ↓');
+		// Driving a pill must update the shared sort state and the URL.
+		await page.getByRole('button', { name: /^Reliability ↓$/ }).click();
 		await expect(page.getByRole('button', { name: /^Reliability ↓$/ })).toHaveClass(/bg-primary-500/);
 		await expect(page).toHaveURL(/\bsort=trust\b/);
 	});
 
-	test('select and pills stay in sync when either changes (#439)', async ({ page }) => {
-		// Single source of truth: changing one control must update the other.
+	test('select and pills stay in sync across viewport switches (single source of truth)', async ({ page }) => {
+		// The pills (desktop) and the <select> (mobile) are two views of the same
+		// sortField/sortDir state. Driving one must be reflected by the other when
+		// the viewport changes — proving they never disagree.
+		// 1. Drive via a pill on desktop.
 		await page.setViewportSize(DESKTOP);
-
-		// Drive via pill first.
 		await page.getByRole('button', { name: /^Price ↓$/ }).click();
+		await expect(page).toHaveURL(/\bdir=desc\b/);
+
+		// 2. Shrink to mobile: the <select> is now the visible affordance and must
+		//    reflect the descending sort the pill just applied.
+		await page.setViewportSize(MOBILE);
 		const sortSelect = page.getByRole('combobox', { name: /sort/i });
+		await expect(sortSelect).toBeVisible();
 		await expect(sortSelect).toHaveValue('Price ↓');
 
-		// Then drive via select.
-		await sortSelect.selectOption('Price ↑');
-		await expect(page.getByRole('button', { name: /^Price ↑$/ })).toHaveClass(/bg-primary-500/);
+		// 3. Drive via the select on mobile, then grow back to desktop: the pills
+		//    must reflect the select's change.
+		await sortSelect.selectOption('Reliability ↓');
+		await expect(page).toHaveURL(/\bsort=trust\b/);
+		await page.setViewportSize(DESKTOP);
+		await expect(page.getByRole('button', { name: /^Reliability ↓$/ })).toHaveClass(/bg-primary-500/);
 	});
 });
