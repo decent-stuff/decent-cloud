@@ -24,6 +24,15 @@ import {
  * succeeds; cancel credits it back (rental_refund). The contract lands at
  * `requested` + payment_status `succeeded` (paid, awaiting provider review).
  *
+ * The fixture (seedRentableWithResource) explicitly pins the provider's
+ * `auto_accept_rentals=false` so the contract stays at `requested` on purpose
+ * — this exercises the MANUAL-review path. That pin is load-bearing for the
+ * wallet math: once a contract auto-accepts and self-provisioned activation
+ * flips it to `active`, `provisioning_completed_at_ns` is set and cancel
+ * refunds become PRORATED (not full). The auto-accept path is covered instead
+ * by rent-wallet-auto-accept.spec.ts; this spec owns the pre-service
+ * full-refund invariant.
+ *
  * Wallet-debit is asserted with REAL money math, not just ledger-row presence:
  * each rent proves the balance dropped by exactly the contract's
  * payment_amount_e9s and a matching rental_debit row exists; each pre-service

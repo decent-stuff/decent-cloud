@@ -801,6 +801,21 @@ export async function seedRentableWithResource(opts?: {
 	name?: string;
 	currency?: string;
 	resourceCount?: number;
+	/**
+	 * Whether the seeded provider auto-accepts wallet-paid rentals. Inserts an
+	 * explicit `provider_profiles` row so the decision is INTENTIONAL rather
+	 * than relying on the schema default (which is `true` for a missing row).
+	 *
+	 * - `false` (default): the contract lands at `requested` (manual-review
+	 *   path). Required by specs that assert the pre-service full-refund wallet
+	 *   math (cancel at `requested` → `provisioning_completed_at_ns` IS NULL →
+	 *   full principal refunded). rent-flow + rent-dialog-keyboard use this.
+	 * - `true`: `try_auto_accept_contract` advances the contract past
+	 *   `requested` to `accepted` (the wallet-auto-accept path). Used by
+	 *   rent-wallet-auto-accept.spec.ts to prove wallet-paid rentals no longer
+	 *   get stuck at `requested` (the marketplace buy-flow bug).
+	 */
+	autoAcceptRentals?: boolean;
 }): Promise<RentableWithResourceSeed> {
 	const providerPubkeyHex = randomHex(32);
 	const providerAccountIdHex = randomHex(16);
@@ -812,6 +827,7 @@ export async function seedRentableWithResource(opts?: {
 	const offeringName = opts?.name ?? 'E2E Rent Flow Offering';
 	const currency = opts?.currency ?? 'USD';
 	const resourceCount = opts?.resourceCount ?? 4;
+	const autoAcceptRentals = opts?.autoAcceptRentals ?? false;
 
 	// Provider accounts row — cloud_accounts.account_id has an FK to accounts.id (bytea).
 	await sql(`
@@ -845,6 +861,17 @@ export async function seedRentableWithResource(opts?: {
 		offeringSource: 'self_provisioned',
 		stockStatus: 'in_stock',
 	});
+
+	// Explicit provider_profiles row so the auto-accept decision is intentional.
+	// Without a row, get_provider_auto_accept_rentals falls back to the schema
+	// default (TRUE) — which would auto-advance wallet-paid rentals past
+	// `requested`. Inserting the row pins the behavior the caller asked for.
+	// (Matches the insert shape used by provider-accept-reject.spec.ts.)
+	await sql(`
+		INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns, auto_accept_rentals)
+		VALUES (decode('${providerPubkeyHex}', 'hex'), '${offeringName}', 'v1', '1', ${nowNs()}, ${autoAcceptRentals})
+		ON CONFLICT (pubkey) DO UPDATE SET auto_accept_rentals = ${autoAcceptRentals}
+	`);
 
 	// Reservable cloud_resources linked to this offering, listed on the marketplace.
 	const resourceExternalIds: string[] = [];
@@ -888,6 +915,7 @@ export async function cleanupRentableWithResource(seed: RentableWithResourceSeed
 		UPDATE cloud_resources SET contract_id = NULL WHERE external_id IN (${extList});
 		DELETE FROM cloud_resources WHERE external_id IN (${extList});
 		DELETE FROM provider_offerings WHERE pubkey = decode('${seed.providerPubkeyHex}', 'hex');
+		DELETE FROM provider_profiles WHERE pubkey = decode('${seed.providerPubkeyHex}', 'hex');
 		DELETE FROM accounts WHERE id = decode('${seed.providerAccountIdHex}', 'hex');
 	`);
 }
