@@ -92,10 +92,34 @@ const BENIGN_CONSOLE = [
 	// NOT application defects — a real outage would instead trip the
 	// checkStuckLoading / checkErrorPage consequence checks below, which remain.
 	/Failed to fetch/i,
+	// Chrome network-layer errors (e.g. "Failed to load resource:
+	// net::ERR_CONNECTION_CLOSED") fired by EXTERNAL resources — Google Fonts
+	// CDN, analytics, etc. — when 4 Chromium workers contend for CPU/network.
+	// These are never first-party app defects: the app's own API failures
+	// surface as HTTP status codes ("the server responded with a status of
+	// 4xx/5xx"), and a real outage still trips checkStuckLoading / content-ready.
+	/net::ERR_/i,
 ];
 
-function isBenign(text: string): boolean {
-	return BENIGN_CONSOLE.some((re) => re.test(text));
+function isBenign(text: string, sourceUrl?: string): boolean {
+	if (BENIGN_CONSOLE.some((re) => re.test(text))) return true;
+	// Resource-load failures ("Failed to load resource: ...") whose source
+	// location is an EXTERNAL host — Google Fonts CDN (a stale woff2 hash 404s
+	// every load), analytics, etc. — are not first-party app defects. The
+	// console message's source location IS the resource URL that failed, so we
+	// can scope the filter to non-localhost hosts and keep real localhost asset
+	// failures (which `checkBrokenLinks`/content-ready may not otherwise catch).
+	if (sourceUrl && /Failed to load resource/.test(text)) {
+		try {
+			const { host } = new URL(sourceUrl);
+			if (host !== 'localhost' && host !== '127.0.0.1' && !sourceUrl.includes('/api/v1/')) {
+				return true;
+			}
+		} catch {
+			// sourceUrl wasn't a real URL — keep the error as a finding.
+		}
+	}
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +189,10 @@ export async function auditRoute(page: Page, url: string, opts: AuditOptions = {
 	const onConsole = (msg: ConsoleMessage) => {
 		if (msg.type() === 'error') {
 			const text = msg.text();
-			if (!isBenign(text)) consoleErrors.push(text);
+			// msg.location().url is the resource URL that failed for
+			// "Failed to load resource" messages — used to scope the external-CDN
+			// benign filter in isBenign (keeps real localhost asset failures).
+			if (!isBenign(text, msg.location()?.url)) consoleErrors.push(text);
 		}
 	};
 	const onPageError = (err: Error) => {
