@@ -202,7 +202,7 @@ anonymous pages are not silently authenticated.
 
 | Flow | Status | Tags | Spec | Test |
 |------|--------|------|------|------|
-| Route audit (every public + authed route) | ✅ | — | `route-audit.spec.ts` | parametrized per route — catches 4xx/5xx, console errors, missing headings |
+| Route audit (every public + authed route) | ✅ | — | `route-audit-{public,dashboard,provider,marketplace,misc}.spec.ts` | parametrized per route, split by category so tests spread across workers — catches 4xx/5xx, console errors, missing headings (shared infra in `fixtures/route-audit-helpers.ts`) |
 | Chatwoot identity / support-access API | ✅ | — | `chatwoot-api.spec.ts` | `GET /chatwoot/identity returns identity hash for authenticated user` |
 
 ---
