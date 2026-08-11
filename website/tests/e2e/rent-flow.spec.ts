@@ -24,6 +24,13 @@ import {
  * succeeds; cancel credits it back (rental_refund). The contract lands at
  * `requested` + payment_status `succeeded` (paid, awaiting provider review).
  *
+ * Wallet-debit is asserted with REAL money math, not just ledger-row presence:
+ * each rent proves the balance dropped by exactly the contract's
+ * payment_amount_e9s and a matching rental_debit row exists; each pre-service
+ * cancel proves the balance was restored to its pre-rent value and the
+ * rental_refund row carries the full principal (provisioning_completed_at_ns is
+ * NULL at `requested`, so the prorated refund equals the whole payment).
+ *
  * Shared-pubkey hazard: all testAccount users derive the same requester pubkey,
  * and this spec CREATES real contracts + wallet rows for it. Serial mode +
  * beforeAll/afterAll cleanup (deleteContractsForRequester + wallet teardown)
@@ -34,6 +41,42 @@ const SSH_KEY = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2eRentFlowTestKeyData1234
 const CONTACT = 'email:e2e-rentflow@test.example.com';
 const MEMO = 'E2E rent-flow happy path';
 
+/**
+ * Read the current prepaid wallet balance (e9s) for a pubkey; 0n if the user
+ * has never topped up. Used to PROVE the rent debits and the cancel refunds
+ * the balance by the exact expected amount — not just that a ledger row exists.
+ */
+async function readWalletBalance(pubkey: string): Promise<bigint> {
+	const out = await sql(
+		`SELECT balance_e9s FROM wallet_balances WHERE pubkey = '${pubkey}'`,
+	);
+	return BigInt(out || '0');
+}
+
+/**
+ * Read the payment_amount_e9s charged for a contract — the principal the
+ * wallet debit + (pre-service) refund must match exactly. Asserting against
+ * the row's own value (not a re-derived number) keeps the math test robust to
+ * changes in the rent dialog's default duration / offering price.
+ */
+async function readContractPaymentAmount(contractId: string): Promise<bigint> {
+	const out = await sql(
+		`SELECT payment_amount_e9s FROM contract_sign_requests WHERE contract_id = decode('${contractId}', 'hex')`,
+	);
+	if (!out) throw new Error(`no payment_amount_e9s for contract ${contractId}`);
+	return BigInt(out);
+}
+
+/** Outcome of one rent-via-dialog cycle: the contract + the wallet facts the
+ * matching cancel test must reconcile against. */
+interface RentOutcome {
+	contractId: string;
+	/** Principal debited at creation (and, pre-service, refunded at cancel). */
+	paymentAmountE9s: bigint;
+	/** Wallet balance captured immediately before the POST /contracts. */
+	balanceBeforeE9s: bigint;
+}
+
 test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 	test.describe.configure({ mode: 'serial' });
 
@@ -41,6 +84,9 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 	let requesterPubkey: string;
 	// Shared across the serial tests: the contract the first rental creates.
 	let firstContractId: string;
+	// Wallet facts for the first rent, captured so the detail-page cancel test
+	// can prove the refund restores the balance to its pre-rent value.
+	let firstRent: RentOutcome | undefined;
 
 	test.beforeAll(async ({ testAccount }) => {
 		requesterPubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
@@ -73,15 +119,22 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 
 	/**
 	 * Drive the real marketplace Rent dialog for the seeded offering and return
-	 * the contract_id of the contract that the real signed POST creates.
+	 * the contract_id + wallet facts for the contract that the real signed POST
+	 * creates.
 	 *
-	 * After submit, the contract is committed at `requested`. The Stripe checkout
-	 * session cannot finish in-harness, so we do not assert dialog success — we
-	 * navigate to the rentals list and confirm the contract landed there.
+	 * After submit, the contract is committed at `requested` with
+	 * payment_status `succeeded` — the wallet debit is applied atomically in the
+	 * same transaction as the contract insert. We assert the balance ACTUALLY
+	 * dropped by exactly `payment_amount_e9s` (the row's own principal) so a
+	 * silent $0 debit or a missing balance update can never pass the suite.
 	 */
 	async function rentViaDialog(
 		page: import('@playwright/test').Page,
-	): Promise<string> {
+	): Promise<RentOutcome> {
+		// Capture the balance RIGHT before the POST so the debit assertion sees
+		// only this rental's effect (no race with a sibling serial test).
+		const balanceBeforeE9s = await readWalletBalance(requesterPubkey);
+
 		await page.goto(`/dashboard/marketplace/${seed.offeringNumericId}`);
 		// The detail page renders the Rent button twice (responsive variants).
 		const rentBtn = page.getByRole('button', { name: 'Rent this offering' }).first();
@@ -116,6 +169,29 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 			throw new Error(`POST /contracts failed (${resp.status()}): ${body}`);
 		}
 
+		// Extract the contract_id from the API response (data.contractId — the
+		// API serializes RentalRequestResponse with serde rename_all = camelCase).
+		const json = await resp.json();
+		const contractId: string | undefined = json?.data?.contractId;
+		if (!contractId || !/^[0-9a-f]+$/.test(contractId)) {
+			throw new Error(`POST /contracts response had no data.contractId: ${JSON.stringify(json)}`);
+		}
+
+		// Wallet-debit proof: the balance must have dropped by EXACTLY the
+		// contract's payment_amount_e9s, and a rental_debit ledger row for this
+		// contract must exist with the matching negative amount.
+		const paymentAmountE9s = await readContractPaymentAmount(contractId);
+		const balanceAfterRentE9s = await readWalletBalance(requesterPubkey);
+		expect(
+			balanceAfterRentE9s,
+			`wallet must decrease by payment_amount_e9s after rent: before=${balanceBeforeE9s}, after=${balanceAfterRentE9s}, expected debit=${paymentAmountE9s}`,
+		).toBe(balanceBeforeE9s - paymentAmountE9s);
+
+		const debitRaw = await sql(
+			`SELECT amount_e9s FROM wallet_ledger WHERE reference = '${contractId}' AND entry_type = 'rental_debit'`,
+		);
+		expect(BigInt(debitRaw)).toBe(-paymentAmountE9s);
+
 		// The contract now exists at `requested` + payment_status `succeeded`
 		// (wallet-debited instantly). Navigate to the rentals list.
 		await page.goto('/dashboard/rentals');
@@ -130,15 +206,19 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 
 		const href = await card.getAttribute('href');
 		if (!href) throw new Error('rental card had no href');
-		return href.split('/').pop()!;
+		const contractIdFromHref = href.split('/').pop()!;
+		expect(contractIdFromHref).toBe(contractId);
+
+		return { contractId, paymentAmountE9s, balanceBeforeE9s };
 	}
 
 	test('rent an offering → contract appears on the rentals list with a Cancel button', async ({
 		page,
 	}) => {
-		const contractId = await rentViaDialog(page);
-		expect(contractId).toMatch(/^[0-9a-f]+$/);
-		firstContractId = contractId;
+		const outcome = await rentViaDialog(page);
+		expect(outcome.contractId).toMatch(/^[0-9a-f]+$/);
+		firstContractId = outcome.contractId;
+		firstRent = outcome;
 	});
 
 	test('view the rental detail page', async ({ page }) => {
@@ -193,22 +273,40 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 		);
 		expect(status).toBe('cancelled');
 
-		// Wallet money integrity: the cancel refunded the debited amount back
-		// to the wallet. The ledger must show both the rental_debit (at creation)
-		// and the rental_refund (at cancel) for this contract.
-		const ledger = await sql(`
-			SELECT entry_type FROM wallet_ledger
+		// Wallet money integrity (strengthened): the cancel refunded the debited
+		// principal back to the wallet. Because the contract was cancelled at
+		// `requested` (service never started → provisioning_completed_at_ns IS
+		// NULL), the prorated refund equals the FULL payment_amount_e9s, so the
+		// balance must be restored to its pre-rent value AND both ledger rows
+		// for this contract must carry the exact matching amounts.
+		const balanceAfterCancelE9s = await readWalletBalance(requesterPubkey);
+		expect(
+			balanceAfterCancelE9s,
+			`wallet must be restored to pre-rent balance after a pre-service cancel: before=${firstRent!.balanceBeforeE9s}, after=${balanceAfterCancelE9s}`,
+		).toBe(firstRent!.balanceBeforeE9s);
+
+		// Ledger: exactly a rental_debit (-principal) and a rental_refund
+		// (+principal) for this contract, with matching magnitudes.
+		const ledgerRaw = await sql(`
+			SELECT entry_type || ':' || amount_e9s FROM wallet_ledger
 			WHERE reference = '${contractId}'
 			ORDER BY id
 		`);
-		const entries = ledger.trim().split('\n').map((e) => e.trim());
-		expect(entries).toContain('rental_debit');
-		expect(entries).toContain('rental_refund');
+		const byType = new Map<string, bigint>();
+		for (const line of ledgerRaw.split('\n').map((l) => l.trim()).filter(Boolean)) {
+			const [type, amount] = line.split(':');
+			byType.set(type, BigInt(amount));
+		}
+		expect(byType.has('rental_debit'), 'rental_debit ledger row must exist').toBe(true);
+		expect(byType.has('rental_refund'), 'rental_refund ledger row must exist').toBe(true);
+		expect(byType.get('rental_debit')).toBe(-firstRent!.paymentAmountE9s);
+		expect(byType.get('rental_refund')).toBe(firstRent!.paymentAmountE9s);
 	});
 
 	test('cancel a rental directly from the rentals list', async ({ page }) => {
 		// A fresh rental (uses the next reservable cloud_resource).
-		const contractId = await rentViaDialog(page);
+		const outcome = await rentViaDialog(page);
+		const contractId = outcome.contractId;
 
 		// Re-open the list and cancel via the card-level Cancel button.
 		await page.goto('/dashboard/rentals');
@@ -240,5 +338,13 @@ test.describe('Rent → pay → view → cancel (primary tenant flow)', () => {
 			`SELECT status FROM contract_sign_requests WHERE contract_id = decode('${contractId}', 'hex')`,
 		);
 		expect(status).toBe('cancelled');
+
+		// Wallet integrity (strengthened): same pre-service full-refund invariant
+		// as the detail-page cancel — balance restored to its pre-rent value.
+		const balanceAfterCancelE9s = await readWalletBalance(requesterPubkey);
+		expect(
+			balanceAfterCancelE9s,
+			`wallet must be restored to pre-rent balance after list-level cancel: before=${outcome.balanceBeforeE9s}, after=${balanceAfterCancelE9s}`,
+		).toBe(outcome.balanceBeforeE9s);
 	});
 });
