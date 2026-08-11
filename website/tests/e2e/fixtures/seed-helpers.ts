@@ -564,6 +564,25 @@ export async function verifyAccountEmail(pubkeyHex: string): Promise<void> {
 	`);
 }
 
+/**
+ * Flip `email_verified = false` on the accounts row that owns the given public
+ * key — the inverse of `verifyAccountEmail`. Needed by specs whose premise is
+ * that the user starts UNVERIFIED (e.g. rent-email-verification-gate): under
+ * serial `--workers 1` mode the shared `testAccount` pubkey can be left
+ * verified by an earlier spec's `beforeAll` (rent-dialog-keyboard calls
+ * `verifyAccountEmail`), so a spec that asserts the unverified UI must own its
+ * precondition explicitly instead of relying on the `seedAccountDirect` default.
+ */
+export async function unverifyAccountEmail(pubkeyHex: string): Promise<void> {
+	await sql(`
+		UPDATE accounts SET email_verified = false
+		WHERE id = (
+			SELECT account_id FROM account_public_keys
+			WHERE public_key = decode('${pubkeyHex}', 'hex')
+		)
+	`);
+}
+
 /** Remove all saved offerings for a user (cleanup helper shared by specs). */
 export async function deleteSavedOfferingsForUser(userPubkeyHex: string): Promise<void> {
 	await sql(`DELETE FROM saved_offerings WHERE user_pubkey = decode('${userPubkeyHex}', 'hex')`);

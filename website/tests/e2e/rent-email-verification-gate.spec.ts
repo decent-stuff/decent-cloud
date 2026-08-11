@@ -4,6 +4,7 @@ import {
 	seedRentableOffering,
 	deleteOfferingsByProvider,
 	verifyAccountEmail,
+	unverifyAccountEmail,
 	pubkeyHexFromSeed,
 } from './fixtures/seed-helpers';
 
@@ -22,8 +23,15 @@ test.describe.configure({ mode: 'serial' });
 test.describe('Email verification gate on the rent flow (F3)', () => {
 	let seeded: { providerPubkeyHex: string; offeringNumericId: string; offeringName: string };
 
-	test.beforeAll(async () => {
+	test.beforeAll(async ({ testAccount }) => {
 		seeded = await seedRentableOffering({ name: 'F3 Gate Rentable' });
+		// This spec's premise is that testAccount is UNVERIFIED. Under serial
+		// `--workers 1` mode the shared testAccount pubkey can be left verified
+		// by an earlier spec's beforeAll (rent-dialog-keyboard calls
+		// verifyAccountEmail and never resets), which would make the detail page
+		// show 'Rent this offering' instead of 'Verify email to rent'. Reset the
+		// flag explicitly so the spec owns its precondition (test 3 re-verifies).
+		await unverifyAccountEmail(pubkeyHexFromSeed(testAccount.seedPhrase));
 	});
 	test.afterAll(async () => {
 		await deleteOfferingsByProvider(seeded.providerPubkeyHex);
