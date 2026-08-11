@@ -13,12 +13,10 @@
 		hexEncode,
 		type WalletLedgerEntry,
 	} from "$lib/services/api";
-	import type { IdentityInfo } from "$lib/stores/auth";
+	import { Ed25519KeyIdentity } from "@dfinity/identity";
 
-	let currentIdentity = $state<IdentityInfo | null>(null);
 	let isAuthenticated = $state(false);
 	let unsubscribeAuth: (() => void) | null = null;
-	let unsubscribeIdentity: (() => void) | null = null;
 
 	let balanceE9s = $state<number | null>(null);
 	let ledger = $state<WalletLedgerEntry[]>([]);
@@ -34,30 +32,39 @@
 	const topupStatus = $derived($page.url.searchParams.get("topup"));
 
 	onMount(() => {
+		// Subscribe so we re-fire when authStore.initialize() completes (the
+		// dashboard layout calls it in its own onMount, which races with ours).
+		// Mirrors /dashboard/saved and /dashboard/rentals.
 		unsubscribeAuth = authStore.isAuthenticated.subscribe((isAuth) => {
 			isAuthenticated = isAuth;
-		});
-		unsubscribeIdentity = authStore.currentIdentity.subscribe((value) => {
-			currentIdentity = value;
-			if (value) {
-				loadWallet();
-			}
+			loadWallet();
 		});
 	});
 
 	onDestroy(() => {
 		unsubscribeAuth?.();
-		unsubscribeIdentity?.();
 	});
 
 	async function loadWallet() {
-		if (!currentIdentity?.identity) return;
+		// Distinguish "loading" from "unauthenticated": flip loading off as
+		// soon as we know the user is not signed in, so the spinner block
+		// (rendered independently of the auth block below) doesn't spin
+		// forever for anonymous visitors.
+		if (!isAuthenticated) {
+			loading = false;
+			return;
+		}
+		const signingIdentityInfo = await authStore.getSigningIdentity();
+		if (!signingIdentityInfo || !(signingIdentityInfo.identity instanceof Ed25519KeyIdentity)) {
+			loading = false;
+			return;
+		}
 		loading = true;
 		error = "";
 		try {
-			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const pubkeyHex = hexEncode(signingIdentityInfo.publicKeyBytes);
 			const { headers } = await signRequest(
-				currentIdentity.identity,
+				signingIdentityInfo.identity,
 				"GET",
 				`/api/v1/users/${pubkeyHex}/wallet`,
 			);
@@ -72,7 +79,8 @@
 	}
 
 	async function handleTopup() {
-		if (!currentIdentity?.identity) return;
+		const signingIdentityInfo = await authStore.getSigningIdentity();
+		if (!signingIdentityInfo || !(signingIdentityInfo.identity instanceof Ed25519KeyIdentity)) return;
 		const amount = parseFloat(amountInput);
 		if (isNaN(amount) || amount <= 0) {
 			formError = "Enter a positive amount";
@@ -81,9 +89,9 @@
 		submitting = true;
 		formError = "";
 		try {
-			const pubkeyHex = hexEncode(currentIdentity.publicKeyBytes);
+			const pubkeyHex = hexEncode(signingIdentityInfo.publicKeyBytes);
 			const { headers } = await signRequest(
-				currentIdentity.identity,
+				signingIdentityInfo.identity,
 				"POST",
 				`/api/v1/users/${pubkeyHex}/wallet/topup`,
 			);
@@ -123,18 +131,25 @@
 
 	{#if !isAuthenticated}
 		<AuthRequiredCard />
-	{:else if loading}
+	{:else if error}
+		<div class="card p-4 mb-4 border-l-4 border-error/60 bg-error/10">
+			<p class="text-error text-sm">{error}</p>
+		</div>
+	{/if}
+
+	<!-- Loading and content are a SEPARATE block from the auth/error check above.
+	     This is the /dashboard/saved + /dashboard/rentals pattern: the spinner
+	     always renders while loading=true, even during the initial window before
+	     isAuthenticated settles, so an authed user never sees a bare "Login
+	     Required" flash during async identity derivation. -->
+	{#if loading}
 		<div class="card p-8 text-center">
 			<div class="inline-block w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 animate-spin"></div>
 			<p class="text-neutral-400 mt-3">Loading wallet…</p>
 		</div>
+	{:else if !isAuthenticated}
+		<!-- AuthRequiredCard already rendered above; nothing here -->
 	{:else}
-		{#if error}
-			<div class="card p-4 mb-4 border-l-4 border-error/60 bg-error/10">
-				<p class="text-error text-sm">{error}</p>
-			</div>
-		{/if}
-
 		{#if topupStatus === "success"}
 			<div class="card p-4 mb-4 border-l-4 border-success/60 bg-success/10 flex items-center gap-3">
 				<Icon name="check" size={20} class="text-success" />
