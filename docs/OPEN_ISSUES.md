@@ -28,26 +28,27 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > ║  until frictionless. This is the PRODUCT NORTH STAR — every session    ║
 > ║  must advance it until there is nothing left to smooth out.            ║
 > ║                                                                        ║
-> ║  **Status (2026-08-11 — MAJOR PROGRESS):** The FULL real product flow   ║
-> ║  was tested end-to-end locally: discover → rent → pay → provision →    ║
-> ║  SSH → cancel, against a REAL Hetzner cx23 VM (created ~56s, SSH       ║
-> ║  `root@<ip>` verified, cancelled + deleted, zero orphans). 5 bugs      ║
-> ║  found + fixed (TDD): (1) dc-auth cancel wrong HTTP method;            ║
-> ║  (2) email-verify gate blocked all dev rentals (dev bypass added);     ║
-> ║  (3) auto_accept defaulted FALSE contradicting schema TRUE;            ║
-> ║  (4) cloud-resell instance_details had misleading gateway fields;      ║
-> ║  (5) honest marketplace stats (was 6/0/7, now 1/1/1 — matches the      ║
-> ║  1 actually-rentable offering). A full browser UX audit found +        ║
-> ║  fixed 9 more buy-flow friction points (rent dialog is now a real      ║
-> ║  accessible keyboard-friendly `<form>` with inline wallet balance;     ║
-> ║  Similar Offerings no longer links to dead offerings; dead quick-      ║
-> ║  filter presets hidden; SLA empty-card warmed; rentals provider-name   ║
-> ║  now clickable; dup sort control removed). 329/331 e2e pass (the 2    ║
-> ║  failures are pre-existing: Stripe-webhook-secret + a test-order        ║
-> ║  contamination hazard). **REMAINING:** codify the wallet+provisioning   ║
-> ║  buy flow as e2e (the discover→rent→cancel shell is covered; the       ║
-> ║  wallet-payment + real-provisioning path is not yet); operator sign-   ║
-> ║  off to publish real offerings to PROD. See plan                        ║
+> ║  **Status (2026-08-11 — BUY FLOW WORKING END-TO-END):** The FULL real     ║
+> ║  product flow was tested end-to-end locally: discover → rent → pay →    ║
+> ║  provision → SSH → cancel, against a REAL Hetzner cx23 VM (created     ║
+> ║  ~56s, SSH `root@<ip>` verified, cancelled + deleted, zero orphans).   ║
+> ║  A CRITICAL buy-flow bug was found + fixed: **wallet-paid contracts     ║
+> ║  never auto-accepted** (`contracts.rs` — the wallet-debit success       ║
+> ║  branch skipped `try_auto_accept_contract`, so every real buyer's      ║
+> ║  contract was stuck at `requested` forever). Fixed by unifying the      ║
+> ║  auto-accept+fulfillment path for ALL payment methods. TDD-proven by    ║
+> ║  `rent-wallet-auto-accept.spec.ts`. In total this session: 6 backend   ║
+> ║  bugs fixed (wallet-auto-accept, dc-auth cancel method, email-verify    ║
+> ║  dev gate, auto_accept default, direct-SSH instance_details, SSH        ║
+> ║  username root@); 9 UX friction points fixed (rent dialog is now a      ║
+> ║  real accessible keyboard-friendly `<form>` with inline wallet          ║
+> ║  balance; Similar Offerings no longer links to dead offerings; honest   ║
+> ║  stats 1/1/1; dead presets hidden; SLA warmed; provider-name links;    ║
+> ║  dup sort removed); buy flow codified as e2e (wallet-debit math in      ║
+> ║  rent-flow, gated real-Hetzner-provisioning spec, wallet-auto-accept    ║
+> ║  proof). **333/334 e2e pass, 0 deterministic failures** (1 skip = the   ║
+> ║  gated real-VM spec). **REMAINING:** operator sign-off to publish real  ║
+> ║  offerings to PROD (the local path is fully verified). See plan         ║
 > ║  `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`.             ║
 > ║                                                                        ║
 > ║  **No further avoiding is acceptable. This is worked on every session.**  ║
