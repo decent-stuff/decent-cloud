@@ -28,14 +28,27 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 > ║  until frictionless. This is the PRODUCT NORTH STAR — every session    ║
 > ║  must advance it until there is nothing left to smooth out.            ║
 > ║                                                                        ║
-> ║  **Status (2026-08-11):** Infrastructure plumbing VERIFIED (Hetzner    ║
-> ║  VM create/delete/SSH/gateway/DNS all work via `api-cli cloud          ║
-> ║  provision` — cx23 provisioned in ~31s, clean termination in ~4s,     ║
-> ║  zero orphans). BUT the REAL product flow (marketplace → contract →    ║
-> ║  payment → provision → gateway → SSH → cancel) has NOT been tested     ║
-> ║  yet — local DB has 0 Hetzner-linked offerings. Next steps: operator   ║
-> ║  publishes Hetzner-backed offering → exercise full rental lifecycle →  ║
-> ║  identify + fix every friction point in the UI flow.                   ║
+> ║  **Status (2026-08-11 — MAJOR PROGRESS):** The FULL real product flow   ║
+> ║  was tested end-to-end locally: discover → rent → pay → provision →    ║
+> ║  SSH → cancel, against a REAL Hetzner cx23 VM (created ~56s, SSH       ║
+> ║  `root@<ip>` verified, cancelled + deleted, zero orphans). 5 bugs      ║
+> ║  found + fixed (TDD): (1) dc-auth cancel wrong HTTP method;            ║
+> ║  (2) email-verify gate blocked all dev rentals (dev bypass added);     ║
+> ║  (3) auto_accept defaulted FALSE contradicting schema TRUE;            ║
+> ║  (4) cloud-resell instance_details had misleading gateway fields;      ║
+> ║  (5) honest marketplace stats (was 6/0/7, now 1/1/1 — matches the      ║
+> ║  1 actually-rentable offering). A full browser UX audit found +        ║
+> ║  fixed 9 more buy-flow friction points (rent dialog is now a real      ║
+> ║  accessible keyboard-friendly `<form>` with inline wallet balance;     ║
+> ║  Similar Offerings no longer links to dead offerings; dead quick-      ║
+> ║  filter presets hidden; SLA empty-card warmed; rentals provider-name   ║
+> ║  now clickable; dup sort control removed). 329/331 e2e pass (the 2    ║
+> ║  failures are pre-existing: Stripe-webhook-secret + a test-order        ║
+> ║  contamination hazard). **REMAINING:** codify the wallet+provisioning   ║
+> ║  buy flow as e2e (the discover→rent→cancel shell is covered; the       ║
+> ║  wallet-payment + real-provisioning path is not yet); operator sign-   ║
+> ║  off to publish real offerings to PROD. See plan                        ║
+> ║  `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`.             ║
 > ║                                                                        ║
 > ║  **No further avoiding is acceptable. This is worked on every session.**  ║
 > ╚══════════════════════════════════════════════════════════════════════╝
@@ -78,7 +91,7 @@ autonomy level.
 |----------|------|--------|
 | **B1** | **~~Close 4 fixed GH issues~~** | **DONE by operator (2026-08-08).** Pushed + deployed. GH issues to close: #466, #452, #453, #447. |
 | **B2** | **~~#470 auto-merge prerequisite~~** | **DONE (2026-08-10).** PR #470 MERGED; auto-merge + `build-and-test` required-check configured. |
-| **B8** | **Hetzner first-offerings (operator sign-off to spend/launch)** | The product north star. Code 100% ready (direct cloud-backend resell path confirmed). All credentials ARE present and agent-accessible: `HETZNER_API_TOKEN_DEV` (read-write, outer `shared/env`) + `DC_PROD_RESELLER_SEED` (prod `hetzner-reseller` identity). The gate is **product/spend sign-off**, not credentials: creating real public offerings (a launch decision) + spending real money on test VMs (cheapest `cx23`, delete immediately). An agent *could* run the discover→rent→provision→SSH→cancel verification autonomously; what it needs from the operator is the go-ahead to spend + go public. Plan: `docs/plans/2026-08-03-hetzner-first-offerings.md`. |
+| **B8** | **Hetzner first-offerings (operator sign-off to spend/launch)** | The product north star. Code 100% ready (direct cloud-backend resell path confirmed + VERIFIED end-to-end this session: rent→provision→SSH→cancel against a real cx23, zero orphans). All credentials ARE present and agent-accessible: `HETZNER_API_TOKEN_DEV` (read-write, outer `shared/env`) + `DC_PROD_RESELLER_SEED` (prod `hetzner-reseller` identity). The autonomous local verification (B8's "an agent *could*") is now DONE — the remaining gate is purely **operator sign-off to go PUBLIC (prod)**: publish real offerings to the prod marketplace + authorize ongoing spend. Plan: `docs/plans/2026-08-03-hetzner-first-offerings.md`; execution log: `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`. |
 | **B3** | **~~OP-1 — Redeploy prod~~** | **DONE (2026-08-08).** Prod verified: health 200, environment "prod", Google OAuth enabled, 2 REAL offerings (tada $7/mo + hetzner-reseller $6.82/mo, both USD — demos gone). |
 | **B4** | **~~OP-2 — Redeploy stage~~** | **DONE (2026-08-08).** Stage verified at `stage-api.decent-cloud.org`: health 200, environment "stage", 5 offerings (storage/compute/network, all USD). |
 | **B5** | **~~OP-4 — Complete stage DNS cutover~~** | **DONE (2026-08-08).** `stage-api.decent-cloud.org` resolves + serves 200. Legacy `dev-api.decent-cloud.org` returns 502 (dead, as expected post-cutover). |
