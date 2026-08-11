@@ -25,7 +25,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 | Tag | Meaning |
 |-----|---------|
-| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~26 tests). Pick only fast (<5s), reliable, low-seed tests. |
+| `@smoke` | Critical path; runs in the fast smoke tier (`test:e2e:fast:smoke`, <35s, ~34 tests). Pick only fast (<5s), reliable, low-seed tests. |
 | `@auth` | Authentication: register, sign-in, sign-out, recover, verify, redirect. |
 | `@marketplace` | Public browse: marketplace, search/filter/sort, offering detail, pricing, reputation, compare. |
 | `@rental` | Tenant rental lifecycle: rent, pay, view, cancel, rentals list/detail. |
@@ -38,7 +38,7 @@ under `tests/e2e/` — when you add a flow or a test, update this file (see
 
 ```bash
 cd website
-npm run test:e2e:fast:smoke                 # ~32 critical-path tests, <35s (dev loop)
+npm run test:e2e:fast:smoke                 # ~34 critical-path tests, <35s (dev loop)
 npm run test:e2e:fast                       # full suite (all specs)
 ```
 
@@ -145,6 +145,7 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | Flow | Status | Tags | Spec | Test |
 |------|--------|------|------|------|
 | Become provider / setup wizard | ✅ | `@smoke` `@provider` | `provider-onboarding-submit.spec.ts` · `become-provider.spec.ts` | `submitting the Help Center form persists onboarding data across reload` (full submit) · `?step=3 deep-link renders the Help Center form without clicking through steps 1+2` (deep-link — the wizard now honors a `?step=N` query param on mount; a valid N wins over the persisted localStorage step, an invalid/absent N falls back to it) · `@smoke renders step 1, advances to step 2, and links Hetzner onboarding` (wizard render) |
+| Become-provider technical-onboarding hub (`/dashboard/provider/start`) | ✅ | `@provider` | `provider-start-cta.spec.ts` · `provider-onboarding.spec.ts` | `start page presents BOTH provider paths plus the shared onboarding steps` (render + href assertions) · `fresh provider steps through the onboarding hub: each link navigates to a live destination` (interactive click-through with a fresh identity). **NOTE:** this route is a STATIC NAVIGATION HUB, not a multi-step form wizard — it renders link cards to the downstream flows (Path A: cloud accounts; Path B: dc-agent docs; Step 2: create offering; Step 3: support profile) and has no Next buttons / form fields / wizard state of its own. The interactive wizard that creates a `provider_profiles` row lives at `/dashboard/provider/support` (covered by `provider-onboarding-submit.spec.ts` above). `provider-onboarding.spec.ts` adds the interactive dimension `provider-start-cta.spec.ts` lacked: it CLICKS each hub link and asserts the destination mounts for a fresh non-provider account. |
 | Create offering (full submit) | ✅ | `@provider` | `offering-create.spec.ts` | `create succeeds when the body omits pubkey (path-derived)` (real signed POST) — was blocked by #440 (backend `Offering.pubkey` rejected missing field); fixed in `ebebff02` via `#[oai(default)]` (handler overwrites from URL path). `monthly price is pre-filled with cost × 1.15 when a Hetzner server is selected` + `provider can override the suggested monthly price and the override is what gets submitted` cover the #442 monthly-price auto-suggest (catalog endpoint mocked — it requires a real Hetzner token unavailable in tests; create submit is real). CSV template download covered in `offerings-template.spec.ts`. |
 | Edit offering | ✅ | `@provider` | `offering-edit.spec.ts` | `submit persists the change and redirects to the offerings list` |
 | Offering edit: ownership guard (#5) | ✅ | `@smoke` `@provider` | `offering-edit-ownership.spec.ts` | `@smoke blocks a non-owner from the editable form (no Save button)` — `/dashboard/offerings/[id]/edit` redirects non-owners to the view-only route |
@@ -154,7 +155,11 @@ Status legend: ✅ covered · ⚠️ partial · ❌ gap
 | View requests (non-provider gate) | ✅ | `@provider` | `provider-requests-auth.spec.ts` | `shows the provider-setup-required banner for a non-provider account` |
 | Accept / reject a request | ✅ | `@provider` | `provider-accept-reject.spec.ts` | `accept a contract request removes it from pending` (+reject, render, auto-accept toggle) — authenticated provider seeds contracts where it is the provider, then accepts/rejects via signed POST .../respond |
 | Auto-accept toggle | ✅ | `@provider` | `provider-accept-reject.spec.ts` | `auto-accept toggle can be enabled` — flips the provider_profiles.auto_accept_rentals toggle and asserts the enabled state + banner |
-| Provider sub-pages render | ✅ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/* renders heading ... and its empty state` (analytics, feedback, password-resets, reseller, sla, ssh-key-rotations) |
+| Provider sub-page: analytics | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/analytics renders heading "Offering Analytics" and its empty state` — render-only — no interactive flow tested |
+| Provider sub-page: feedback | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/feedback renders heading "Tenant Feedback" and its empty state` — render-only — no interactive flow tested |
+| Provider sub-page: ssh-key-rotations | ⚠️ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/ssh-key-rotations renders heading "SSH Key Rotations" and its empty state` — render-only — no interactive flow tested |
+| Provider sub-page: reseller | ✅ | `@provider` | `provider-pages-smoke.spec.ts` · `inline-confirm-delete.spec.ts` | `/dashboard/provider/reseller renders heading "Reseller Program" and its empty state` (render) · `reseller` (full interactive flow: seeds a `reseller_relationships` row, drives the inline two-step confirm, awaits the signed `DELETE /api/v1/reseller/relationships/<ext_pubkey>`, asserts the "Reseller relationship deleted" toast + row removal). Despite the render-only appearance, this route DOES have interactive signed-DELETE coverage. |
+| Provider sub-page: sla (render) | ✅ | `@provider` | `provider-pages-smoke.spec.ts` | `/dashboard/provider/sla renders heading "SLA Monitor" and its empty state` (render) — the SLA metrics API (the load-bearing assertion) is covered by the "SLA metrics" row below (`provider-response-metrics.spec.ts`). |
 | Agent pools | ✅ | `@provider` | `agent-pool-create.spec.ts` · `agent-pool-edit.spec.ts` · `provider-pages-smoke.spec.ts` | `creates an agent pool and lists it in the pool table` (create via UI form) · `rename persists in DB, list table, and detail page header` (signed PUT rename + `/dashboard/provider/agents/[pool_id]` detail-page render — was an untested gap; the detail page has no inline rename UI, so the PUT is exercised directly and the new name is asserted in the table UI, the DB, and the detail `<h1>`/breadcrumb) |
 | Earnings | ✅ | `@provider` | `provider-earnings.spec.ts` · `provider-pages-smoke.spec.ts` | `shows the summed revenue, contract count, and contract rows for seeded provider contracts` |
 | SLA metrics | ✅ | `@smoke` `@provider` | `provider-response-metrics.spec.ts` · `offering-sla-empty-state.spec.ts` | `@smoke GET /providers/:pubkey/response-metrics returns contract request SLA metrics` |
@@ -204,7 +209,7 @@ anonymous pages are not silently authenticated.
 
 ## Smoke tier (`@smoke`)
 
-The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~31 tests,
+The fast dev-loop tier. Run with `npm run test:e2e:fast:smoke` (~34 tests,
 **<35s** against the warm stack). Selection rules:
 
 - **Critical path only** — landing/anonymous browse, dashboard overview, sign-in,
@@ -254,6 +259,9 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 | 29 | UX-008 unauth sidebar clean | `ux-regression-guards.spec.ts` › `@smoke UX-008 unauthenticated sidebar hides "My Activity"...` |
 | 30 | UX-013 login heading | `ux-regression-guards.spec.ts` › `@smoke UX-013 login page heading reads "Sign In or Create Account"` |
 | 31 | UX-004 dashboard @username | `ux-regression-guards.spec.ts` › `@smoke UX-004 dashboard welcome card shows @username, not a raw principal` |
+| 32 | Seed-phrase education (chooser) | `seed-phrase-education.spec.ts` › `@smoke login chooser shows inline seed-phrase education` |
+| 33 | Seed-phrase education (backup warning) | `seed-phrase-education.spec.ts` › `@smoke seed backup step warns the seed cannot be recovered if lost` |
+| 34 | Seed-phrase education (recovery link) | `seed-phrase-education.spec.ts` › `@smoke recovery link on the login page uses seed-phrase-specific copy` |
 
 > **Coverage note.** 13 of the 14 critical paths are covered. The remaining
 > path — *rent an offering (dialog → real contract)* — is intentionally **not**
@@ -277,6 +285,15 @@ Current smoke membership (run `npx playwright test --list --grep @smoke`):
 > anonymous/SSR reads (~0.7–1s each) and parallelize into existing workers, so
 > the marginal wall-clock cost was ~1.6s. UX-010 (2px focus outline) and UX-012
 > (reduced-motion typing) are documented gaps in §6.
+>
+> **2026-08-11 count reconciliation.** The membership table + the inline `~NN`
+> counts had drifted: 3 `@smoke` tests in `seed-phrase-education.spec.ts` (the
+> UX-003 inline education + loss warning + recovery-link copy) were tagged
+> `@smoke` but never added to the table, and the inline counts still read
+> ~26/~31/~32. Re-listed with `npx playwright test --list --grep @smoke` and
+> updated every present-state count to the verified **34** (stable across two
+> clean runs: 33.4s + 34.2s, 34 passed each). Historical tuning notes above
+> retain their original numbers as dated records.
 
 ## Mock inventory
 
