@@ -30,3 +30,15 @@ export function connectableIp(details: Record<string, unknown> | null): string |
 		return details.ip_address;
 	return null;
 }
+
+/** SSH login user for a provisioned instance.
+ *  - `direct_ssh` (cloud-resell): always `root` — Hetzner enables root login
+ *    with the injected SSH key for every cloud image (empirically confirmed).
+ *  - other (gateway / self-hosted): derive from the OS heuristic. */
+export function sshUserForInstance(
+	instanceDetails: Record<string, unknown> | null,
+	operatingSystem?: string | null,
+): string {
+	if (instanceDetails?.connection_type === 'direct_ssh') return 'root';
+	return sshUsername(operatingSystem);
+}

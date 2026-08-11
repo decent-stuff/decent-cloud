@@ -23,7 +23,7 @@
 		calculateSpendingByCurrency,
 	} from "$lib/utils/contract-format";
 	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
-	import { connectableIp, sshUsername } from "$lib/utils/network";
+	import { connectableIp, sshUserForInstance } from "$lib/utils/network";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
@@ -1012,7 +1012,7 @@
 
 					{#if contract.gateway_subdomain && contract.gateway_ssh_port || contract.provisioning_instance_details}
 						{@const instanceJson = (() => { try { return JSON.parse(contract.provisioning_instance_details ?? ''); } catch { return null; } })()}
-						{@const user = sshUsername(contract.operating_system)}
+						{@const user = sshUserForInstance(instanceJson, contract.operating_system)}
 						{@const gatewaySshCmd = contract.gateway_subdomain && contract.gateway_ssh_port ? `ssh -p ${contract.gateway_ssh_port} ${user}@${contract.gateway_subdomain}` : null}
 						{@const directIp = connectableIp(instanceJson)}
 						{@const directSshCmd = directIp ? `ssh ${user}@${directIp}` : null}
