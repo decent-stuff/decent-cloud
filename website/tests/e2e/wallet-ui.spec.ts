@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures/test-account';
+import { waitForAuthReady } from './fixtures/test-account';
 import { sql, pubkeyHexFromSeed } from './fixtures/seed-helpers';
 
 /**
@@ -29,6 +30,48 @@ test.describe('Wallet UI', () => {
 		// Ledger empty state.
 		await expect(page.locator('h2:has-text("Recent Transactions")')).toBeVisible();
 		await expect(page.locator('text=No transactions yet.')).toBeVisible();
+	});
+
+	// Regression: UX-3. The wallet page used to render "Login Required" alone
+	// during the async identity-derivation window (its single if/else chain
+	// checked !isAuthenticated before loading, so the spinner branch was
+	// unreachable while isAuthenticated was still settling). The fix mirrors
+	// the /dashboard/saved + /dashboard/rentals two-block pattern so the
+	// spinner always renders while loading=true — including in the SSR HTML,
+	// where isAuthenticated is always false (no onMount runs on the server).
+	// Asserting the SSR response contains the spinner is the deterministic
+	// signal: the old code's SSR emitted only "Login Required" with no
+	// "Loading wallet"; the fixed code emits both.
+	test('wallet page SSR includes the loading spinner (no Login Required-only flash)', async ({ page, testAccount }) => {
+		const response = await page.goto('/dashboard/wallet');
+		const html = await response!.text();
+		expect(html).toContain('Loading wallet');
+	});
+
+	// Behavioral guard: during the wallet-fetch loading phase (after auth has
+	// resolved but before the GET returns), the spinner is visible and
+	// "Login Required" is absent. Kept as a regression guard on top of the
+	// SSR assertion above.
+	test('wallet page does not flash "Login Required" during the loading phase', async ({ page, testAccount }) => {
+		// Hold the wallet GET open so loading stays true after auth resolves.
+		let releaseWallet: () => void = () => {};
+		await page.route('**/api/v1/users/*/wallet', async (route) => {
+			await new Promise<void>((resolve) => { releaseWallet = resolve; });
+			await route.continue();
+		});
+
+		await page.goto('/dashboard/wallet');
+
+		// Auth is definitively resolved once the sidebar Logout button appears.
+		await waitForAuthReady(page);
+
+		// Still loading (delayed route): spinner visible, "Login Required" absent.
+		await expect(page.getByText('Loading wallet')).toBeVisible({ timeout: 5000 });
+		await expect(page.getByText('Login Required')).toHaveCount(0);
+
+		// Release the delayed response; content renders normally.
+		releaseWallet();
+		await expect(page.locator('text=Available Balance')).toBeVisible({ timeout: 10000 });
 	});
 
 	// Wait for the balance card — it only renders after loadWallet() resolves
