@@ -686,45 +686,13 @@ impl ContractsApi {
                 // Test payment method: auto-succeeds without payment.
                 // All other real rentals: debit the prepaid wallet balance atomically
                 // (replaces the former per-contract Stripe Checkout flow).
+                // Payment: self-rental/test succeed immediately (payment_status=succeeded
+                // set in create_rental_request); all other rentals debit the prepaid wallet
+                // balance atomically (marks payment_status=succeeded in the same tx, so a
+                // crash can never leave the wallet debited but the contract unpaid).
                 let checkout_url = if is_self_rental || payment_method.to_lowercase() == "test" {
-                    // Self-rental or Test: payment_status is "succeeded" immediately, try auto-accept
-                    match db.try_auto_accept_contract(&contract_id).await {
-                        Ok(true) => {
-                            if let Err(e) = db
-                                .try_activate_self_provisioned_contract(&contract_id)
-                                .await
-                            {
-                                tracing::warn!(
-                                    "Self-provisioned fulfillment failed for contract {}: {:#}",
-                                    hex::encode(&contract_id),
-                                    e
-                                );
-                            }
-
-                            // Auto-accepted, try to trigger cloud provisioning
-                            if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await {
-                                tracing::warn!(
-                                    "Cloud provisioning trigger failed for contract {}: {}",
-                                    hex::encode(&contract_id),
-                                    e
-                                );
-                            }
-                        }
-                        Ok(false) => {} // Not eligible for auto-accept
-                        Err(e) => {
-                            tracing::warn!(
-                                "Auto-accept check failed for contract {}: {}",
-                                hex::encode(&contract_id),
-                                e
-                            );
-                        }
-                    }
                     None
                 } else {
-                    // Real rental: debit the prepaid wallet balance atomically.
-                    // The debit marks the contract paid (payment_status=succeeded,
-                    // payment_method=wallet) in the same transaction, so a crash can
-                    // never leave the wallet debited but the contract unpaid.
                     let contract = match db.get_contract(&contract_id).await {
                         Ok(Some(c)) => c,
                         Ok(None) => {
@@ -781,6 +749,44 @@ impl ContractsApi {
                         }
                     }
                 };
+
+                // Fulfillment runs uniformly for ALL paid contracts: by this point every
+                // path (self-rental, test, wallet) has payment_status=succeeded, so the
+                // auto-accept eligibility check (payment_status == "succeeded") passes for
+                // each. Previously only the test/self-rental branch auto-accepted, which
+                // left wallet-paid contracts stuck at `requested` forever — breaking the
+                // entire marketplace buy flow for real buyers.
+                match db.try_auto_accept_contract(&contract_id).await {
+                    Ok(true) => {
+                        if let Err(e) = db
+                            .try_activate_self_provisioned_contract(&contract_id)
+                            .await
+                        {
+                            tracing::warn!(
+                                "Self-provisioned fulfillment failed for contract {}: {:#}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
+
+                        // Auto-accepted, try to trigger cloud provisioning
+                        if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await {
+                            tracing::warn!(
+                                "Cloud provisioning trigger failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
+                    }
+                    Ok(false) => {} // Not eligible for auto-accept
+                    Err(e) => {
+                        tracing::warn!(
+                            "Auto-accept check failed for contract {}: {}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
+                }
 
                 // Best-effort: check spending alert and notify if threshold exceeded
                 check_spending_alert_and_notify(&db, &auth.pubkey).await;
