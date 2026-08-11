@@ -7,6 +7,10 @@ on:
       - "dc-agent/container/**"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-publish:
     name: Build & Publish dc-agent-ssh
