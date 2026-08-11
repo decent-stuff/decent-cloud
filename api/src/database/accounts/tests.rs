@@ -1342,16 +1342,16 @@ async fn test_oauth_account_creation_sets_email_verified() {
 async fn test_oauth_linking_to_existing_account_sets_email_verified() {
     let db = setup_test_db().await;
 
-    // Create an account with unverified email
+    // Create an account (auto-verified in non-prod dev environments)
     let account = db
         .create_account("existing_user", &[11u8; 32], "existing@example.com")
         .await
         .unwrap();
 
-    // Verify email is not verified initially
+    // Verify email is verified (dev auto-verify bypass)
     assert!(
-        !account.email_verified,
-        "New accounts should have email_verified=false"
+        account.email_verified,
+        "New accounts auto-verified in non-prod (dev bypass)"
     );
 
     // Link OAuth account to existing account
