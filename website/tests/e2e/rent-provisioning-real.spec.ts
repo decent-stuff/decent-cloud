@@ -1,5 +1,7 @@
 import { test, expect } from './fixtures/test-account';
 import type { Page } from '@playwright/test';
+import { execSync } from 'node:child_process';
+import { readFileSync, rmSync } from 'node:fs';
 import {
 	pubkeyHexFromSeed,
 	identityFromSeedPhrase,
@@ -55,10 +57,12 @@ const WALLET_SEED_E9S = 10_000_000_000;
 const PROVISION_TIMEOUT_MS = 180_000;
 const TERMINATE_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 5_000;
-// SSH key generated for this spec only (never reused, never on a real host).
-const SSH_PUBKEY =
-	'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE2eRealProvSpecKeyData9981 e2e@real-provisioning';
+// SSH key generated fresh per run in beforeAll (Hetzner validates the key at
+// server-create time — a constant fake key 400s on provisioning). Never reused.
+let SSH_PUBKEY = '';
 const CONTACT = 'email:e2e-real-provisioning@test.example.com';
+// Throwaway keypair path (regenerated each run; outside the repo).
+const SSH_KEY_PATH = '/tmp/e2e-real-prov-key';
 
 test.describe('REAL cloud-resell provisioning (Hetzner) — gated', () => {
 	test.describe.configure({ mode: 'serial' });
@@ -89,6 +93,12 @@ test.describe('REAL cloud-resell provisioning (Hetzner) — gated', () => {
 			VALUES ('${requesterPubkey}', ${WALLET_SEED_E9S})
 			ON CONFLICT (pubkey) DO UPDATE SET balance_e9s = ${WALLET_SEED_E9S}
 		`);
+		// Generate a real ed25519 keypair for VM injection (Hetzner validates it).
+		// Remove any stale key from a prior run first (ssh-keygen won't overwrite).
+		rmSync(SSH_KEY_PATH, { force: true });
+		rmSync(`${SSH_KEY_PATH}.pub`, { force: true });
+		execSync(`ssh-keygen -t ed25519 -f ${SSH_KEY_PATH} -N '' -q`);
+		SSH_PUBKEY = readFileSync(`${SSH_KEY_PATH}.pub`, 'utf8').trim();
 	});
 
 	test.afterAll(async () => {
@@ -176,6 +186,9 @@ test.describe('REAL cloud-resell provisioning (Hetzner) — gated', () => {
 	}
 
 	test('rent → provision → SSH details → cancel (real Hetzner VM)', async ({ page }) => {
+		// Real provisioning (VM create + boot + cloud-init) takes ~60s; allow
+		// generous headroom over Playwright's 30s default.
+		test.setTimeout(300_000);
 		// 1. Rent the real offering via a signed POST /api/v1/contracts. Direct
 		//    API call (not the marketplace dialog) keeps this spec focused on
 		//    the PROVISIONING path and avoids depending on the offering's
@@ -184,11 +197,15 @@ test.describe('REAL cloud-resell provisioning (Hetzner) — gated', () => {
 		const rentResp = await signedApiCall(identity, 'POST', '/api/v1/contracts', {
 			offering_db_id: REAL_OFFERING_DB_ID,
 			ssh_pubkey: SSH_PUBKEY,
-			payment_method: 'wallet',
+			// 'test' payment auto-succeeds + auto-accepts + triggers cloud
+			// provisioning (the proven Phase-1 path). The gated spec validates
+			// PROVISIONING, not wallet math (rent-flow.spec.ts owns that).
+			payment_method: 'test',
 			contact_method: CONTACT,
 		});
-		expect(rentResp.ok, `rent POST must succeed: ${await rentResp.text().catch(() => '<no body>')}`).toBe(true);
-		const rentJson = await rentResp.json();
+		const rentText = await rentResp.text().catch(() => '<no body>');
+		expect(rentResp.ok, `rent POST must succeed: ${rentText}`).toBe(true);
+		const rentJson = JSON.parse(rentText);
 		const contractId: string = rentJson?.data?.contractId;
 		expect(contractId, `rent response must carry data.contractId: ${JSON.stringify(rentJson)}`).toMatch(
 			/^[0-9a-f]+$/,
@@ -221,18 +238,15 @@ test.describe('REAL cloud-resell provisioning (Hetzner) — gated', () => {
 		const publicIp = String(details.public_ip);
 
 		// 4. The rental detail page must render the SSH command for the
-		//    provisioned IP. The rendered username is OS-derived
-		//    (sshUsername(): "ubuntu" for ubuntu images, "root" otherwise) —
-		//    the backend's direct-SSH intent documents root@<ip>, so this
-		//    assertion intentionally matches the IP + `ssh <user>@` prefix and
-		//    does NOT hardcode the username. If the rendered user disagrees
-		//    with the VM's actual login user, that is a separate UI/backend
-		//    mismatch this spec surfaces (not a provisioning failure).
+		//    provisioned IP. Cloud-resell (direct_ssh) VMs always use `root`
+		//    (Hetzner enables root login with the injected SSH key for all
+		//    cloud images — confirmed empirically). sshUserForInstance()
+		//    returns 'root' for connection_type==='direct_ssh'.
 		await page.goto(`/dashboard/rentals/${contractId}`);
 		// Wait for the detail page to mount the connection block (the IP
 		// appears in the SSH command code + the IP-address block).
 		await expect(page.locator('body')).toContainText(publicIp, { timeout: 15_000 });
-		const sshCode = page.locator('code', { hasText: new RegExp(`ssh\\s+\\S+@${publicIp.replace(/\./g, '\\.')}`) });
+		const sshCode = page.locator('code', { hasText: new RegExp(`ssh\\s+root@${publicIp.replace(/\./g, '\\.')}`) });
 		await expect(sshCode.first()).toBeVisible({ timeout: 15_000 });
 
 		// 5. Cancel the rental. `active` is cancellable; the API refunds the
