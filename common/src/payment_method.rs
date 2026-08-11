@@ -27,20 +27,6 @@ pub enum PaymentMethod {
     Test,
 }
 
-impl PaymentMethod {
-    pub fn is_stripe(&self) -> bool {
-        matches!(self, PaymentMethod::Stripe)
-    }
-
-    pub fn is_wallet(&self) -> bool {
-        matches!(self, PaymentMethod::Wallet)
-    }
-
-    pub fn is_test(&self) -> bool {
-        matches!(self, PaymentMethod::Test)
-    }
-}
-
 impl std::fmt::Display for PaymentMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -104,18 +90,6 @@ pub mod payment_status {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_payment_method_is_stripe() {
-        assert!(PaymentMethod::Stripe.is_stripe());
-        assert!(!PaymentMethod::Test.is_stripe());
-    }
-
-    #[test]
-    fn test_payment_method_is_test() {
-        assert!(PaymentMethod::Test.is_test());
-        assert!(!PaymentMethod::Stripe.is_test());
-    }
 
     #[test]
     fn test_payment_method_from_str_valid() {
