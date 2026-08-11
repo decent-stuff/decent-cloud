@@ -289,6 +289,33 @@
 		trendingOfferings.filter((t) => !offlineOfferingIds.has(t.offering_id))
 	);
 
+	// Preset availability: hide quick-filter presets that match zero offerings so
+	// a new user never taps a prominent shortcut into an empty result set
+	// (regression: "GPU Servers" and "North America" exposed 0 offerings — the
+	// catalog has no GPUs / NA datacenters). Derived from the current
+	// server-filtered `offerings` list, respecting offline hiding. A preset is
+	// surfaced when at least one offering matches it OR it is the active preset
+	// (so a stale deep-link to an empty preset still renders its toggle to clear
+	// it — no stranded selection / dead-end).
+	let presetAvailability = $derived.by(() => {
+		const base = showOfflineOfferings ? offerings : offerings.filter((o) => o.provider_online);
+		const inRegion = (region: string) =>
+			base.filter((o) => COUNTRY_TO_REGION[o.datacenter_country ?? ''] === region).length;
+		return {
+			gpu: base.filter((o) => o.product_type.toLowerCase().includes('gpu')).length,
+			budget: base.filter((o) => o.monthly_price != null && o.monthly_price <= 20).length,
+			na: inRegion('na'),
+			europe: inRegion('europe'),
+		};
+	});
+	let anyPresetAvailable = $derived(
+		presetAvailability.gpu > 0 ||
+			presetAvailability.budget > 0 ||
+			presetAvailability.na > 0 ||
+			presetAvailability.europe > 0 ||
+			selectedPreset !== null
+	);
+
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
 	});
@@ -1106,31 +1133,41 @@
 					<Icon name="shield" size={14} /> Most Trusted
 				</button>
 				<div class="w-px h-5 bg-neutral-700 mx-1"></div>
-				<span class="text-neutral-600 text-xs shrink-0">Quick filters:</span>
-				<button
-					onclick={() => setPreset("gpu")}
-					class={buildQuickPillClass('preset', selectedPreset === 'gpu', 'purple')}
-				>
-					<Icon name="gpu" size={14} /> GPU Servers
-				</button>
-				<button
-					onclick={() => setPreset("budget")}
-					class={buildQuickPillClass('preset', selectedPreset === 'budget', 'emerald')}
-				>
-					Budget (&lt;$20/mo)
-				</button>
-				<button
-					onclick={() => setPreset("na")}
-					class={buildQuickPillClass('preset', selectedPreset === 'na', 'sky')}
-				>
-					North America
-				</button>
-				<button
-					onclick={() => setPreset("europe")}
-					class={buildQuickPillClass('preset', selectedPreset === 'europe', 'sky')}
-				>
-					Europe
-				</button>
+				{#if anyPresetAvailable}
+					<span class="text-neutral-600 text-xs shrink-0">Quick filters:</span>
+				{/if}
+				{#if presetAvailability.gpu > 0 || selectedPreset === 'gpu'}
+					<button
+						onclick={() => setPreset("gpu")}
+						class={buildQuickPillClass('preset', selectedPreset === 'gpu', 'purple')}
+					>
+						<Icon name="gpu" size={14} /> GPU Servers
+					</button>
+				{/if}
+				{#if presetAvailability.budget > 0 || selectedPreset === 'budget'}
+					<button
+						onclick={() => setPreset("budget")}
+						class={buildQuickPillClass('preset', selectedPreset === 'budget', 'emerald')}
+					>
+						Budget (&lt;$20/mo)
+					</button>
+				{/if}
+				{#if presetAvailability.na > 0 || selectedPreset === 'na'}
+					<button
+						onclick={() => setPreset("na")}
+						class={buildQuickPillClass('preset', selectedPreset === 'na', 'sky')}
+					>
+						North America
+					</button>
+				{/if}
+				{#if presetAvailability.europe > 0 || selectedPreset === 'europe'}
+					<button
+						onclick={() => setPreset("europe")}
+						class={buildQuickPillClass('preset', selectedPreset === 'europe', 'sky')}
+					>
+						Europe
+					</button>
+				{/if}
 			</div>
 			</div>
 
@@ -1178,9 +1215,12 @@
 				</div>
 			<div class="flex items-center justify-end gap-2">
 				<!-- Desktop sort pills (hidden below md). The <select> mirror below
-				     is the single sort affordance on mobile and an a11y alternative
-				     on desktop. Both bind to the same sortField/sortDir state and
-				     share syncFiltersToUrl(), so they stay in sync (#439). -->
+				     is the ONLY sort affordance on mobile; on desktop the pills are
+				     the single affordance (the select is `md:hidden`, so there is no
+				     duplicate sort control and no phantom-focus on a hidden element).
+				     Both still bind to the same sortField/sortDir state and share
+				     syncFiltersToUrl(), so they stay in sync across viewports (#439,
+				     #marketplace-buy-flow). -->
 				<div class="hidden md:flex items-center gap-1">
 					<button
 						onclick={() => setSortPrice("asc")}
@@ -1195,14 +1235,14 @@
 						class="{buildDashboardCtaClass('marketplace-sort-pill')} {sortField === 'trust' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-neutral-500 hover:text-white'}"
 					>Reliability ↓</button>
 				</div>
-				<!-- Sort <select>: visible on mobile as the only sort affordance
-				     (the pills are hidden below md) and on desktop as a
-				     keyboard/screen-reader-friendly alternative. -->
-				<label class="md:sr-only text-xs text-neutral-500" for="marketplace-sort-select">Sort</label>
+				<!-- Sort <select>: the ONLY sort affordance on mobile (the pills are
+				     `hidden md:flex`). `md:hidden` removes it from desktop so the
+				     pills are the single desktop affordance — no duplicate control. -->
+				<label class="md:hidden text-xs text-neutral-500" for="marketplace-sort-select">Sort</label>
 				<select
 					id="marketplace-sort-select"
 					aria-label="Sort offerings"
-					class="bg-surface border border-neutral-700 text-white text-sm rounded px-2 py-1 focus:border-primary-400 focus:outline-none w-36 md:w-40"
+					class="md:hidden bg-surface border border-neutral-700 text-white text-sm rounded px-2 py-1 focus:border-primary-400 focus:outline-none w-36"
 					value="{sortField === 'trust' ? 'Reliability ↓' : sortField === 'price' && sortDir === 'desc' ? 'Price ↓' : 'Price ↑'}"
 					onchange={(e) => {
 						const v = (e.currentTarget as HTMLSelectElement).value;

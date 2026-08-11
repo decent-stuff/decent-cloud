@@ -2,6 +2,8 @@
 	import type { Offering } from "$lib/services/api";
 	import {
 		createRentalRequest,
+		getWallet,
+		formatE9sAsUsd,
 		type RentalRequestParams,
 	} from "$lib/services/api";
 	import { signRequest } from "$lib/services/auth-api";
@@ -136,6 +138,51 @@
 		selectedOperatingSystem = availableOperatingSystems[0] ?? "";
 	});
 
+	// --- Dialog accessibility (mirrors KeyboardHelpOverlay.svelte) ---
+	// Real modal semantics: role="dialog"/aria-modal, focus moves in on open,
+	// Escape closes from anywhere, and Tab/Shift-Tab cycle within the dialog.
+	let dialogEl = $state<HTMLDivElement | null>(null);
+
+	// Move focus into the dialog on open. We focus the Duration field (the
+	// first input the user might change) rather than the SSH textarea: Duration
+	// sits high enough that focusing it does NOT scroll the dialog, so the cost
+	// summary stays visible on open. Subscription offerings have no Duration
+	// field, so fall back to the SSH key.
+	$effect(() => {
+		if (offering && dialogEl) {
+			dialogEl.querySelector<HTMLElement>('#duration, #ssh-key')?.focus();
+		}
+	});
+
+	// Trap Tab/Shift-Tab inside the dialog and close on Escape from any focused
+	// element within it (not just the backdrop).
+	function handleDialogKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') {
+			e.stopPropagation();
+			onClose();
+			return;
+		}
+		if (e.key !== 'Tab' || !dialogEl) return;
+		const focusable = Array.from(
+			dialogEl.querySelectorAll<HTMLElement>(
+				'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((el) => el.offsetParent !== null); // skip hidden (e.g. closed <details>)
+		if (focusable.length === 0) return;
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		const activeEl = document.activeElement as HTMLElement | null;
+		if (e.shiftKey) {
+			if (activeEl === first || !dialogEl.contains(activeEl)) {
+				e.preventDefault();
+				last.focus();
+			}
+		} else if (activeEl === last) {
+			e.preventDefault();
+			first.focus();
+		}
+	}
+
 	// Validate SSH public key format
 	function validateSshKey(key: string): string | null {
 		if (!key.trim()) {
@@ -156,8 +203,8 @@
 		!savedSshKeys.some((k) => k.keyData === sshKey.trim())
 	);
 
-	// Stripe is the only paid rail (self-rental stays free).
-	let paymentMethod = $state<"stripe">("stripe");
+	// The prepaid wallet is the only paid rail (self-rental stays free).
+	let paymentMethod = $state<"wallet">("wallet");
 
 	// Self-rental: user renting their own offering (no payment needed)
 	let isSelfRental = $derived(() => {
@@ -167,8 +214,50 @@
 		return bytesToHex(active.publicKeyBytes) === offering.pubkey;
 	});
 
-	// Payment is required unless it's a self-rental (Stripe is the only paid path)
+	// Payment is required unless it's a self-rental (wallet is the only paid path)
 	let paymentRequired = $derived(!isSelfRental());
+
+	// Wallet balance for the payment step. Reuses the exact same API path as the
+	// wallet page (signRequest + getWallet) so there is one source of truth.
+	let walletBalanceE9s = $state<number | null>(null);
+	let walletLoading = $state(false);
+	let walletError = $state<string | null>(null);
+
+	async function loadWalletBalance() {
+		const identityInfo = get(authStore.activeIdentity);
+		if (!identityInfo?.identity) return;
+		walletLoading = true;
+		walletError = null;
+		try {
+			const pubkeyHex = bytesToHex(identityInfo.publicKeyBytes);
+			const { headers } = await signRequest(
+				identityInfo.identity as Ed25519KeyIdentity,
+				"GET",
+				`/api/v1/users/${pubkeyHex}/wallet`,
+			);
+			const wallet = await getWallet(headers, pubkeyHex);
+			walletBalanceE9s = wallet.balanceE9s;
+		} catch (e) {
+			// Debuggable: surface the failure instead of silently hiding the balance.
+			walletError = e instanceof Error ? e.message : "Couldn't load wallet balance";
+		} finally {
+			walletLoading = false;
+		}
+	}
+
+	// Cost (USD) of this rental, used to compare against the wallet balance.
+	let costUsd = $derived(() => {
+		if (!offering || isSelfRental()) return 0;
+		if (isSubscriptionOffering) return offering.monthly_price;
+		return parseFloat(calculatePrice());
+	});
+	let balanceUsd = $derived(
+		walletBalanceE9s !== null ? parseFloat(formatE9sAsUsd(walletBalanceE9s)) : null
+	);
+	// null balance (not loaded / error) → unknown, never block; only flag insufficient.
+	let balanceSufficient = $derived(
+		balanceUsd === null ? null : balanceUsd >= costUsd()
+	);
 
 	// Subscription offering helpers
 	let isSubscriptionOffering = $derived(offering?.is_subscription ?? false);
@@ -273,7 +362,9 @@
 
 			const response = await createRentalRequest(params, signed.headers);
 
-			// Stripe: redirect to Checkout
+			// Wallet payment: balance is debited atomically by the API; no
+			// redirect. checkoutUrl is null on success. (Legacy Stripe
+			// per-contract redirect retained for any non-wallet path.)
 			if (response.checkoutUrl) {
 				// Persist SSH key save intent in localStorage so the rentals page
 				// can complete the save after returning from Stripe Checkout.
@@ -284,7 +375,7 @@
 				return;
 			}
 
-			// Self-rental / no-checkout path
+			// Wallet / self-rental: payment succeeded inline, finish the flow.
 			await maybeSaveKeyToProfile();
 			onSuccess(response.contractId);
 		} catch (e) {
@@ -297,21 +388,46 @@
 			loading = false;
 		}
 	}
+
+	// Fetch the wallet balance when a PAID rental dialog opens (offering set).
+	// Done as an $effect on `offering`, not in onMount: the component mounts with
+	// offering=null (only renders when the user clicks Rent), and the auth
+	// identity may not be hydrated yet at mount time. By the time `offering` is
+	// set, the user is on an authenticated page, so the identity is available.
+	// `walletFetchedFor` guards against duplicate fetches for the same offering.
+	let walletFetchedFor: string | number | null = null;
+	$effect(() => {
+		if (offering && paymentRequired && offering.id !== walletFetchedFor) {
+			walletFetchedFor = offering.id ?? null;
+			loadWalletBalance();
+		}
+	});
 </script>
 
 {#if offering}
-	<!-- Backdrop -->
+	<!-- Backdrop: click to dismiss. The dialog stops propagation so inner clicks
+	do not close. Escape + Tab are handled on the dialog container (below). -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
+		role="presentation"
 		class="fixed inset-0 bg-base/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
 		onclick={(e) => e.target === e.currentTarget && onClose()}
-		role="button"
-		tabindex="0"
-		onkeydown={(e) => e.key === "Escape" && onClose()}
 	>
-		<!-- Dialog -->
+		<!-- Dialog: real modal semantics mirroring KeyboardHelpOverlay.svelte -->
 		<div
-			class="bg-gradient-to-br from-base to-gray-800  max-w-2xl w-full border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
+			bind:this={dialogEl}
+			data-testid="rent-dialog"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Rent resource"
+			tabindex="-1"
+			onkeydown={handleDialogKeydown}
+			onclick={(e) => e.stopPropagation()}
+			class="bg-gradient-to-br from-base to-gray-800 max-w-2xl w-full border border-neutral-800 shadow-2xl max-h-[90vh] overflow-y-auto"
 		>
+			<!-- The whole dialog body is a real form so Enter submits and the
+			primary button is type="submit". -->
+			<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
 			<!-- Header -->
 			<div
 				class="flex items-center justify-between p-6 border-b border-neutral-800"
@@ -323,6 +439,7 @@
 					</p>
 				</div>
 				<button
+					type="button"
 					onclick={onClose}
 					class="text-neutral-500 hover:text-white transition-colors"
 					aria-label="Close dialog"
@@ -462,7 +579,7 @@
 							{:else}
 								<span class="text-neutral-400 text-sm">One-Time Payment</span>
 								<p class="text-xs text-neutral-500 mt-1">
-									{durationHours} hours @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
+									{formatHours(durationHours ?? 720)} @ {offering.monthly_price.toFixed(2)} {offering.currency}/mo
 								</p>
 							{/if}
 						</div>
@@ -538,31 +655,6 @@
 					</div>
 				{/if}
 
-				<!-- Operating System Selection -->
-				{#if hasOperatingSystems}
-					<div>
-						<label
-							for="operating-system"
-							class="block text-sm font-medium text-white mb-2"
-						>
-							Operating System
-						</label>
-						<select
-							id="operating-system"
-							bind:value={selectedOperatingSystem}
-							class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
-						>
-							<option value="">Select an OS...</option>
-							{#each availableOperatingSystems as os}
-								<option value={os}>{os}</option>
-							{/each}
-						</select>
-						<p class="text-xs text-neutral-500 mt-1">
-							Choose the operating system for your server
-						</p>
-					</div>
-				{/if}
-
 			<!-- Payment Info -->
 			{#if isSelfRental()}
 				<div
@@ -576,31 +668,47 @@
 						at no cost.
 					</p>
 				</div>
-			{:else}
-				<div
-					class="bg-surface-elevated  p-4 border border-neutral-800"
-				>
-					<h3 class="text-sm font-semibold text-neutral-400 mb-2">
-						Credit Card Payment via Stripe
-					</h3>
-					<p class="text-sm text-neutral-500">
-						You will be redirected to Stripe's secure checkout
-						page to complete your payment. Tax will be
-						calculated automatically based on your location.
-					</p>
-					{#if import.meta.env.DEV}
-						<div class="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/30 text-xs text-yellow-300 space-y-1">
-							<p class="font-semibold">Test mode — sample card numbers:</p>
-							<p>4242 4242 4242 4242 — succeeds immediately, no authentication</p>
-							<p>4000 0025 0000 3155 — requires 3D Secure 2 authentication</p>
-							<p>4000 0000 0000 9995 — declined: insufficient_funds</p>
-							<p>4000 0000 0000 0002 — declined: generic</p>
-							<p>4000 0000 0000 0069 — declined: expired card</p>
-							<p>4000 0000 0000 0127 — declined: incorrect CVC</p>
-						</div>
+		{:else}
+			<div
+				class="bg-surface-elevated p-4 border border-neutral-800 space-y-2"
+				data-testid="rent-dialog-wallet"
+			>
+				<h3 class="text-sm font-semibold text-neutral-400">
+					Wallet Payment
+				</h3>
+				<div class="flex justify-between text-sm">
+					<span class="text-neutral-500">This rental</span>
+					<span class="text-white font-medium">
+						${costUsd().toFixed(2)} <span class="text-neutral-500">{offering.currency}</span>
+					</span>
+				</div>
+				<div class="flex justify-between text-sm">
+					<span class="text-neutral-500">Wallet balance</span>
+					{#if walletLoading}
+						<span class="text-neutral-500">Loading…</span>
+					{:else if walletError}
+						<span class="text-amber-400" title={walletError}>Couldn't load balance</span>
+					{:else}
+						<span class="text-white font-medium">
+							${formatE9sAsUsd(walletBalanceE9s)} <span class="text-neutral-500">USD</span>
+						</span>
 					{/if}
 				</div>
-			{/if}
+				<!-- Sufficient / insufficient indicator (one-glance confirmation) -->
+				{#if !walletLoading && !walletError && balanceSufficient !== null}
+					{#if balanceSufficient}
+						<p data-testid="rent-dialog-balance-ok" class="text-xs text-green-400 pt-1 border-t border-neutral-800">
+							✓ Sufficient balance — the cost will be debited when you rent.
+						</p>
+					{:else}
+						<p data-testid="rent-dialog-balance-low" class="text-xs text-amber-400 pt-1 border-t border-neutral-800">
+							⚠ Insufficient balance —
+							<a href="/dashboard/wallet" class="text-primary-400 underline font-medium">Top up your wallet →</a>
+						</p>
+					{/if}
+				{/if}
+			</div>
+		{/if}
 
 				<!-- SSH Key (Required) - positioned after payment for better UX -->
 				<div>
@@ -750,71 +858,106 @@
 					{/if}
 				</div>
 
-				<!-- Contact Method -->
-				<div>
-					<label
-						for="contact"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Contact Method <span class="text-neutral-500"
-							>(optional)</span
-						>
-					</label>
-					<input
-						id="contact"
-						type="text"
-						bind:value={contactMethod}
-						placeholder="email:you@example.com or matrix:@user:server"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					/>
-					<p class="text-xs text-neutral-500 mt-1">
-						How the provider should reach you (e.g.,
-						email:you@example.com)
-					</p>
-				</div>
+				<!-- Advanced (optional): rarely-used fields collapsed by default so
+				the essentials (duration, SSH key, cost, Pay) stay above the fold. -->
+				<details class="border border-neutral-800 rounded">
+					<summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-neutral-300 hover:text-white">
+						Advanced (optional)
+					</summary>
+					<div class="p-4 space-y-4 border-t border-neutral-800">
+						<!-- Operating System (pre-defaulted to the offering's first OS) -->
+						{#if hasOperatingSystems}
+							<div>
+								<label
+									for="operating-system"
+									class="block text-sm font-medium text-white mb-2"
+								>
+									Operating System
+								</label>
+								<select
+									id="operating-system"
+									bind:value={selectedOperatingSystem}
+									class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white focus:outline-none focus:border-primary-400 transition-colors"
+								>
+									<option value="">Select an OS...</option>
+									{#each availableOperatingSystems as os}
+										<option value={os}>{os}</option>
+									{/each}
+								</select>
+								<p class="text-xs text-neutral-500 mt-1">
+									Choose the operating system for your server
+								</p>
+							</div>
+						{/if}
 
-				<!-- Billing Address (for B2B invoices) -->
-				<div>
-					<label
-						for="buyer-address"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Billing Address <span class="text-neutral-500"
-							>(optional, for invoices)</span
-						>
-					</label>
-					<textarea
-						id="buyer-address"
-						bind:value={buyerAddress}
-						placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-					<p class="text-xs text-neutral-500 mt-1">
-						Required for B2B invoices with VAT
-					</p>
-				</div>
+						<!-- Contact Method -->
+						<div>
+							<label
+								for="contact"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Contact Method <span class="text-neutral-500"
+									>(optional)</span
+								>
+							</label>
+							<input
+								id="contact"
+								type="text"
+								bind:value={contactMethod}
+								placeholder="email:you@example.com or matrix:@user:server"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							/>
+							<p class="text-xs text-neutral-500 mt-1">
+								How the provider should reach you (e.g.,
+								email:you@example.com)
+							</p>
+						</div>
 
-				<!-- Memo -->
-				<div>
-					<label
-						for="memo"
-						class="block text-sm font-medium text-white mb-2"
-					>
-						Notes <span class="text-neutral-500">(optional)</span>
-					</label>
-					<textarea
-						id="memo"
-						bind:value={memo}
-						placeholder="Any special requirements or notes for the provider..."
-						rows="3"
-						class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
-					></textarea>
-				</div>
+						<!-- Billing Address (for B2B invoices) -->
+						<div>
+							<label
+								for="buyer-address"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Billing Address <span class="text-neutral-500"
+									>(optional, for invoices)</span
+								>
+							</label>
+							<textarea
+								id="buyer-address"
+								bind:value={buyerAddress}
+								placeholder="Company Name&#10;Street Address&#10;City, Postal Code&#10;Country"
+								rows="3"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							></textarea>
+							<p class="text-xs text-neutral-500 mt-1">
+								Required for B2B invoices with VAT
+							</p>
+						</div>
+
+						<!-- Memo -->
+						<div>
+							<label
+								for="memo"
+								class="block text-sm font-medium text-white mb-2"
+							>
+								Notes <span class="text-neutral-500">(optional)</span>
+							</label>
+							<textarea
+								id="memo"
+								bind:value={memo}
+								placeholder="Any special requirements or notes for the provider..."
+								rows="3"
+								class="w-full px-4 py-3 bg-surface-elevated border border-neutral-800  text-white placeholder-white/50 focus:outline-none focus:border-primary-400 transition-colors"
+							></textarea>
+						</div>
+					</div>
+				</details>
 
 				<!-- Error Message -->
 				{#if error}
 					<div
+						data-testid="rent-dialog-error"
 						class="bg-red-500/20 border border-red-500/30  p-4 text-red-400"
 					>
 						<p class="font-semibold">Error</p>
@@ -826,6 +969,7 @@
 			<!-- Footer -->
 			<div class="flex gap-3 p-6 border-t border-neutral-800 bg-surface-elevated">
 				<button
+					type="button"
 					onclick={onClose}
 					disabled={loading}
 					class="flex-1 px-4 py-3 bg-surface-elevated text-white  font-semibold hover:bg-surface-elevated transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -833,7 +977,7 @@
 					Cancel
 				</button>
 			<button
-				onclick={handleSubmit}
+				type="submit"
 				disabled={loading || !emailVerified || (generatedPrivateKey !== null && !privateKeyDownloaded)}
 				class="flex-1 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600  font-semibold hover:brightness-110 hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
 			>
@@ -849,6 +993,7 @@
 					{/if}
 				</button>
 			</div>
+			</form>
 		</div>
 	</div>
 {/if}

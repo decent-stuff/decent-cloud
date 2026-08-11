@@ -1184,7 +1184,7 @@ async fn test_disabled_key_cannot_lookup_account() {
 async fn test_get_account_with_keys_includes_email_and_verification_status() {
     let db = setup_test_db().await;
 
-    // Create account (email_verified=false by default)
+    // Create account (auto-verified in non-prod dev environments)
     let _account = db
         .create_account("emailuser", &[30u8; 32], "emailuser@example.com")
         .await
@@ -1201,8 +1201,8 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
         Some("emailuser@example.com".to_string())
     );
     assert!(
-        !account_with_keys.email_verified,
-        "Email should not be verified initially"
+        account_with_keys.email_verified,
+        "Email auto-verified in non-prod (dev bypass)"
     );
 
     // Verify email
@@ -1236,7 +1236,7 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
     let db = setup_test_db().await;
     let pubkey = [31u8; 32];
 
-    // Create account (email_verified=false by default)
+    // Create account (auto-verified in non-prod dev environments)
     let _account = db
         .create_account("pkemailuser", &pubkey, "pkemailuser@example.com")
         .await
@@ -1253,8 +1253,8 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
         Some("pkemailuser@example.com".to_string())
     );
     assert!(
-        !account_with_keys.email_verified,
-        "Email should not be verified initially"
+        account_with_keys.email_verified,
+        "Email auto-verified in non-prod (dev bypass)"
     );
 
     // Verify email
@@ -1342,16 +1342,16 @@ async fn test_oauth_account_creation_sets_email_verified() {
 async fn test_oauth_linking_to_existing_account_sets_email_verified() {
     let db = setup_test_db().await;
 
-    // Create an account with unverified email
+    // Create an account (auto-verified in non-prod dev environments)
     let account = db
         .create_account("existing_user", &[11u8; 32], "existing@example.com")
         .await
         .unwrap();
 
-    // Verify email is not verified initially
+    // Verify email is verified (dev auto-verify bypass)
     assert!(
-        !account.email_verified,
-        "New accounts should have email_verified=false"
+        account.email_verified,
+        "New accounts auto-verified in non-prod (dev bypass)"
     );
 
     // Link OAuth account to existing account
@@ -1888,4 +1888,57 @@ async fn test_admin_delete_account_with_offerings_and_profile() {
             .await
             .expect("Failed to fetch from database");
     assert_eq!(audit_count.0, 0, "Signature audit should be deleted");
+}
+
+// === Email-verification dev bypass (BUG-2) ===
+//
+// Schema default is email_verified=FALSE (migrations_pg/001_schema.sql:269) and
+// create_rental_request blocks renting until verified
+// (api/src/openapi/contracts.rs:659-668). Locally there is no email-sending /
+// verification path, so every fresh account is permanently blocked from
+// renting. The dev bypass auto-verifies email at account creation when NOT in
+// production, unblocking local + automation flows WITHOUT touching prod.
+
+use serial_test::serial;
+
+/// In non-production (the local/test default), a freshly created account must
+/// be email-verified so the rental-time email gate does not block it.
+#[tokio::test]
+#[serial(env)]
+async fn test_create_account_auto_verifies_email_in_dev() {
+    // Force the non-production state explicitly (the local stack default).
+    std::env::remove_var("ENVIRONMENT");
+
+    let db = setup_test_db().await;
+    let account = db
+        .create_account("dev_buyer", &[0xA1u8; 32], "dev_buyer@example.com")
+        .await
+        .expect("Failed to create account");
+
+    assert!(
+        account.email_verified,
+        "dev-mode accounts must be auto email-verified so the rental gate does not block them"
+    );
+}
+
+/// In production, account creation must NOT auto-verify email — the operator's
+/// email-verification flow is the only legitimate path to email_verified=TRUE.
+/// This guards the bypass against accidentally shipping to prod.
+#[tokio::test]
+#[serial(env)]
+async fn test_create_account_does_not_auto_verify_email_in_prod() {
+    std::env::set_var("ENVIRONMENT", "prod");
+
+    let db = setup_test_db().await;
+    let account = db
+        .create_account("prod_buyer", &[0xA2u8; 32], "prod_buyer@example.com")
+        .await
+        .expect("Failed to create account");
+
+    std::env::remove_var("ENVIRONMENT");
+
+    assert!(
+        !account.email_verified,
+        "prod accounts must NOT be auto email-verified — the email gate must hold in production"
+    );
 }

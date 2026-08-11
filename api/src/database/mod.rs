@@ -34,6 +34,7 @@ pub mod types;
 pub mod user_notifications;
 pub mod users;
 pub mod visibility_allowlist;
+pub mod wallet;
 
 // Re-export main types
 pub use agent_delegations::{AgentDelegation, AgentPermission, AgentStatus};
@@ -43,6 +44,7 @@ pub use cloud_resources::CloudResourceWithDetails;
 pub use contracts::ContractDisputeUpsert;
 pub use notification_config::UserNotificationConfig;
 pub use types::{Database, LedgerEntryData};
+pub use wallet::WalletCreditResult;
 
 // Import all handler implementations
 

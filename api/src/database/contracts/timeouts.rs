@@ -488,6 +488,33 @@ impl Database {
                     }
                 }
             }
+        } else if payment_method == "wallet"
+            && payment_status == "succeeded"
+            && payment_amount_e9s > 0
+        {
+            // Wallet refund: instant internal credit to the prepaid balance
+            // (non-withdrawable stored value). No Stripe call, no gate.
+            let requester_hex = hex::encode(&requester_pubkey);
+            self.credit_wallet_balance(
+                &requester_hex,
+                payment_amount_e9s,
+                "rental_refund",
+                Some(&hex::encode(contract_id)),
+            )
+            .await?;
+            sqlx::query(
+                "UPDATE contract_sign_requests SET refund_amount_e9s = $1, refund_created_at_ns = $2, payment_status = 'refunded' WHERE contract_id = $3",
+            )
+            .bind(payment_amount_e9s)
+            .bind(now_ns)
+            .bind(contract_id)
+            .execute(&self.pool)
+            .await?;
+
+            tracing::info!(
+                contract_id = %hex::encode(contract_id),
+                "Provisioning-failure wallet refund issued"
+            );
         }
 
         Ok(Some(now_ns))

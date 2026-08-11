@@ -25,6 +25,27 @@ import {
  * agent pool whose agents are all offline: `resolved_pool_id` is then set
  * (passes the list filter) while `provider_online` stays false (hidden by
  * default, surfaced by the reveal).
+ *
+ * PARALLEL-ISOLATION (#477): the test asserts an empty visible list
+ * (`filteredOfferings.length === 0` → "No offerings found"), which only holds
+ * when NO online offerings exist in the current view. Under Playwright's
+ * default parallel workers, sibling specs seed always-online
+ * (`self_provisioned`) offerings into the SAME test DB (search-dsl seeds 6 in
+ * beforeAll and keeps them for ~20s; compare-share / rentable-offering-fixture
+ * do likewise). Those online rows leak into an unfiltered marketplace view and
+ * flip the list non-empty → flake.
+ *
+ * The fix scopes the view to this suite's own provider via
+ * `?provider=<pubkey>` — the SAME URL param the production "View all from
+ * provider" link uses (`marketplace/[id]/+page.svelte`). `providerFilter` is
+ * applied client-side in `userFiltered` and is transparent to the
+ * reveal-empty-state branch (it is NOT in the "Clear all filters" active-filter
+ * gate at `marketplace/+page.svelte`), so the reveal button still fires when
+ * the only offering in view is offline. Other workers' offerings never share
+ * this random pubkey, so they cannot perturb the list. This is option (c) from
+ * the task brief ("disjoint provider identity so the empty-state query filters
+ * to its own scope") and is strictly more robust than serializing against one
+ * spec, because it immunizes against ALL concurrent online-offering seeders.
  */
 test.describe('Marketplace default-hide empty state', () => {
 	// Fresh random provider pubkey → uniquely owned by this seed, so tearing the
@@ -63,7 +84,10 @@ test.describe('Marketplace default-hide empty state', () => {
 	});
 
 	test('offers a reveal action when all offerings are hidden by default', async ({ page }) => {
-		await page.goto('/dashboard/marketplace');
+		// Scope to this suite's own provider so parallel workers' online
+		// offerings (search-dsl's 6, etc.) cannot leak into the view and flip
+		// it non-empty. See the PARALLEL-ISOLATION note at the top of this file.
+		await page.goto(`/dashboard/marketplace?provider=${providerPubkeyHex}`);
 
 		// Empty state: no visible offerings after the default-hide filters run.
 		await expect(page.getByText('No offerings found')).toBeVisible({ timeout: 10000 });

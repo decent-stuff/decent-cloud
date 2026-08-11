@@ -473,6 +473,27 @@ impl Database {
                         None => (Some(net_refund_e9s), None),
                     }
                 }
+            } else if contract.payment_status == dcc_common::payment_status::SUCCEEDED
+                && contract.payment_method == "wallet"
+            {
+                // Wallet refund: instant internal credit to the prepaid balance
+                // (non-withdrawable stored value). No Stripe call, no approval
+                // gate — the credit is immediate and irreversible.
+                let net_refund_e9s = self
+                    .calculate_net_refund_e9s(&contract, reject_ts_ns)
+                    .await?;
+                if net_refund_e9s <= 0 {
+                    (None, None)
+                } else {
+                    self.credit_wallet_balance(
+                        &contract.requester_pubkey,
+                        net_refund_e9s,
+                        "rental_refund",
+                        Some(&hex::encode(contract_id)),
+                    )
+                    .await?;
+                    (Some(net_refund_e9s), None)
+                }
             } else {
                 (None, None)
             };
@@ -482,11 +503,14 @@ impl Database {
         let rejected_status = ContractStatus::Rejected.to_string();
         let mut tx = self.pool.begin().await?;
 
-        // R5: only flip payment_status to 'refunded' when a real refund id was
-        // returned. When the refund computed but no client issued it (no id),
-        // record the amount for ops reconciliation but leave payment_status
-        // untouched -- never claim a refund that did not actually happen.
-        let refund_issued = stripe_refund_id.is_some();
+        // R5: only flip payment_status to 'refunded' when a real refund was
+        // issued — either a Stripe refund id was returned OR a wallet credit
+        // was applied (internal, instant). When the refund computed but no
+        // client issued it (Stripe-only, no id), record the amount for ops
+        // reconciliation but leave payment_status untouched — never claim a
+        // refund that did not actually happen.
+        let wallet_refunded = contract.payment_method == "wallet" && refund_amount_e9s.is_some();
+        let refund_issued = stripe_refund_id.is_some() || wallet_refunded;
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
             if !refund_issued {
                 tracing::warn!(
@@ -658,6 +682,24 @@ impl Database {
                     } => (Some(refund_amount_e9s), None),
                     RefundGateOutcome::NoRefund => (None, None),
                 }
+            } else if contract.payment_status == "succeeded" && contract.payment_method == "wallet" {
+                // Wallet refund: instant internal credit to the prepaid balance
+                // (non-withdrawable stored value). No Stripe call, no gate.
+                let refund_e9s = self
+                    .calculate_net_refund_e9s(&contract, current_timestamp_ns)
+                    .await?;
+                if refund_e9s <= 0 {
+                    (None, None)
+                } else {
+                    self.credit_wallet_balance(
+                        &contract.requester_pubkey,
+                        refund_e9s,
+                        "rental_refund",
+                        Some(&hex::encode(contract_id)),
+                    )
+                    .await?;
+                    (Some(refund_e9s), None)
+                }
             } else {
                 (None, None)
             };
@@ -667,11 +709,14 @@ impl Database {
         let cancelled_status = ContractStatus::Cancelled.to_string();
         let mut tx = self.pool.begin().await?;
 
-        // R5: only flip payment_status to 'refunded' when a real refund id was
-        // returned. When the refund computed but no client issued it (no id),
-        // record the amount for ops reconciliation but leave payment_status
-        // untouched -- never claim a refund that did not actually happen.
-        let refund_issued = stripe_refund_id.is_some();
+        // R5: only flip payment_status to 'refunded' when a real refund was
+        // issued — either a Stripe refund id was returned OR a wallet credit
+        // was applied (internal, instant). When the refund computed but no
+        // client issued it (Stripe-only, no id), record the amount for ops
+        // reconciliation but leave payment_status untouched — never claim a
+        // refund that did not actually happen.
+        let wallet_refunded = contract.payment_method == "wallet" && refund_amount_e9s.is_some();
+        let refund_issued = stripe_refund_id.is_some() || wallet_refunded;
         // Update contract status to cancelled with refund info
         if refund_amount_e9s.is_some() || stripe_refund_id.is_some() {
             if !refund_issued {

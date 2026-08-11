@@ -72,16 +72,23 @@ impl Database {
         Ok(result.rows_affected() > 0u64)
     }
 
-    /// Sum of payment_amount_e9s for active/provisioning/provisioned contracts
+    /// Sum of `payment_amount_e9s` for PAID contracts (`payment_status='succeeded'`)
     /// created by this requester in the current calendar month, converted to USD.
     ///
+    /// Counting by `payment_status` rather than lifecycle `status` is what makes
+    /// this correct: a wallet-method contract is debited (and therefore
+    /// `payment_status='succeeded'`) while still at `status='requested'`, so the
+    /// former `status IN ('active','provisioning','provisioned')` filter missed
+    /// every freshly-debited contract — the alert ran at debit time but the new
+    /// contract was still `requested` and thus invisible to it. It also correctly
+    /// excludes still-pending Stripe contracts (`payment_status='pending'`).
     /// `payment_amount_e9s` is in nanocents (1 USD = 1_000_000_000 e9s).
     pub async fn get_current_month_spending_usd(&self, requester_pubkey: &[u8]) -> Result<f64> {
         let sum: Option<i64> = sqlx::query_scalar!(
             r#"SELECT SUM(payment_amount_e9s)::BIGINT as "sum: i64"
                FROM contract_sign_requests
                WHERE requester_pubkey = $1
-                 AND status IN ('active', 'provisioning', 'provisioned')
+                 AND payment_status = 'succeeded'
                  AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())"#,
             requester_pubkey,
         )
@@ -215,5 +222,61 @@ mod tests {
         let pubkey = vec![0x42u8; 32];
         let spending = db.get_current_month_spending_usd(&pubkey).await.unwrap();
         assert_eq!(spending, 0.0);
+    }
+
+    /// Fix (c): a freshly-debited wallet contract sits at `status='requested'`
+    /// but `payment_status='succeeded'`. The old status-based filter
+    /// (`status IN ('active','provisioning','provisioned')`) missed every
+    /// freshly-debited contract — the alert ran at debit time while the new
+    /// contract was still `requested`. The new payment_status-based filter must
+    /// count it.
+    #[tokio::test]
+    async fn test_current_month_spending_counts_requested_when_paid() {
+        let db = setup_test_db().await;
+        let requester = vec![0x33u8; 32];
+        let provider = [0x44u8; 32];
+
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-spend-paid', $4, 'memo', 0, 'requested', 'wallet', 'succeeded', 'USD')",
+            vec![0x01u8; 32],
+            &requester[..],
+            &provider[..],
+            5_000_000_000_i64,
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let spending = db.get_current_month_spending_usd(&requester).await.unwrap();
+        assert!(
+            (spending - 5.0).abs() < 0.001,
+            "a requested+succeeded (freshly debited) contract must count; got {spending}"
+        );
+    }
+
+    /// Fix (c) sibling: a still-pending contract (Stripe checkout not yet
+    /// completed) must NOT count toward spending — no money has been collected.
+    #[tokio::test]
+    async fn test_current_month_spending_excludes_unpaid_requested() {
+        let db = setup_test_db().await;
+        let requester = vec![0x55u8; 32];
+        let provider = [0x66u8; 32];
+
+        sqlx::query!(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, payment_status, currency) VALUES ($1, $2, 'ssh-key', 'contact', $3, 'off-spend-unpaid', $4, 'memo', 0, 'requested', 'stripe', 'pending', 'USD')",
+            vec![0x02u8; 32],
+            &requester[..],
+            &provider[..],
+            5_000_000_000_i64,
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let spending = db.get_current_month_spending_usd(&requester).await.unwrap();
+        assert_eq!(
+            spending, 0.0,
+            "an unpaid (payment_status=pending) contract must not count"
+        );
     }
 }

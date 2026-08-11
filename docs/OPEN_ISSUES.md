@@ -8,37 +8,102 @@ inventory for quick local reference; GitHub remains the source of truth. Re-sync
 gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,labels
 ```
 
-## Next session priorities (2026-08-08)
+## Next session priorities (2026-08-11)
 
-Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
+> ╔══════════════════════════════════════════════════════════════════════╗
+> ║  **#0 — ABSOLUTE TOP PRIORITY (non-negotiable, iterates every session)**  ║
+> ╠══════════════════════════════════════════════════════════════════════╣
+> ║                                                                        ║
+> ║  **MARKETPLACE BUY FLOW must be dead simple + silky smooth.**          ║
+> ║                                                                        ║
+> ║  A new user must be able to:                                           ║
+> ║    1. Find resources in the marketplace                                ║
+> ║    2. Click to buy                                                     ║
+> ║    3. Answer a few questions if needed (SSH key, duration, etc.)       ║
+> ║    4. Click → done → start using the resource                          ║
+> ║                                                                        ║
+> ║  The operator will add real Hetzner-backed offerings as a provider.    ║
+> ║  The flow must then be exercised end-to-end (discover → contract →     ║
+> ║  payment → provision → gateway → SSH → use → cancel) and iterated      ║
+> ║  until frictionless. This is the PRODUCT NORTH STAR — every session    ║
+> ║  must advance it until there is nothing left to smooth out.            ║
+> ║                                                                        ║
+> ║  **Status (2026-08-11 — BUY FLOW WORKING END-TO-END):** The FULL real     ║
+> ║  product flow was tested end-to-end locally: discover → rent → pay →    ║
+> ║  provision → SSH → cancel, against a REAL Hetzner cx23 VM (created     ║
+> ║  ~56s, SSH `root@<ip>` verified, cancelled + deleted, zero orphans).   ║
+> ║  A CRITICAL buy-flow bug was found + fixed: **wallet-paid contracts     ║
+> ║  never auto-accepted** (`contracts.rs` — the wallet-debit success       ║
+> ║  branch skipped `try_auto_accept_contract`, so every real buyer's      ║
+> ║  contract was stuck at `requested` forever). Fixed by unifying the      ║
+> ║  auto-accept+fulfillment path for ALL payment methods. TDD-proven by    ║
+> ║  `rent-wallet-auto-accept.spec.ts`. In total this session: 6 backend   ║
+> ║  bugs fixed (wallet-auto-accept, dc-auth cancel method, email-verify    ║
+> ║  dev gate, auto_accept default, direct-SSH instance_details, SSH        ║
+> ║  username root@); 9 UX friction points fixed (rent dialog is now a      ║
+> ║  real accessible keyboard-friendly `<form>` with inline wallet          ║
+> ║  balance; Similar Offerings no longer links to dead offerings; honest   ║
+> ║  stats 1/1/1; dead presets hidden; SLA warmed; provider-name links;    ║
+> ║  dup sort removed); buy flow codified as e2e (wallet-debit math in      ║
+> ║  rent-flow, gated real-Hetzner-provisioning spec, wallet-auto-accept    ║
+> ║  proof). **333/334 e2e pass, 0 deterministic failures** (1 skip = the   ║
+> ║  gated real-VM spec). **REMAINING:** operator sign-off to publish real  ║
+> ║  offerings to PROD (the local path is fully verified). See plan         ║
+> ║  `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`.             ║
+> ║                                                                        ║
+> ║  **No further avoiding is acceptable. This is worked on every session.**  ║
+> ╚══════════════════════════════════════════════════════════════════════╝
+
+Decisions recorded 2026-08-11: the **marketplace buy flow** (item #0 above) is now the
+**absolute #1 priority**, above everything else in this document. All other work is
+subordinate to making the discover→buy→use flow frictionless. The Hetzner infrastructure
+verification proved the plumbing works; the remaining work is UX flow quality (B8 below is
+the operator entry point for this).
+
+Decisions recorded 2026-08-10: (1) Hetzner resell = **direct cloud-backend** path (no
+gateway VM — see `docs/plans/2026-08-03-hetzner-first-offerings.md`); (2) **Decent Agents
+epic de-prioritized but NOT stopped** — handled next, after the Hetzner resell path lands;
+(3) two stale specs **killed** (catalog verification/claim flow + author-commission — see
+"Killed / obsolete" below); (4) **#470 done** (PR merged). Everything remaining, ordered by
+autonomy level.
 
 ### A. Autonomously actionable (no human/credential/infra input needed)
 
 | Priority | Task | Detail |
 |----------|------|--------|
 | ~~**A1**~~ | ~~**#451 — Chatwoot dedicated service-account token**~~ **DONE** | Verified working: dev Chatwoot is fully provisioned (Account 1, Inbox 1, bot user `api@decent-cloud.org` + 2 user tokens + 2 platform tokens). All tokens in SOPS match the DB. Network-isolated from agent container but functional in prod/stage where API + Chatwoot co-locate. No code change needed. |
-| **A3** | **#444 — continue large-file splits** | Ongoing. Current largest: `providers.rs` 4090L, `dc-agent/src/main.rs` 3674L, `database/offerings.rs` 2876L, `database/cloud_resources.rs` 2445L. Each verified byte-identical OpenAPI via `spec_snapshot.rs` guard. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
+| ~~**A3**~~ | **~~#444 — continue large-file splits~~** **accounts.rs DONE (2026-08-11)** | `accounts.rs` **2230→973 lines** via 3 extractions (`AccountKeysApi` 665L, `AccountContactsApi` 524L, `AccountBillingApi` 152L). Commits `eb3fc2ea`/`a9b5682e`/`6a4e6079`. **Lower-risk than prior verdicts** — every handler was self-contained (no shared private helpers; the account-resolution preamble is inline-duplicated per handler). Tuple (14,14)→(15,16), both ≤16. `spec_snapshot` hash `515a5f67…` unchanged (byte-identical OpenAPI). 355/355 openapi tests pass. Remaining >2k files: `dc-agent/src/main.rs` 3681L, `database/offerings.rs` 2944L, `database/cloud_resources.rs` 2701L — no clean decoupled cluster, deferred. |
+| ~~**A10**~~ | **~~#477 — marketplace-empty-state e2e parallel-contamination flake~~** **DONE (2026-08-10)** | Two layers: (1) cross-RUN leak — FIXED in `062be50d`. (2) within-RUN parallel contamination — FIXED in `8f1e2013`: the empty-state spec now scopes to its own provider via `?provider=<pubkey>` (same URL param the production "View all from provider" link uses), so sibling workers' always-online seedings (search-dsl's 6, etc.) can never leak into the view. `providerFilter` is transparent to the reveal-empty-state branch (not in the "Clear all filters" gate), so the reveal button still fires. Verified: 3× parallel runs (9/9 each), 36-row worst-case load, 5-spec marketplace suite 23/23. |
+| ~~**A11**~~ | **~~Pre-pay wallet (stored-value billing)~~** **DONE (2026-08-10)** | Full MVP: migrations 054 (wallet_balances + wallet_ledger) + 055 (refund-gate wallet exemption); `PaymentMethod::Wallet` variant; top-up via Stripe Checkout → webhook credit; rentals debit wallet at creation (replaces per-contract checkout); instant refund-to-balance on cancel/reject/provisioning-failed; `/dashboard/wallet` UI + dashboard card + sidebar. Plan: `docs/plans/2026-08-10-prepay-wallet.md`. 325 e2e + 101 nextest pass. **Follow-ups (not blocking):** (a) webhook top-up idempotency — **DONE (2026-08-10, `bba87c98`)**: migration `056` partial unique index on `wallet_ledger(reference) WHERE entry_type='topup'` + `credit_wallet_balance_idempotent()` returns `AlreadyProcessed` on Stripe replay, webhook returns 200 OK; **(b) auto-renewal wallet-debit path — DONE (2026-08-11, `4a0de3b1`)**: auto-renewal now debits the wallet correctly (was a money-safety bug — created a zombie contract that could never provision + silently cleared old `auto_renew`, causing silent service loss); pre-checks balance before create, calls `debit_wallet_for_contract` after, cancels zombie on debit failure without clearing `auto_renew` (retried next cycle); **(c) spending-alert cap model — DONE (2026-08-11, `4a0de3b1`)**: query filter changed from `status IN (...)` to `payment_status='succeeded'` (instant-debit debits at `status='requested'`), + alert hook added to renewal path. HTTP zombie fix: `6542527c` (insufficient-balance path now cancels unpaid contract too). |
 | **A4** | **~~#425 — Audit Provisioning → Cancelled failure paths~~** | **DONE (2026-08-08).** Root cause: dc-agent sent `"provision-failed"` (unparseable — parser only accepts `"provisioning_failed"`) AND the handler routed through bare `update_contract_status` (no refund). Fix: (a) parameterized `mark_provisioning_failed` actor, (b) handler now routes provider failures through the money-safe path (gated refund + cloud-resource teardown), (c) fixed wire string, (d) cloud-resell failures now proactively drive contract to `ProvisioningFailed`. 4 tests (parse guard, wire-string, provider-actor refund, user-cancel regression). Commit: `8aee2e6f`. |
-| **A5** | **#334 / #387 — DB test coverage / concurrent ticket processing** | #334: largely addressed (kept open on literal reading). #387: single-threaded poll loop, needs a design before work. Both code-only. |
+| **A5** | **#334 / #387 — concurrent ticket processing** | **Design complete (2026-08-11).** #387 GitHub issue is actually CLOSED + about a Python dispatcher (mislabeled); real concern is this A5 row. Bottleneck = serial `for contract in &contracts` at `dc-agent/src/main.rs:1739` with minutes-long `provisioner.provision().await`. KEY: codebase is ALREADY concurrency-safe (provisioners `Send+Sync`, VMID = deterministic hash, gateway already `Arc<Mutex>`, API client all `&self`). Recommended: `JoinSet`+`Semaphore` with `max_concurrent_provisioning` config knob, **DEFAULT=1** (behaviorally identical). Ship machinery first; raise N only after operator verifies node headroom. **Deferred** — needs operator sign-off on concurrency level. |
 | **A6** | **~~Push 33 unpushed commits~~** | **DONE by operator (2026-08-08).** Commits pushed; prod + stage deployed + verified. Origin now current. |
 | **A7** | **~~Remaining robustness items (ROB-005/006/009/012/013)~~** | **DONE (2026-08-08).** All 5 items addressed: ROB-005 (bounded all blocking Command spawns with timeouts via shared helper), ROB-006 (tcp_keepalive on proxy upstream), ROB-009 (logged fs::remove_file cleanup), ROB-012 (named poll-interval consts), ROB-013 (verified already complete — all waitForResponse calls had timeouts). Commits: `932df94f`, `438632dd`, `c950bb33`, `21b80efe`. |
 | **A8** | **~~UX-009 — Dashboard banner wall consolidation~~** | **DONE (2026-08-08).** Two stacked full-width banners replaced with a single compact dismissible one-line action indicator (`ActionRequiredBanner.svelte`) that expands inline. Old banner components deleted. Commit: `10424378`. |
 | **A9** | **~~UX-006 — Reputation leaderboard~~** | **DONE (2026-08-08).** Full-stack: `GET /api/v1/reputation/leaderboard` endpoint (honesty-gated `WHERE total_contracts > 0`, sorted by trust_score), "Top Providers" section on `/dashboard/reputation`, shared trust-score helper extracted (DRY), e2e coverage. Commits: `ddd113b6`, `938a2d28`, `046e818a`. |
-| **A9** | **UX-006 — Reputation leaderboard (user-confirmed must-have)** | Split HIGH into 3 MEDIUM subtasks: (a) Backend: `GET /api/v1/reputation/leaderboard` — top providers by trust score + completed contracts, paginated; (b) Frontend: browseable "Top Providers" section on `/dashboard/reputation` (currently search-only dead-end); (c) E2e: coverage for leaderboard rendering + search. The product direction mandates this (`docs/PRODUCT-DIRECTION.md`: "a top-providers leaderboard so reputation is browseable by default"). The trust-score calculator already exists (`website/src/lib/utils/trust-score.ts`). |
+| **A9** | **~~UX-006 — Reputation leaderboard (user-confirmed must-have)~~** | **DONE (2026-08-08)** — see row above. |
+| ~~**A11**~~ | **~~VM-reconciliation legacy dead-code cleanup~~** **DONE (2026-08-10, `dae7d59e`)** | Entry was **stale/invalid**: 2 of 3 cited functions (`get_pending_terminations` in dc-agent, `get_pending_termination_contracts` in api) were already gone; removed the dormant `ContractPendingTermination` struct + the `/providers/:pubkey/contracts/pending-termination` endpoint that this session confirmed had no live caller. The 3rd cited fn `get_pending_termination_RESOURCES` (`cloud_resources.rs:626`) is a **different LIVE function** (central-API cloud-resell VM termination via `CloudProvisioningService`) — correctly KEPT. *(Doc bug: the wallet epic reused the A11 id on 2026-08-10; the collision is cosmetic — both rows now struck through as done.)* |
+| ~~**A12**~~ | **~~Retire ICP `LedgerClient`/`MetadataCache` polling in `serve`~~** **DONE (2026-08-10, `dae7d59e`)** | Removed `metadata_cache.rs` module entirely; moved `LedgerClient::new` init from shared `setup_app_context` into `sync_command` only (sync CLI still uses `data_fetch`); removed dead `metadata` field from `PlatformOverview`; removed dead `fetch_metadata`/`try_fetch_metadata`. `NETWORK_URL`/`CANISTER_ID` still live (sync CLI). +86/-528 across 11 files. |
+| ~~**A13**~~ | **~~Minor tech-debt~~** **DONE (2026-08-10, `ba1ed300`)** | (a) Stale doctor hint `dc-agent/src/main.rs:3075` `setup proxmox` → `setup token` (the real subcommand). (b) Audited 6 residual `let _ =` sites — all are comments/test/example code, NOT production Result-swallowing; no changes needed. |
 
 ### B. Needs operator action (deploy / GitHub settings / infra)
 
 | Priority | Task | Detail |
 |----------|------|--------|
 | **B1** | **~~Close 4 fixed GH issues~~** | **DONE by operator (2026-08-08).** Pushed + deployed. GH issues to close: #466, #452, #453, #447. |
-| **B2** | **#470 auto-merge prerequisite** | Needs GitHub repo settings: "Allow auto-merge" ON + `build-and-test` as branch-protection required check. Code is sound (`49843e48`). |
+| **B2** | **~~#470 auto-merge prerequisite~~** | **DONE (2026-08-10).** PR #470 MERGED; auto-merge + `build-and-test` required-check configured. |
+| **B8** | **Hetzner first-offerings (operator sign-off to spend/launch)** | The product north star. Code 100% ready (direct cloud-backend resell path confirmed + VERIFIED end-to-end this session: rent→provision→SSH→cancel against a real cx23, zero orphans). All credentials ARE present and agent-accessible: `HETZNER_API_TOKEN_DEV` (read-write, outer `shared/env`) + `DC_PROD_RESELLER_SEED` (prod `hetzner-reseller` identity). The autonomous local verification (B8's "an agent *could*") is now DONE — the remaining gate is purely **operator sign-off to go PUBLIC (prod)**: publish real offerings to the prod marketplace + authorize ongoing spend. Plan: `docs/plans/2026-08-03-hetzner-first-offerings.md`; execution log: `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`. |
 | **B3** | **~~OP-1 — Redeploy prod~~** | **DONE (2026-08-08).** Prod verified: health 200, environment "prod", Google OAuth enabled, 2 REAL offerings (tada $7/mo + hetzner-reseller $6.82/mo, both USD — demos gone). |
 | **B4** | **~~OP-2 — Redeploy stage~~** | **DONE (2026-08-08).** Stage verified at `stage-api.decent-cloud.org`: health 200, environment "stage", 5 offerings (storage/compute/network, all USD). |
 | **B5** | **~~OP-4 — Complete stage DNS cutover~~** | **DONE (2026-08-08).** `stage-api.decent-cloud.org` resolves + serves 200. Legacy `dev-api.decent-cloud.org` returns 502 (dead, as expected post-cutover). |
 | **B6** | **~~OP-5 — Populate GitHub repo vars~~** | **DONE (2026-08-09).** GitHub repo Variable `CHATWOOT_BASE_URL=https://dev-support.decent-cloud.org` + Actions Secret `CHATWOOT_WEBSITE_TOKEN` set. CI uses the **dev** Chatwoot instance (verified-working tokens; prod Chatwoot tokens not recoverable from agent env — in k8s only). Architecture decision: CI builds use dev Chatwoot; prod deploy gets prod config separately. Outer SOPS store synced with verified dev Chatwoot tokens (5 keys updated). |
 | **B7** | **~~staging → k8s cutover~~** | **DONE (2026-08-08).** Stage serving at `stage-api.decent-cloud.org`. |
 
-### C. Large epics (multi-session, needs design forks)
+### C. Large epics (multi-session, needs design forks) — DE-PRIORITIZED 2026-08-10
+
+> **Decision:** the Decent Agents epic (C1/C2/C3) is **de-prioritized but NOT stopped**.
+> It will be handled **next**, after the Hetzner operator-resell path (the current product
+> north star) lands real offerings on the marketplace. Specs remain valid and unblocked.
 
 | Priority | Task | Detail |
 |----------|------|--------|
@@ -49,6 +114,14 @@ Everything remaining, ordered by autonomy level. **Goal: tackle all of these.**
 ### D. Deferred post-launch (≥20 paying customers)
 
 #429 (key exfiltration mitigation), #430 (CODEOWNERS deadlock UX), #431 (webhook secret rotation), #432 (per-identity observability).
+
+### E. Killed / obsolete (deliberately not pursuing — 2026-08-10)
+
+| Spec | Reason |
+|------|--------|
+| `2025-12-07-provider-catalog-seeding` Phase 1/2 (catalog verification + provider claim flow: `provider_claims` table, DNS/file domain-ownership verification, "Verified"/"Claim this provider" UI) | Predates the operator-resell product direction; curated seeding + claim flow not on the roadmap. Phase 1A scraper kept. |
+| `2026-02-14-decent-recipes` author-commission revenue model (`author_commission_percent`/platform_fee) | Superseded by the operator-resell model. Recipe execution itself is implemented and kept; only the author-commission/payout split is killed. |
+| `2025-12-25-provider-tunnel-relay` (frp relay) | Superseded by the public-IP-per-host gateway architecture. |
 
 ## Real-deployment audit (2026-08-04)
 
@@ -84,7 +157,7 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 
 | Issue / finding | Fix | Commit |
 |-----------------|-----|--------|
-| **#466** — Cloud-resell race between cancel and in-flight provisioning can orphan a VM | 3 coordinated state-machine guards: `update_cloud_resource_provisioned` refuses to overwrite terminal states (returns `Result<bool>`); `mark_cloud_resource_failed` is a no-op on `deleting`/`deleted`; `provision_one` cleans up the just-created VM on concurrent-cancel detection. 3 DB-level regression tests. | `bc692bdc` |
+| **#466** — Cloud-resell race between cancel and in-flight provisioning can orphan a VM | 3 coordinated state-machine guards: `update_cloud_resource_provisioned` refuses to overwrite terminal states (returns `Result<bool>`); `mark_cloud_resource_failed` is a no-op on `deleting`/`deleted`; `provision_one` cleans up the just-created VM on concurrent-cancel detection. 3 DB-level regression tests. | `a0d13207` (GH issue closed 2026-08-11; the precursor `bc692bdc` was dangling) |
 | **#452** — Dead `CHATWOOT_INBOX_ID` config (never read by code) | Removed from `.env.example`(×2), `docker-compose.dev.yml`, `CONFIG.md`, `deploy.py` `NON_SECRET_VARS`; rewrote `support_bot/AGENTS.md` to describe the real `list_inboxes()` assign-to-all loop. | `71210f8e` |
 | **#453** — `api/.sqlx` gitignored | Already resolved: workspace-root `.sqlx/` is the single committed source of truth (299 tracked query files); `api/.sqlx/` correctly gitignored (`.gitignore:120`). GH issue commented; no code change needed. | — |
 | Verification finding — `poc/hetzner-provision-probe.mjs` reads bare `HETZNER_API_TOKEN` (stranded-VM foot-gun in operator-local runs) | Hard-switched to `HETZNER_API_TOKEN_DEV` (consistent with #467 agent rule). | `b5be319c` |
@@ -92,7 +165,7 @@ are in `docs/REAL-DEPLOYMENT-ISSUES.md`. Surfaced by the real-deployment e2e har
 | Latent panic + terse error messages (rewards.rs `[..8]` on short slice; ledger_cursor FromStr discards value+error; identity.rs, offerings.rs) | Bound-check before slice + echo bad value + error in all 6 cursor-parse sites + 3 more error-message improvements. New regression test for the panic guard. | `86227dc6` |
 | Dev-cycle: no fast debug-binary path; broken `_announce_api_binary` suggestion; entrypoint missing `CARGO_TARGET_DIR` workaround | Added `--dev` flag to `dev-server.sh` (debug binary, honors `CARGO_TARGET_DIR`); fixed broken path suggestion; entrypoint error now leads with the no-sudo workaround. | `c5b19c67` |
 | **E2e suite verification** — full 314-test Playwright suite run against warm stack | 303 passed, 5 flaky under parallel load (all pass in isolation — documented in config), 6 cascade. No code bugs found. | — |
-| **#447** — Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion | Renamed `replay_orphan_dispute_pause` → `replay_orphan_dispute_lifecycle`; closed-lost orphans now get terminate+refund (same idempotent sequence as `handle_dispute_closed`). Previously only detected — refund was never recorded. | `36f5e550` |
+| **#447** — Replay dispute lifecycle (pause/refund) for orphans re-linked after late checkout completion | Renamed `replay_orphan_dispute_pause` → `replay_orphan_dispute_lifecycle`; closed-lost orphans now get terminate+refund (same idempotent sequence as `handle_dispute_closed`). Previously only detected — refund was never recorded. | `aeaae750`+`71732957`+`f52db00d` (GH issue closed 2026-08-11; the precursor `36f5e550` was dangling) |
 | **P0-B** — Path-A Hetzner offerings SILENTLY HIDDEN from marketplace | Already fixed in `a2a96862` — `is_marketplace_visible` includes `is_cloud_resell()`. Updated OPEN_ISSUES.md to reflect. | — |
 | **Chatwoot full reset (dev/stage/prod)** — all instances broken (Postgres not listening, missing DBs/roles, pgvector not installed) | Root cause: nuc Postgres only listened on `127.0.0.1`. Fixed: `listen_addresses='*'` + `pg_hba.conf` rules + pgvector built for PG14 + `chatwoot_dev`/`chatwoot_prod` DBs/roles created + migrations + full Rails initialization (SuperAdmin/Account/PlatformApp/Inbox/tokens). Dev SOPS updated; prod/stage k8s secrets patched live + persisted to nuc-k3s GitOps (`d3646f1`). All 3 instances verified working. | `8b44cb6b` (dev SOPS) + k8s repo `d3646f1` |
 
@@ -130,7 +203,7 @@ smoke 32/32 (28.9s), clippy 0, nextest green on all touched crates.
 | **UX-004** Dashboard shows raw IC principal as identity | Shows `@username` (principal preserved on Account→Profile) | `a2b10565` |
 | **UX-011** Keyboard shortcuts undiscoverable | Clickable `?` kbd badge next to "Ctrl K" palette trigger | `f1b0c3d8` |
 | **UX-003** Seed-phrase-only auth is a wall for non-crypto buyers (OAuth enablement = user decision: YES) | Frontend: inline "What is a seed phrase?" education on auth chooser + prominent permanent-loss warning on backup step + more discoverable recovery link. OAuth was already enabled server-side by operator (prod `{"google_oauth":true}`). 3 new `@smoke` e2e tests. | `5abeda55` |
-| **UX DEFERRED** UX-006 (reputation leaderboard — user confirmed must-have, scheduled as A9), UX-009 (dashboard banner wall — scheduled as A8), UX-014 (footer community links unverified) | UX-006 split into 3 MEDIUM subtasks (see A9); UX-014 needs live verification | — |
+| **UX DEFERRED** UX-006 (reputation leaderboard — user confirmed must-have, scheduled as A9), UX-009 (dashboard banner wall — scheduled as A8) | UX-006 split into 3 MEDIUM subtasks (see A9); UX-014 DONE 2026-08-11 (`b6b59412`) | — |
 
 ### Phase 3c: Rust robustness sweep — 11 findings, 8 fixed
 
@@ -418,7 +491,7 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 | (UX-003) | Seed-phrase-only auth is a wall for non-crypto cloud buyers — needs inline education + OAuth enablement decision (FORK: should Google OAuth be enabled for the primary audience?) | 2026-08-08 UX audit |
 | (UX-006) | Reputation page dead-end (search-only, no browseable "Top Providers" leaderboard) — overlaps F6; product-direction mandates a leaderboard; HIGH effort (backend query + UI) | 2026-08-08 UX audit |
 | (UX-009) | Dashboard "banner wall" — two stacked full-width colored banners dominate top real estate; consolidate into a compact dismissible notification tray | 2026-08-08 UX audit |
-| (UX-014) | Footer community links (discord.gg/decentcloud, twitter.com/decentcloud) unverified — need live verification | 2026-08-08 UX audit |
+| ~~(UX-014)~~ | ~~Footer community links (discord.gg/decentcloud, twitter.com/decentcloud) unverified~~ **DONE (2026-08-11, `b6b59412`)** | Discord invite = DEAD (404 Unknown Invite), Twitter `@DecentCloud` = parked (0 posts). Replaced both with a single "GitHub Discussions" link (`github.com/orgs/decent-stuff/discussions`, verified 200). |
 | (F9) | "Become a Provider" landing CTA lands on the support-account profile page, not a true provider-start (technical onboarding via `dc-agent`/CLI is not reachable from the web) | 2026-08-03 sweep |
 | (F2) | Seed/demo offerings carry a fake placeholder pubkey (`example-offering-provider-identifier`) — honestly labelled "Demo only" + excluded from stats, but would be nonsensical in a production deploy (seed-data-quality decision: env-gate demos out of prod, or refresh seed data with real identities) | 2026-08-03 sweep |
 
@@ -531,6 +604,59 @@ staging traffic and the age store is still in the repo. Do not pre-delete.
 >   extensive `:root[data-theme='light']` rules in `app.css`. Fully shipped.
 
 ## Recently closed by this work
+
+### 2026-08-11 session (wallet money-safety fix + accounts.rs split + UX-014 + issue closure)
+
+Baseline: `main` at `eeeb4d66` (18 commits ahead of origin/main, unpushed). All work committed on
+`main` as `andris-k85`, working tree clean at end.
+
+**Wallet follow-up (b) — money-safety BUG fix** (`4a0de3b1`): auto-renewal called
+`create_rental_request` but never `debit_wallet_for_contract` (the debit lived only in the HTTP
+handler at `openapi/contracts.rs:751`). Result: zombie contract (`payment_status=pending`, blocked
+from provisioning by migration 048 CHECK) + old contract's `auto_renew` silently cleared → running
+service expires with no replacement, no error logged. Fix: `renew_contract` now pre-checks wallet
+balance before create, debits after create, cancels zombie on debit failure (returns Err, retries
+next cycle), clears `auto_renew` + fires spending alert only on success. New scoped
+`cancel_unpaid_contract` helper (`status='requested' AND payment_status='pending'` only). 2 new
+money-safety tests. ZERO prior test coverage.
+
+**Wallet follow-up (c) — spending-alert GAP fix** (`4a0de3b1`): `get_current_month_spending_usd`
+filtered by `status IN ('active','provisioning','provisioned')` but instant-debit debits at
+`status='requested'` → freshly-debited contracts invisible to alerts + auto-renewals never triggered
+alerts. Fix: query now filters `payment_status='succeeded'` (counts any paid contract, excludes
+pending Stripe) + alert hook added to renewal path. `.sqlx/` regenerated. 2 new tests (RED→GREEN).
+
+**HTTP zombie fix** (`6542527c`): insufficient-balance error path in `openapi/contracts.rs:759-772`
+now cancels the unpaid zombie contract too (consistent with the auto-renewal fix).
+
+**A3/#444 accounts.rs split** (`eb3fc2ea`/`a9b5682e`/`6a4e6079`): `accounts.rs` 2230→**973 lines**
+via 3 extractions (`AccountKeysApi` 665L, `AccountContactsApi` 524L, `AccountBillingApi` 152L).
+Lower-risk than prior wave verdicts predicted — every handler was self-contained (no shared private
+helpers; account-resolution preamble is inline-duplicated per handler). Tuple (14,14)→(15,16).
+`spec_snapshot` hash `515a5f67…` unchanged throughout. 355/355 openapi tests pass.
+
+**UX-014** (`b6b59412`): footer Discord link DEAD (404), Twitter parked (0 posts) → replaced both
+with single "GitHub Discussions" link.
+
+**GH issues closed** (#477, #466, #451, #453, #447) with evidence. SHA correction: `bc692bdc`
+(#466) and `36f5e550` (#447) were dangling precursors; cited actual merged SHAs (`a0d13207`,
+`aeaae750`).
+
+**A5 concurrent ticket processing**: design complete. `#387` is mislabeled (closed, about a Python
+dispatcher). Real concern = `dc-agent` serial poll loop. Codebase is already concurrency-safe.
+Recommended `JoinSet`+`Semaphore` with `max_concurrent_provisioning` knob (default=1). **Deferred**
+— needs operator sign-off on concurrency level.
+
+**12 `database::contracts::tests` flakes** in full-suite runs = pre-existing environmental
+(parallel DB-test contention, tests take 158-168s); pass in isolation (254/254). NOT a regression.
+
+**B8 Hetzner infrastructure verification (PARTIAL)**: proved the plumbing works via
+`api-cli cloud provision` — direct cloud-account/cloud-resource API path. cx23 VM provisioned
+in ~31s (IP `46.225.238.4`, SSH reachable), gateway/DNS auto-created (`yws9n5.hz-nbg1.gw.decent-cloud.org`),
+clean termination in ~4s, zero orphaned resources. **BUT the real product flow was NOT tested** —
+local DB has 0 Hetzner-linked offerings; the rental/marketplace path (contract → payment → provision →
+gateway → SSH → cancel) is untested end-to-end. **Operator decision: marketplace buy flow is now
+ABSOLUTE #1 PRIORITY (item #0 above).** Infrastructure works; the UX flow must now be made silky smooth.
 
 ### 2026-08-03 session (k8s migration autonomous portion + #444 Wave 12 + real-app UX fixes + robustness sweep)
 

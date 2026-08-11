@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use stripe::{
     CheckoutSession, CheckoutSessionId, CheckoutSessionMode,
     CheckoutSessionPaymentStatus, Client, CreateCheckoutSession,
-    CreateCheckoutSessionInvoiceCreation, CreateCheckoutSessionLineItems,
+    CreateCheckoutSessionLineItems,
     CreateCheckoutSessionLineItemsPriceData, CreateCheckoutSessionLineItemsPriceDataProductData,
     CreateRefund, Currency,
     Expandable, Invoice, InvoiceId, PaymentIntentId, Refund, RequestStrategy,
@@ -39,22 +39,24 @@ impl StripeClient {
         Ok(Self { client })
     }
 
-    /// Creates a Stripe Checkout Session for one-time payment
+    /// Creates a Stripe Checkout Session for a wallet top-up (stored-value
+    /// credit). metadata carries `type=wallet_topup` + `pubkey` so the webhook handler
+    /// credits the wallet instead of processing a contract; redirect URLs go to
+    /// the wallet page; no invoice creation (prepayment, not a purchase).
     ///
     /// # Arguments
-    /// * `amount` - Amount in cents (e.g., 1000 = $10.00)
+    /// * `amount_cents` - Amount to charge in cents (e.g., 1000 = $10.00)
     /// * `currency` - Currency code (e.g., "usd")
-    /// * `product_name` - Name of the product/service being purchased
-    /// * `contract_id` - Hex-encoded contract ID for metadata and URLs
+    /// * `pubkey_hex` - Hex-encoded user pubkey, stored in metadata for the
+    ///   webhook to identify which wallet to credit.
     ///
     /// # Returns
-    /// Checkout Session URL for redirect on success
-    pub async fn create_checkout_session(
+    /// Checkout Session URL for redirect on success.
+    pub async fn create_wallet_topup_session(
         &self,
-        amount: i64,
+        amount_cents: i64,
         currency: &str,
-        product_name: &str,
-        contract_id: &str,
+        pubkey_hex: &str,
     ) -> Result<String> {
         let currency = currency.parse::<Currency>()?;
 
@@ -62,22 +64,19 @@ impl StripeClient {
             std::env::var("FRONTEND_URL").unwrap_or_else(|_| "http://localhost:59010".to_string());
 
         let success_url = format!(
-            "{}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "{}/dashboard/wallet?topup=success&session_id={{CHECKOUT_SESSION_ID}}",
             frontend_url
         );
-        let cancel_url = format!(
-            "{}/checkout/cancel?contract_id={}",
-            frontend_url, contract_id
-        );
+        let cancel_url = format!("{}/dashboard/wallet?topup=cancel", frontend_url);
 
         let mut params = CreateCheckoutSession::new();
         params.mode = Some(CheckoutSessionMode::Payment);
         params.line_items = Some(vec![CreateCheckoutSessionLineItems {
             price_data: Some(CreateCheckoutSessionLineItemsPriceData {
                 currency,
-                unit_amount: Some(amount),
+                unit_amount: Some(amount_cents),
                 product_data: Some(CreateCheckoutSessionLineItemsPriceDataProductData {
-                    name: product_name.to_string(),
+                    name: "Wallet Top-up".to_string(),
                     ..Default::default()
                 }),
                 ..Default::default()
@@ -85,46 +84,22 @@ impl StripeClient {
             quantity: Some(1),
             ..Default::default()
         }]);
-        // Automatic tax requires origin address configured in Stripe dashboard
-        // https://dashboard.stripe.com/settings/tax
-        if std::env::var("STRIPE_AUTOMATIC_TAX").is_ok() {
-            params.automatic_tax = Some(stripe::CreateCheckoutSessionAutomaticTax {
-                enabled: true,
-                liability: None,
-            });
-            params.tax_id_collection =
-                Some(stripe::CreateCheckoutSessionTaxIdCollection { enabled: true });
-        } else {
-            tracing::warn!("STRIPE_AUTOMATIC_TAX not set - automatic tax calculation disabled. Set STRIPE_AUTOMATIC_TAX=true and configure origin address at https://dashboard.stripe.com/settings/tax to enable.");
-        }
         params.success_url = Some(&success_url);
         params.cancel_url = Some(&cancel_url);
         params.metadata = Some(
-            [("contract_id".to_string(), contract_id.to_string())]
-                .into_iter()
-                .collect(),
+            [
+                ("type".to_string(), "wallet_topup".to_string()),
+                ("pubkey".to_string(), pubkey_hex.to_string()),
+            ]
+            .into_iter()
+            .collect(),
         );
-
-        // Enable invoice generation for post-purchase invoice PDF
-        // Pass contract_id in invoice_data.metadata so we can link the invoice back
-        // when we receive the invoice.paid webhook (invoice is created asynchronously)
-        params.invoice_creation = Some(CreateCheckoutSessionInvoiceCreation {
-            enabled: true,
-            invoice_data: Some(stripe::CreateCheckoutSessionInvoiceCreationInvoiceData {
-                metadata: Some(
-                    [("contract_id".to_string(), contract_id.to_string())]
-                        .into_iter()
-                        .collect(),
-                ),
-                ..Default::default()
-            }),
-        });
 
         let session = CheckoutSession::create(&self.client, params).await?;
 
         session
             .url
-            .ok_or_else(|| anyhow::anyhow!("Checkout Session missing URL"))
+            .ok_or_else(|| anyhow::anyhow!("Wallet top-up Checkout Session missing URL"))
     }
 
     /// Creates a refund for a payment intent.
@@ -524,23 +499,6 @@ mod tests {
         std::env::set_var("STRIPE_SECRET_KEY", "sk_test_dummy");
         assert!(stripe_client_or_warn().is_some());
         std::env::remove_var("STRIPE_SECRET_KEY");
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_create_checkout_session_invalid_currency() {
-        std::env::set_var("STRIPE_SECRET_KEY", "sk_test_dummy");
-        std::env::set_var("FRONTEND_URL", "http://localhost:59010");
-        let client = StripeClient::new().unwrap();
-
-        let result = client
-            .create_checkout_session(1000, "invalid", "Test Product", "abc123")
-            .await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("currency"));
-
-        std::env::remove_var("STRIPE_SECRET_KEY");
-        std::env::remove_var("FRONTEND_URL");
     }
 
     #[test]

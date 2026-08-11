@@ -1,5 +1,5 @@
 use crate::chatwoot::ChatwootClient;
-use crate::database::Database;
+use crate::database::{Database, WalletCreditResult};
 use crate::notifications::telegram::{TelegramClient, TelegramUpdate};
 use crate::openapi::common::decode_hex_path;
 use crate::support_bot::handler::handle_customer_message;
@@ -39,6 +39,8 @@ struct StripeCheckoutSession {
     metadata: Option<serde_json::Value>,
     total_details: Option<StripeTotalDetails>,
     customer_details: Option<StripeCustomerDetails>,
+    /// Total amount paid in cents (used by wallet top-up crediting).
+    amount_total: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -166,6 +168,88 @@ pub async fn stripe_webhook(
                 })?;
 
             tracing::info!("Checkout session completed: {}", session.id);
+
+            // Wallet top-up branch: metadata type=wallet_topup credits the
+            // user's stored-value balance instead of processing a contract.
+            let metadata_type = session
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("type"))
+                .and_then(|v| v.as_str());
+
+            if metadata_type == Some("wallet_topup") {
+                let pubkey_hex = session
+                    .metadata
+                    .as_ref()
+                    .and_then(|m| m.get("pubkey"))
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        tracing::error!("Wallet top-up session missing pubkey metadata");
+                        PoemError::from_string(
+                            "Missing pubkey in wallet top-up metadata",
+                            poem::http::StatusCode::BAD_REQUEST,
+                        )
+                    })?;
+
+                // amount_total is in cents; convert to nano-USD (e9s).
+                let amount_cents = session.amount_total.unwrap_or(0);
+                if amount_cents <= 0 {
+                    tracing::error!(
+                        "Wallet top-up session {} has non-positive amount_total: {}",
+                        session.id,
+                        amount_cents
+                    );
+                    return Err(PoemError::from_string(
+                        "Wallet top-up amount must be positive",
+                        poem::http::StatusCode::BAD_REQUEST,
+                    ));
+                }
+                let amount_e9s = amount_cents * 10_000_000;
+
+                // Idempotent credit keyed on the Stripe checkout session id:
+                // if Stripe replays `checkout.session.completed` for the same
+                // session, the wallet is credited exactly ONCE (the second
+                // delivery is an idempotent no-op that still 200s so Stripe
+                // stops retrying). See migration 056 + `credit_wallet_balance_idempotent`.
+                match db
+                    .credit_wallet_balance_idempotent(pubkey_hex, amount_e9s, &session.id)
+                    .await
+                {
+                    Ok(WalletCreditResult::NewlyCredited { balance_e9s: new_balance }) => {
+                        tracing::info!(
+                            "Wallet top-up credited: pubkey={} session={} amount_cents={} new_balance_e9s={}",
+                            pubkey_hex,
+                            session.id,
+                            amount_cents,
+                            new_balance
+                        );
+                        return Ok("wallet_topup_credited".into());
+                    }
+                    Ok(WalletCreditResult::AlreadyProcessed { balance_e9s: existing_balance }) => {
+                        tracing::info!(
+                            "Wallet top-up already processed (idempotent replay): \
+                             pubkey={} session={} existing_balance_e9s={}",
+                            pubkey_hex,
+                            session.id,
+                            existing_balance
+                        );
+                        // 200 OK so Stripe stops retrying — NOT an error.
+                        return Ok("wallet_topup_already_processed".into());
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to credit wallet for pubkey={} session={}: {:#}",
+                            pubkey_hex,
+                            session.id,
+                            e
+                        );
+                        return Err(PoemError::from_string(
+                            format!("Wallet credit failed: {e}"),
+                            poem::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        ));
+                    }
+                }
+            }
 
             // Extract contract_id from metadata
             let contract_id_hex = session

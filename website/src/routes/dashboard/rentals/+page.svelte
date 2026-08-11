@@ -23,7 +23,7 @@
 		calculateSpendingByCurrency,
 	} from "$lib/utils/contract-format";
 	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
-	import { connectableIp, sshUsername } from "$lib/utils/network";
+	import { connectableIp, sshUserForInstance } from "$lib/utils/network";
 	import { authStore } from "$lib/stores/auth";
 	import { signRequest } from "$lib/services/auth-api";
 	import { UserApiClient } from "$lib/services/user-api";
@@ -969,11 +969,16 @@
 								Provider
 							</div>
 							<div class="flex items-center gap-2">
+								<!-- Provider name → provider profile page. Mirrors the marketplace
+								     href (`/dashboard/providers/{username || pubkey}`). The card itself
+								     is an <a> to the rental detail, so the name stays a button+goto
+								     (nested <a> is invalid HTML); it still resolves to the same profile
+								     destination as a real marketplace link (cmd/middle-click aside). -->
 								<button
 									onclick={(e) => {
 										e.preventDefault();
 										e.stopPropagation();
-										goto(`/dashboard/reputation/${contract.provider_pubkey}`);
+										goto(`/dashboard/providers/${contract.provider_username || contract.provider_pubkey}`);
 									}}
 									class="text-white text-sm hover:text-primary-400 transition-colors text-left {contract.provider_username ? '' : 'font-mono'}"
 								>
@@ -1007,7 +1012,7 @@
 
 					{#if contract.gateway_subdomain && contract.gateway_ssh_port || contract.provisioning_instance_details}
 						{@const instanceJson = (() => { try { return JSON.parse(contract.provisioning_instance_details ?? ''); } catch { return null; } })()}
-						{@const user = sshUsername(contract.operating_system)}
+						{@const user = sshUserForInstance(instanceJson, contract.operating_system)}
 						{@const gatewaySshCmd = contract.gateway_subdomain && contract.gateway_ssh_port ? `ssh -p ${contract.gateway_ssh_port} ${user}@${contract.gateway_subdomain}` : null}
 						{@const directIp = connectableIp(instanceJson)}
 						{@const directSshCmd = directIp ? `ssh ${user}@${directIp}` : null}

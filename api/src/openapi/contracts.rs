@@ -100,45 +100,6 @@ pub async fn check_spending_alert_and_notify(db: &Database, requester_pubkey: &[
     }
 }
 
-/// Helper function to create Stripe checkout session and update contract
-async fn create_stripe_checkout_session(
-    db: &Database,
-    contract_id: &[u8],
-    currency: &str,
-    product_name: &str,
-) -> Result<String, String> {
-    let contract = db
-        .get_contract(contract_id)
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Contract created but not found".to_string())?;
-
-    // Validate currency is supported by Stripe
-    if !dcc_common::is_stripe_supported_currency(currency) {
-        return Err(format!(
-            "Currency '{}' is not supported by Stripe",
-            currency
-        ));
-    }
-
-    let stripe_client = crate::stripe_client::StripeClient::new().map_err(|e| e.to_string())?;
-
-    // Convert e9s to cents (divide by 10^7)
-    let amount_cents = contract.payment_amount_e9s / 10_000_000;
-    let contract_id_hex = hex::encode(contract_id);
-    let checkout_url = stripe_client
-        .create_checkout_session(
-            amount_cents,
-            &currency.to_lowercase(),
-            product_name,
-            &contract_id_hex,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(checkout_url)
-}
-
 #[OpenApi]
 impl ContractsApi {
     /// List contracts (admin only)
@@ -721,69 +682,111 @@ impl ContractsApi {
 
         match db.create_rental_request(&auth.pubkey, params.0).await {
             Ok(contract_id) => {
-                // Self-rental: no payment needed, skip Stripe checkout
-                // Also applies to the Test payment method which auto-succeeds without checkout
-                let checkout_url = if is_self_rental || payment_method.to_lowercase() != "stripe" {
-                    // Self-rental or Test: payment_status is "succeeded" immediately, try auto-accept
-                    match db.try_auto_accept_contract(&contract_id).await {
-                        Ok(true) => {
-                            if let Err(e) = db
-                                .try_activate_self_provisioned_contract(&contract_id)
-                                .await
-                            {
-                                tracing::warn!(
-                                    "Self-provisioned fulfillment failed for contract {}: {:#}",
-                                    hex::encode(&contract_id),
-                                    e
-                                );
-                            }
-
-                            // Auto-accepted, try to trigger cloud provisioning
-                            if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await {
-                                tracing::warn!(
-                                    "Cloud provisioning trigger failed for contract {}: {}",
-                                    hex::encode(&contract_id),
-                                    e
-                                );
-                            }
-                        }
-                        Ok(false) => {} // Not eligible for auto-accept
-                        Err(e) => {
-                            tracing::warn!(
-                                "Auto-accept check failed for contract {}: {}",
-                                hex::encode(&contract_id),
-                                e
-                            );
-                        }
-                    }
+                // Self-rental: no payment needed.
+                // Test payment method: auto-succeeds without payment.
+                // All other real rentals: debit the prepaid wallet balance atomically
+                // (replaces the former per-contract Stripe Checkout flow).
+                // Payment: self-rental/test succeed immediately (payment_status=succeeded
+                // set in create_rental_request); all other rentals debit the prepaid wallet
+                // balance atomically (marks payment_status=succeeded in the same tx, so a
+                // crash can never leave the wallet debited but the contract unpaid).
+                let checkout_url = if is_self_rental || payment_method.to_lowercase() == "test" {
                     None
                 } else {
-                    // Stripe payment required
-                    match create_stripe_checkout_session(
-                        &db,
-                        &contract_id,
-                        &offering.currency,
-                        &offering.offer_name,
-                    )
-                    .await
-                    {
-                        Ok(url) => Some(url),
+                    let contract = match db.get_contract(&contract_id).await {
+                        Ok(Some(c)) => c,
+                        Ok(None) => {
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some(
+                                    "Rental created but the contract record could not be read back. Please contact support."
+                                        .to_string(),
+                                ),
+                            })
+                        }
                         Err(e) => {
-                            tracing::warn!(
-                                "Stripe checkout failed for contract {}: {}",
-                                hex::encode(&contract_id),
-                                e
-                            );
                             return Json(ApiResponse {
                                 success: false,
                                 data: None,
                                 error: Some(format!(
-                                    "Rental created but payment could not be initiated: {e}. You can retry payment or cancel from your rentals page."
+                                    "Rental created but reading the contract failed: {e}"
+                                )),
+                            })
+                        }
+                    };
+                    match db
+                        .debit_wallet_for_contract(
+                            &requester_pubkey_hex,
+                            &contract_id,
+                            contract.payment_amount_e9s,
+                        )
+                        .await
+                    {
+                        Ok(()) => None,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Wallet debit failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                            if let Err(cancel_err) =
+                                db.cancel_unpaid_contract(&contract_id).await
+                            {
+                                tracing::error!(
+                                    "Failed to cancel unpaid contract {}: {}",
+                                    hex::encode(&contract_id),
+                                    cancel_err
+                                );
+                            }
+                            return Json(ApiResponse {
+                                success: false,
+                                data: None,
+                                error: Some(format!(
+                                    "Insufficient wallet balance. Top up at /dashboard/wallet. Details: {e}"
                                 )),
                             })
                         }
                     }
                 };
+
+                // Fulfillment runs uniformly for ALL paid contracts: by this point every
+                // path (self-rental, test, wallet) has payment_status=succeeded, so the
+                // auto-accept eligibility check (payment_status == "succeeded") passes for
+                // each. Previously only the test/self-rental branch auto-accepted, which
+                // left wallet-paid contracts stuck at `requested` forever — breaking the
+                // entire marketplace buy flow for real buyers.
+                match db.try_auto_accept_contract(&contract_id).await {
+                    Ok(true) => {
+                        if let Err(e) = db
+                            .try_activate_self_provisioned_contract(&contract_id)
+                            .await
+                        {
+                            tracing::warn!(
+                                "Self-provisioned fulfillment failed for contract {}: {:#}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
+
+                        // Auto-accepted, try to trigger cloud provisioning
+                        if let Err(e) = db.try_trigger_cloud_provisioning(&contract_id).await {
+                            tracing::warn!(
+                                "Cloud provisioning trigger failed for contract {}: {}",
+                                hex::encode(&contract_id),
+                                e
+                            );
+                        }
+                    }
+                    Ok(false) => {} // Not eligible for auto-accept
+                    Err(e) => {
+                        tracing::warn!(
+                            "Auto-accept check failed for contract {}: {}",
+                            hex::encode(&contract_id),
+                            e
+                        );
+                    }
+                }
 
                 // Best-effort: check spending alert and notify if threshold exceeded
                 check_spending_alert_and_notify(&db, &auth.pubkey).await;

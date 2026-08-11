@@ -2006,6 +2006,47 @@ async fn test_try_auto_accept_contract_disabled() {
     assert_eq!(contract.status, "requested");
 }
 
+/// cloud-resell (Model B) rentals: operator-provisioned offering with NO
+/// human provider to accept/reject. There is no provider_profiles row, so the
+/// rental's fate depends on get_provider_auto_accept_rentals's default. The
+/// schema default for auto_accept_rentals is TRUE, so the rental MUST
+/// auto-advance past 'requested' to 'accepted' (BUG-3).
+#[tokio::test]
+async fn test_try_auto_accept_contract_advances_without_provider_profile() {
+    let db = setup_test_db().await;
+    let provider_pk = vec![5u8; 32];
+    let requester_pk = vec![6u8; 32];
+    let contract_id = vec![7u8; 32];
+
+    // Deliberately NO provider_profiles row — this is the cloud-resell case.
+    insert_contract_request(
+        &db,
+        &contract_id,
+        &requester_pk,
+        &provider_pk,
+        "cloud-resell-offering",
+        0,
+        "requested",
+    )
+    .await;
+
+    let accepted = db
+        .try_auto_accept_contract(&contract_id)
+        .await
+        .unwrap();
+    assert!(
+        accepted,
+        "cloud-resell rental with no provider profile must auto-advance \
+         (schema default auto_accept_rentals=TRUE)"
+    );
+
+    let contract = db.get_contract(&contract_id).await.unwrap().unwrap();
+    assert_eq!(
+        contract.status, "accepted",
+        "cloud-resell rental must advance past 'requested'"
+    );
+}
+
 #[tokio::test]
 async fn test_try_auto_accept_contract_idempotent() {
     let db = setup_test_db().await;
@@ -2340,82 +2381,6 @@ async fn test_cancel_active_contract_with_prorated_refund() {
 }
 
 #[tokio::test]
-async fn test_get_pending_termination_contracts() {
-    let db = setup_test_db().await;
-    let provider_pk = vec![2u8; 32];
-    let requester_pk = vec![1u8; 32];
-
-    // Create a cancelled contract WITH instance details (should be returned)
-    let contract_id_1 = vec![60u8; 32];
-    insert_contract_request(
-        &db,
-        &contract_id_1,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        0,
-        "cancelled",
-    )
-    .await;
-
-    let instance_details_1 = r#"{"external_id":"vm-001","ip_address":"10.0.0.1","ssh_port":22}"#;
-    sqlx::query!(
-        "UPDATE contract_sign_requests SET provisioning_instance_details = $1 WHERE contract_id = $2",
-        instance_details_1,
-        contract_id_1
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    // Create a cancelled contract WITHOUT instance details (should NOT be returned)
-    let contract_id_2 = vec![61u8; 32];
-    insert_contract_request(
-        &db,
-        &contract_id_2,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        0,
-        "cancelled",
-    )
-    .await;
-
-    // Create an active contract WITH instance details (should NOT be returned - not cancelled)
-    let contract_id_3 = vec![62u8; 32];
-    insert_contract_request(
-        &db,
-        &contract_id_3,
-        &requester_pk,
-        &provider_pk,
-        "off-1",
-        0,
-        "active",
-    )
-    .await;
-
-    let instance_details_3 = r#"{"external_id":"vm-003","ip_address":"10.0.0.3","ssh_port":22}"#;
-    sqlx::query!(
-        "UPDATE contract_sign_requests SET provisioning_instance_details = $1 WHERE contract_id = $2",
-        instance_details_3,
-        contract_id_3
-    )
-    .execute(&db.pool)
-    .await
-    .unwrap();
-
-    // Get pending terminations
-    let pending = db
-        .get_pending_termination_contracts(&provider_pk)
-        .await
-        .unwrap();
-
-    assert_eq!(pending.len(), 1);
-    assert_eq!(pending[0].contract_id, hex::encode(&contract_id_1));
-    assert_eq!(pending[0].instance_details, instance_details_1);
-}
-
-#[tokio::test]
 async fn test_mark_contract_terminated() {
     let db = setup_test_db().await;
     let provider_pk = vec![2u8; 32];
@@ -2445,24 +2410,21 @@ async fn test_mark_contract_terminated() {
     .await
     .unwrap();
 
-    // Verify it appears in pending terminations
-    let pending = db
-        .get_pending_termination_contracts(&provider_pk)
-        .await
-        .unwrap();
-    assert_eq!(pending.len(), 1);
+    // Verify terminated_at_ns is NULL before marking
+    let contract_id_param = contract_id.clone();
+    let terminated_at_before: Option<i64> = sqlx::query_scalar!(
+        r#"SELECT terminated_at_ns FROM contract_sign_requests WHERE contract_id = $1"#,
+        contract_id_param
+    )
+    .fetch_one(&db.pool)
+    .await
+    .unwrap();
+    assert!(terminated_at_before.is_none());
 
     // Mark as terminated
     db.mark_contract_terminated(&contract_id).await.unwrap();
 
-    // Verify it no longer appears in pending terminations
-    let pending = db
-        .get_pending_termination_contracts(&provider_pk)
-        .await
-        .unwrap();
-    assert_eq!(pending.len(), 0);
-
-    // Verify terminated_at_ns is set
+    // Verify terminated_at_ns is now set
     let contract_id_param = contract_id.clone();
     let terminated_at: Option<i64> = sqlx::query_scalar!(
         r#"SELECT terminated_at_ns FROM contract_sign_requests WHERE contract_id = $1"#,

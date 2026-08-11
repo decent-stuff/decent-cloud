@@ -55,6 +55,19 @@ async fn test_get_platform_stats_with_data() {
     .execute(&db.pool)
     .await
     .unwrap();
+    // The offering only counts as rentable when its pool has an ONLINE agent,
+    // and pool online-count is computed via provider_agent_delegations — so
+    // delegate the agent below to pool-na. Without this the offering has a
+    // resolvable pool but provider_online=false (stats honesty: count only what
+    // is rentable right now).
+    sqlx::query(
+        "INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', '\\x00', 0, 'pool-na')",
+    )
+    .bind(pubkey.as_slice())
+    .bind(vec![3u8; 32].as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
     let contract_id = vec![1u8; 32];
     let requester_pubkey = vec![2u8; 32];
     {
@@ -206,6 +219,173 @@ async fn test_active_providers_counts_online_agents_in_liveness_window() {
     .await
     .unwrap();
     assert_eq!(db.get_platform_stats().await.unwrap().active_providers, 1);
+}
+
+// Stats honesty: the three marketplace headline numbers must reflect ONLY what
+// is genuinely rentable right now — i.e. what a user sees in the marketplace's
+// DEFAULT view (the frontend hides `provider_online == false` offerings behind a
+// toggle). Seeding three providers — a cloud-resell provider (always-online, no
+// agent), an agent-backed ONLINE provider, and an agent-backed OFFLINE provider
+// whose pool has no live agents — must resolve to exactly +2 offerings, +2
+// providers, +2 active. The offline provider's dead offering must NOT inflate
+// any headline count (the #1 credibility hit for an "honest catalog").
+//
+// On the OLD stats code this failed on all three: total_offerings counted the
+// offline-pool offering too (+3), total_providers counted every provider_profiles
+// row (+3), and active_providers missed the cloud-resell provider entirely (+1).
+#[tokio::test]
+async fn test_stats_headlines_count_only_rentable_offerings_and_providers() {
+    let db = setup_test_db().await;
+    let now_ns = chrono::Utc::now()
+        .timestamp_nanos_opt()
+        .expect("timestamp overflow (year > 2262)");
+    // Outside the marketplace's 5-minute liveness window.
+    let stale_ns = now_ns - 10 * 60 * 1_000_000_000;
+
+    let cloud_resell_pk = vec![50u8; 32];
+    let online_pk = vec![51u8; 32];
+    let offline_pk = vec![52u8; 32];
+
+    let before = db.get_platform_stats().await.unwrap();
+
+    // --- Cloud-resell provider: NO pool, NO agent. Always rentable. ----------
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Hetzner Reseller', '1.0', '1.0', 0)",
+    )
+    .bind(cloud_resell_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, provisioner_type, created_at_ns) VALUES ($1, 'off-hetzner', 'Hetzner CX23', 'USD', 5.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'DE', 'Falkenstein', FALSE, 'hetzner', 0)",
+    )
+    .bind(cloud_resell_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // --- Agent-backed ONLINE provider: pool + delegated online agent. -------
+    sqlx::query(
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
+    )
+    .bind(online_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Online Provider', '1.0', '1.0', 0)",
+    )
+    .bind(online_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ('pool-online', $1, 'Online Pool', 'na', 'manual', 0)",
+    )
+    .bind(online_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-online', 'Online KVM', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(online_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let online_agent = vec![60u8; 32];
+    sqlx::query(
+        "INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', '\\x00', 0, 'pool-online')",
+    )
+    .bind(online_pk.as_slice())
+    .bind(online_agent.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, TRUE, $3, $4)",
+    )
+    .bind(online_agent.as_slice())
+    .bind(online_pk.as_slice())
+    .bind(now_ns)
+    .bind(now_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    // --- Agent-backed OFFLINE provider: pool + delegated agent that is OFFLINE
+    // (stale heartbeat). Its offering has a resolvable pool, so it IS
+    // marketplace-visible (it appears behind the "show offline" toggle), but it
+    // is NOT rentable right now — it must NOT count in any headline number. ---
+    sqlx::query(
+        "INSERT INTO provider_registrations (pubkey, signature, created_at_ns) VALUES ($1, '\\x00', 0)",
+    )
+    .bind(offline_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Offline Provider', '1.0', '1.0', 0)",
+    )
+    .bind(offline_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ('pool-offline', $1, 'Offline Pool', 'na', 'manual', 0)",
+    )
+    .bind(offline_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-offline', 'Offline KVM', 'USD', 8.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(offline_pk.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let offline_agent = vec![61u8; 32];
+    sqlx::query(
+        "INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', '\\x00', 0, 'pool-offline')",
+    )
+    .bind(offline_pk.as_slice())
+    .bind(offline_agent.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, FALSE, $3, $4)",
+    )
+    .bind(offline_agent.as_slice())
+    .bind(offline_pk.as_slice())
+    .bind(stale_ns)
+    .bind(stale_ns)
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let after = db.get_platform_stats().await.unwrap();
+    // Only the cloud-resell + online-agent offerings are rentable right now.
+    assert_eq!(
+        after.total_offerings - before.total_offerings,
+        2,
+        "offline-pool offering must not count toward total_offerings"
+    );
+    // Only those two providers have a rentable offering (the offline provider's
+    // profile row must NOT inflate the count).
+    assert_eq!(
+        after.total_providers - before.total_providers,
+        2,
+        "provider with only an offline/dead offering must not count toward total_providers"
+    );
+    // Cloud-resell (always-online) + the online agent's heartbeat; the offline
+    // agent is outside the liveness window.
+    assert_eq!(
+        after.active_providers - before.active_providers,
+        2,
+        "cloud-resell provider must count as active; offline agent must not"
+    );
 }
 
 #[tokio::test]

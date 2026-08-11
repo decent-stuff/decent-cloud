@@ -54,14 +54,8 @@
 				<h4 class="section-label mb-4">Community</h4>
 				<ul class="space-y-2.5">
 					<li>
-						<a href="https://discord.gg/decentcloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
-							Discord
-							<Icon name="external" size={20} class="text-neutral-600" />
-						</a>
-					</li>
-					<li>
-						<a href="https://twitter.com/decentcloud" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
-							Twitter
+						<a href="https://github.com/orgs/decent-stuff/discussions" class="text-neutral-400 hover:text-white transition-colors text-xs inline-flex items-center gap-1.5">
+							GitHub Discussions
 							<Icon name="external" size={20} class="text-neutral-600" />
 						</a>
 					</li>

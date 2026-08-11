@@ -12,6 +12,18 @@ export interface OfferingOnline {
 }
 
 /**
+ * Shape required to decide whether an offering is safe to surface as a
+ * clickable alternative (e.g. "Similar Offerings"). Both fields are optional
+ * because not every caller has the full `Offering` shape (the similar-offerings
+ * helper uses a trimmed `SimilarOffering`); the predicate treats absent /
+ * `undefined` / `null` values as "no problem" so it composes cleanly.
+ */
+export interface OfferingRentable {
+	provider_online?: boolean | undefined;
+	has_critical_flags?: boolean | undefined;
+}
+
+/**
  * Returns true when an offering is paused (stock_status !== 'in_stock').
  * Treats null/undefined stock_status as not paused.
  */
@@ -43,4 +55,22 @@ export function filterOfflineOfferings<T extends OfferingOnline>(
 ): T[] {
 	if (includeOffline) return offerings;
 	return offerings.filter((o) => o.provider_online !== false);
+}
+
+/**
+ * Returns true when an offering is genuinely rentable right now and therefore
+ * safe to link to as an alternative: the provider is NOT confirmed offline
+ * (`provider_online !== false`) AND the offering carries no critical flags.
+ *
+ * Offerings with unknown online status (`undefined`/`null`) are considered
+ * rentable — matching the marketplace list and trending-strip "unknown =
+ * include" default — so a link never silently drops a live provider whose
+ * status simply hasn't been polled.
+ *
+ * This is the shared liveness guard used wherever we surface a deep link to
+ * another offering (e.g. the "Similar Offerings" strip on the detail page);
+ * re-use it instead of re-implementing the two conditions inline.
+ */
+export function isOfferingRentable<T extends OfferingRentable>(offering: T): boolean {
+	return offering.provider_online !== false && offering.has_critical_flags !== true;
 }

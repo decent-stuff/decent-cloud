@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPrivateIp, connectableIp, sshUsername } from './network';
+import { isPrivateIp, connectableIp, sshUsername, sshUserForInstance } from './network';
 
 describe('isPrivateIp', () => {
 	it('detects RFC1918 ranges', () => {
@@ -70,5 +70,23 @@ describe('sshUsername', () => {
 
 	it('returns root for unknown OS', () => {
 		expect(sshUsername('SomeUnknownOS')).toBe('root');
+	});
+});
+
+describe('sshUserForInstance', () => {
+	it('returns root for direct_ssh (cloud-resell) regardless of OS', () => {
+		// Hetzner cloud-resell enables root login with the injected SSH key
+		// for ALL images — even Ubuntu (where the OS heuristic would say ubuntu).
+		expect(sshUserForInstance({ connection_type: 'direct_ssh', public_ip: '1.2.3.4' }, 'Ubuntu 24.04')).toBe('root');
+		expect(sshUserForInstance({ connection_type: 'direct_ssh' }, 'Fedora 39')).toBe('root');
+	});
+
+	it('falls back to OS heuristic when connection_type is not direct_ssh', () => {
+		expect(sshUserForInstance({ gateway_ssh_port: 20001 }, 'Ubuntu 24.04')).toBe('ubuntu');
+		expect(sshUserForInstance(null, 'Ubuntu 24.04')).toBe('ubuntu');
+	});
+
+	it('falls back to OS heuristic when connection_type is absent', () => {
+		expect(sshUserForInstance({ public_ip: '1.2.3.4' }, 'Ubuntu 24.04')).toBe('ubuntu');
 	});
 });

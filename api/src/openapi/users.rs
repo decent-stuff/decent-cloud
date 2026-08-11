@@ -3,6 +3,7 @@ use super::providers::BandwidthHistoryResponse;
 use crate::auth::ApiAuthenticatedUser;
 use crate::database::Database;
 use crate::database::spending_alerts::SpendingAlert;
+use crate::database::wallet::WalletLedgerEntry;
 use poem::web::Data;
 use poem_openapi::{param::Path, payload::Json, Object, OpenApi};
 use serde::{Deserialize, Serialize};
@@ -57,6 +58,34 @@ pub struct ApiTokenSummary {
     #[oai(skip_serializing_if_is_none)]
     pub expires_at: Option<i64>,
     pub is_active: bool,
+}
+
+/// Request body to initiate a wallet top-up via Stripe Checkout.
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct WalletTopupRequest {
+    /// Amount in USD to top up (e.g. 25.00). Must be > 0.
+    pub amount_usd: f64,
+}
+
+/// Wallet state returned by GET /users/:pubkey/wallet.
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct WalletResponse {
+    /// Current balance in nano-USD (e9s). Null if the user has never topped up.
+    pub balance_e9s: Option<i64>,
+    /// Most recent ledger entries (newest first).
+    pub recent_ledger: Vec<WalletLedgerEntry>,
+}
+
+/// Stripe Checkout URL for a wallet top-up.
+#[derive(Debug, Serialize, Deserialize, Object)]
+#[oai(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct WalletTopupResponse {
+    pub checkout_url: String,
 }
 
 /// Decode pubkey hex and verify it matches the authenticated user.
@@ -804,6 +833,127 @@ impl UsersApi {
             Ok(_) => Json(ApiResponse {
                 success: true,
                 data: None,
+                error: None,
+            }),
+            Err(e) => Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some(e.to_string()),
+            }),
+        }
+    }
+
+    /// Get wallet balance and recent ledger
+    ///
+    /// Returns the authenticated user's pre-pay wallet balance (nano-USD) and
+    /// the most recent ledger entries. Balance is null if the user has never
+    /// topped up.
+    #[oai(
+        path = "/users/:pubkey/wallet",
+        method = "get",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn get_wallet(
+        &self,
+        db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+    ) -> Json<ApiResponse<WalletResponse>> {
+        if decode_and_verify_pubkey(&pubkey.0, &auth.pubkey).is_err() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own data".to_string()),
+            });
+        }
+        let balance_e9s = match db.get_wallet_balance(&pubkey.0).await {
+            Ok(b) => b,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+        let recent_ledger = match db.get_wallet_ledger(&pubkey.0, 20).await {
+            Ok(l) => l,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                })
+            }
+        };
+        Json(ApiResponse {
+            success: true,
+            data: Some(WalletResponse {
+                balance_e9s,
+                recent_ledger,
+            }),
+            error: None,
+        })
+    }
+
+    /// Initiate a wallet top-up via Stripe Checkout
+    ///
+    /// Creates a Stripe Checkout session for the requested USD amount and
+    /// returns the URL the client should redirect to. On successful payment,
+    /// the webhook credits the wallet balance.
+    #[oai(
+        path = "/users/:pubkey/wallet/topup",
+        method = "post",
+        tag = "super::common::ApiTags::Users"
+    )]
+    async fn topup_wallet(
+        &self,
+        _db: Data<&Arc<Database>>,
+        auth: ApiAuthenticatedUser,
+        pubkey: Path<String>,
+        body: Json<WalletTopupRequest>,
+    ) -> Json<ApiResponse<WalletTopupResponse>> {
+        if decode_and_verify_pubkey(&pubkey.0, &auth.pubkey).is_err() {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Unauthorized: can only access your own data".to_string()),
+            });
+        }
+        if body.0.amount_usd <= 0.0 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Amount must be greater than zero".to_string()),
+            });
+        }
+        let amount_cents = (body.0.amount_usd * 100.0).round() as i64;
+        if amount_cents <= 0 {
+            return Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Amount too small".to_string()),
+            });
+        }
+        let stripe_client = match crate::stripe_client::StripeClient::new() {
+            Ok(c) => c,
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(format!(
+                        "Stripe is not configured: {e}. Set STRIPE_SECRET_KEY to enable wallet top-ups."
+                    )),
+                })
+            }
+        };
+        match stripe_client
+            .create_wallet_topup_session(amount_cents, "usd", &pubkey.0)
+            .await
+        {
+            Ok(checkout_url) => Json(ApiResponse {
+                success: true,
+                data: Some(WalletTopupResponse { checkout_url }),
                 error: None,
             }),
             Err(e) => Json(ApiResponse {

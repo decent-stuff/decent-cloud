@@ -162,17 +162,27 @@ impl Database {
             bail!("Public key must be 32 bytes");
         }
 
+        // Dev bypass: outside production there is no email-sending/verification
+        // path, so email_verified would stay FALSE (schema default) and the
+        // rental-time email gate (contracts.rs) would permanently block every
+        // fresh account from renting. Auto-verify in non-prod to unblock local
+        // + automation flows. Production keeps the operator's verification flow.
+        let email_verified = !crate::environment::is_production_env();
+
         // Start transaction
         let mut tx = self.pool.begin().await?;
 
         // Insert account
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO accounts (id, username, email) VALUES ($1, $2, $3)")
-            .bind(&account_id)
-            .bind(username)
-            .bind(email)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO accounts (id, username, email, email_verified) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&account_id)
+        .bind(username)
+        .bind(email)
+        .bind(email_verified)
+        .execute(&mut *tx)
+        .await?;
 
         // Insert initial public key
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
@@ -1069,15 +1079,21 @@ impl Database {
             bail!("Public key must be 32 bytes");
         }
 
+        // Same dev-bypass as create_account (see there for rationale).
+        let email_verified = !crate::environment::is_production_env();
+
         let mut tx = self.pool.begin().await?;
 
         let account_id = uuid::Uuid::new_v4().as_bytes().to_vec();
-        sqlx::query("INSERT INTO accounts (id, username, email) VALUES ($1, $2, $3)")
-            .bind(&account_id)
-            .bind(username)
-            .bind(email)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "INSERT INTO accounts (id, username, email, email_verified) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&account_id)
+        .bind(username)
+        .bind(email)
+        .bind(email_verified)
+        .execute(&mut *tx)
+        .await?;
 
         let key_id = uuid::Uuid::new_v4().as_bytes().to_vec();
         sqlx::query(

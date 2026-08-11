@@ -50,12 +50,15 @@
 	import { signRequest } from "$lib/services/auth-api";
 	import { createPasswordResetPoller, type PasswordResetPoller } from "$lib/utils/password-reset-poller";
 	import { createSshKeyRotationPoller, type SshKeyRotationPoller } from "$lib/utils/ssh-key-rotation-poller";
-	import { isPrivateIp, sshUsername } from "$lib/utils/network";
+	import { connectableIp as resolveConnectableIp, sshUserForInstance } from "$lib/utils/network";
 
 	const contractId = $page.params.contract_id ?? "";
 
 	let contract = $state<Contract | null>(null);
-	let sshUser = $derived(sshUsername(contract?.operating_system));
+	let instanceDetails = $derived<Record<string, unknown> | null>(
+		(() => { try { return JSON.parse(contract?.provisioning_instance_details ?? ''); } catch { return null; } })()
+	);
+	let sshUser = $derived(sshUserForInstance(instanceDetails, contract?.operating_system));
 	let identityTip = $derived(contract?.gateway_subdomain && contract?.gateway_ssh_port
 		? `chmod 600 ~/Downloads/id_ed25519_decent_cloud && ssh -p ${contract.gateway_ssh_port} -o IdentitiesOnly=yes -i ~/Downloads/id_ed25519_decent_cloud ${sshUser}@${contract.gateway_subdomain}`
 		: '');
@@ -248,16 +251,16 @@
 			return { text: "Payment failed. Please try again or contact support.", isWaiting: false };
 		}
 		if (s === "requested" && ps === "succeeded") {
-			return { text: "Waiting for provider to accept your request (typically within a few hours)", isWaiting: true };
+			return { text: "Preparing your rental — provisioning will start shortly", isWaiting: true };
 		}
 		if (s === "pending") {
-			return { text: "Waiting for provider response", isWaiting: true };
+			return { text: "Your rental request is being processed", isWaiting: true };
 		}
 		if (s === "accepted") {
-			return { text: "Provider accepted! Waiting for provisioning to start...", isWaiting: true };
+			return { text: "Request accepted! Provisioning will begin momentarily...", isWaiting: true };
 		}
 		if (s === "provisioning") {
-			return { text: "Provider is setting up your resource (typically 5–20 minutes)", isWaiting: true };
+			return { text: "Your resource is being provisioned (this can take a few minutes)", isWaiting: true };
 		}
 		if (s === "provisioned" || s === "active") {
 			return { text: "Your resource is ready! See connection details below.", isWaiting: false };
@@ -1281,7 +1284,7 @@
 				<div class="bg-surface-elevated  p-3 border border-neutral-800">
 					<div class="text-neutral-500 text-xs mb-1">Provider</div>
 					<a
-						href="/dashboard/reputation/{contract.provider_pubkey}"
+						href="/dashboard/providers/{contract.provider_username || contract.provider_pubkey}"
 						class="text-white text-sm hover:text-primary-400 transition-colors {contract.provider_username ? '' : 'font-mono'}"
 					>
 						{contract.provider_username ? `@${contract.provider_username}` : truncateHash(contract.provider_pubkey)}
@@ -1327,10 +1330,7 @@
 			{/if}
 
 			{#if contract.provisioning_instance_details}
-				{@const instanceDetails = (() => {
-					try { return JSON.parse(contract.provisioning_instance_details); } catch { return null; }
-				})()}
-				{@const connectableIp = instanceDetails?.public_ip || (instanceDetails?.ip_address && !isPrivateIp(instanceDetails.ip_address) ? instanceDetails.ip_address : null)}
+				{@const connectableIp = resolveConnectableIp(instanceDetails)}
 				<div class="bg-green-500/10 border border-green-500/30  p-4">
 					<div class="text-green-400 font-semibold mb-3">Connection Details</div>
 
@@ -1510,7 +1510,7 @@
 								<div class="text-neutral-500 text-xs mb-1">IP Address</div>
 								<code class="text-white text-sm font-mono select-all">{connectableIp}</code>
 							</div>
-							{#if instanceDetails.ipv6_address}
+							{#if instanceDetails?.ipv6_address}
 								<div class="bg-black/20  p-3">
 									<div class="text-neutral-500 text-xs mb-1">IPv6 Address</div>
 									<code class="text-white text-sm font-mono select-all">{instanceDetails.ipv6_address}</code>

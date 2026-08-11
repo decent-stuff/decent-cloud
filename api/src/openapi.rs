@@ -1,4 +1,7 @@
 pub mod accounts;
+pub mod accounts_billing;
+pub mod accounts_contacts;
+pub mod accounts_keys;
 pub mod admin;
 pub mod allowlist;
 pub mod agents;
@@ -32,6 +35,9 @@ pub mod webhooks;
 pub mod webhooks_disputes;
 
 pub use accounts::AccountsApi;
+pub use accounts_billing::AccountBillingApi;
+pub use accounts_contacts::AccountContactsApi;
+pub use accounts_keys::AccountKeysApi;
 pub use admin::AdminApi;
 pub use allowlist::AllowlistApi;
 pub use agents::AgentsApi;
@@ -83,6 +89,7 @@ pub fn create_combined_api() -> impl OpenApi {
             SlaApi,
             AllowlistApi,
             ContractTelemetryApi,
+            AccountBillingApi,
         ),
         (
             OfferingsApi,
@@ -99,6 +106,8 @@ pub fn create_combined_api() -> impl OpenApi {
             TotpApi,
             RecoveryApi,
             EmailVerificationApi,
+            AccountKeysApi,
+            AccountContactsApi,
         ),
     )
 }

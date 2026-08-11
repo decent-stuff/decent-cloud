@@ -189,24 +189,24 @@ async fn test_count_offerings_no_filters() {
     assert!(count >= 2);
 }
 
-// FIX 2 (stats honesty): count_marketplace_visible_offerings must apply the SAME
-// visibility rule the marketplace list applies in search_offerings — an offering
-// counts only if it has a resolvable agent pool (or is self-provisioned) and is
-// public + non-draft. Otherwise platform stats advertises a listing the
-// marketplace silently drops.
+// Stats honesty: count_rentable_offerings must count only offerings that are
+// rentable right now — marketplace-visible AND provider_online. A pool-backed
+// offering with an ONLINE agent counts; a pool-less offering and a draft never
+// do. Otherwise platform stats advertises a listing the marketplace's default
+// view hides.
 #[tokio::test]
-async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
+async fn test_count_rentable_offerings_excludes_poolless_and_draft() {
     let db = setup_test_db().await;
     let visible_pubkey = vec![30u8; 32];
     let no_pool_pubkey = vec![31u8; 32];
     let draft_pubkey = vec![32u8; 32];
 
-    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+    let baseline = db.count_rentable_offerings().await.unwrap();
 
-    // 1) Public, non-draft, provider HAS a matching pool + online agent -> VISIBLE.
+    // 1) Public, non-draft, provider HAS a matching pool + online agent -> RENTABLE.
     insert_test_offering(&db, 30, &visible_pubkey, "US", 100.0).await;
 
-    // 2) Public, non-draft, provider has NO pool -> NOT visible (marketplace drops it).
+    // 2) Public, non-draft, provider has NO pool -> NOT rentable (no pool to serve it).
     sqlx::query(
         "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-no-pool', 'NoPool', 'USD', 50.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0)",
     )
@@ -215,7 +215,7 @@ async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
     .await
     .unwrap();
 
-    // 3) DRAFT, provider HAS a pool -> NOT visible (drafts are excluded).
+    // 3) DRAFT, provider HAS a pool -> NOT rentable (drafts are excluded).
     register_provider(&db, &draft_pubkey).await;
     ensure_provider_with_pool(&db, &draft_pubkey, "US").await;
     sqlx::query(
@@ -226,12 +226,67 @@ async fn test_count_marketplace_visible_offerings_applies_marketplace_rule() {
     .await
     .unwrap();
 
-    let after = db.count_marketplace_visible_offerings().await.unwrap();
-    // Exactly the one pool-backed, published offering became newly visible.
+    let after = db.count_rentable_offerings().await.unwrap();
+    // Exactly the one pool-backed, published, online offering became newly rentable.
     assert_eq!(
         after - baseline,
         1,
-        "only the pool-backed published offering should be counted"
+        "only the pool-backed published online offering should be counted"
+    );
+}
+
+// Stats honesty at the count layer: an offering whose pool exists but has NO
+// online agents is marketplace-visible (it has a resolved pool, so the list
+// shows it behind the "show offline" toggle) but is NOT rentable right now. It
+// must NOT count toward the headline total_offerings — otherwise stats would
+// advertise a listing the marketplace's default view hides.
+#[tokio::test]
+async fn test_count_rentable_offerings_excludes_offline_pool() {
+    let db = setup_test_db().await;
+    delete_example_data(&db).await;
+    let pubkey = vec![33u8; 32];
+    register_provider(&db, &pubkey).await;
+
+    let baseline = db.count_rentable_offerings().await.unwrap();
+
+    // Pool exists in the offering's region (US -> na), with a delegated agent
+    // that is OFFLINE (online=FALSE).
+    sqlx::query(
+        "INSERT INTO agent_pools (pool_id, provider_pubkey, name, location, provisioner_type, created_at_ns) VALUES ('pool-offline-stat', $1, 'Offline Pool', 'na', 'manual', 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    let agent = vec![34u8; 32];
+    sqlx::query(
+        "INSERT INTO provider_agent_delegations (provider_pubkey, agent_pubkey, permissions, signature, created_at_ns, pool_id) VALUES ($1, $2, '[]', '\\x00', 0, 'pool-offline-stat')",
+    )
+    .bind(pubkey.as_slice())
+    .bind(agent.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_agent_status (agent_pubkey, provider_pubkey, online, last_heartbeat_ns, updated_at_ns) VALUES ($1, $2, FALSE, 0, 0)",
+    )
+    .bind(agent.as_slice())
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO provider_offerings (pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns) VALUES ($1, 'off-offline-stat', 'Offline', 'USD', 40.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'NYC', FALSE, 0)",
+    )
+    .bind(pubkey.as_slice())
+    .execute(&db.pool)
+    .await
+    .unwrap();
+
+    let after = db.count_rentable_offerings().await.unwrap();
+    assert_eq!(
+        after, baseline,
+        "an offering whose pool has no online agents must NOT count as rentable"
     );
 }
 
@@ -252,7 +307,7 @@ async fn test_cloud_resell_offering_visible_without_pool() {
     register_provider(&db, &hetzner_pubkey).await;
     register_provider(&db, &vultr_pubkey).await;
 
-    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+    let baseline = db.count_rentable_offerings().await.unwrap();
 
     // Hetzner resell offering: central-provisioner backend, no pool, default
     // offering_source ('provider') — the exact shape a real resell offering has.
@@ -275,7 +330,7 @@ async fn test_cloud_resell_offering_visible_without_pool() {
     .unwrap();
 
     // Must be counted in the marketplace-visible headline number.
-    let after = db.count_marketplace_visible_offerings().await.unwrap();
+    let after = db.count_rentable_offerings().await.unwrap();
     assert_eq!(
         after - baseline,
         2,
@@ -334,7 +389,7 @@ async fn test_non_cloud_resell_offering_without_pool_stays_hidden() {
     let pubkey = vec![42u8; 32];
     register_provider(&db, &pubkey).await;
 
-    let baseline = db.count_marketplace_visible_offerings().await.unwrap();
+    let baseline = db.count_rentable_offerings().await.unwrap();
 
     // dc-agent-style proxmox offering, NO pool, NO online agent -> must stay
     // hidden. ('proxmox' is distinct from the cloud-resell 'proxmox_api'.)
@@ -346,7 +401,7 @@ async fn test_non_cloud_resell_offering_without_pool_stays_hidden() {
     .await
     .unwrap();
 
-    let after = db.count_marketplace_visible_offerings().await.unwrap();
+    let after = db.count_rentable_offerings().await.unwrap();
     assert_eq!(
         after, baseline,
         "non-cloud-resell offering without a pool must NOT inflate the marketplace count"

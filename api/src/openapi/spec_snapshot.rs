@@ -79,17 +79,24 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-09. Refreshed after removing the dead ICP-era
-    // `TransfersApi` (3 GET endpoints: /transfers, /accounts/:account/transfers,
-    // /accounts/:account/balance) and its `Transfers` tag. Paths dropped
-    // 187->185; schemas stay at 327 (the `TokenTransfer` row model was inlined
-    // in the removed responses, never a named component). Backend DB read
-    // methods + the `TokenTransfer` struct were also removed; the
-    // `token_transfers` table + `insert_token_transfers` + `SyncService` are
-    // kept (the `sync` CLI subcommand still compiles against them).
-    const EXPECTED_PATHS: usize = 185;
-    const EXPECTED_SCHEMAS: usize = 327;
-    const EXPECTED_HASH: &str = "d39cca59e7061782df501f9508d92e74e8571ea3c39dd76196a9093fa47debbd";
+    // Capture date: 2026-08-10. This refresh supersedes a snapshot that had
+    // drifted stale against HEAD's own wallet work (the prior 2026-08-09
+    // capture pinned 185/327 while HEAD rendered 187/333). The current values
+    // reflect three concurrent spec changes in the tree:
+    //   1. Issue A12 — retired the ICP `MetadataCache` polling from `serve`.
+    //      Removed the dead `metadata: Record<string, any>` field from
+    //      `PlatformOverview` (it surfaced dead ICP-token metadata with no
+    //      remaining consumer after `token_transfers` was removed). This is a
+    //      schema-content change only (no path delta, one fewer schema entry).
+    //   2. The wallet-era endpoints/schemas already committed in HEAD but not
+    //      yet snapshotted.
+    //   3. An in-flight removal of the deprecated
+    //      `/providers/:pubkey/contracts/pending-termination` endpoint and its
+    //      `ContractPendingTermination` row model (present in the working tree,
+    //      not part of A12) — drops one path + one named schema.
+    const EXPECTED_PATHS: usize = 186;
+    const EXPECTED_SCHEMAS: usize = 331;
+    const EXPECTED_HASH: &str = "515a5f676ba0e83c3b673dbb71ba2209d33a2587e3f0a5ce274facef3fd5bdfb";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");

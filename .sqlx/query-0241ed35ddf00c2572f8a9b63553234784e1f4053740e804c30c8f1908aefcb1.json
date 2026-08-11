@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wallet_balances\n               SET balance_e9s = balance_e9s - $2, updated_at = NOW()\n               WHERE pubkey = $1 AND balance_e9s >= $2\n               RETURNING balance_e9s as \"balance_e9s!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance_e9s!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0241ed35ddf00c2572f8a9b63553234784e1f4053740e804c30c8f1908aefcb1"
+}

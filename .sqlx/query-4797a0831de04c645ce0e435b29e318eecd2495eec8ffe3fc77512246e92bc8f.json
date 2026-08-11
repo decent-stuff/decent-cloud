@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id,\n                      amount_e9s,\n                      balance_after_e9s,\n                      entry_type,\n                      reference,\n                      COALESCE(EXTRACT(EPOCH FROM created_at)::BIGINT, 0) as \"created_at!: i64\"\n               FROM wallet_ledger\n               WHERE pubkey = $1\n               ORDER BY created_at DESC\n               LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "balance_after_e9s",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "entry_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "reference",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!: i64",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "4797a0831de04c645ce0e435b29e318eecd2495eec8ffe3fc77512246e92bc8f"
+}

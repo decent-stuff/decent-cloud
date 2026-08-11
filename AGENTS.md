@@ -401,8 +401,9 @@ Do NOT simply "fix" tests or code to work around these issues. The symptom fix m
 5. **E2E tests**: Add end-to-end tests for user-facing features where appropriate.
 6. **Zombie code removal**: Search for and remove unused functions/structs/modules, deprecated code paths, legacy comments, orphaned imports, dead feature flags.
 7. **Clean build**: Run `cargo clippy --tests` and `cargo nextest run` in the project you changed and fix ANY warnings or errors.
-8. **Minimal diff**: Check `git diff` and confirm changes are minimal and aligned with project rules.
-9. **Commit**: Only commit when the implementation is fully done and verification is clean.
+8. **Run E2E before claiming done (MANDATORY, non-negotiable)**: Before reporting a task complete / ending the session, bring up the warm stack (`bash scripts/dev-server.sh start --e2e`) and run the Playwright suite — at minimum every spec touching the changed area, and the **full** website suite (`cd website && npm run test:e2e:fast`) for any change to shared dashboard chrome, auth, layout, banners, or anything cross-cutting. The full suite is what CI runs, so it is the only thing that catches the "rewrote one spec, missed a sibling" class of regression (e.g. commit `10424378` rewrote `dashboard-banners.spec.ts` for the consolidated banner but left `keyboard-shortcuts.spec.ts` pointing at the deleted "Verify Your Email Address" text — CI failed, a local full-suite run would have caught it in seconds). Do NOT declare the work done while any E2E test is failing, flaky, or skipped because of your change; fix it or escalate. Re-run after any post-test edit.
+9. **Minimal diff**: Check `git diff` and confirm changes are minimal and aligned with project rules.
+10. **Commit**: Only commit when the implementation is fully done and verification is clean.
 
 ## AUTOMATION AND CONFIG CHECKS
 - Automate external-service setup whenever APIs allow it.

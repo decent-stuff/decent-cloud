@@ -390,24 +390,25 @@ async fn provision_one(
         );
     }
 
-    // If linked to a contract, update contract status to active
+    // If linked to a contract, update contract status to active.
+    //
+    // Cloud-resell (Model B) VMs SSH DIRECTLY to root@<public_ip>:22 — there
+    // is no gateway. We deliberately pass None for the contract-row gateway
+    // fields (and omit them from instance_details) so the website / api-cli
+    // take the direct-SSH path instead of the gateway path. The gateway_slug /
+    // gateway_subdomain stored on the cloud_resources ROW above are retained
+    // for DNS-record lifecycle (creation here, deletion at termination) and are
+    // NOT surfaced as a gateway connection to the renter.
     if let Some(contract_id) = &resource.contract_id {
-        let instance_details = serde_json::json!({
-            "public_ip": public_ip,
-            "ssh_port": 22,
-            "gateway_slug": gateway_slug,
-            "gateway_subdomain": gateway_subdomain,
-            "gateway_ssh_port": gateway_ssh_port,
-        })
-        .to_string();
+        let instance_details = build_direct_ssh_instance_details(&public_ip);
 
         if let Err(e) = database
             .update_contract_provisioned_by_cloud_resource(
                 contract_id,
                 &instance_details,
-                Some(&gateway_slug),
-                gateway_subdomain.as_deref(),
-                Some(gateway_ssh_port),
+                None,
+                None,
+                None,
             )
             .await
         {
@@ -631,6 +632,26 @@ fn generate_gateway_slug() -> String {
         .collect()
 }
 
+/// Build `provisioning_instance_details` JSON for a cloud-resell (Model B)
+/// offering.
+///
+/// Cloud-resell VMs have a public IP and the renter SSHes DIRECTLY to
+/// `root@<public_ip>` on port 22 — there is no gateway / Caddy reverse proxy
+/// (that path exists only for Model A / self-hosted offerings behind a
+/// provider gateway). The JSON therefore carries only the direct-SSH facts and
+/// an explicit `connection_type: "direct_ssh"` marker, and deliberately OMITS
+/// `gateway_slug` / `gateway_subdomain` / `gateway_ssh_port` so consumers (the
+/// website, `api-cli`) cannot be misled toward a gateway connection path that
+/// does not apply.
+fn build_direct_ssh_instance_details(public_ip: &str) -> String {
+    serde_json::json!({
+        "connection_type": "direct_ssh",
+        "public_ip": public_ip,
+        "ssh_port": 22,
+    })
+    .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -651,5 +672,40 @@ mod tests {
         assert!(slug
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+    }
+
+    // === FRICTION-5: direct-SSH instance details for cloud-resell (Model B) ===
+    //
+    // Cloud-resell offerings SSH DIRECTLY to root@<public_ip> on port 22 — no
+    // gateway/Caddy reverse proxy (that path is for Model A / self-hosted
+    // offerings). The provisioning_instance_details JSON must reflect that
+    // reality, not mislead consumers toward a gateway path that doesn't apply.
+
+    #[test]
+    fn test_build_direct_ssh_instance_details_marks_direct_ssh() {
+        let details = build_direct_ssh_instance_details("203.0.113.42");
+        let parsed: serde_json::Value = serde_json::from_str(&details)
+            .expect("instance details must be valid JSON");
+
+        // Direct-SSH reality
+        assert_eq!(parsed["connection_type"], "direct_ssh");
+        assert_eq!(parsed["public_ip"], "203.0.113.42");
+        assert_eq!(parsed["ssh_port"], 22);
+
+        // NO gateway fields — they would mislead consumers (e.g. the website's
+        // gateway-SSH branch, api-cli gateway ssh) toward a gateway path that
+        // does not exist for cloud-resell offerings.
+        assert!(
+            parsed.get("gateway_slug").is_none(),
+            "gateway_slug must be absent for direct-SSH cloud-resell"
+        );
+        assert!(
+            parsed.get("gateway_subdomain").is_none(),
+            "gateway_subdomain must be absent for direct-SSH cloud-resell"
+        );
+        assert!(
+            parsed.get("gateway_ssh_port").is_none(),
+            "gateway_ssh_port must be absent for direct-SSH cloud-resell"
+        );
     }
 }

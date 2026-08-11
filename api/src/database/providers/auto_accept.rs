@@ -4,7 +4,15 @@ use anyhow::Result;
 
 impl Database {
     /// Check if provider has auto-accept rentals enabled.
-    /// Returns false if provider profile doesn't exist or auto_accept_rentals is not set.
+    ///
+    /// Returns the provider's `auto_accept_rentals` setting, or the **schema
+    /// default of `TRUE`** when no `provider_profiles` row exists for this
+    /// pubkey. The TRUE default is load-bearing for cloud-resell (Model B)
+    /// offerings: they are operator-provisioned with no human provider to
+    /// accept/reject, so a rental against an un-onboarded provider pubkey must
+    /// still auto-advance past `requested`. The column itself defaults to TRUE
+    /// (`migrations_pg/001_schema.sql`), so this lookup must agree. A provider
+    /// opts out by inserting a profile row with `auto_accept_rentals = FALSE`.
     pub async fn get_provider_auto_accept_rentals(&self, pubkey: &[u8]) -> Result<bool> {
         let row = sqlx::query_scalar!(
             "SELECT auto_accept_rentals FROM provider_profiles WHERE pubkey = $1",
@@ -13,8 +21,8 @@ impl Database {
         .fetch_optional(&self.pool)
         .await?;
 
-        // row is Option<bool> - None if no row found, Some(value) if found
-        Ok(row.unwrap_or(false))
+        // No profile row → schema default (TRUE); otherwise honor the stored value.
+        Ok(row.unwrap_or(true))
     }
 
     /// Set provider auto-accept rentals setting.

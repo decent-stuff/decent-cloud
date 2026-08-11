@@ -3,6 +3,7 @@ import {
 	seedRentableOffering,
 	deleteOfferingsByProvider,
 	randomHex,
+	sql,
 	type OfferingSeedOverrides,
 } from './fixtures/seed-helpers';
 
@@ -50,6 +51,12 @@ test.describe('Search DSL', () => {
 	test.describe.configure({ mode: 'serial' });
 
 	test.beforeAll(async () => {
+		// Clean up stale offerings from a prior run whose afterAll did not
+		// execute (worker crash/timeout). The `e2edsl-` prefix is constant
+		// across runs; only the randomHex suffix changes. Without this, leaked
+		// rows pollute other specs that expect a near-empty marketplace
+		// (marketplace-empty-state.spec.ts).
+		await sql(`DELETE FROM provider_offerings WHERE offer_name LIKE 'e2edsl-%'`);
 		// Unique tag shared by every seeded offering name. The suite navigates
 		// to `?q=<TAG>` so only these rows are visible to client-side filters.
 		TAG = `e2edsl-${randomHex(4)}`;
@@ -70,8 +77,16 @@ test.describe('Search DSL', () => {
 	});
 
 	test.afterAll(async () => {
+		// Surface cleanup failures rather than silently swallowing them — a
+		// silent .catch(() => {}) hides FK-constraint / timeout issues that
+		// then leak offerings into the next run. Log so the failure is
+		// debuggable without failing the whole suite on a teardown race.
 		for (const p of PLANS) {
-			if (p.providerHex) await deleteOfferingsByProvider(p.providerHex).catch(() => {});
+			if (p.providerHex) {
+				await deleteOfferingsByProvider(p.providerHex).catch((e) => {
+					console.error(`search-dsl cleanup: failed to delete offerings for ${p.providerHex}:`, e);
+				});
+			}
 		}
 	});
 

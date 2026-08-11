@@ -7,7 +7,7 @@
 	import type { DashboardData } from "$lib/services/dashboard-data";
 	import type { IdentityInfo } from "$lib/stores/auth";
 	import { computePubkey, formatContractPrice } from "$lib/utils/contract-format";
-	import { getProviderDashboard, getPendingProviderRequests, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
+	import { getProviderDashboard, getPendingProviderRequests, getWallet, formatE9sAsUsd, hexEncode, type ProviderTrustMetrics, type ProviderResponseMetrics, type ProviderHealthSummary, type Offering } from "$lib/services/api";
 	import { type UserActivity } from "$lib/services/api-user-activity";
 	import { signRequest } from "$lib/services/auth-api";
 	import { detectUserRole, countActiveRentals, countExpiringSoon, countActiveRentalsAsProvider } from "$lib/utils/role-detection";
@@ -41,6 +41,9 @@
 	// Recent Activity state
 	let activity = $state<UserActivity | null>(null);
 	let activityLoading = $state(false);
+
+	// Wallet balance (non-blocking fetch — null until loaded).
+	let walletBalanceE9s = $state<number | null>(null);
 
 	// Pending provider requests
 	let pendingRequestsCount = $state(0);
@@ -104,6 +107,20 @@
 		return { thisMonth, lastMonth, trend, top3, projected, daysLeftInMonth };
 	});
 
+	// Lifetime spend as requester + active earnings as provider (USD).
+	// Single derivation reused by the tenant/provider/new-user stat cards so the
+	// financial position is always surfaced — including the $0.00 starting point
+	// for brand-new users who have no contracts yet.
+	let lifetimeSpentUsd = $derived(
+		(activity?.rentals_as_requester ?? [])
+			.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+	);
+	let activeEarningsUsd = $derived(
+		(activity?.rentals_as_provider ?? [])
+			.filter(c => c.status === 'active' || c.status === 'provisioned')
+			.reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9
+	);
+
 	async function loadDashboard(identity: IdentityInfo | null) {
 		// Single authenticated call replaces the previous 5-endpoint fan-out
 		// (trust/response/health metrics, my-offerings, activity). Each section
@@ -155,6 +172,22 @@
 			trustMetricsLoading = false;
 			myOfferingsLoading = false;
 			activityLoading = false;
+		}
+
+		// Wallet balance is independent of the provider dashboard payload and
+		// must not block it. Fetch separately; a failure leaves the balance at
+		// null (card shows "—") rather than blanking the dashboard.
+		loadWalletBalance(identity);
+	}
+
+	async function loadWalletBalance(identity: IdentityInfo) {
+		try {
+			const pubkeyHex = hexEncode(identity.publicKeyBytes);
+			const { headers } = await signRequest(identity.identity, 'GET', `/api/v1/users/${pubkeyHex}/wallet`, '');
+			const wallet = await getWallet(headers, pubkeyHex);
+			walletBalanceE9s = wallet.balanceE9s;
+		} catch {
+			walletBalanceE9s = null;
 		}
 	}
 
@@ -361,6 +394,35 @@
 			</div>
 		</div>
 	{:else if userRole === 'new'}
+		<!-- New user: financial position is always surfaced so the spending/earnings
+		     surfaces are discoverable from the very first visit. Both start at $0.00. -->
+		<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="wallet" size={20} class="text-primary-400" />
+					<span class="metric-label mb-0">Wallet</span>
+				</div>
+				<p class="metric-value text-base">{walletBalanceE9s === null ? '—' : formatE9sAsUsd(walletBalanceE9s)}</p>
+				<p class="metric-subtext">USD balance · <a href="/dashboard/wallet" class="text-primary-400 hover:text-primary-300">Top up</a></p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="download" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Spending</span>
+				</div>
+				<p class="metric-value text-base">{lifetimeSpentUsd.toFixed(2)}</p>
+				<p class="metric-subtext">USD lifetime · <a href="/dashboard/account/billing" class="text-primary-400 hover:text-primary-300">Set cap</a></p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="check" size={20} class="text-neutral-600" />
+					<span class="metric-label mb-0">Earnings</span>
+				</div>
+				<p class="metric-value text-base">{activeEarningsUsd.toFixed(2)}</p>
+				<p class="metric-subtext">USD active · <a href="/dashboard/provider/earnings" class="text-primary-400 hover:text-primary-300">Details</a></p>
+			</div>
+		</div>
+
 		<!-- New user: prominent Get Started CTAs -->
 		<div class="card p-6 border-primary-500/30 bg-primary-500/5">
 			<h2 class="text-base font-semibold text-white mb-1">Ready to get started?</h2>
@@ -403,6 +465,14 @@
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">
+					<Icon name="wallet" size={20} class="text-primary-400" />
+					<span class="metric-label mb-0">Wallet</span>
+				</div>
+				<p class="metric-value text-base">{walletBalanceE9s === null ? '—' : formatE9sAsUsd(walletBalanceE9s)}</p>
+				<p class="metric-subtext">USD · <a href="/dashboard/wallet" class="text-primary-400 hover:text-primary-300">Top up</a></p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
 					<Icon name="file" size={20} class="text-primary-500" />
 					<span class="metric-label mb-0">Active Rentals</span>
 				</div>
@@ -415,7 +485,7 @@
 					<span class="metric-label mb-0">Total Spent</span>
 				</div>
 			<p class="metric-value text-base">
-				{((activity?.rentals_as_requester ?? []).reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				{lifetimeSpentUsd.toFixed(2)}
 			</p>
 			<p class="metric-subtext">USD lifetime</p>
 			</div>
@@ -537,9 +607,17 @@
 					<span class="metric-label mb-0">Earnings</span>
 				</div>
 			<p class="metric-value text-base">
-				{((activity?.rentals_as_provider ?? []).filter(c => c.status === 'active' || c.status === 'provisioned').reduce((sum, c) => sum + (c.payment_amount_e9s ?? 0), 0) / 1e9).toFixed(2)}
+				{activeEarningsUsd.toFixed(2)}
 			</p>
 			<p class="metric-subtext">USD active</p>
+			</div>
+			<div class="metric-card">
+				<div class="flex items-center gap-2 mb-3">
+					<Icon name="wallet" size={20} class="text-primary-400" />
+					<span class="metric-label mb-0">Wallet</span>
+				</div>
+				<p class="metric-value text-base">{walletBalanceE9s === null ? '—' : formatE9sAsUsd(walletBalanceE9s)}</p>
+				<p class="metric-subtext">USD · <a href="/dashboard/wallet" class="text-primary-400 hover:text-primary-300">Top up</a></p>
 			</div>
 			<div class="metric-card">
 				<div class="flex items-center gap-2 mb-3">

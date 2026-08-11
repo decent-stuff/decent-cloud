@@ -94,4 +94,29 @@ test.describe('/dashboard overview', () => {
 		await page.waitForURL('**/dashboard/provider/support**', { timeout: 15000 });
 		await expect(page).not.toHaveURL(/.*\/error.*/i);
 	});
+
+	test('financial summary is visible for new users with $0.00 balances', async ({ page }) => {
+		// A fresh fixture account has no contracts and no offerings, so
+		// detectUserRole returns 'new'. The dashboard must STILL surface the
+		// financial position (Spending + Earnings) at $0.00 so users can see
+		// the spending/earnings surfaces from the very first visit — not a
+		// blank dashboard with only CTAs.
+		await page.goto('/dashboard');
+		await waitForAuthReady(page);
+
+		// Wait for the dashboard data to load so role-gated content renders.
+		await expect(page.locator('h2', { hasText: 'My Resources' })).toBeVisible({ timeout: 10000 });
+
+		// Spending metric card with $0.00 + a link to set a spending cap.
+		const spendingCard = page.locator('div.metric-card').filter({ hasText: 'Spending' });
+		await expect(spendingCard).toBeVisible({ timeout: 10000 });
+		await expect(spendingCard).toContainText('0.00');
+		await expect(spendingCard.getByRole('link', { name: 'Set cap' })).toHaveAttribute('href', '/dashboard/account/billing');
+
+		// Earnings metric card with $0.00 + a link to the earnings detail page.
+		const earningsCard = page.locator('div.metric-card').filter({ hasText: 'Earnings' });
+		await expect(earningsCard).toBeVisible({ timeout: 10000 });
+		await expect(earningsCard).toContainText('0.00');
+		await expect(earningsCard.getByRole('link', { name: 'Details' })).toHaveAttribute('href', '/dashboard/provider/earnings');
+	});
 });
