@@ -1184,7 +1184,7 @@ async fn test_disabled_key_cannot_lookup_account() {
 async fn test_get_account_with_keys_includes_email_and_verification_status() {
     let db = setup_test_db().await;
 
-    // Create account (email_verified=false by default)
+    // Create account (auto-verified in non-prod dev environments)
     let _account = db
         .create_account("emailuser", &[30u8; 32], "emailuser@example.com")
         .await
@@ -1201,8 +1201,8 @@ async fn test_get_account_with_keys_includes_email_and_verification_status() {
         Some("emailuser@example.com".to_string())
     );
     assert!(
-        !account_with_keys.email_verified,
-        "Email should not be verified initially"
+        account_with_keys.email_verified,
+        "Email auto-verified in non-prod (dev bypass)"
     );
 
     // Verify email
@@ -1236,7 +1236,7 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
     let db = setup_test_db().await;
     let pubkey = [31u8; 32];
 
-    // Create account (email_verified=false by default)
+    // Create account (auto-verified in non-prod dev environments)
     let _account = db
         .create_account("pkemailuser", &pubkey, "pkemailuser@example.com")
         .await
@@ -1253,8 +1253,8 @@ async fn test_get_account_with_keys_by_public_key_includes_email_and_verificatio
         Some("pkemailuser@example.com".to_string())
     );
     assert!(
-        !account_with_keys.email_verified,
-        "Email should not be verified initially"
+        account_with_keys.email_verified,
+        "Email auto-verified in non-prod (dev bypass)"
     );
 
     // Verify email
