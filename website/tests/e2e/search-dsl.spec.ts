@@ -3,6 +3,7 @@ import {
 	seedRentableOffering,
 	deleteOfferingsByProvider,
 	randomHex,
+	nowNs,
 	sql,
 	type OfferingSeedOverrides,
 } from './fixtures/seed-helpers';
@@ -48,7 +49,11 @@ let TAG: string;
 let PLANS: Plan[];
 
 test.describe('Search DSL', () => {
-	test.describe.configure({ mode: 'serial' });
+	// Not declared `serial`: the suite is self-contained — `beforeAll` seeds 6
+	// offerings under a unique random TAG (per worker process), tests only READ
+	// (filter/search, never mutate), and `afterAll` cleans up by those same
+	// random provider pubkeys. Under fullyParallel, `beforeAll`/`afterAll` run
+	// per worker, so each worker owns an isolated TAG'd set.
 
 	test.beforeAll(async () => {
 		// Clean up stale offerings from a prior run whose afterAll did not
@@ -56,7 +61,15 @@ test.describe('Search DSL', () => {
 		// across runs; only the randomHex suffix changes. Without this, leaked
 		// rows pollute other specs that expect a near-empty marketplace
 		// (marketplace-empty-state.spec.ts).
-		await sql(`DELETE FROM provider_offerings WHERE offer_name LIKE 'e2edsl-%'`);
+		//
+		// PARALLEL-SAFE: scope the delete to rows older than 2 minutes. A
+		// concurrent worker's freshly-seeded e2edsl offerings (seconds old)
+		// survive — only genuine prior-run leaks (minutes/hours old) are
+		// removed. Without the age gate, worker B's beforeAll would DELETE
+		// worker A's just-seeded rows (they share the `e2edsl-` prefix) and
+		// break A's tag-scoped assertions.
+		const staleCutoff = nowNs() - BigInt(120_000_000_000); // 2 min ago, in ns
+		await sql(`DELETE FROM provider_offerings WHERE offer_name LIKE 'e2edsl-%' AND created_at_ns < ${staleCutoff}`);
 		// Unique tag shared by every seeded offering name. The suite navigates
 		// to `?q=<TAG>` so only these rows are visible to client-side filters.
 		TAG = `e2edsl-${randomHex(4)}`;

@@ -54,7 +54,12 @@ async function seedSavedOffering(requesterPubkeyHex: string, offeringId: string)
 }
 
 test.describe('/dashboard/saved', () => {
-	test.describe.configure({ mode: 'serial' });
+	// Not declared `serial`: offerings are seeded under a random provider pubkey
+	// (per worker process) in `beforeAll`, and every test that mutates state
+	// seeds its own saved_offering rows for the worker's testAccount pubkey and
+	// tears them down in a `finally`. The empty-state test relies on those
+	// cleanups (correct design — a leak would surface as a real failure).
+	// Dropping `serial` lets the 5 tests spread across workers.
 	test('empty state: fresh user sees empty message and Browse Marketplace CTA', async ({ page }) => {
 		await page.goto('/dashboard/saved');
 		await waitForAuthReady(page);
