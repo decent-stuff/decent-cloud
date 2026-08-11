@@ -283,6 +283,63 @@ workers and a green route-audit. Smoke stays ~30-40 s.
 
 ---
 
+## Implementation Results
+
+**Branch:** `fix/e2e-suite-speed` (3 commits, one per phase). Measured on the
+same warm stack (web `localhost:59010` / api `59011` / postgres sidecar).
+
+### Before → after (local, warm stack)
+
+| Run | Workers | Wall-clock | Tests | Result |
+|---|---:|---:|---:|---|
+| Baseline (this session) | 2 | **12.1 m (727 s)** | 333 pass / 1 fail / 1 skip | RED (admin-dashboard auth flake) |
+| After phase 1 (split route-audit) | 2 | — | route-audit alone 99.8 s → **50.7 s** | green |
+| After phases 1–3 | **4** | **~4.2 m (avg 254 s)** | 334 pass / 0 fail / 1 skip | **GREEN ×3 consecutive** |
+
+**Speedup: ~2.9× faster wall-clock (727 s → 254 s).** CI is ~1.3× slower than
+this dev box, so projected CI is ~5.5 min (down from ~11 min).
+
+### What landed
+
+**Phase 1 — split `route-audit.spec.ts` (commit 1).** The single 751-line /
+41-test file could only occupy one worker-slot. Split into 5 category files
+(`-public`, `-dashboard`, `-provider`, `-marketplace`, `-misc`) with shared
+infra in `fixtures/route-audit-helpers.ts`. Each authed file runs its own
+DB-direct seed (cheap) and reports its own findings slice. At 2 workers this
+alone halved route-audit (99.8 s → 50.7 s).
+
+**Phase 2 — de-serialize independent specs (commit 2).** Dropped `mode:'serial'`
+from three specs whose tests are self-contained, so they fan out across workers:
+- `inline-confirm-delete` (10 tests): per-entity uniquely-random seed + finally cleanup.
+- `saved-offerings` (5 tests): per-test saved-row seed + finally cleanup.
+- `search-dsl` (8 tests): NOT independent as-is — the `beforeAll` stale-cleanup
+  `DELETE ... LIKE 'e2edsl-%'` deleted concurrent workers' fresh seeds. Made it
+  parallel-safe with an age gate (only delete rows >2 min old = prior-run leaks).
+
+**Phase 3 — raise workers 2→4 + harden auth waits (commit 3).** Fixed the
+contention flakes that capped workers at 2, then raised the default to 4:
+- `billing-settings` 'persist on reload': gate reload on signed `GET /api/v1/accounts/billing`.
+- `rental-detail-cancel` (both tests): gate goto on signed `GET /api/v1/users/<pubkey>/contracts`.
+- `admin-dashboard` 'Admin link in sidebar': gate goto on signed `GET /api/v1/accounts?publicKey=` (returns `isAdmin`).
+- `auth-protection` (SSR-only anonymous pages): `goto` → `waitUntil:'domcontentloaded'` (don't wait on the failing external Google Fonts 'load').
+- `route-audit`: treat external-CDN console errors as benign (`net::ERR_*` + `Failed to load resource` from non-localhost hosts — the stale JetBrains Mono woff2 404s every load). Real localhost asset failures are still caught.
+
+### Tests that needed auth hardening (the 4-worker flake list)
+1. `billing-settings › settings persist on reload`
+2. `rental-detail-cancel › first Cancel click reveals…` + `› Abort hides…`
+3. `admin-dashboard › should show Admin link in sidebar for admin users`
+4. `auth-protection › should show login prompt on protected pages…` (SSR `load`-wait, not signed API)
+5. `route-audit` (false-positive console errors from external fonts) — filter, not a wait
+
+All five classes were resolved at the source (deterministic `waitForResponse`
+on the signed endpoint each page fires, or `domcontentloaded` for SSR pages);
+**no test needed a `{ worker: 2 }` carve-out** — step 3e was not triggered.
+
+### Confidence
+**High.** 3 consecutive full-suite clean runs at 4 workers (334 pass, 0 fail),
+route-audit green at 1/2/4 workers, smoke green (34 pass / 43 s). De-serialized
+specs verified 0 flakes across 2× runs at 2 workers + 1× at 4 workers.
+
 ## Appendix: methodology
 
 ```bash
