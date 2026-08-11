@@ -188,21 +188,24 @@ impl Database {
     }
 
 
-    /// rejecting overdrafts at the row level (`WHERE balance_e9s >= amount`).
-    /// Returns the new balance, or an error if the user has no wallet /
-    /// insufficient funds.
+    /// Debit the wallet and append the audit row, within the caller's
+    /// transaction. Shared by [`debit_wallet_balance`] (a standalone test
+    /// primitive that commits immediately) and [`debit_wallet_for_contract`]
+    /// (prod, which adds the contract-payment update in the same tx so the
+    /// debit + contract mark commit atomically).
     ///
-    /// `amount_e9s` must be strictly positive.
-    #[allow(dead_code)] // wired in Unit 4 (rentals → balance debit)
-    pub async fn debit_wallet_balance(
-        &self,
+    /// Row-level overdraft guard: `WHERE balance_e9s >= amount`. If the wallet
+    /// row is missing or the balance is too low, the UPDATE matches zero rows
+    /// and we return an error — the caller is expected to roll the tx back.
+    /// `entry_type` / `reference` stay bound params (not literals) so this
+    /// INSERT shares one cached query plan with the credit path's INSERT.
+    async fn debit_wallet_in_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         pubkey_hex: &str,
         amount_e9s: i64,
         entry_type: &str,
         reference: Option<&str>,
     ) -> Result<i64> {
-        ensure!(amount_e9s > 0, "debit amount must be positive");
-        let mut tx = self.pool.begin().await?;
         let new_balance = sqlx::query_scalar!(
             r#"UPDATE wallet_balances
                SET balance_e9s = balance_e9s - $2, updated_at = NOW()
@@ -211,9 +214,10 @@ impl Database {
             pubkey_hex,
             amount_e9s,
         )
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut **tx)
         .await?
         .ok_or_else(|| anyhow::anyhow!("Insufficient wallet balance for debit"))?;
+
         sqlx::query!(
             r#"INSERT INTO wallet_ledger (pubkey, amount_e9s, balance_after_e9s, entry_type, reference)
                VALUES ($1, $2, $3, $4, $5)"#,
@@ -223,8 +227,30 @@ impl Database {
             entry_type,
             reference,
         )
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
+        Ok(new_balance)
+    }
+
+    /// Debit the wallet (test primitive / generic debit). Begins and commits
+    /// its own transaction. Production rental payments MUST use
+    /// [`debit_wallet_for_contract`] instead, which debits the wallet AND
+    /// marks the contract paid in a single atomic transaction.
+    ///
+    /// Returns the new balance, or an error if the user has no wallet /
+    /// insufficient funds. `amount_e9s` must be strictly positive.
+    #[cfg(test)]
+    pub async fn debit_wallet_balance(
+        &self,
+        pubkey_hex: &str,
+        amount_e9s: i64,
+        entry_type: &str,
+        reference: Option<&str>,
+    ) -> Result<i64> {
+        ensure!(amount_e9s > 0, "debit amount must be positive");
+        let mut tx = self.pool.begin().await?;
+        let new_balance =
+            Self::debit_wallet_in_tx(&mut tx, pubkey_hex, amount_e9s, entry_type, reference).await?;
         tx.commit().await?;
         Ok(new_balance)
     }
@@ -247,31 +273,16 @@ impl Database {
         ensure!(amount_e9s > 0, "debit amount must be positive");
         let mut tx = self.pool.begin().await?;
 
-        // Debit wallet row-level (rejects overdraft via WHERE balance >= amount).
-        let new_balance = sqlx::query_scalar!(
-            r#"UPDATE wallet_balances
-               SET balance_e9s = balance_e9s - $2, updated_at = NOW()
-               WHERE pubkey = $1 AND balance_e9s >= $2
-               RETURNING balance_e9s as "balance_e9s!: i64""#,
+        // Debit wallet + append ledger row (shared with debit_wallet_balance).
+        // The contract id hex is the ledger reference for this rental debit.
+        let contract_id_hex = hex::encode(contract_id);
+        Self::debit_wallet_in_tx(
+            &mut tx,
             requester_pubkey_hex,
             amount_e9s,
+            "rental_debit",
+            Some(&contract_id_hex),
         )
-        .fetch_optional(&mut *tx)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Insufficient wallet balance"))?;
-
-        let contract_id_hex = hex::encode(contract_id);
-
-        // Append immutable ledger entry (signed negative amount).
-        sqlx::query!(
-            r#"INSERT INTO wallet_ledger (pubkey, amount_e9s, balance_after_e9s, entry_type, reference)
-               VALUES ($1, $2, $3, 'rental_debit', $4)"#,
-            requester_pubkey_hex,
-            -amount_e9s,
-            new_balance,
-            contract_id_hex,
-        )
-        .execute(&mut *tx)
         .await?;
 
         // Mark the contract as paid via wallet (no Stripe session/PI).
