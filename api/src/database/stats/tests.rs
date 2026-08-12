@@ -1417,7 +1417,11 @@ async fn test_get_provider_trust_metrics_new_provider() {
     // Provider with no contracts
     let metrics = db.get_provider_trust_metrics(&pubkey).await.unwrap();
 
-    assert_eq!(metrics.trust_score, 100); // No penalties
+    // Honesty gate: zero completed contracts -> trust_score is NULL (no
+    // behavioural track record). The raw calc would have produced ~100
+    // (baseline, no penalties), but storing/presenting that would read as
+    // a dishonest "Reliable" verdict for a brand-new provider.
+    assert_eq!(metrics.trust_score, None);
     assert_eq!(metrics.total_contracts, 0);
     assert_eq!(metrics.completion_rate_pct, 0.0);
     assert!(metrics.is_new_provider); // <5 completed contracts
@@ -3431,9 +3435,12 @@ async fn test_get_offering_conversion_stats_only_counts_own_provider() {
     assert_eq!(stats_b[0].rentals_30d, 1);
 }
 
-// Reputation leaderboard: honesty gate (0-contract exclusion), ordering, and
-// completion_rate math. Three providers: A (3 completed + high trust), B
-// (1 completed + 1 cancelled), C (0 contracts -> must never appear).
+// Reputation leaderboard: honesty gate (zero-completed exclusion), ordering,
+// and completion_rate math. Four providers: A (3 completed + high trust), B
+// (1 completed + 1 cancelled), C (0 contracts -> always excluded), D
+// (cancelled-only, 0 completed -> must be excluded even though
+// total_contracts > 0; this is the hetzner-reseller-shaped case where
+// requested-then-cancelled rentals must NOT look like a track record).
 #[tokio::test]
 async fn test_get_reputation_leaderboard_honesty_gate_and_ordering() {
     let db = setup_test_db().await;
@@ -3441,12 +3448,14 @@ async fn test_get_reputation_leaderboard_honesty_gate_and_ordering() {
     let provider_a = vec![1u8; 32];
     let provider_b = vec![2u8; 32];
     let provider_c = vec![3u8; 32];
-    let requester = vec![4u8; 32];
+    let provider_d = vec![4u8; 32];
+    let requester = vec![5u8; 32];
 
     for (pk, name, score) in [
         (provider_a.as_slice(), "Provider A", Some(95i64)),
         (provider_b.as_slice(), "Provider B", Some(70i64)),
         (provider_c.as_slice(), "Provider C", Some(100i64)),
+        (provider_d.as_slice(), "Provider D", Some(80i64)),
     ] {
         sqlx::query(
             "INSERT INTO provider_profiles (pubkey, name, trust_score, api_version, profile_version, updated_at_ns) VALUES ($1, $2, $3, '1.0', '1.0', 0)",
@@ -3493,13 +3502,30 @@ async fn test_get_reputation_leaderboard_honesty_gate_and_ordering() {
     .await
     .unwrap();
 
+    // Provider D: 2 cancelled, 0 completed. The OLD leaderboard gate
+    // (`total_contracts > 0`) would wrongly include D; the new gate
+    // (`completed_contracts > 0`) must exclude it.
+    for cid in [vec![30u8; 32], vec![31u8; 32]] {
+        sqlx::query(
+            "INSERT INTO contract_sign_requests (contract_id, requester_pubkey, requester_ssh_pubkey, requester_contact, provider_pubkey, offering_id, payment_amount_e9s, request_memo, created_at_ns, status, payment_method, stripe_payment_intent_id, stripe_customer_id, currency) VALUES ($1, $2, 'ssh', 'contact', $3, 'off-1', 0, 'memo', 0, 'cancelled', 'test', NULL, NULL, 'usd')",
+        )
+        .bind(cid.as_slice())
+        .bind(requester.as_slice())
+        .bind(provider_d.as_slice())
+        .execute(&db.pool)
+        .await
+        .unwrap();
+    }
+
     let leaderboard = db.get_reputation_leaderboard(20).await.unwrap();
 
-    // Honesty gate: provider C (0 contracts) excluded despite a higher trust_score.
+    // Honesty gate: provider C (0 contracts) AND provider D (cancelled-only,
+    // 0 completed) are both excluded despite non-null trust_scores. Only
+    // providers with >=1 completed contract appear.
     assert_eq!(
         leaderboard.len(),
         2,
-        "provider with 0 contracts must be excluded by the honesty gate"
+        "providers with 0 completed contracts must be excluded by the honesty gate"
     );
 
     // Ordering: A (trust 95) ranks above B (trust 70).

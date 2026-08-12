@@ -172,15 +172,19 @@
 										{truncatePubkey(entry.pubkey)}
 									</div>
 								</td>
-								<td class="py-3 px-4 text-right font-mono">
-									{#if entry.trust_score !== undefined && entry.trust_score !== null}
-										<span class="font-semibold {getScoreColor(entry.trust_score)}">
-											{entry.trust_score}
-										</span>
-									{:else}
-										<span class="text-neutral-600">—</span>
-									{/if}
-								</td>
+							<td class="py-3 px-4 text-right font-mono">
+								{#if entry.trust_score !== undefined && entry.trust_score !== null}
+									<span class="font-semibold {getScoreColor(entry.trust_score)}">
+										{entry.trust_score}
+									</span>
+								{:else}
+									<!-- Should not normally appear: the leaderboard's
+								     completed_contracts > 0 gate excludes providers
+								     with NULL trust_score. Render honestly if it ever
+								     slips through (no fabricated score). -->
+									<span class="text-neutral-600" title="No completed contracts yet">N/A</span>
+								{/if}
+							</td>
 								<td class="py-3 px-4 text-right text-white">
 									{formatNumber(entry.completed_contracts)}
 								</td>
