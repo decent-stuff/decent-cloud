@@ -773,8 +773,16 @@ fn claim_pool_slot() -> Option<usize> {
     for slot in 0..DB_POOL_SIZE {
         let lock_dir = format!("/tmp/dc_db_pool_{}.lock.d", slot);
         if std::fs::create_dir(&lock_dir).is_ok() {
-            // Won the slot — write our PID inside for stale detection.
-            let _ = std::fs::write(format!("{}/pid", lock_dir), pid.to_string());
+            // Won the slot — write our PID inside for stale detection. Log (don't
+            // ignore) a write failure: a missing pid file makes the slot look
+            // permanently busy to later processes (read_to_string fails → skip),
+            // which is a leak worth surfacing.
+            if let Err(e) = std::fs::write(format!("{}/pid", lock_dir), pid.to_string()) {
+                eprintln!(
+                    "Warning: failed to write pid file for pool slot {}: {}",
+                    slot, e
+                );
+            }
             return Some(slot);
         }
         // Slot taken — check if the owner is still alive.
@@ -784,8 +792,14 @@ fn claim_pool_slot() -> Option<usize> {
                     // Stale — reclaim atomically.
                     let _ = std::fs::remove_dir_all(&lock_dir);
                     if std::fs::create_dir(&lock_dir).is_ok() {
-                        let _ =
-                            std::fs::write(format!("{}/pid", lock_dir), pid.to_string());
+                        if let Err(e) =
+                            std::fs::write(format!("{}/pid", lock_dir), pid.to_string())
+                        {
+                            eprintln!(
+                                "Warning: failed to write pid file for reclaimed pool slot {}: {}",
+                                slot, e
+                            );
+                        }
                         return Some(slot);
                     }
                 }
@@ -803,6 +817,35 @@ fn pool_db_name(template_name: &str, slot: usize) -> String {
         .strip_prefix("template_test_db_")
         .unwrap_or("unknown");
     format!("test_pool_{}_{}", hash, slot)
+}
+
+/// Base advisory-lock key for exclusive access to a pool DB slot. Each slot adds
+/// its index: `POOL_DB_ADVISORY_LOCK_BASE + slot` (slot ∈ 0..DB_POOL_SIZE, so it
+/// fits in the low 32 bits). "DBPL" occupies the high 32 bits to avoid colliding
+/// with the template-setup advisory key (`TEMPLATE_SETUP_ADVISORY_KEY`).
+const POOL_DB_ADVISORY_LOCK_BASE: i64 = 0x4442_504C_0000_0000;
+
+/// Try to take the session advisory lock for `slot` on the pool DB connection.
+///
+/// Returns `true` if acquired (caller proceeds to TRUNCATE + use the pool DB for
+/// the test process's lifetime), or `false` if another live session already holds
+/// it (caller releases its filesystem slot and falls back to a fresh per-test DB).
+///
+/// The lock is **session-scoped**: it is auto-released the moment the connection
+/// closes (process exit, crash, or kill), so a process that dies never wedges the
+/// slot — and a reclaimer is only allowed in once the prior occupant's connection
+/// is truly gone. This is the quiescence guarantee that the filesystem slot lock's
+/// `/proc/{pid}` liveness check cannot provide on its own.
+///
+/// Errors propagate as a panic (test failure) — a broken lock check must never
+/// silently permit a race.
+async fn try_acquire_pool_db_lock(pool: &PgPool, slot: usize) -> bool {
+    let key = POOL_DB_ADVISORY_LOCK_BASE + slot as i64;
+    sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(key)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("pool DB advisory-lock check failed for slot {slot}: {e:#?}"))
 }
 
 /// Migration seed data that must survive a pool-DB TRUNCATE reset.
@@ -984,8 +1027,39 @@ pub async fn setup_test_db() -> Database {
                 .await
             {
                 Ok(pool) => {
-                    reset_db_data(&pool).await;
-                    return Database { pool };
+                    // DB-level mutual exclusion: a session advisory lock guarantees
+                    // we are the only process using this pool DB. The filesystem slot
+                    // lock above only distributes processes across slots — it cannot
+                    // guarantee the pool DB's Postgres session is quiesced when a slot
+                    // is reclaimed. A process killed mid-test (e.g. nextest slow-timeout
+                    // SIGTERM) vanishes from `/proc` instantly while its DB session may
+                    // still be tearing down, so a reclaimer could otherwise connect to
+                    // the same DB and race the dying session — observed in production as
+                    // `duplicate key ... Key (id)=(101) already exists` when two test
+                    // processes (the `api` lib + the `api::bin/api-server` binary, which
+                    // both compile `offerings::tests`) land on the same pool DB.
+                    //
+                    // `pg_try_advisory_lock` is session-scoped and auto-released on
+                    // disconnect, so it frees *exactly* when the prior occupant's
+                    // connection is gone — the quiescence guarantee `/proc` lacks.
+                    if !try_acquire_pool_db_lock(&pool, slot).await {
+                        // Pool DB is held by a live session — the filesystem slot lock
+                        // raced. Release the slot and fall through to the per-test
+                        // CREATE/DROP fallback. `pool` had no lock acquired, so dropping
+                        // it just closes the connection we opened.
+                        let _ = std::fs::remove_dir_all(format!(
+                            "/tmp/dc_db_pool_{}.lock.d",
+                            slot
+                        ));
+                        eprintln!(
+                            "Warning: pool DB slot {} advisory-lock busy, falling back to per-test DB",
+                            slot
+                        );
+                        drop(pool);
+                    } else {
+                        reset_db_data(&pool).await;
+                        return Database { pool };
+                    }
                 }
                 Err(e) => {
                     // Connection failed — release slot, fall through to fallback.
