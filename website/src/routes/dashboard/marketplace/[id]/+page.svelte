@@ -391,7 +391,11 @@
 		</div>
 	{:else if offering}
 	<!-- Trust warning banners -->
-	{#if trustMetrics && trustMetrics.total_contracts === 0}
+	{#if trustMetrics && (trustMetrics.trust_score === null || trustMetrics.trust_score === undefined)}
+		<!-- Honest "new provider" banner. The backend nulls trust_score when
+		     completed_contracts == 0 (the hetzner-reseller-shaped case where
+		     total_contracts > 0 from cancelled rentals still counts as no
+		     track record). trust_score nullness is the canonical signal. -->
 		<div class="bg-blue-500/10 border border-blue-500/30 p-4 flex items-start gap-3">
 			<span class="text-blue-400 shrink-0 text-base leading-none mt-0.5">ℹ</span>
 			<p class="text-sm text-blue-300">
@@ -399,7 +403,7 @@
 				Consider starting with a short rental to test reliability.
 			</p>
 		</div>
-	{:else if !trustWarningDismissed && trustMetrics && Number(trustMetrics.trust_score) < 60}
+	{:else if !trustWarningDismissed && trustMetrics && trustMetrics.trust_score != null && Number(trustMetrics.trust_score) < 60}
 		<div class="bg-amber-500/10 border border-amber-500/30 p-4 flex items-start justify-between gap-4">
 			<div class="flex items-start gap-3">
 				<span class="text-amber-400 shrink-0 text-base leading-none mt-0.5">⚠</span>

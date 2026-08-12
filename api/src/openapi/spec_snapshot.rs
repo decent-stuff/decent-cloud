@@ -79,24 +79,15 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-10. This refresh supersedes a snapshot that had
-    // drifted stale against HEAD's own wallet work (the prior 2026-08-09
-    // capture pinned 185/327 while HEAD rendered 187/333). The current values
-    // reflect three concurrent spec changes in the tree:
-    //   1. Issue A12 — retired the ICP `MetadataCache` polling from `serve`.
-    //      Removed the dead `metadata: Record<string, any>` field from
-    //      `PlatformOverview` (it surfaced dead ICP-token metadata with no
-    //      remaining consumer after `token_transfers` was removed). This is a
-    //      schema-content change only (no path delta, one fewer schema entry).
-    //   2. The wallet-era endpoints/schemas already committed in HEAD but not
-    //      yet snapshotted.
-    //   3. An in-flight removal of the deprecated
-    //      `/providers/:pubkey/contracts/pending-termination` endpoint and its
-    //      `ContractPendingTermination` row model (present in the working tree,
-    //      not part of A12) — drops one path + one named schema.
+    // Capture date: 2026-08-11. This refresh reflects one schema-content change
+    // from the honest-trust-scores fix: `ProviderTrustMetrics.trust_score`
+    // changed from required `i64` to optional `Option<i64>` (now `null` when a
+    // provider has 0 completed contracts — insufficient data, per
+    // PRODUCT-DIRECTION "honest N/A when no track record"). Path/schema COUNTS
+    // are unchanged (186/331); only the canonical hash moved.
     const EXPECTED_PATHS: usize = 186;
     const EXPECTED_SCHEMAS: usize = 331;
-    const EXPECTED_HASH: &str = "515a5f676ba0e83c3b673dbb71ba2209d33a2587e3f0a5ce274facef3fd5bdfb";
+    const EXPECTED_HASH: &str = "03727ac61fcba984e636c6d5f8c7b989782a5e4b6b1b3ddc51790aaa7338c33c";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");

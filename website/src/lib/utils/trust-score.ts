@@ -6,25 +6,27 @@
  */
 
 /**
- * Minimal structural shape the trust-data check needs. Any object with a
- * `total_contracts` number satisfies it (e.g. the full `ProviderTrustMetrics`
+ * Minimal structural shape the trust-data check needs. Any object with an
+ * optional `trust_score` satisfies it (e.g. the full `ProviderTrustMetrics`
  * from `$lib/services/api`), so this helper stays decoupled from the service
  * layer and trivially unit-testable.
  */
 export interface TrustDataShape {
-	total_contracts: number;
+	trust_score?: number | null;
 }
 
 /**
  * A numeric trust score is only meaningful once the provider has at least one
- * contract — the backend scoring starts at 100 and only deducts for observed
- * negative signals, so a provider with zero contracts has no behavioural track
- * record and the computed score (often ~90) reads as a dishonest "Reliable"
- * verdict. When this returns false, the UI must render an N/A + neutral
- * "Not enough data" state instead of the score + coloured verdict badge.
+ * completed contract. The backend scoring starts at 100 and only deducts for
+ * observed negative signals, so a provider with zero completed contracts has
+ * no behavioural track record — `get_provider_trust_metrics` now stores /
+ * returns trust_score = NULL in that case (mirroring reliability_score's
+ * insufficient-data pattern). Treat NULL/undefined as "no track record" and
+ * have the UI render N/A + a neutral "Not enough data" verdict instead of
+ * the coloured score badge.
  */
 export function hasEnoughTrustData(metrics: TrustDataShape): boolean {
-	return metrics.total_contracts > 0;
+	return metrics.trust_score != null;
 }
 
 export type TrustTier = 'reliable' | 'caution' | 'high-risk';

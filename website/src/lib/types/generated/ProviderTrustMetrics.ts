@@ -5,9 +5,12 @@
  */
 export type ProviderTrustMetrics = { pubkey: string, 
 /**
- * Composite trust score 0-100
+ * Composite trust score 0-100. None when the provider has zero completed
+ * contracts (no behavioural track record) — the score would otherwise
+ * start at 100 and read as a dishonest "Reliable" verdict. See
+ * `get_provider_trust_metrics` for the gate.
  */
-trust_score: bigint, 
+trust_score: number | undefined, 
 /**
  * Median hours from payment to provisioned service
  */
