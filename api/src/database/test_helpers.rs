@@ -330,43 +330,26 @@ fn migration_hash() -> String {
 /// never wedge the lock (unlike the old fixed-timeout poll loop, which wedged forever).
 const TEMPLATE_SETUP_ADVISORY_KEY: i64 = 0x4443_5F54_454D_504C; // "DC_TMPL"
 
-/// Forcefully drop a database: terminate backends, clear the template flag, then DROP.
-/// Used for stale/incomplete template DBs (same migration hash, never marked as template) and
-/// for templates left behind by previous migration hashes. Errors are logged loudly but
-/// non-fatal: a failed cleanup of an *old* template must not abort setup of the current one.
+/// Forcefully drop a database using PostgreSQL 13+ `WITH (FORCE)` (terminates
+/// connections then drops). For templates, clears the template flag first since
+/// `DROP DATABASE` refuses a marked template. Errors are logged loudly but
+/// non-fatal: a failed cleanup of an *old* DB must not abort setup of the current one.
 async fn drop_database_force(conn: &mut PgConnection, db_name: &str) {
-    // Terminate any open connections (required before DROP can succeed).
-    if let Err(e) = sqlx::query(&format!(
-        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-        db_name
-    ))
-    .execute(&mut *conn)
-    .await
-    {
-        eprintln!(
-            "Warning: Failed to terminate connections to '{}': {:#?}",
-            db_name, e
-        );
-    }
-
-    // Clear the template flag (DROP DATABASE refuses a marked template).
-    if let Err(e) = sqlx::query(&format!(
+    // Clear the template flag if set (DROP DATABASE refuses a marked template).
+    let _ = sqlx::query(&format!(
         "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
         db_name
     ))
     .execute(&mut *conn)
-    .await
-    {
-        eprintln!(
-            "Warning: Failed to clear template flag for '{}': {:#?}",
-            db_name, e
-        );
-        return;
-    }
+    .await;
 
-    if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
-        .execute(&mut *conn)
-        .await
+    // DROP DATABASE WITH (FORCE) — PG 13+ terminates backends then drops, atomically.
+    if let Err(e) = sqlx::query(&format!(
+        "DROP DATABASE IF EXISTS {} WITH (FORCE)",
+        db_name
+    ))
+    .execute(&mut *conn)
+    .await
     {
         eprintln!("Warning: Failed to drop database '{}': {:#?}", db_name, e);
     }
@@ -745,48 +728,156 @@ async fn cleanup_stale_test_dbs(admin_pool: &PgPool) {
             .map(|pid| !Path::new(&format!("/proc/{}", pid)).exists())
             .unwrap_or(true); // If we can't parse the PID, assume orphaned
 
-        if !is_orphaned {
-            continue;
+        if is_orphaned {
+            // DROP DATABASE WITH (FORCE) terminates backends then drops, atomically.
+            if let Err(e) =
+                sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\" WITH (FORCE)", db_name))
+                    .execute(admin_pool)
+                    .await
+            {
+                eprintln!(
+                    "Warning: Failed to drop stale test database '{}': {:#?}",
+                    db_name, e
+                );
+            }
         }
+    }
+}
 
-        // Terminate connections to the stale database
-        sqlx::query(&format!(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-            db_name
-        ))
-        .execute(admin_pool)
-        .await
-        .ok();
+// ---------------------------------------------------------------------------
+// DB POOL: recycled databases (eliminates ~2600 CREATE/DROP DATABASE per CI run)
+// ---------------------------------------------------------------------------
+//
+// Each `cargo nextest` test runs in its own process. With ~2600 tests that means
+// ~2600 CREATE DATABASE + DROP DATABASE operations, all serialized on the
+// `pg_database` system catalog lock. This pool eliminates the hot-path DDL:
+//
+// 1. Pre-create `DB_POOL_SIZE` databases from the template (once per migration hash).
+// 2. Each test process claims a slot via an atomic `mkdir` lock (with stale-PID
+//    reclamation — same pattern as the ephemeral-PG lock).
+// 3. Before each test: `TRUNCATE ... RESTART IDENTITY CASCADE` on all public tables
+//    (per-table lock, fully parallel across different pool DBs — no catalog lock).
+// 4. When the process exits, the slot becomes stale and the next process reclaims it.
+//
+// Pool DBs are named `test_pool_{hash}_{slot}` so they are tied to the migration
+// hash; old-hash pool DBs are cleaned alongside old templates.
 
-        // Drop the stale database
-        if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\"", db_name))
-            .execute(admin_pool)
+/// Number of pre-created databases in the pool. Covers nextest's default parallelism.
+const DB_POOL_SIZE: usize = 16;
+
+/// Claim a pool slot via an atomic `mkdir` lock. Returns the slot number, or `None`
+/// if all slots are busy (caller falls back to per-test CREATE/DROP). The lock is
+/// reclaimed automatically when the owning process dies (stale-PID detection).
+fn claim_pool_slot() -> Option<usize> {
+    let pid = std::process::id();
+    for slot in 0..DB_POOL_SIZE {
+        let lock_dir = format!("/tmp/dc_db_pool_{}.lock.d", slot);
+        if std::fs::create_dir(&lock_dir).is_ok() {
+            // Won the slot — write our PID inside for stale detection.
+            let _ = std::fs::write(format!("{}/pid", lock_dir), pid.to_string());
+            return Some(slot);
+        }
+        // Slot taken — check if the owner is still alive.
+        if let Ok(content) = std::fs::read_to_string(format!("{}/pid", lock_dir)) {
+            if let Ok(owner_pid) = content.trim().parse::<u32>() {
+                if !Path::new(&format!("/proc/{}", owner_pid)).exists() {
+                    // Stale — reclaim atomically.
+                    let _ = std::fs::remove_dir_all(&lock_dir);
+                    if std::fs::create_dir(&lock_dir).is_ok() {
+                        let _ =
+                            std::fs::write(format!("{}/pid", lock_dir), pid.to_string());
+                        return Some(slot);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Pool DB name: `test_pool_{migration_hash}_{slot}`. Tied to the migration hash
+/// so old pool DBs are cleaned when the schema changes.
+fn pool_db_name(template_name: &str, slot: usize) -> String {
+    // Extract the hash suffix from the template name (template_test_db_{hash}).
+    let hash = template_name
+        .strip_prefix("template_test_db_")
+        .unwrap_or("unknown");
+    format!("test_pool_{}_{}", hash, slot)
+}
+
+/// Reset all data in the database by truncating every table in the `public` schema.
+/// Resets sequences via `RESTART IDENTITY`. Uses `CASCADE` to handle FK constraints.
+/// This is a fast data-only reset — no schema/index recreation, no catalog lock.
+async fn reset_db_data(pool: &PgPool) {
+    let tables: Vec<String> =
+        sqlx::query_scalar("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+            .fetch_all(pool)
             .await
-        {
-            eprintln!(
-                "Warning: Failed to drop stale test database '{}': {:#?}",
-                db_name, e
-            );
+            .expect("Failed to list tables for TRUNCATE");
+
+    if tables.is_empty() {
+        return;
+    }
+
+    let table_list = tables
+        .iter()
+        .map(|t| format!("public.{}", t))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    sqlx::query(&format!("TRUNCATE {} RESTART IDENTITY CASCADE", table_list))
+        .execute(pool)
+        .await
+        .expect("Failed to TRUNCATE tables for pool DB reset");
+}
+
+/// Clean up stale pool databases from old migration hashes.
+/// Drops all `test_pool_%` databases whose hash doesn't match the current template.
+async fn cleanup_stale_pool_dbs(admin_pool: &PgPool, current_hash_prefix: &str) {
+    let pool_dbs: Vec<String> = match sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'test_pool_%' AND datistemplate = FALSE",
+    )
+    .fetch_all(admin_pool)
+    .await
+    {
+        Ok(dbs) => dbs,
+        Err(e) => {
+            eprintln!("Warning: Failed to query stale pool databases: {:#?}", e);
+            return;
         }
+    };
+
+    let current_pattern = format!("test_pool_{}_", current_hash_prefix);
+    for db_name in pool_dbs {
+        if db_name.starts_with(&current_pattern) {
+            continue; // belongs to the current migration hash — keep it
+        }
+        let mut conn = admin_pool.acquire().await.unwrap_or_else(|e| {
+            panic!("Failed to acquire connection for pool cleanup: {:#?}", e)
+        });
+        drop_database_force(&mut conn, &db_name).await;
     }
 }
 
 /// Set up a test database with all migrations applied
 ///
 /// Automatically starts an ephemeral PostgreSQL server if TEST_DATABASE_URL is not set.
-/// Each test gets a unique database that is isolated from other tests.
+/// Each test gets an isolated database.
 ///
-/// Performance: Uses PostgreSQL template databases to avoid recreating schema/indexes
-/// for every test. First test creates template (~6-10s), subsequent tests clone it (~0.5-1s).
+/// Performance strategy (eliminates the ~2600 CREATE/DROP bottleneck):
+/// - **Pool path (fast):** Claims a pre-created pool DB (one of `DB_POOL_SIZE` cloned
+///   from the template) and resets data via `TRUNCATE`. No CREATE/DROP in the hot path.
+/// - **Fallback path:** If all pool slots are busy, creates a fresh DB from the template.
 pub async fn setup_test_db() -> Database {
     let base_url = get_postgres_url();
 
     // Ensure template database exists and is current
     let template_name = ensure_template_db(&base_url).await;
 
-    // Create unique database name for this test
-    let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
+    // Extract the migration hash prefix for pool DB naming + stale cleanup.
+    let hash_prefix = template_name
+        .strip_prefix("template_test_db_")
+        .unwrap_or("unknown");
 
     // Connect to postgres database (limit to 2 connections to avoid exhausting PostgreSQL)
     let admin_url = format!("{}/postgres", base_url);
@@ -796,10 +887,7 @@ pub async fn setup_test_db() -> Database {
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
-    // Clean up stale test databases once per 30-second window across all parallel processes.
-    // CLEANUP_DONE AtomicBool is per-process (useless with nextest's per-test process isolation);
-    // the filesystem lock ensures only one of the ~N concurrent test processes runs cleanup,
-    // preventing N concurrent DROP DATABASE calls on the same stale databases.
+    // Clean up stale databases once per 30-second window across all parallel processes.
     let epoch_window = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -807,10 +895,77 @@ pub async fn setup_test_db() -> Database {
         / 30;
     if std::fs::create_dir(format!("/tmp/dc_test_cleanup_{}.lock.d", epoch_window)).is_ok() {
         cleanup_stale_test_dbs(&admin_pool).await;
+        cleanup_stale_pool_dbs(&admin_pool, hash_prefix).await;
     }
 
-    // Drop if exists (cleanup from previous failed runs)
-    sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
+    // ── Pool path (fast): claim a pre-created DB and TRUNCATE ──────────────
+    if let Some(slot) = claim_pool_slot() {
+        let db_name = pool_db_name(&template_name, slot);
+
+        // Ensure the pool DB exists (create from template if missing — one-time per slot).
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
+        )
+        .bind(&db_name)
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap_or(false);
+
+        if !exists {
+            // First use of this slot — clone from template.
+            if let Err(e) = sqlx::query(&format!(
+                "CREATE DATABASE {} TEMPLATE {}",
+                db_name, template_name
+            ))
+            .execute(&admin_pool)
+            .await
+            {
+                // CREATE failed (template busy? permissions?) — release slot, fall through.
+                let _ = std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
+                eprintln!(
+                    "Warning: pool DB creation failed for slot {}, falling back: {:#?}",
+                    slot, e
+                );
+            }
+        }
+
+        admin_pool.close().await;
+
+        // Connect to the pool DB, TRUNCATE all data, return.
+        let test_url = format!("{}/{}", base_url, db_name);
+        match PgPoolOptions::new()
+            .max_connections(2)
+            .connect(&test_url)
+            .await
+        {
+            Ok(pool) => {
+                reset_db_data(&pool).await;
+                return Database { pool };
+            }
+            Err(e) => {
+                // Connection failed — release slot, fall through to fallback.
+                let _ = std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
+                eprintln!(
+                    "Warning: pool DB connection failed for slot {}, falling back: {:#?}",
+                    slot, e
+                );
+            }
+        }
+    }
+
+    // ── Fallback path: per-test CREATE/DROP (pool full or unavailable) ──────
+    // Reconnect to admin (pool was closed above in the pool path).
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&admin_url)
+        .await
+        .expect("Failed to reconnect to PostgreSQL admin database");
+
+    let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
+
+    // Drop if exists with FORCE (terminates lingering connections then drops).
+    sqlx::query(&format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", db_name))
         .execute(&admin_pool)
         .await
         .expect("Failed to drop existing test database");
