@@ -911,44 +911,55 @@ pub async fn setup_test_db() -> Database {
         .await
         .unwrap_or(false);
 
-        if !exists {
-            // First use of this slot — clone from template.
-            if let Err(e) = sqlx::query(&format!(
+        let create_ok = if !exists {
+            match sqlx::query(&format!(
                 "CREATE DATABASE {} TEMPLATE {}",
                 db_name, template_name
             ))
             .execute(&admin_pool)
             .await
             {
-                // CREATE failed (template busy? permissions?) — release slot, fall through.
-                let _ = std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
-                eprintln!(
-                    "Warning: pool DB creation failed for slot {}, falling back: {:#?}",
-                    slot, e
-                );
+                Ok(_) => true,
+                Err(e) => {
+                    // CREATE failed — release slot, fall through to fallback.
+                    let _ =
+                        std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
+                    eprintln!(
+                        "Warning: pool DB creation failed for slot {}, falling back: {:#?}",
+                        slot, e
+                    );
+                    false
+                }
             }
-        }
+        } else {
+            true
+        };
 
         admin_pool.close().await;
 
-        // Connect to the pool DB, TRUNCATE all data, return.
-        let test_url = format!("{}/{}", base_url, db_name);
-        match PgPoolOptions::new()
-            .max_connections(2)
-            .connect(&test_url)
-            .await
-        {
-            Ok(pool) => {
-                reset_db_data(&pool).await;
-                return Database { pool };
-            }
-            Err(e) => {
-                // Connection failed — release slot, fall through to fallback.
-                let _ = std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
-                eprintln!(
-                    "Warning: pool DB connection failed for slot {}, falling back: {:#?}",
-                    slot, e
-                );
+        if create_ok {
+            // Connect to the pool DB, TRUNCATE all data, return.
+            let test_url = format!("{}/{}", base_url, db_name);
+            match PgPoolOptions::new()
+                .max_connections(2)
+                .connect(&test_url)
+                .await
+            {
+                Ok(pool) => {
+                    reset_db_data(&pool).await;
+                    return Database { pool };
+                }
+                Err(e) => {
+                    // Connection failed — release slot, fall through to fallback.
+                    let _ = std::fs::remove_dir_all(format!(
+                        "/tmp/dc_db_pool_{}.lock.d",
+                        slot
+                    ));
+                    eprintln!(
+                        "Warning: pool DB connection failed for slot {}, falling back: {:#?}",
+                        slot, e
+                    );
+                }
             }
         }
     }
