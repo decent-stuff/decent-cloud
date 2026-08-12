@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { filterInStock, isOfferingPaused, filterOfflineOfferings, isOfferingRentable } from './marketplace-filters';
+import {
+	filterInStock,
+	isOfferingPaused,
+	filterOfflineOfferings,
+	isOfferingRentable,
+	parseArchitecture,
+	formatArchitectureLabel,
+	ARCHITECTURES,
+} from './marketplace-filters';
 
 // ---------- isOfferingPaused ----------
 describe('isOfferingPaused', () => {
@@ -269,5 +277,75 @@ describe('isOfferingRentable', () => {
 
 	it('treats undefined has_critical_flags as rentable (no flags)', () => {
 		expect(isOfferingRentable({ provider_online: true, has_critical_flags: undefined })).toBe(true);
+	});
+});
+
+// ---------- architecture helpers (parseArchitecture / formatArchitectureLabel) ----------
+describe('parseArchitecture', () => {
+	it('parses x86 from provisioner_config JSON', () => {
+		expect(parseArchitecture('{"server_type":"cx23","architecture":"x86"}')).toBe('x86');
+	});
+
+	it('parses arm from provisioner_config JSON', () => {
+		expect(parseArchitecture('{"server_type":"cax11","architecture":"arm"}')).toBe('arm');
+	});
+
+	it('returns undefined when architecture key is absent (non-cloud offering)', () => {
+		expect(parseArchitecture('{"server_type":"cx23","location":"fsn1"}')).toBeUndefined();
+	});
+
+	it('returns undefined for undefined / null / empty input', () => {
+		expect(parseArchitecture(undefined)).toBeUndefined();
+		expect(parseArchitecture(null)).toBeUndefined();
+		expect(parseArchitecture('')).toBeUndefined();
+	});
+
+	it('returns undefined for malformed JSON instead of throwing', () => {
+		expect(parseArchitecture('not-json')).toBeUndefined();
+		expect(parseArchitecture('{broken')).toBeUndefined();
+	});
+
+	it('returns undefined when architecture is present but not a string', () => {
+		expect(parseArchitecture('{"architecture":42}')).toBeUndefined();
+		expect(parseArchitecture('{"architecture":null}')).toBeUndefined();
+	});
+
+	it('returns undefined when provisioner_config is a JSON non-object', () => {
+		// A bare string/array is not a valid provisioner_config; treat as no arch.
+		expect(parseArchitecture('"hello"')).toBeUndefined();
+		expect(parseArchitecture('["x86"]')).toBeUndefined();
+	});
+});
+
+describe('formatArchitectureLabel', () => {
+	it('renders arm as ARM64', () => {
+		expect(formatArchitectureLabel('arm')).toBe('ARM64');
+	});
+
+	it('renders x86 as x86 (conventional casing preserved)', () => {
+		expect(formatArchitectureLabel('x86')).toBe('x86');
+	});
+
+	it('is case-insensitive on input (API always lowercases, but be resilient)', () => {
+		expect(formatArchitectureLabel('ARM')).toBe('ARM64');
+		expect(formatArchitectureLabel('X86')).toBe('x86');
+	});
+
+	it('passes unknown architectures through unchanged', () => {
+		expect(formatArchitectureLabel('riscv')).toBe('riscv');
+	});
+
+	it('returns undefined for empty / undefined input', () => {
+		expect(formatArchitectureLabel(undefined)).toBeUndefined();
+		expect(formatArchitectureLabel(null)).toBeUndefined();
+		expect(formatArchitectureLabel('')).toBeUndefined();
+	});
+
+	it('round-trips: every accepted ARCHITECTURES value has a non-empty label', () => {
+		for (const arch of ARCHITECTURES) {
+			const label = formatArchitectureLabel(arch);
+			expect(typeof label).toBe('string');
+			expect(label!.length).toBeGreaterThan(0);
+		}
 	});
 });
