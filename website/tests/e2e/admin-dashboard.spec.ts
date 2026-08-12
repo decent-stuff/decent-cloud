@@ -80,13 +80,23 @@ test.describe('Admin Dashboard - Authenticated Non-Admin', () => {
 
 adminTest.describe('Admin Dashboard - Authenticated Admin', () => {
 	adminTest('should show Admin link in sidebar for admin users', async ({ page }) => {
-		// Go to any dashboard page to load the sidebar
-		await page.goto('/dashboard/marketplace');
+		// The sidebar Admin link renders only after the signed
+		// `GET /api/v1/accounts?publicKey=...` fetch resolves with isAdmin=true.
+		// Under 4-worker contention that auth-settle lags past the affirmative
+		// sidebar wait, so gate the goto on the account fetch itself
+		// (deterministic; no networkidle). 'domcontentloaded' avoids waiting on
+		// slow external font 'load'.
+		await Promise.all([
+			page.waitForResponse(
+				(r) => r.url().includes('/api/v1/accounts') && r.url().includes('publicKey='),
+				{ timeout: 10000 },
+			),
+			page.goto('/dashboard/marketplace', { waitUntil: 'domcontentloaded' }),
+		]);
 
-		// Sidebar chrome must be mounted before we assert on it. (Replaces
-		// `networkidle`.) The marketplace link is the canonical sidebar entry —
-		// visible on every breakpoint — so its visibility proves the sidebar
-		// has rendered.
+		// Sidebar chrome must be mounted before we assert on it. The marketplace
+		// link is the canonical sidebar entry — visible on every breakpoint — so
+		// its visibility proves the sidebar has rendered.
 		await expect(page.locator('aside a[href="/dashboard/marketplace"]')).toBeVisible();
 
 		// Admin user SHOULD see the Admin link in sidebar

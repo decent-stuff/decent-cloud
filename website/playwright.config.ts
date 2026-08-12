@@ -29,12 +29,15 @@ export default defineConfig({
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	retries: process.env.CI ? 2 : 0,
-	// Default 2 workers locally: the dev box runs the agent harness + MCP
-	// servers as a persistent CPU baseline, so 4 Chromium workers contend and
-	// produce intermittent auth-settle timeouts (1 random flake per run, all
-	// passing in isolation). 2 workers is the reliable default; CI uses 2 too.
-	// On an idle box, override per-run with E2E_WORKERS=4.
-	workers: process.env.CI ? 2 : (process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 2),
+	// 4 workers locally + CI. Previously capped at 2 because 4 Chromium workers
+	// contended under the dev box's persistent CPU baseline (agent harness + MCP
+	// servers) and produced intermittent auth-settle timeouts (~1 flake/run).
+	// That flake was fixed at the source by hardening the auth waits: pages that
+	// fetch signed `/api/v1/` data now gate on `waitForResponse` (or the Logout
+	// button via waitForAuthReady) instead of ad-hoc content-text visibility,
+	// so signed-API-gated renders no longer depend on a quiet CPU. 4 workers
+	// cuts the full suite ~40% vs 2. Override per-run with E2E_WORKERS=N.
+	workers: process.env.E2E_WORKERS ? parseInt(process.env.E2E_WORKERS, 10) : 4,
 	// Per-test timeout. The fast-auth fixture lands on /dashboard in <2s; 30s
 	// leaves plenty of headroom for actual test body work under parallel load.
 	timeout: 30_000,

@@ -59,7 +59,7 @@ E2E_AUTO_SERVER=1 npm run test:e2e  # one-shot mode (spawns + tears down its own
   the WelcomeModal remove that key via a page-level `addInitScript` (page-level runs after context-level).
   (Was `sessionStorage` until 2026-07-23 — switched so returning users don't see the modal each
   new browser session.)
-- Dev iteration target: smoke 4 tests in ~20 s against a warm stack; full suite ~200 tests in ~2.9 m.
+- Dev iteration target: smoke ~34 tests in ~40 s against a warm stack; full suite ~334 tests in ~4 m at 4 workers (split route-audit by category + hardened auth waits let workers default to 4; see `docs/plans/2026-08-11-e2e-suite-speed.md`).
 - See `repo/AGENTS.md` → "Playwright E2E (repo-local)" for the full warm-stack workflow and the
   `RATE_LIMIT_ENABLED` note (parallel workers need it disabled to avoid mass 429s).
 

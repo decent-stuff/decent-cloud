@@ -99,10 +99,17 @@ test.describe('Billing Settings Page', () => {
 		await page.click('button:has-text("Save Billing Settings")');
 		await expect(page.locator('text=Billing settings saved')).toBeVisible({ timeout: 5000 });
 
-		// Reload. The next op (toHaveValue) is auto-retrying, so the prior
-		// networkidle wait was redundant and has been removed — toHaveValue
-		// itself waits for the form to re-populate from the server.
-		await page.reload();
+		// Reload, gating on the signed `/api/v1/accounts/billing` fetch that
+		// repopulates the form. Under 4-worker CPU contention the form values
+		// can lag past the toHaveValue auto-retry window; waitForResponse on the
+		// signed endpoint is deterministic (no networkidle, no content polling).
+		await Promise.all([
+			page.waitForResponse(
+				(r) => r.url().includes('/api/v1/accounts/billing') && r.request().method() === 'GET',
+				{ timeout: 10000 },
+			),
+			page.reload(),
+		]);
 
 		// Verify data persisted
 		await expect(page.locator('#billingAddress')).toHaveValue(testAddress);
