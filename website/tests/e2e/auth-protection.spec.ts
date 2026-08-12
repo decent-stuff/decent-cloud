@@ -6,12 +6,23 @@ import { clickAndRetry } from './fixtures/auth-helpers';
  *
  * Tests that protected pages show view-only mode with login prompts
  * for anonymous users, while allowing full access for authenticated users.
+ *
+ * These pages are SSR'd for anonymous visitors (AuthRequiredCard renders in
+ * the initial HTML — no signed `/api/v1/` fetch fires), so all `goto` calls
+ * use `waitUntil: 'domcontentloaded'`. The default 'load' waits for ALL
+ * resources including external fonts, which under 4-worker CPU contention
+ * intermittently fail (404 / ERR_CONNECTION_CLOSED) and hold back 'load' long
+ * enough to trip the assertions. 'domcontentloaded' returns as soon as the
+ * SSR'd "Login Required" chrome is in the DOM.
  */
+
+// Shared goto options for every navigation in this spec (see header comment).
+const GO = { waitUntil: 'domcontentloaded' as const };
 
 test.describe('Auth Protection', () => {
 	test.beforeEach(async ({ page }) => {
 		// Ensure we start logged out
-		await page.goto('/');
+		await page.goto('/', GO);
 		// Clear any existing auth
 		await page.evaluate(() => {
 			localStorage.clear();
@@ -29,7 +40,7 @@ test.describe('Auth Protection', () => {
 		];
 
 		for (const pagePath of protectedPages) {
-			await page.goto(pagePath);
+			await page.goto(pagePath, GO);
 
 			// Should stay on the page (view-only)
 			await expect(page).toHaveURL(pagePath);
@@ -41,7 +52,7 @@ test.describe('Auth Protection', () => {
 	});
 
 	test('should redirect to /login with returnUrl when clicking login button', async ({ page }) => {
-		await page.goto('/dashboard/rentals');
+		await page.goto('/dashboard/rentals', GO);
 
 		// AuthRequiredCard is SSR'd for anonymous visitors, so the Login button's
 		// onclick binds only on hydration — clickAndRetry until the URL changes.
@@ -62,7 +73,7 @@ test.describe('Auth Protection', () => {
 		];
 
 		for (const pagePath of publicPages) {
-			await page.goto(pagePath);
+			await page.goto(pagePath, GO);
 
 			// Should NOT show login prompt
 			await expect(page).toHaveURL(pagePath);
@@ -79,7 +90,7 @@ test.describe('Auth Protection', () => {
 		// it inside a red "Error loading offerings" panel — a hard error with no
 		// recovery CTA. Fix: gate the page on isAuthenticated like rentals and
 		// render the AuthRequiredCard.
-		await page.goto('/dashboard/offerings');
+		await page.goto('/dashboard/offerings', GO);
 
 		// AuthRequiredCard renders its heading + Login button.
 		await expect(page.getByRole('heading', { name: 'Login Required' })).toBeVisible();
@@ -91,7 +102,7 @@ test.describe('Auth Protection', () => {
 	});
 
 	test('should show auth prompt banner on public dashboard pages', async ({ page }) => {
-		await page.goto('/dashboard');
+		await page.goto('/dashboard', GO);
 
 		// Should show banner prompting to create account
 		await expect(page.getByText(/Create an account to rent resources/i)).toBeVisible();

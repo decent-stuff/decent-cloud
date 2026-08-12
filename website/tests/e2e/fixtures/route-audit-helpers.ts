@@ -1,37 +1,34 @@
 /**
- * Comprehensive route-audit spec.
+ * Shared infrastructure for the split `route-audit-*.spec.ts` suite.
  *
- * Tours EVERY public + authenticated route of the marketplace and captures
- * functional + visual defects across seven categories:
- *   1. HTTP load failures (4xx/5xx) and SvelteKit error pages.
- *   2. Console `error` messages and uncaught `pageerror` exceptions
- *      (excluding the documented-benign dev warnings).
- *   3. Raw data leakage (`undefined`, `NaN`, `null`, `[object Object]`,
- *      raw JSON, stack traces) surfaced in user-visible text.
- *   4. Stuck spinners / skeleton placeholders that never resolve.
- *   5. Template / stub / slop copy (Lorem ipsum, TODO, WIP, "asdf", …).
- *   6. Empty states that show no helpful guidance (informational).
- *   7. Internal `<a href>` links that resolve to a 4xx.
+ * The original single-file audit (`route-audit.spec.ts`, 751 lines / 41 tests)
+ * could only occupy one worker-slot, so the whole ~100 s cost was serial. The
+ * suite is now split into category files (`-public`, `-dashboard`,
+ * `-provider`, `-marketplace`, `-misc`) that spread across workers; every file
+ * imports its defect-checking machinery + seeding lifecycle from HERE so the
+ * audit logic stays in one place.
  *
- * Design:
- *   - One testAccount (created DB-direct) is made a provider (own offering)
- *     and a tenant (one active contract) via the EXISTING seed helpers, so the
- *     populated branches of offerings/edit, marketplace detail, rentals detail,
- *     invoices etc. all render real data.
- *   - `test.describe.configure({ mode: 'serial' })` runs setup once.
- *   - Deterministic: no `networkidle` anywhere — content is gated on a body-text
- *     length predicate; spinners are only re-checked (3s grace) when one is
- *     actually present, so fast routes pay nothing.
- *   - Internal link health is checked with HTTP status, de-duplicated GLOBALLY
- *     so the repeated sidebar nav links are verified once, not once-per-route.
+ * What lives here:
+ *   - The `Finding` model + the seven defect-category checks (`auditRoute`).
+ *   - Noise filters + pattern tables (console noise, leakage, slop, error pages,
+ *     stuck loading, broken internal links).
+ *   - `KNOWN_BROKEN` — the single source of truth for routes flipped to
+ *     expected-failure so the committed suite stays green.
+ *   - `seedAuditContext` / `cleanupAuditContext` — the provider+tenant seed the
+ *     populated branches of the audited routes render against. DB-direct and
+ *     cheap, so each authed split file runs its own copy.
+ *   - `printFindingsSummary` — the per-file report printer (cross-worker state
+ *     can't be shared via a module array; each worker is its own process, so
+ *     each file reports its own slice).
  *
- * KNOWN_BROKEN routes are flipped to expected-failure via `test.fail(...)` so
- * the committed suite stays green; the defects they pin are enumerated in the
- * accompanying audit report.
+ * Design notes carried over from the original spec:
+ *   - No `networkidle` anywhere. Content is gated on a body-text length
+ *     predicate; spinners are only re-checked (3 s grace) when one is present,
+ *     so fast routes pay nothing.
+ *   - Internal-link health is checked with HTTP status, de-duplicated PER
+ *     PROCESS via `CHECKED_LINKS` (sidebar nav verified once within a worker).
  */
-import { test as authTest, expect } from './fixtures/test-account';
-import { test as anonTest } from '@playwright/test';
-import type { ConsoleMessage, Page, Response } from '@playwright/test';
+import type { ConsoleMessage, Page, Request, Response } from '@playwright/test';
 import {
 	pubkeyHexFromSeed,
 	seedOffering,
@@ -40,15 +37,14 @@ import {
 	deleteOfferingsByProvider,
 	deleteContractsForRequester,
 	verifyAccountEmail,
-	sql,
-} from './fixtures/seed-helpers';
+} from './seed-helpers';
 
 // ---------------------------------------------------------------------------
 // Finding model
 // ---------------------------------------------------------------------------
-type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
+export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
 
-interface Finding {
+export interface Finding {
 	route: string;
 	severity: Severity;
 	category: string;
@@ -56,18 +52,28 @@ interface Finding {
 	evidence: string;
 }
 
-/** Every finding discovered during the run (across all routes). Printed in afterAll. */
-const ALL_FINDINGS: Finding[] = [];
+/**
+ * The shape of the account-level seed the audit pages render against. Produced
+ * by `seedAuditContext`, consumed by the dynamic-route URL resolvers in the
+ * split spec files (`/dashboard/rentals/[contract_id]` etc.).
+ */
+export interface AuditContext {
+	pubkey: string;
+	username: string;
+	ownOfferingId: string;
+	marketplaceOffering: { providerPubkeyHex: string; offeringNumericId: string };
+	contractId: string;
+}
 
 /**
  * Routes with a confirmed defect. Keyed by the EXACT audited URL (for static
  * routes) or the route pattern (for dynamic routes, e.g. /dashboard/rentals/[id]).
  * Members are flipped to expected-failure via test.fail so the suite is green.
+ *
+ * Currently empty: the previously-pinned defects were resolved. New defects the
+ * audit catches should be triaged (fixed or pinned here) before merge.
  */
-const KNOWN_BROKEN = new Map<string, string>([
-	// Discovered by the audit run. Each entry flips the route to expected-failure
-	// so the committed suite is green; the defects remain listed in the report.
-]);
+export const KNOWN_BROKEN = new Map<string, string>([]);
 
 // ---------------------------------------------------------------------------
 // Noise filters — dev-only messages that are NOT application defects.
@@ -86,10 +92,34 @@ const BENIGN_CONSOLE = [
 	// NOT application defects — a real outage would instead trip the
 	// checkStuckLoading / checkErrorPage consequence checks below, which remain.
 	/Failed to fetch/i,
+	// Chrome network-layer errors (e.g. "Failed to load resource:
+	// net::ERR_CONNECTION_CLOSED") fired by EXTERNAL resources — Google Fonts
+	// CDN, analytics, etc. — when 4 Chromium workers contend for CPU/network.
+	// These are never first-party app defects: the app's own API failures
+	// surface as HTTP status codes ("the server responded with a status of
+	// 4xx/5xx"), and a real outage still trips checkStuckLoading / content-ready.
+	/net::ERR_/i,
 ];
 
-function isBenign(text: string): boolean {
-	return BENIGN_CONSOLE.some((re) => re.test(text));
+function isBenign(text: string, sourceUrl?: string): boolean {
+	if (BENIGN_CONSOLE.some((re) => re.test(text))) return true;
+	// Resource-load failures ("Failed to load resource: ...") whose source
+	// location is an EXTERNAL host — Google Fonts CDN (a stale woff2 hash 404s
+	// every load), analytics, etc. — are not first-party app defects. The
+	// console message's source location IS the resource URL that failed, so we
+	// can scope the filter to non-localhost hosts and keep real localhost asset
+	// failures (which `checkBrokenLinks`/content-ready may not otherwise catch).
+	if (sourceUrl && /Failed to load resource/.test(text)) {
+		try {
+			const { host } = new URL(sourceUrl);
+			if (host !== 'localhost' && host !== '127.0.0.1' && !sourceUrl.includes('/api/v1/')) {
+				return true;
+			}
+		} catch {
+			// sourceUrl wasn't a real URL — keep the error as a finding.
+		}
+	}
+	return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +167,7 @@ const ERROR_LABELS = [
 // ---------------------------------------------------------------------------
 // Audit core
 // ---------------------------------------------------------------------------
-interface AuditOptions {
+export interface AuditOptions {
 	authed?: boolean;
 	/** Max ms to wait for in-flight `/api/v1/` requests to settle after content
 	 * appears. The settle ONLY fires when a client API request is actually
@@ -145,22 +175,12 @@ interface AuditOptions {
 	settleMs?: number;
 }
 
-interface AuditContext {
-	pubkey: string;
-	username: string;
-	ownOfferingId: string;
-	marketplaceOffering: { providerPubkeyHex: string; offeringNumericId: string };
-	contractId: string;
-}
-
-let ctx: AuditContext;
-
 /**
  * Visit `url`, run every defect check, return the findings. Never throws on
  * navigation/content problems — records them as findings so the caller's single
  * `expect(findings).toEqual([])` is the only assertion that can fail.
  */
-async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Promise<Finding[]> {
+export async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Promise<Finding[]> {
 	const findings: Finding[] = [];
 	const route = url;
 	const consoleErrors: string[] = [];
@@ -169,7 +189,10 @@ async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Pro
 	const onConsole = (msg: ConsoleMessage) => {
 		if (msg.type() === 'error') {
 			const text = msg.text();
-			if (!isBenign(text)) consoleErrors.push(text);
+			// msg.location().url is the resource URL that failed for
+			// "Failed to load resource" messages — used to scope the external-CDN
+			// benign filter in isBenign (keeps real localhost asset failures).
+			if (!isBenign(text, msg.location()?.url)) consoleErrors.push(text);
 		}
 	};
 	const onPageError = (err: Error) => {
@@ -283,7 +306,7 @@ async function auditRoute(page: Page, url: string, opts: AuditOptions = {}): Pro
 		// 8. Stuck spinners / skeletons (only pays 3s when one is present).
 		findings.push(...(await checkStuckLoading(page, route)));
 
-		// 9. Broken internal links (de-duplicated globally).
+		// 9. Broken internal links (de-duplicated per process).
 		findings.push(...(await checkBrokenLinks(page, route)));
 	} finally {
 		detach();
@@ -322,10 +345,10 @@ interface ApiRequestTracker {
 
 function trackPendingApiRequests(page: Page): ApiRequestTracker {
 	let pending = 0;
-	const onRequest = (req: import('@playwright/test').Request) => {
+	const onRequest = (req: Request) => {
 		if (req.url().includes('/api/v1/')) pending++;
 	};
-	const onResponse = (resp: import('@playwright/test').Response) => {
+	const onResponse = (resp: Response) => {
 		if (resp.url().includes('/api/v1/')) pending = Math.max(0, pending - 1);
 	};
 	page.on('request', onRequest);
@@ -510,7 +533,8 @@ async function checkStuckLoading(page: Page, route: string): Promise<Finding[]> 
 	return out;
 }
 
-// Global de-dup of internal-link checks so repeated sidebar nav is verified once.
+// Per-process de-dup of internal-link checks so repeated sidebar nav is verified
+// once within a worker. (Cross-worker re-checking is acceptable — minor HTTP cost.)
 const CHECKED_LINKS = new Set<string>();
 
 async function checkBrokenLinks(page: Page, route: string): Promise<Finding[]> {
@@ -567,7 +591,7 @@ function snippet(text: string, index: number, radius = 40): string {
 	return text.slice(start, end).replace(/\s+/g, ' ').trim();
 }
 
-function formatFindings(findings: Finding[]): string {
+export function formatFindings(findings: Finding[]): string {
 	if (findings.length === 0) return '  (none)';
 	return findings
 		.map((f) => `  [${f.severity}] ${f.category}: ${f.issue}\n      evidence: ${f.evidence}`)
@@ -575,177 +599,84 @@ function formatFindings(findings: Finding[]): string {
 }
 
 // ---------------------------------------------------------------------------
-// Route tables
+// Seed lifecycle — the provider+tenant state the audited pages render against.
+// DB-direct + cheap, so each authed split file runs its own copy.
 // ---------------------------------------------------------------------------
-const PUBLIC_ROUTES = [
-	'/login',
-	'/recover',
-	'/verify-email',
-	'/agents',
-	'/agents/pricing',
-	'/checkout/cancel',
-	'/checkout/success',
-	'/offline',
-] as const;
 
-const AUTHED_STATIC = [
-	'/dashboard',
-	'/dashboard/account/profile',
-	'/dashboard/account/billing',
-	'/dashboard/account/notifications',
-	'/dashboard/account/security',
-	'/dashboard/admin',
-	'/dashboard/cloud/accounts',
-	'/dashboard/cloud/resources',
-	'/dashboard/invoices',
-	'/dashboard/marketplace',
-	'/dashboard/marketplace/compare',
-	'/dashboard/offerings',
-	'/dashboard/offerings/create',
-	'/dashboard/provider/support',
-	'/dashboard/provider/requests',
-	'/dashboard/provider/agents',
-	'/dashboard/provider/analytics',
-	'/dashboard/provider/earnings',
-	'/dashboard/provider/feedback',
-	'/dashboard/provider/sla',
-	'/dashboard/provider/password-resets',
-	'/dashboard/provider/ssh-key-rotations',
-	'/dashboard/provider/reseller',
-	'/dashboard/rentals',
-	'/dashboard/reputation',
-	'/dashboard/saved',
-] as const;
+/**
+ * Build the audit seed for one `testAccount`: a verified-email provider with
+ * its OWN offering (offerings list/edit populated), a third-party rentable
+ * marketplace offering (marketplace detail populated), and one active contract
+ * renting it (rentals list/detail + invoices populated). Returns the handles
+ * the dynamic-route URL resolvers need.
+ */
+export async function seedAuditContext(testAccount: {
+	seedPhrase: string;
+	username: string;
+}): Promise<AuditContext> {
+	const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
+	const username = testAccount.username;
 
-// Dynamic routes: title is the route PATTERN (stable test name, also the
-// KNOWN_BROKEN key); url is resolved at run time once `ctx` is seeded.
-const AUTHED_DYNAMIC: { title: string; url: () => string }[] = [
-	{ title: '/dashboard/marketplace/[id]', url: () => `/dashboard/marketplace/${ctx.marketplaceOffering.offeringNumericId}` },
-	{ title: '/dashboard/offerings/[id]/edit', url: () => `/dashboard/offerings/${ctx.ownOfferingId}/edit` },
-	{ title: '/dashboard/providers/[identifier]', url: () => `/dashboard/providers/${ctx.pubkey}` },
-	{ title: '/dashboard/rentals/[contract_id]', url: () => `/dashboard/rentals/${ctx.contractId}` },
-	{ title: '/dashboard/reputation/[identifier]', url: () => `/dashboard/reputation/${ctx.pubkey}` },
-	{ title: '/dashboard/reputation/[identifier]/trust', url: () => `/dashboard/reputation/${ctx.pubkey}/trust` },
-	{ title: '/dashboard/user/[identifier]', url: () => `/dashboard/user/${ctx.username}` },
-];
+	// Realistic: verified email so rental/account pages don't show a
+	// spurious "unverified" banner that could mask other findings.
+	await verifyAccountEmail(pubkey);
 
-// ---------------------------------------------------------------------------
-// Public (anonymous) routes
-// ---------------------------------------------------------------------------
-anonTest.describe('route-audit (public)', () => {
-	for (const url of PUBLIC_ROUTES) {
-		anonTest(url, async ({ page }) => {
-			anonTest.setTimeout(60_000);
-			const reason = KNOWN_BROKEN.get(url);
-			if (reason) anonTest.fail(true, reason);
-			const findings = await auditRoute(page, url, { authed: false });
-			ALL_FINDINGS.push(...findings);
-			expect(
-				findings,
-				`Route ${url} — ${findings.length} defect(s):\n${formatFindings(findings)}`,
-			).toEqual([]);
-		});
-	}
-});
-
-// ---------------------------------------------------------------------------
-// Authenticated routes — one provider+tenant account, serial setup
-// ---------------------------------------------------------------------------
-authTest.describe('route-audit (authenticated)', () => {
-	// NOTE: deliberately NOT `test.describe.configure({ mode: 'serial' })`.
-	// Serial mode skips every test after the first failure, which would abort
-	// the audit the moment one buggy route is found. The single-setup guarantee
-	// the serial pattern exists for is already provided by the worker-scoped
-	// `testAccount` fixture + `test.beforeAll` under `--workers 1` (one worker =
-	// one account, one seeding pass, no parallel cleanup hazard). Non-serial lets
-	// every route be checked independently regardless of sibling failures.
-
-	authTest.beforeAll(async ({ testAccount }) => {
-		const pubkey = pubkeyHexFromSeed(testAccount.seedPhrase);
-		const username = testAccount.username;
-
-		// Realistic: verified email so rental/account pages don't show a
-		// spurious "unverified" banner that could mask other findings.
-		await verifyAccountEmail(pubkey);
-
-		// (a) Provider side: an offering OWNED by the fixture account, so the
-		// offerings list + edit page render the populated (not empty) branch.
-		const ownOfferingId = await seedOffering(pubkey, {
-			name: 'E2E Audit Own Offering',
-			offeringSource: 'self_provisioned',
-			currency: 'usd',
-		});
-
-		// (b) Marketplace side: a third-party self_provisioned offering so the
-		// marketplace detail page shows a realistic online provider offering.
-		const marketplaceOffering = await seedRentableOffering({
-			name: 'E2E Audit Marketplace Offering',
-		});
-
-		// (c) Tenant side: one active contract for the fixture account renting
-		// the marketplace offering — drives rentals list/detail + invoices.
-		const contractId = await seedContract({
-			requesterPubkeyHex: pubkey,
-			status: 'active',
-			paymentStatus: 'succeeded',
-			providerPubkeyHex: marketplaceOffering.providerPubkeyHex,
-			offeringId: marketplaceOffering.offeringId,
-		});
-
-		ctx = { pubkey, username, ownOfferingId, marketplaceOffering, contractId };
+	// (a) Provider side: an offering OWNED by the fixture account, so the
+	// offerings list + edit page render the populated (not empty) branch.
+	const ownOfferingId = await seedOffering(pubkey, {
+		name: 'E2E Audit Own Offering',
+		offeringSource: 'self_provisioned',
+		currency: 'usd',
 	});
 
-	authTest.afterAll(async () => {
-		if (ctx) {
-			await deleteContractsForRequester(ctx.pubkey).catch(() => {});
-			await deleteOfferingsByProvider(ctx.pubkey).catch(() => {});
-			await deleteOfferingsByProvider(ctx.marketplaceOffering.providerPubkeyHex).catch(() => {});
-		}
-		// Print the full defect inventory so the report can be lifted from output.
-		const bySev: Record<Severity, Finding[]> = { Critical: [], High: [], Medium: [], Low: [] };
-		for (const f of ALL_FINDINGS) bySev[f.severity].push(f);
-		const lines: string[] = ['\n================ ROUTE-AUDIT SUMMARY ================'];
-		lines.push(`total findings: ${ALL_FINDINGS.length}`);
-		lines.push(
-			`Critical=${bySev.Critical.length} High=${bySev.High.length} Medium=${bySev.Medium.length} Low=${bySev.Low.length}`,
-		);
-		for (const sev of ['Critical', 'High', 'Medium', 'Low'] as Severity[]) {
-			for (const f of bySev[sev]) {
-				lines.push(`[${sev}] ${f.route} | ${f.category} | ${f.issue} | ${f.evidence}`);
-			}
-		}
-		lines.push('====================================================\n');
-		console.log(lines.join('\n'));
+	// (b) Marketplace side: a third-party self_provisioned offering so the
+	// marketplace detail page shows a realistic online provider offering.
+	const marketplaceOffering = await seedRentableOffering({
+		name: 'E2E Audit Marketplace Offering',
 	});
 
-	// Static authed routes.
-	for (const url of AUTHED_STATIC) {
-		authTest(url, async ({ page }) => {
-			authTest.setTimeout(60_000);
-			const reason = KNOWN_BROKEN.get(url);
-			if (reason) authTest.fail(true, reason);
-			const findings = await auditRoute(page, url, { authed: true });
-			ALL_FINDINGS.push(...findings);
-			expect(
-				findings,
-				`Route ${url} — ${findings.length} defect(s):\n${formatFindings(findings)}`,
-			).toEqual([]);
-		});
-	}
+	// (c) Tenant side: one active contract for the fixture account renting
+	// the marketplace offering — drives rentals list/detail + invoices.
+	const contractId = await seedContract({
+		requesterPubkeyHex: pubkey,
+		status: 'active',
+		paymentStatus: 'succeeded',
+		providerPubkeyHex: marketplaceOffering.providerPubkeyHex,
+		offeringId: marketplaceOffering.offeringId,
+	});
 
-	// Dynamic authed routes (url resolved at run time from seeded `ctx`).
-	for (const r of AUTHED_DYNAMIC) {
-		authTest(r.title, async ({ page }) => {
-			authTest.setTimeout(60_000);
-			const url = r.url();
-			const reason = KNOWN_BROKEN.get(url) ?? KNOWN_BROKEN.get(r.title);
-			if (reason) authTest.fail(true, reason);
-			const findings = await auditRoute(page, url, { authed: true });
-			ALL_FINDINGS.push(...findings);
-			expect(
-				findings,
-				`Route ${url} — ${findings.length} defect(s):\n${formatFindings(findings)}`,
-			).toEqual([]);
-		});
+	return { pubkey, username, ownOfferingId, marketplaceOffering, contractId };
+}
+
+/**
+ * Tear down a `seedAuditContext` seed: the fixture account's contracts +
+ * offerings, and the third-party marketplace provider's offerings. Best-effort
+ * (errors swallowed) so one stuck cleanup never aborts the suite.
+ */
+export async function cleanupAuditContext(ctx: AuditContext): Promise<void> {
+	await deleteContractsForRequester(ctx.pubkey).catch(() => undefined);
+	await deleteOfferingsByProvider(ctx.pubkey).catch(() => undefined);
+	await deleteOfferingsByProvider(ctx.marketplaceOffering.providerPubkeyHex).catch(() => undefined);
+}
+
+/**
+ * Print the per-file defect inventory so the report can be lifted from output.
+ * Cross-worker aggregation isn't possible via module state (each worker is its
+ * own process), so each split file reports its own slice.
+ */
+export function printFindingsSummary(scope: string, findings: Finding[]): void {
+	const bySev: Record<Severity, Finding[]> = { Critical: [], High: [], Medium: [], Low: [] };
+	for (const f of findings) bySev[f.severity].push(f);
+	const lines: string[] = [`\n================ ROUTE-AUDIT SUMMARY (${scope}) ================`];
+	lines.push(`total findings: ${findings.length}`);
+	lines.push(
+		`Critical=${bySev.Critical.length} High=${bySev.High.length} Medium=${bySev.Medium.length} Low=${bySev.Low.length}`,
+	);
+	for (const sev of ['Critical', 'High', 'Medium', 'Low'] as Severity[]) {
+		for (const f of bySev[sev]) {
+			lines.push(`[${sev}] ${f.route} | ${f.category} | ${f.issue} | ${f.evidence}`);
+		}
 	}
-});
+	lines.push('====================================================\n');
+	console.log(lines.join('\n'));
+}

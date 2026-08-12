@@ -16,8 +16,24 @@ import {
  *
  * Serial mode: all testAccount users share one pubkey, and this spec mutates
  * (seeds + cancels) contract_sign_requests rows for that pubkey.
+ *
+ * Auth wait: the detail page renders the Cancel button only after its signed
+ * `GET /api/v1/users/<pubkey>/contracts` fetch resolves, so each goto is gated
+ * on that response — under 4-worker contention the click would otherwise race
+ * the contract-detail render.
  */
 test.describe.configure({ mode: 'serial' });
+
+// Gate the detail-page goto on the signed contracts fetch that renders the
+// Cancel button (deterministic; no networkidle, no content polling).
+const contractsLoaded = (page: import('@playwright/test').Page) =>
+	page.waitForResponse(
+		(r) =>
+			r.url().includes('/api/v1/users/') &&
+			r.url().includes('/contracts') &&
+			r.request().method() === 'GET',
+		{ timeout: 10000 },
+	);
 
 test.describe('Rental detail cancel (inline two-step confirm)', () => {
 	test('first Cancel click reveals an inline confirm; second click cancels the contract', async ({ page, testAccount }) => {
@@ -28,7 +44,10 @@ test.describe('Rental detail cancel (inline two-step confirm)', () => {
 			paymentStatus: 'pending',
 		});
 		try {
-			await page.goto(`/dashboard/rentals/${contractId}`);
+			await Promise.all([
+				contractsLoaded(page),
+				page.goto(`/dashboard/rentals/${contractId}`),
+			]);
 
 			// First click: no native dialog — it reveals an inline Confirm button.
 			await page.getByRole('button', { name: 'Cancel', exact: true }).first().click();
@@ -63,7 +82,10 @@ test.describe('Rental detail cancel (inline two-step confirm)', () => {
 			paymentStatus: 'pending',
 		});
 		try {
-			await page.goto(`/dashboard/rentals/${contractId}`);
+			await Promise.all([
+				contractsLoaded(page),
+				page.goto(`/dashboard/rentals/${contractId}`),
+			]);
 
 			await page.getByRole('button', { name: 'Cancel', exact: true }).first().click();
 			await page.getByRole('button', { name: 'Abort', exact: true }).click();

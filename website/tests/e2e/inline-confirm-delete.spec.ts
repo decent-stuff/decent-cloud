@@ -36,10 +36,13 @@ import {
  * provider-page signed-DELETE) rather than duplicated 7× — this drops ~6
  * redundant tests (~16 → 10) while keeping every Confirm path covered.
  *
- * Serial mode: every entity mutates rows keyed on the shared testAccount
- * pubkey / account id; tests must not run in parallel.
+ * Not declared `serial`: each entity seeds its own uniquely-random row
+ * (`randomHex` + `Date.now()`) and tears it down in a `finally`, so tests are
+ * independent. The `testAccount` fixture is worker-scoped (one random pubkey
+ * per worker), and tests that share a worker run sequentially — so even the
+ * broad `DELETE ... WHERE account_id =` cleanups can't race a sibling test's
+ * seed. Dropping `serial` lets the 10 tests spread across workers.
  */
-test.describe.configure({ mode: 'serial' });
 
 /**
  * Per-entity setup result. Built by each `seed()` below; consumed by the

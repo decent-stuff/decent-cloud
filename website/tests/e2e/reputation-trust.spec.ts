@@ -10,8 +10,9 @@ import {
  *
  * Coverage gap found in the 2026-08-02 audit: the Trust Report sub-route is a
  * user-facing page (breadcrumb, copy-link, TrustDashboard) that was neither in
- * FLOWS.md nor in route-audit.spec.ts's AUTHED_DYNAMIC table — only its parent
- * reputation profile (reputation-detail.spec.ts) was covered.
+ * FLOWS.md nor in the route-audit suite's dynamic-route table — only its parent
+ * reputation profile (reputation-detail.spec.ts) was covered. (It is now also
+ * covered by `route-audit-misc.spec.ts`.)
  *
  * Two deterministic branches, both exercised here:
  *   - Known account: the identifier resolves and the page renders the Trust
