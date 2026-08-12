@@ -805,15 +805,45 @@ fn pool_db_name(template_name: &str, slot: usize) -> String {
     format!("test_pool_{}_{}", hash, slot)
 }
 
+/// Migration seed data that must survive a pool-DB TRUNCATE reset.
+///
+/// These rows are inserted by migration `001_schema.sql`. `reset_db_data()` truncates
+/// all public tables (except `_sqlx_migrations`) then re-inserts them so tests that
+/// depend on this seed data — e.g. `database::tests::test_database_basic_operations`,
+/// which calls `get_last_sync_position()` → `SELECT ... FROM sync_state WHERE id = 1`
+/// via `fetch_one` (panics if the row is missing) — keep working.
+///
+/// Stored as one entry per statement because `sqlx::query()` uses the Postgres extended
+/// (prepared) protocol, which rejects multi-statement strings.
+///
+/// If a future migration adds seed data, update this constant; a failing test will
+/// signal the need.
+const MIGRATION_SEED_DATA_SQL: &[&str] = &[
+    // sync_state: single row consumed by get_last_sync_position() (fetch_one).
+    "INSERT INTO sync_state (id, last_position) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
+    // invoice_sequence: current-year invoice counter (migration 039).
+    "INSERT INTO invoice_sequence (id, year, next_number) \
+     VALUES (1, EXTRACT(YEAR FROM NOW()), 1) ON CONFLICT (id) DO NOTHING",
+    // receipt_sequence: receipt counter (migration 038).
+    "INSERT INTO receipt_sequence (id, next_number) VALUES (1, 1) \
+     ON CONFLICT (id) DO NOTHING",
+];
+
 /// Reset all data in the database by truncating every table in the `public` schema.
 /// Resets sequences via `RESTART IDENTITY`. Uses `CASCADE` to handle FK constraints.
 /// This is a fast data-only reset — no schema/index recreation, no catalog lock.
+///
+/// `_sqlx_migrations` is excluded (truncating it would break the migrator) and the
+/// migration seed rows (see `MIGRATION_SEED_DATA_SQL`) are re-inserted afterwards so
+/// tests that rely on them keep passing.
 async fn reset_db_data(pool: &PgPool) {
-    let tables: Vec<String> =
-        sqlx::query_scalar("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
-            .fetch_all(pool)
-            .await
-            .expect("Failed to list tables for TRUNCATE");
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT tablename FROM pg_tables \
+         WHERE schemaname = 'public' AND tablename != '_sqlx_migrations'",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("Failed to list tables for TRUNCATE");
 
     if tables.is_empty() {
         return;
@@ -829,6 +859,14 @@ async fn reset_db_data(pool: &PgPool) {
         .execute(pool)
         .await
         .expect("Failed to TRUNCATE tables for pool DB reset");
+
+    // Re-insert migration seed data wiped by the TRUNCATE above.
+    for stmt in MIGRATION_SEED_DATA_SQL {
+        sqlx::query(stmt)
+            .execute(pool)
+            .await
+            .expect("Failed to re-insert migration seed data after TRUNCATE");
+    }
 }
 
 /// Clean up stale pool databases from old migration hashes.
