@@ -17,6 +17,7 @@
 	import { getRecentlyViewed } from "$lib/utils/recently-viewed";
 	import { buildQuickPillClass, buildRowActionButtonClass } from "$lib/utils/marketplace-ui";
 	import { buildDashboardCtaClass } from "$lib/utils/dashboard-cta";
+	import { parseArchitecture, formatArchitectureLabel, type Architecture } from "$lib/utils/marketplace-filters";
 	import Button from "$lib/components/Button.svelte";
 
 	let offerings = $state<Offering[]>([]);
@@ -60,6 +61,9 @@
 	let recipesOnly = $state(false);
 	let inStockOnly = $state(true);
 	let providerFilter = $state<string>('');
+	// Architecture filter (Hetzner cloud-resell): '' = All, 'x86', or 'arm'.
+	// Compared against the raw value parsed from each offering's provisioner_config.
+	let selectedArch = $state<Architecture | ''>("");
 	let recentlyViewedIds = $state<number[]>([]);
 	let trendingOfferings = $state<TrendingOffering[]>([]);
 	let recommendedOfferings = $state<RecommendedOffering[]>([]);
@@ -213,6 +217,15 @@
 			);
 		}
 
+		// Client-side architecture filter (Hetzner cloud-resell). Matches the
+		// raw arch value injected into provisioner_config; offerings without an
+		// architecture never match a specific arch filter.
+		if (selectedArch) {
+			result = result.filter(
+				(o) => parseArchitecture(o.provisioner_config) === selectedArch,
+			);
+		}
+
 		// Client-side unmetered filter
 		if (unmeteredOnly) {
 			result = result.filter((o) => o.unmetered_bandwidth);
@@ -316,6 +329,21 @@
 			selectedPreset !== null
 	);
 
+	// Architecture pill availability: how many current offerings carry each arch
+	// (parsed from provisioner_config). Pills hide when zero match and none is
+	// selected, mirroring presetAvailability. Drives the x86 / ARM64 quick filter.
+	let archAvailability = $derived.by(() => {
+		const base = showOfflineOfferings ? offerings : offerings.filter((o) => o.provider_online);
+		let x86 = 0;
+		let arm = 0;
+		for (const o of base) {
+			const arch = parseArchitecture(o.provisioner_config);
+			if (arch === 'x86') x86++;
+			else if (arch === 'arm') arm++;
+		}
+		return { x86, arm };
+	});
+
 	authStore.isAuthenticated.subscribe((value) => {
 		isAuthenticated = value;
 	});
@@ -408,6 +436,7 @@
 		minMemoryGb = p.has('minMemoryGb') ? Number(p.get('minMemoryGb')) : null;
 		minSsdGb = p.has('minSsdGb') ? Number(p.get('minSsdGb')) : null;
 		selectedVirt = p.get('virt') ?? '';
+		selectedArch = (p.get('arch') as Architecture | '') ?? '';
 		unmeteredOnly = p.get('unmetered') === '1';
 		minTrust = p.has('minTrust') ? Number(p.get('minTrust')) : null;
 		showOfflineOfferings = p.get('offline') === '1';
@@ -433,6 +462,7 @@
 		if (minMemoryGb != null) params.set('minMemoryGb', String(minMemoryGb));
 		if (minSsdGb != null) params.set('minSsdGb', String(minSsdGb));
 		if (selectedVirt) params.set('virt', selectedVirt);
+		if (selectedArch) params.set('arch', selectedArch);
 		if (unmeteredOnly) params.set('unmetered', '1');
 		if (minTrust != null) params.set('minTrust', String(minTrust));
 		if (showOfflineOfferings) params.set('offline', '1');
@@ -534,6 +564,7 @@
 		minMemoryGb = null;
 		minSsdGb = null;
 		selectedVirt = "";
+		selectedArch = "";
 		unmeteredOnly = false;
 		minTrust = null;
 		showOfflineOfferings = false;
@@ -686,6 +717,13 @@
 		return parts.join(" · ") || "—";
 	}
 
+	// Architecture badge label for an offering, parsed from its provisioner_config
+	// (injected by the API for Hetzner cloud-resell offerings). Undefined when the
+	// offering has no architecture to show.
+	function archBadge(offering: Offering): string | undefined {
+		return formatArchitectureLabel(parseArchitecture(offering.provisioner_config));
+	}
+
 	function formatLocation(offering: Offering): string {
 		if (offering.datacenter_city && offering.datacenter_country) {
 			return `${offering.datacenter_city}, ${offering.datacenter_country}`;
@@ -729,7 +767,8 @@
 	let hasActiveFilters = $derived(
 		selectedTypes.size > 0 || searchQuery !== '' || selectedRegion !== '' || selectedCountry !== '' ||
 		selectedCity !== '' || minPrice !== null || maxPrice !== null || minCores !== null ||
-		minMemoryGb !== null || minSsdGb !== null || selectedVirt !== '' || unmeteredOnly ||
+		minMemoryGb !== null || minSsdGb !== null || selectedVirt !== '' || selectedArch !== '' ||
+		unmeteredOnly ||
 		minTrust !== null || showOfflineOfferings || recipesOnly || !inStockOnly ||
 		quickFilter !== null || selectedPreset !== null
 	);
@@ -772,6 +811,10 @@
 		}
 		if (selectedVirt) {
 			chips.push({ label: `Virt: ${selectedVirt.toUpperCase()}`, remove: () => { selectedVirt = ""; syncFiltersToUrl(); } });
+		}
+		if (selectedArch) {
+			const archLabel = formatArchitectureLabel(selectedArch) ?? selectedArch;
+			chips.push({ label: `Arch: ${archLabel}`, remove: () => { selectedArch = ""; syncFiltersToUrl(); } });
 		}
 		if (unmeteredOnly) {
 			chips.push({ label: "Unmetered", remove: () => { unmeteredOnly = false; syncFiltersToUrl(); } });
@@ -1160,15 +1203,41 @@
 						North America
 					</button>
 				{/if}
-				{#if presetAvailability.europe > 0 || selectedPreset === 'europe'}
+			{#if presetAvailability.europe > 0 || selectedPreset === 'europe'}
+				<button
+					onclick={() => setPreset("europe")}
+					class={buildQuickPillClass('preset', selectedPreset === 'europe', 'sky')}
+				>
+					Europe
+				</button>
+			{/if}
+			{#if archAvailability.x86 > 0 || archAvailability.arm > 0 || selectedArch}
+				<div class="w-px h-5 bg-neutral-700 mx-1"></div>
+				<span class="text-neutral-600 text-xs shrink-0">Arch:</span>
+				<button
+					onclick={() => { selectedArch = ""; syncFiltersToUrl(); }}
+					class={buildQuickPillClass('filter', selectedArch === '', 'neutral')}
+				>
+					All
+				</button>
+				{#if archAvailability.x86 > 0 || selectedArch === 'x86'}
 					<button
-						onclick={() => setPreset("europe")}
-						class={buildQuickPillClass('preset', selectedPreset === 'europe', 'sky')}
+						onclick={() => { selectedArch = "x86"; syncFiltersToUrl(); }}
+						class={buildQuickPillClass('filter', selectedArch === 'x86', 'sky')}
 					>
-						Europe
+						x86
 					</button>
 				{/if}
-			</div>
+				{#if archAvailability.arm > 0 || selectedArch === 'arm'}
+					<button
+						onclick={() => { selectedArch = "arm"; syncFiltersToUrl(); }}
+						class={buildQuickPillClass('filter', selectedArch === 'arm', 'emerald')}
+					>
+						ARM64
+					</button>
+				{/if}
+			{/if}
+		</div>
 			</div>
 
 			<!-- Search Bar with Icon -->
@@ -1454,7 +1523,15 @@
 									>
 								</td>
 									<td class="py-3 pr-4 text-neutral-300"
-										>{formatSpecs(offering)}</td
+										><div class="flex items-center gap-1.5 flex-wrap"
+											><span>{formatSpecs(offering)}</span
+											>{#if archBadge(offering)}
+												<span
+													class="marketplace-arch-badge inline-flex items-center text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded bg-surface-elevated text-neutral-300 border border-neutral-700"
+													title="{offering.offer_name} runs on the {archBadge(offering)} architecture"
+												>{archBadge(offering)}</span>
+											{/if}</div
+										></td
 									>
 									<td class="py-3 pr-4 text-neutral-300"
 										>{formatLocation(offering)}</td
@@ -1769,8 +1846,13 @@
 									{/if}
 								</div>
 							</div>
-							<div class="text-sm text-neutral-400 mb-2">
-								{formatSpecs(offering)}
+							<div class="text-sm text-neutral-400 mb-2 flex items-center gap-1.5 flex-wrap">
+								<span>{formatSpecs(offering)}</span>
+								{#if archBadge(offering)}
+									<span
+										class="marketplace-arch-badge inline-flex items-center text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded bg-surface-elevated text-neutral-300 border border-neutral-700"
+									>{archBadge(offering)}</span>
+								{/if}
 							</div>
 							<div class="flex items-center justify-between">
 								<div>

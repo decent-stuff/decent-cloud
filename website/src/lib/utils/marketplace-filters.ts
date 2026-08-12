@@ -74,3 +74,49 @@ export function filterOfflineOfferings<T extends OfferingOnline>(
 export function isOfferingRentable<T extends OfferingRentable>(offering: T): boolean {
 	return offering.provider_online !== false && offering.has_critical_flags !== true;
 }
+
+/**
+ * The raw CPU architecture values Hetzner reports and that the API injects into
+ * an offering's `provisioner_config`. Kept here as the single source of truth so
+ * the filter pills and the parser agree on the accepted set.
+ */
+export const ARCHITECTURES = ['x86', 'arm'] as const;
+export type Architecture = (typeof ARCHITECTURES)[number];
+
+/**
+ * Parse the CPU architecture from an offering's `provisioner_config` JSON string.
+ *
+ * Hetzner cloud-resell offerings store architecture ("x86" or "arm") in
+ * `provisioner_config` (injected by the API from the Hetzner catalog, so it
+ * always matches the actual server_type). Returns the raw value, or `undefined`
+ * for non-cloud offerings and older offerings created before architecture
+ * injection landed. Invalid JSON is treated as "no architecture" rather than
+ * throwing — the marketplace must never crash on a malformed config string.
+ */
+export function parseArchitecture(provisionerConfig: string | undefined | null): string | undefined {
+	if (!provisionerConfig) return undefined;
+	try {
+		const parsed: unknown = JSON.parse(provisionerConfig);
+		if (parsed && typeof parsed === 'object') {
+			const arch = (parsed as Record<string, unknown>)?.architecture;
+			return typeof arch === 'string' ? arch : undefined;
+		}
+		return undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Human-readable architecture label for badges/display: "arm" -> "ARM64",
+ * "x86" -> "x86" (already the conventional casing). Unknown values pass through
+ * as-is. Returns `undefined` when there is no architecture to show so callers
+ * can `{#if}` the badge away cleanly.
+ */
+export function formatArchitectureLabel(architecture: string | undefined | null): string | undefined {
+	if (!architecture) return undefined;
+	const normalized = architecture.toLowerCase();
+	if (normalized === 'arm') return 'ARM64';
+	if (normalized === 'x86') return 'x86';
+	return architecture;
+}
