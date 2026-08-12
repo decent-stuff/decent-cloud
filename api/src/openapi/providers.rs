@@ -337,15 +337,22 @@ pub fn normalize_provisioning_details(
 /// `pub(crate)` so the extracted `OfferingCsvApi` (CSV import post-validation)
 /// can call it; it stays here because the offering create/update handlers in
 /// `ProvidersApi` are the other caller.
+///
+/// Returns `Some(HetznerCatalogSpecs)` for validated Hetzner offerings so the
+/// caller can record architecture + catalog-resolved hardware on the offering.
+/// `None` for vultr / non-cloud offerings (no catalog specs to inject today).
 pub(crate) async fn validate_cloud_offering(
     db: &Database,
     offering: &crate::database::offerings::Offering,
     pubkey_bytes: &[u8],
-) -> Result<(), String> {
+) -> Result<Option<crate::cloud::hetzner::HetznerCatalogSpecs>, String> {
     match offering.provisioner_type.as_deref() {
         Some("hetzner") => validate_hetzner_offering_inner(db, offering, pubkey_bytes).await,
-        Some("vultr") => validate_vultr_offering_inner(db, offering, pubkey_bytes).await,
-        _ => Ok(()),
+        Some("vultr") => {
+            validate_vultr_offering_inner(db, offering, pubkey_bytes).await?;
+            Ok(None)
+        }
+        _ => Ok(None),
     }
 }
 
@@ -353,7 +360,7 @@ async fn validate_hetzner_offering_inner(
     db: &Database,
     offering: &crate::database::offerings::Offering,
     pubkey_bytes: &[u8],
-) -> Result<(), String> {
+) -> Result<Option<crate::cloud::hetzner::HetznerCatalogSpecs>, String> {
     let config = crate::cloud::hetzner::resolve_provisioner_config(
         offering.provisioner_config.as_deref(),
         &offering.datacenter_city,
@@ -386,12 +393,12 @@ async fn validate_hetzner_offering_inner(
     let backend = crate::cloud::hetzner::HetznerBackend::new(token)
         .map_err(|e| format!("Failed to create Hetzner client: {e:#}"))?;
 
-    backend
+    let specs = backend
         .validate_offering_config(&config)
         .await
         .map_err(|e| format!("Hetzner offering validation failed: {e:#}"))?;
 
-    Ok(())
+    Ok(Some(specs))
 }
 
 async fn validate_vultr_offering_inner(
@@ -437,6 +444,73 @@ async fn validate_vultr_offering_inner(
         .map_err(|e| format!("Vultr offering validation failed: {e:#}"))?;
 
     Ok(())
+}
+
+/// Record Hetzner catalog-resolved specs onto an offering before it is stored.
+///
+/// Cloud-resell offerings are typically created with only `server_type` /
+/// `location` / `image` in `provisioner_config`, leaving the marketplace spec
+/// fields blank. This (a) injects `architecture` into the `provisioner_config`
+/// JSON so the marketplace can surface and filter by it, and (b) auto-populates
+/// vCPU / memory / disk from the authoritative catalog when the operator left
+/// them blank. Operator-provided values are NEVER overwritten — only filled.
+///
+/// `architecture` becomes the single source of truth derived from the catalog
+/// (never operator-typed), so it can't drift from the actual server_type.
+fn apply_hetzner_catalog_specs(
+    offering: &mut crate::database::offerings::Offering,
+    specs: &crate::cloud::hetzner::HetznerCatalogSpecs,
+) {
+    // (a) Merge architecture into provisioner_config JSON. This was already
+    // parsed successfully inside validate_hetzner_offering_inner's
+    // resolve_provisioner_config, so a re-parse failure here is impossible in
+    // practice — log loudly if it ever happens rather than silently dropping.
+    let mut config: serde_json::Value = match offering.provisioner_config.as_deref() {
+        Some(raw) => serde_json::from_str(raw).unwrap_or_else(|e| {
+            tracing::warn!(
+                raw_provisioner_config = raw,
+                error = %e,
+                "provisioner_config failed to re-parse after validation; \
+                 architecture will be written into a fresh config object"
+            );
+            serde_json::json!({})
+        }),
+        None => serde_json::json!({}),
+    };
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert(
+            "architecture".to_string(),
+            serde_json::Value::String(specs.architecture.clone()),
+        );
+    } else {
+        // provisioner_config parsed to a non-object (e.g. a bare string/array);
+        // replace it with an object carrying architecture + the original value.
+        tracing::warn!(
+            raw_provisioner_config = ?offering.provisioner_config,
+            "provisioner_config was not a JSON object; replacing with architecture object"
+        );
+        config = serde_json::json!({ "architecture": specs.architecture });
+    }
+    match serde_json::to_string(&config) {
+        Ok(serialized) => offering.provisioner_config = Some(serialized),
+        Err(e) => tracing::warn!(
+            error = %e,
+            "failed to re-serialize provisioner_config with architecture; leaving unchanged"
+        ),
+    }
+
+    // (b) Auto-populate spec fields only when the operator left them blank.
+    // Units match existing display + filter conventions: memory and disk as GB
+    // strings (the marketplace memory/SSD filters parse GB from these fields).
+    if offering.processor_cores.is_none() {
+        offering.processor_cores = Some(specs.cores as i64);
+    }
+    if offering.memory_amount.is_none() {
+        offering.memory_amount = Some(format!("{} GB", specs.memory_gb));
+    }
+    if offering.total_ssd_capacity.is_none() {
+        offering.total_ssd_capacity = Some(format!("{} GB", specs.disk_gb));
+    }
 }
 
 pub struct ProvidersApi;
@@ -1367,12 +1441,16 @@ impl ProvidersApi {
             });
         }
 
-        if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e),
-            });
+        match validate_cloud_offering(&db, &params, &pubkey_bytes).await {
+            Ok(Some(specs)) => apply_hetzner_catalog_specs(&mut params, &specs),
+            Ok(None) => {}
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
         }
 
         if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
@@ -1449,12 +1527,16 @@ impl ProvidersApi {
             });
         }
 
-        if let Err(e) = validate_cloud_offering(&db, &params, &pubkey_bytes).await {
-            return Json(ApiResponse {
-                success: false,
-                data: None,
-                error: Some(e),
-            });
+        match validate_cloud_offering(&db, &params, &pubkey_bytes).await {
+            Ok(Some(specs)) => apply_hetzner_catalog_specs(&mut params, &specs),
+            Ok(None) => {}
+            Err(e) => {
+                return Json(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                });
+            }
         }
 
         if let Err(e) = validate_recipe_if_present(params.post_provision_script.as_ref()) {
@@ -4078,5 +4160,170 @@ mod tests {
         for key in ["trustMetrics", "responseMetrics", "healthSummary", "offerings", "activity"] {
             assert!(obj.contains_key(key), "missing camelCase key `{key}`");
         }
+    }
+
+    // ── apply_hetzner_catalog_specs ─────────────────────────────────────────
+
+    /// Build an Offering with only the fields relevant to spec injection
+    /// populated; everything else defaults. Avoids dragging the full Offering
+    /// constructor into every assertion below.
+    fn blank_offering() -> crate::database::offerings::Offering {
+        use crate::database::offerings::Offering;
+        Offering {
+            id: None,
+            pubkey: String::new(),
+            offering_id: "test".to_string(),
+            offer_name: "Test".to_string(),
+            description: None,
+            product_page_url: None,
+            currency: "USD".to_string(),
+            monthly_price: 10.0,
+            setup_fee: 0.0,
+            visibility: "public".to_string(),
+            product_type: "compute".to_string(),
+            virtualization_type: None,
+            billing_interval: "monthly".to_string(),
+            billing_unit: "month".to_string(),
+            pricing_model: None,
+            price_per_unit: None,
+            included_units: None,
+            overage_price_per_unit: None,
+            stripe_metered_price_id: None,
+            is_subscription: false,
+            subscription_interval_days: None,
+            stock_status: "in_stock".to_string(),
+            processor_brand: None,
+            processor_amount: None,
+            processor_cores: None,
+            processor_speed: None,
+            processor_name: None,
+            memory_error_correction: None,
+            memory_type: None,
+            memory_amount: None,
+            hdd_amount: None,
+            total_hdd_capacity: None,
+            ssd_amount: None,
+            total_ssd_capacity: None,
+            unmetered_bandwidth: false,
+            uplink_speed: None,
+            traffic: None,
+            datacenter_country: "DE".to_string(),
+            datacenter_city: "Falkenstein".to_string(),
+            datacenter_latitude: None,
+            datacenter_longitude: None,
+            control_panel: None,
+            gpu_name: None,
+            gpu_count: None,
+            gpu_memory_gb: None,
+            min_contract_hours: None,
+            max_contract_hours: None,
+            payment_methods: None,
+            features: None,
+            operating_systems: None,
+            trust_score: None,
+            has_critical_flags: None,
+            reliability_score: None,
+            is_draft: false,
+            offering_source: None,
+            external_checkout_url: None,
+            reseller_name: None,
+            reseller_commission_percent: None,
+            owner_username: None,
+            provider_name: None,
+            provisioner_type: Some("hetzner".to_string()),
+            provisioner_config: None,
+            template_name: None,
+            agent_pool_id: None,
+            post_provision_script: None,
+            provider_online: None,
+            resolved_pool_id: None,
+            resolved_pool_name: None,
+            created_at_ns: None,
+            publish_at: None,
+        }
+    }
+
+    #[test]
+    fn test_apply_hetzner_catalog_specs_injects_architecture_and_specs() {
+        let mut offering = blank_offering();
+        // Cloud-resell offering created with NO provisioner_config and no spec
+        // fields — the common case the helper exists to fill in.
+        let specs = crate::cloud::hetzner::HetznerCatalogSpecs {
+            architecture: "arm".to_string(),
+            cores: 2,
+            memory_gb: 4.0,
+            disk_gb: 40,
+        };
+        super::apply_hetzner_catalog_specs(&mut offering, &specs);
+
+        // Architecture recorded in provisioner_config JSON.
+        let config: serde_json::Value =
+            serde_json::from_str(offering.provisioner_config.as_deref().unwrap_or("{}"))
+                .expect("provisioner_config must be valid JSON");
+        assert_eq!(config["architecture"], "arm");
+
+        // Spec fields auto-populated from the catalog (GB units match the
+        // marketplace display + filter convention).
+        assert_eq!(offering.processor_cores, Some(2));
+        assert_eq!(offering.memory_amount.as_deref(), Some("4 GB"));
+        assert_eq!(offering.total_ssd_capacity.as_deref(), Some("40 GB"));
+    }
+
+    #[test]
+    fn test_apply_hetzner_catalog_specs_preserves_existing_config_keys() {
+        let mut offering = blank_offering();
+        offering.provisioner_config =
+            Some(r#"{"server_type":"cax11","location":"fsn1","image":"ubuntu-24.04"}"#.to_string());
+        let specs = crate::cloud::hetzner::HetznerCatalogSpecs {
+            architecture: "arm".to_string(),
+            cores: 2,
+            memory_gb: 4.0,
+            disk_gb: 40,
+        };
+        super::apply_hetzner_catalog_specs(&mut offering, &specs);
+
+        let config: serde_json::Value =
+            serde_json::from_str(offering.provisioner_config.as_deref().unwrap())
+                .expect("provisioner_config must stay valid JSON");
+        // Architecture added.
+        assert_eq!(config["architecture"], "arm");
+        // Operator-provided keys preserved.
+        assert_eq!(config["server_type"], "cax11");
+        assert_eq!(config["location"], "fsn1");
+        assert_eq!(config["image"], "ubuntu-24.04");
+    }
+
+    #[test]
+    fn test_apply_hetzner_catalog_specs_does_not_overwrite_operator_specs() {
+        // An operator who set their own spec values keeps them — the catalog
+        // only fills BLANK fields, never overrides (DRY: catalog is fallback,
+        // not authority, for human-curated fields).
+        let mut offering = blank_offering();
+        offering.processor_cores = Some(8);
+        offering.memory_amount = Some("32 GB ECC".to_string());
+        offering.total_ssd_capacity = Some("1 TB".to_string());
+        let specs = crate::cloud::hetzner::HetznerCatalogSpecs {
+            architecture: "x86".to_string(),
+            cores: 2,
+            memory_gb: 4.0,
+            disk_gb: 40,
+        };
+        super::apply_hetzner_catalog_specs(&mut offering, &specs);
+
+        assert_eq!(offering.processor_cores, Some(8), "operator cores preserved");
+        assert_eq!(
+            offering.memory_amount.as_deref(),
+            Some("32 GB ECC"),
+            "operator memory preserved"
+        );
+        assert_eq!(
+            offering.total_ssd_capacity.as_deref(),
+            Some("1 TB"),
+            "operator disk preserved"
+        );
+        // Architecture is still injected (it's always catalog-derived).
+        let config: serde_json::Value =
+            serde_json::from_str(offering.provisioner_config.as_deref().unwrap_or("{}")).unwrap();
+        assert_eq!(config["architecture"], "x86");
     }
 }
