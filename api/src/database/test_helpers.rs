@@ -330,43 +330,26 @@ fn migration_hash() -> String {
 /// never wedge the lock (unlike the old fixed-timeout poll loop, which wedged forever).
 const TEMPLATE_SETUP_ADVISORY_KEY: i64 = 0x4443_5F54_454D_504C; // "DC_TMPL"
 
-/// Forcefully drop a database: terminate backends, clear the template flag, then DROP.
-/// Used for stale/incomplete template DBs (same migration hash, never marked as template) and
-/// for templates left behind by previous migration hashes. Errors are logged loudly but
-/// non-fatal: a failed cleanup of an *old* template must not abort setup of the current one.
+/// Forcefully drop a database using PostgreSQL 13+ `WITH (FORCE)` (terminates
+/// connections then drops). For templates, clears the template flag first since
+/// `DROP DATABASE` refuses a marked template. Errors are logged loudly but
+/// non-fatal: a failed cleanup of an *old* DB must not abort setup of the current one.
 async fn drop_database_force(conn: &mut PgConnection, db_name: &str) {
-    // Terminate any open connections (required before DROP can succeed).
-    if let Err(e) = sqlx::query(&format!(
-        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-        db_name
-    ))
-    .execute(&mut *conn)
-    .await
-    {
-        eprintln!(
-            "Warning: Failed to terminate connections to '{}': {:#?}",
-            db_name, e
-        );
-    }
-
-    // Clear the template flag (DROP DATABASE refuses a marked template).
-    if let Err(e) = sqlx::query(&format!(
+    // Clear the template flag if set (DROP DATABASE refuses a marked template).
+    let _ = sqlx::query(&format!(
         "UPDATE pg_database SET datistemplate = FALSE WHERE datname = '{}'",
         db_name
     ))
     .execute(&mut *conn)
-    .await
-    {
-        eprintln!(
-            "Warning: Failed to clear template flag for '{}': {:#?}",
-            db_name, e
-        );
-        return;
-    }
+    .await;
 
-    if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
-        .execute(&mut *conn)
-        .await
+    // DROP DATABASE WITH (FORCE) — PG 13+ terminates backends then drops, atomically.
+    if let Err(e) = sqlx::query(&format!(
+        "DROP DATABASE IF EXISTS {} WITH (FORCE)",
+        db_name
+    ))
+    .execute(&mut *conn)
+    .await
     {
         eprintln!("Warning: Failed to drop database '{}': {:#?}", db_name, e);
     }
@@ -745,48 +728,237 @@ async fn cleanup_stale_test_dbs(admin_pool: &PgPool) {
             .map(|pid| !Path::new(&format!("/proc/{}", pid)).exists())
             .unwrap_or(true); // If we can't parse the PID, assume orphaned
 
-        if !is_orphaned {
-            continue;
+        if is_orphaned {
+            // DROP DATABASE WITH (FORCE) terminates backends then drops, atomically.
+            if let Err(e) =
+                sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\" WITH (FORCE)", db_name))
+                    .execute(admin_pool)
+                    .await
+            {
+                eprintln!(
+                    "Warning: Failed to drop stale test database '{}': {:#?}",
+                    db_name, e
+                );
+            }
         }
+    }
+}
 
-        // Terminate connections to the stale database
-        sqlx::query(&format!(
-            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}'",
-            db_name
-        ))
-        .execute(admin_pool)
+// ---------------------------------------------------------------------------
+// DB POOL: recycled databases (eliminates ~2600 CREATE/DROP DATABASE per CI run)
+// ---------------------------------------------------------------------------
+//
+// Each `cargo nextest` test runs in its own process. With ~2600 tests that means
+// ~2600 CREATE DATABASE + DROP DATABASE operations, all serialized on the
+// `pg_database` system catalog lock. This pool eliminates the hot-path DDL:
+//
+// 1. Pre-create `DB_POOL_SIZE` databases from the template (once per migration hash).
+// 2. Each test process claims a slot via an atomic `mkdir` lock (with stale-PID
+//    reclamation — same pattern as the ephemeral-PG lock).
+// 3. Before each test: `TRUNCATE ... RESTART IDENTITY CASCADE` on all public tables
+//    (per-table lock, fully parallel across different pool DBs — no catalog lock).
+// 4. When the process exits, the slot becomes stale and the next process reclaims it.
+//
+// Pool DBs are named `test_pool_{hash}_{slot}` so they are tied to the migration
+// hash; old-hash pool DBs are cleaned alongside old templates.
+
+/// Number of pre-created databases in the pool. Covers nextest's default parallelism.
+const DB_POOL_SIZE: usize = 16;
+
+/// Claim a pool slot via an atomic `mkdir` lock. Returns the slot number, or `None`
+/// if all slots are busy (caller falls back to per-test CREATE/DROP). The lock is
+/// reclaimed automatically when the owning process dies (stale-PID detection).
+fn claim_pool_slot() -> Option<usize> {
+    let pid = std::process::id();
+    for slot in 0..DB_POOL_SIZE {
+        let lock_dir = format!("/tmp/dc_db_pool_{}.lock.d", slot);
+        if std::fs::create_dir(&lock_dir).is_ok() {
+            // Won the slot — write our PID inside for stale detection. Log (don't
+            // ignore) a write failure: a missing pid file makes the slot look
+            // permanently busy to later processes (read_to_string fails → skip),
+            // which is a leak worth surfacing.
+            if let Err(e) = std::fs::write(format!("{}/pid", lock_dir), pid.to_string()) {
+                eprintln!(
+                    "Warning: failed to write pid file for pool slot {}: {}",
+                    slot, e
+                );
+            }
+            return Some(slot);
+        }
+        // Slot taken — check if the owner is still alive.
+        if let Ok(content) = std::fs::read_to_string(format!("{}/pid", lock_dir)) {
+            if let Ok(owner_pid) = content.trim().parse::<u32>() {
+                if !Path::new(&format!("/proc/{}", owner_pid)).exists() {
+                    // Stale — reclaim atomically.
+                    let _ = std::fs::remove_dir_all(&lock_dir);
+                    if std::fs::create_dir(&lock_dir).is_ok() {
+                        if let Err(e) =
+                            std::fs::write(format!("{}/pid", lock_dir), pid.to_string())
+                        {
+                            eprintln!(
+                                "Warning: failed to write pid file for reclaimed pool slot {}: {}",
+                                slot, e
+                            );
+                        }
+                        return Some(slot);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Pool DB name: `test_pool_{migration_hash}_{slot}`. Tied to the migration hash
+/// so old pool DBs are cleaned when the schema changes.
+fn pool_db_name(template_name: &str, slot: usize) -> String {
+    // Extract the hash suffix from the template name (template_test_db_{hash}).
+    let hash = template_name
+        .strip_prefix("template_test_db_")
+        .unwrap_or("unknown");
+    format!("test_pool_{}_{}", hash, slot)
+}
+
+/// Base advisory-lock key for exclusive access to a pool DB slot. Each slot adds
+/// its index: `POOL_DB_ADVISORY_LOCK_BASE + slot` (slot ∈ 0..DB_POOL_SIZE, so it
+/// fits in the low 32 bits). "DBPL" occupies the high 32 bits to avoid colliding
+/// with the template-setup advisory key (`TEMPLATE_SETUP_ADVISORY_KEY`).
+const POOL_DB_ADVISORY_LOCK_BASE: i64 = 0x4442_504C_0000_0000;
+
+/// Try to take the session advisory lock for `slot` on the pool DB connection.
+///
+/// Returns `true` if acquired (caller proceeds to TRUNCATE + use the pool DB for
+/// the test process's lifetime), or `false` if another live session already holds
+/// it (caller releases its filesystem slot and falls back to a fresh per-test DB).
+///
+/// The lock is **session-scoped**: it is auto-released the moment the connection
+/// closes (process exit, crash, or kill), so a process that dies never wedges the
+/// slot — and a reclaimer is only allowed in once the prior occupant's connection
+/// is truly gone. This is the quiescence guarantee that the filesystem slot lock's
+/// `/proc/{pid}` liveness check cannot provide on its own.
+///
+/// Errors propagate as a panic (test failure) — a broken lock check must never
+/// silently permit a race.
+async fn try_acquire_pool_db_lock(pool: &PgPool, slot: usize) -> bool {
+    let key = POOL_DB_ADVISORY_LOCK_BASE + slot as i64;
+    sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(key)
+        .fetch_one(pool)
         .await
-        .ok();
+        .unwrap_or_else(|e| panic!("pool DB advisory-lock check failed for slot {slot}: {e:#?}"))
+}
 
-        // Drop the stale database
-        if let Err(e) = sqlx::query(&format!("DROP DATABASE IF EXISTS \"{}\"", db_name))
-            .execute(admin_pool)
+/// Migration seed data that must survive a pool-DB TRUNCATE reset.
+///
+/// These rows are inserted by migration `001_schema.sql`. `reset_db_data()` truncates
+/// all public tables (except `_sqlx_migrations`) then re-inserts them so tests that
+/// depend on this seed data — e.g. `database::tests::test_database_basic_operations`,
+/// which calls `get_last_sync_position()` → `SELECT ... FROM sync_state WHERE id = 1`
+/// via `fetch_one` (panics if the row is missing) — keep working.
+///
+/// Stored as one entry per statement because `sqlx::query()` uses the Postgres extended
+/// (prepared) protocol, which rejects multi-statement strings.
+///
+/// If a future migration adds seed data, update this constant; a failing test will
+/// signal the need.
+const MIGRATION_SEED_DATA_SQL: &[&str] = &[
+    // sync_state: single row consumed by get_last_sync_position() (fetch_one).
+    "INSERT INTO sync_state (id, last_position) VALUES (1, 0) ON CONFLICT (id) DO NOTHING",
+    // invoice_sequence: current-year invoice counter (migration 039).
+    "INSERT INTO invoice_sequence (id, year, next_number) \
+     VALUES (1, EXTRACT(YEAR FROM NOW()), 1) ON CONFLICT (id) DO NOTHING",
+    // receipt_sequence: receipt counter (migration 038).
+    "INSERT INTO receipt_sequence (id, next_number) VALUES (1, 1) \
+     ON CONFLICT (id) DO NOTHING",
+];
+
+/// Reset all data in the database by truncating every table in the `public` schema.
+/// Resets sequences via `RESTART IDENTITY`. Uses `CASCADE` to handle FK constraints.
+/// This is a fast data-only reset — no schema/index recreation, no catalog lock.
+///
+/// `_sqlx_migrations` is excluded (truncating it would break the migrator) and the
+/// migration seed rows (see `MIGRATION_SEED_DATA_SQL`) are re-inserted afterwards so
+/// tests that rely on them keep passing.
+async fn reset_db_data(pool: &PgPool) {
+    let tables: Vec<String> = sqlx::query_scalar(
+        "SELECT tablename FROM pg_tables \
+         WHERE schemaname = 'public' AND tablename != '_sqlx_migrations'",
+    )
+    .fetch_all(pool)
+    .await
+    .expect("Failed to list tables for TRUNCATE");
+
+    if tables.is_empty() {
+        return;
+    }
+
+    let table_list = tables
+        .iter()
+        .map(|t| format!("public.{}", t))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    sqlx::query(&format!("TRUNCATE {} RESTART IDENTITY CASCADE", table_list))
+        .execute(pool)
+        .await
+        .expect("Failed to TRUNCATE tables for pool DB reset");
+
+    // Re-insert migration seed data wiped by the TRUNCATE above.
+    for stmt in MIGRATION_SEED_DATA_SQL {
+        sqlx::query(stmt)
+            .execute(pool)
             .await
-        {
-            eprintln!(
-                "Warning: Failed to drop stale test database '{}': {:#?}",
-                db_name, e
-            );
+            .expect("Failed to re-insert migration seed data after TRUNCATE");
+    }
+}
+
+/// Clean up stale pool databases from old migration hashes.
+/// Drops all `test_pool_%` databases whose hash doesn't match the current template.
+async fn cleanup_stale_pool_dbs(admin_pool: &PgPool, current_hash_prefix: &str) {
+    let pool_dbs: Vec<String> = match sqlx::query_scalar(
+        "SELECT datname FROM pg_database WHERE datname LIKE 'test_pool_%' AND datistemplate = FALSE",
+    )
+    .fetch_all(admin_pool)
+    .await
+    {
+        Ok(dbs) => dbs,
+        Err(e) => {
+            eprintln!("Warning: Failed to query stale pool databases: {:#?}", e);
+            return;
         }
+    };
+
+    let current_pattern = format!("test_pool_{}_", current_hash_prefix);
+    for db_name in pool_dbs {
+        if db_name.starts_with(&current_pattern) {
+            continue; // belongs to the current migration hash — keep it
+        }
+        let mut conn = admin_pool.acquire().await.unwrap_or_else(|e| {
+            panic!("Failed to acquire connection for pool cleanup: {:#?}", e)
+        });
+        drop_database_force(&mut conn, &db_name).await;
     }
 }
 
 /// Set up a test database with all migrations applied
 ///
 /// Automatically starts an ephemeral PostgreSQL server if TEST_DATABASE_URL is not set.
-/// Each test gets a unique database that is isolated from other tests.
+/// Each test gets an isolated database.
 ///
-/// Performance: Uses PostgreSQL template databases to avoid recreating schema/indexes
-/// for every test. First test creates template (~6-10s), subsequent tests clone it (~0.5-1s).
+/// Performance strategy (eliminates the ~2600 CREATE/DROP bottleneck):
+/// - **Pool path (fast):** Claims a pre-created pool DB (one of `DB_POOL_SIZE` cloned
+///   from the template) and resets data via `TRUNCATE`. No CREATE/DROP in the hot path.
+/// - **Fallback path:** If all pool slots are busy, creates a fresh DB from the template.
 pub async fn setup_test_db() -> Database {
     let base_url = get_postgres_url();
 
     // Ensure template database exists and is current
     let template_name = ensure_template_db(&base_url).await;
 
-    // Create unique database name for this test
-    let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
-    let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
+    // Extract the migration hash prefix for pool DB naming + stale cleanup.
+    let hash_prefix = template_name
+        .strip_prefix("template_test_db_")
+        .unwrap_or("unknown");
 
     // Connect to postgres database (limit to 2 connections to avoid exhausting PostgreSQL)
     let admin_url = format!("{}/postgres", base_url);
@@ -796,10 +968,7 @@ pub async fn setup_test_db() -> Database {
         .await
         .expect("Failed to connect to PostgreSQL admin database");
 
-    // Clean up stale test databases once per 30-second window across all parallel processes.
-    // CLEANUP_DONE AtomicBool is per-process (useless with nextest's per-test process isolation);
-    // the filesystem lock ensures only one of the ~N concurrent test processes runs cleanup,
-    // preventing N concurrent DROP DATABASE calls on the same stale databases.
+    // Clean up stale databases once per 30-second window across all parallel processes.
     let epoch_window = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -807,10 +976,119 @@ pub async fn setup_test_db() -> Database {
         / 30;
     if std::fs::create_dir(format!("/tmp/dc_test_cleanup_{}.lock.d", epoch_window)).is_ok() {
         cleanup_stale_test_dbs(&admin_pool).await;
+        cleanup_stale_pool_dbs(&admin_pool, hash_prefix).await;
     }
 
-    // Drop if exists (cleanup from previous failed runs)
-    sqlx::query(&format!("DROP DATABASE IF EXISTS {}", db_name))
+    // ── Pool path (fast): claim a pre-created DB and TRUNCATE ──────────────
+    if let Some(slot) = claim_pool_slot() {
+        let db_name = pool_db_name(&template_name, slot);
+
+        // Ensure the pool DB exists (create from template if missing — one-time per slot).
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
+        )
+        .bind(&db_name)
+        .fetch_one(&admin_pool)
+        .await
+        .unwrap_or(false);
+
+        let create_ok = if !exists {
+            match sqlx::query(&format!(
+                "CREATE DATABASE {} TEMPLATE {}",
+                db_name, template_name
+            ))
+            .execute(&admin_pool)
+            .await
+            {
+                Ok(_) => true,
+                Err(e) => {
+                    // CREATE failed — release slot, fall through to fallback.
+                    let _ =
+                        std::fs::remove_dir_all(format!("/tmp/dc_db_pool_{}.lock.d", slot));
+                    eprintln!(
+                        "Warning: pool DB creation failed for slot {}, falling back: {:#?}",
+                        slot, e
+                    );
+                    false
+                }
+            }
+        } else {
+            true
+        };
+
+        admin_pool.close().await;
+
+        if create_ok {
+            // Connect to the pool DB, TRUNCATE all data, return.
+            let test_url = format!("{}/{}", base_url, db_name);
+            match PgPoolOptions::new()
+                .max_connections(2)
+                .connect(&test_url)
+                .await
+            {
+                Ok(pool) => {
+                    // DB-level mutual exclusion: a session advisory lock guarantees
+                    // we are the only process using this pool DB. The filesystem slot
+                    // lock above only distributes processes across slots — it cannot
+                    // guarantee the pool DB's Postgres session is quiesced when a slot
+                    // is reclaimed. A process killed mid-test (e.g. nextest slow-timeout
+                    // SIGTERM) vanishes from `/proc` instantly while its DB session may
+                    // still be tearing down, so a reclaimer could otherwise connect to
+                    // the same DB and race the dying session — observed in production as
+                    // `duplicate key ... Key (id)=(101) already exists` when two test
+                    // processes (the `api` lib + the `api::bin/api-server` binary, which
+                    // both compile `offerings::tests`) land on the same pool DB.
+                    //
+                    // `pg_try_advisory_lock` is session-scoped and auto-released on
+                    // disconnect, so it frees *exactly* when the prior occupant's
+                    // connection is gone — the quiescence guarantee `/proc` lacks.
+                    if !try_acquire_pool_db_lock(&pool, slot).await {
+                        // Pool DB is held by a live session — the filesystem slot lock
+                        // raced. Release the slot and fall through to the per-test
+                        // CREATE/DROP fallback. `pool` had no lock acquired, so dropping
+                        // it just closes the connection we opened.
+                        let _ = std::fs::remove_dir_all(format!(
+                            "/tmp/dc_db_pool_{}.lock.d",
+                            slot
+                        ));
+                        eprintln!(
+                            "Warning: pool DB slot {} advisory-lock busy, falling back to per-test DB",
+                            slot
+                        );
+                        drop(pool);
+                    } else {
+                        reset_db_data(&pool).await;
+                        return Database { pool };
+                    }
+                }
+                Err(e) => {
+                    // Connection failed — release slot, fall through to fallback.
+                    let _ = std::fs::remove_dir_all(format!(
+                        "/tmp/dc_db_pool_{}.lock.d",
+                        slot
+                    ));
+                    eprintln!(
+                        "Warning: pool DB connection failed for slot {}, falling back: {:#?}",
+                        slot, e
+                    );
+                }
+            }
+        }
+    }
+
+    // ── Fallback path: per-test CREATE/DROP (pool full or unavailable) ──────
+    // Reconnect to admin (pool was closed above in the pool path).
+    let admin_pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&admin_url)
+        .await
+        .expect("Failed to reconnect to PostgreSQL admin database");
+
+    let test_id = TEST_DB_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let db_name = format!("test_db_{}_{}", std::process::id(), test_id);
+
+    // Drop if exists with FORCE (terminates lingering connections then drops).
+    sqlx::query(&format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", db_name))
         .execute(&admin_pool)
         .await
         .expect("Failed to drop existing test database");
