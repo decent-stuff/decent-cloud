@@ -31,6 +31,7 @@
 	import { Ed25519KeyIdentity } from '@dfinity/identity';
 	import { providerDisplayName } from '$lib/utils/provider-display';
 	import { recordView } from '$lib/utils/recently-viewed';
+	import { parseArchitecture, formatArchitectureLabel } from '$lib/utils/marketplace-filters';
 	import Breadcrumb from '$lib/components/Breadcrumb.svelte';
 	import SlaBreachTimeline from '$lib/components/SlaBreachTimeline.svelte';
 	import { filterSimilarOfferings } from './similar-offerings';
@@ -663,6 +664,12 @@
 		<div class="card p-6 border border-neutral-800">
 			<h2 class="text-sm font-medium text-neutral-500 uppercase tracking-wide mb-4">Specifications</h2>
 			<div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+				{#if formatArchitectureLabel(parseArchitecture(offering.provisioner_config))}
+					<div>
+						<span class="text-neutral-500 text-xs block">Architecture</span>
+						<span class="text-white">{formatArchitectureLabel(parseArchitecture(offering.provisioner_config))}</span>
+					</div>
+				{/if}
 				{#if offering.processor_cores}
 					<div>
 						<span class="text-neutral-500 text-xs block">vCPUs</span>
