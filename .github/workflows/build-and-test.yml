@@ -7,6 +7,12 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
+# Cancel superseded runs for the same ref (PR or branch) when a newer push
+# arrives. Saves runner time during rapid PR iteration.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     name: Build & Test
