@@ -8,27 +8,48 @@ import {
 	type TrustDataShape
 } from './trust-score';
 
-// F5: a brand-new provider (zero contracts, zero reputation) was shown a green
+// F5: a brand-new provider (zero completed contracts) was shown a green
 // "Reliable" badge on a near-100 trust score. The backend scoring starts at 100
 // and only deducts for observed negative signals, so absence of history reads as
 // reliability — the opposite of honest. The dashboard TrustDashboard card must
 // detect "no behavioural track record" and refuse to present the numeric score
 // + verdict; it renders an N/A + neutral "Not enough data" state instead.
+// Backend contract: get_provider_trust_metrics now stores / returns
+// trust_score = NULL when completed_contracts == 0, so the UI's honest signal
+// is trust_score == null (regardless of total_contracts — cancelled-only
+// providers like the hetzner-reseller case must also read as "no track record").
 // See TrustDashboard.svelte for the call site.
 describe('hasEnoughTrustData', () => {
-	it('returns false when the provider has zero contracts (no track record)', () => {
-		const fresh: TrustDataShape = { total_contracts: 0 };
+	it('returns false when trust_score is null (0 completed contracts)', () => {
+		const fresh: TrustDataShape = { trust_score: null };
 		expect(hasEnoughTrustData(fresh)).toBe(false);
 	});
 
-	it('returns true as soon as the provider has at least one contract', () => {
-		const tracked: TrustDataShape = { total_contracts: 1 };
+	it('returns false when trust_score is undefined (field omitted by API)', () => {
+		const omitted: TrustDataShape = {};
+		expect(hasEnoughTrustData(omitted)).toBe(false);
+	});
+
+	it('returns true as soon as the API returns a numeric trust_score (>=1 completed)', () => {
+		const tracked: TrustDataShape = { trust_score: 72 };
 		expect(hasEnoughTrustData(tracked)).toBe(true);
 	});
 
-	it('returns true for an established provider with many contracts', () => {
-		const established: TrustDataShape = { total_contracts: 42 };
+	it('returns true for an established provider with a high score', () => {
+		const established: TrustDataShape = { trust_score: 95 };
 		expect(hasEnoughTrustData(established)).toBe(true);
+	});
+
+	it('does NOT trust total_contracts alone — cancelled-only providers still read as no-data when trust_score is null', () => {
+		// Mirrors the hetzner-reseller case: total_contracts=2 (cancelled),
+		// completed_contracts=0 -> backend nulls trust_score. A caller that
+		// happened to have total_contracts in scope must not short-circuit
+		// the check; the trust_score nullness is the canonical signal.
+		const cancelledOnly: TrustDataShape & { total_contracts: number } = {
+			trust_score: null,
+			total_contracts: 2
+		};
+		expect(hasEnoughTrustData(cancelledOnly)).toBe(false);
 	});
 });
 

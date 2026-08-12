@@ -209,18 +209,27 @@
 							<img src={profile.logo_url} alt="{displayName} logo" class="h-10 w-10 object-contain" />
 						{/if}
 						<h1 class="text-2xl font-bold text-white tracking-tight">{displayName}</h1>
-						{#if trustMetrics}
+					{#if trustMetrics}
+						{#if trustMetrics.trust_score !== null && trustMetrics.trust_score !== undefined}
 							<TrustBadge
 								score={Number(trustMetrics.trust_score)}
 								hasFlags={trustMetrics.has_critical_flags}
 								compact={false}
 							/>
-							{#if trustMetrics.provider_tenure}
-								<span class="px-2 py-0.5 text-xs border border-neutral-700 text-neutral-400 rounded">
-									{trustMetrics.provider_tenure}
-								</span>
-							{/if}
+						{:else}
+							<!-- Honest "no track record" verdict: the backend nulls
+							     trust_score when completed_contracts == 0. Show N/A
+							     instead of a fabricated green "Reliable" badge. -->
+							<span class="px-3 py-1 rounded-full text-sm font-medium border bg-neutral-500/10 border-neutral-600 text-neutral-400">
+								N/A · new provider
+							</span>
 						{/if}
+						{#if trustMetrics.provider_tenure}
+							<span class="px-2 py-0.5 text-xs border border-neutral-700 text-neutral-400 rounded">
+								{trustMetrics.provider_tenure}
+							</span>
+						{/if}
+					{/if}
 					</div>
 
 					{#if profile?.description}
@@ -275,12 +284,12 @@
 		<!-- Trust & Reliability Summary -->
 		{#if trustMetrics || healthSummary}
 			<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-				{#if trustMetrics}
-					<div class="metric-card">
-						<div class="metric-label">Trust Score</div>
-						<div class="metric-value">{trustMetrics.trust_score}</div>
-						<div class="metric-subtext">{trustMetrics.provider_tenure}</div>
-					</div>
+			{#if trustMetrics}
+				<div class="metric-card">
+					<div class="metric-label">Trust Score</div>
+					<div class="metric-value">{trustMetrics.trust_score ?? 'N/A'}</div>
+					<div class="metric-subtext">{trustMetrics.provider_tenure}</div>
+				</div>
 
 					{#if trustMetrics.reliability_score != null}
 						<div class="metric-card">
