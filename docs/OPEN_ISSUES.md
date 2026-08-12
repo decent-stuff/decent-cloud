@@ -18,14 +18,22 @@ gh issue list --repo decent-stuff/decent-cloud --state open --json number,title,
 **decent-cloud is "OpenRouter, but for cloud resources"** — a proxy/reselling platform unifying
 many cloud providers behind one common API. Near-term: the operator resells Hetzner. The
 marketplace buy flow (discover → rent → pay → provision → SSH → use → cancel) was verified
-end-to-end against a real Hetzner cx23 VM and merged (PR #479). **Going public is now the gate.**
+end-to-end against a real Hetzner cx23 VM and merged (PR #479). **Operator approved going public
+(2026-08-12). Prod deployment is the remaining step — see PROD-DEPLOY below.**
+
+## Operator decisions (2026-08-12)
+
+| Decision | Rationale |
+|----------|-----------|
+| **EMAIL-GATE: keep as-is in PROD** | Buyers must verify email before renting (anti-Sybil). Dev auto-verifies at account creation; prod unchanged. Closed decision — do not re-ask. |
+| **PROD-LIVE: approved** | Operator authorizes publishing real Hetzner offerings + ongoing spend. Prod already has 2 live offerings (ids 11, 12). Prerequisite: deploy latest `main` to prod (wallet-auto-accept fix). |
+| **TD-1: next session** | dc-agent split (5 M-effort subtasks) deferred to next session per IMPORTANT 9. |
 
 ## Open items
 
 | ID | Description | value [1-10] | effort [S/M/L] | Status / notes |
 |----|-------------|:---:|:---:|----------------|
-| **PROD-LIVE** | Publish real Hetzner-backed offerings to the PROD marketplace + authorize ongoing spend | **10** | **S** | The local path is fully verified + merged (PR #479, commit `05849932`): discover → rent → pay → provision → SSH → cancel against a real cx23 (created ~56s, zero orphans). All creds present (`HETZNER_API_TOKEN_DEV`, `DC_PROD_RESELLER_SEED`). **Blocked only on operator sign-off to go PUBLIC.** Plan: `docs/plans/2026-08-11-marketplace-buy-flow-execution.md`. |
-| **EMAIL-GATE** | Should the email-verification gate block rentals in PROD? | **6** | **S** | Operator decision. The gate currently hard-rejects unverified email at contract-create with an upstream warning (UX shipped). In PROD the tradeoff is fraud/spam prevention vs. buyer friction. Needs an operator call on whether to keep, soften, or remove it for the public launch. |
+| **PROD-DEPLOY** | Deploy latest `main` to prod (k8s `dc-prod` via ArgoCD) | **10** | **M** | **CRITICAL:** Prod is running pre-#479 code — the wallet-auto-accept bug means wallet-paid contracts get stuck at `requested` forever. All fixes from PRs #479-#489 are merged to `main` but NOT deployed. Deploy steps: (1) build image `git.kalaj.org/decent-stuff/decent-cloud-api:<sha>`, (2) bump `third_party/k8s/cluster/apps/decent-cloud/base/dc-api.yaml` image tag, (3) push k8s repo → ArgoCD auto-syncs, (4) verify `https://api.decent-cloud.org/api/v1/stats` shows honest counts (not 17 providers). Prod offerings already exist (ids 11, 12, both `provisioner_type=hetzner`). **Operator action** — k8s repo not accessible from agent container. |
 | **A5** | Concurrent ticket processing in dc-agent (`JoinSet`+`Semaphore`) | **5** | **M** | Bottleneck = serial `for contract in &contracts` at `dc-agent/src/main.rs:1739`. Design complete: codebase is already concurrency-safe (provisioners `Send+Sync`, deterministic VMID, gateway `Arc<Mutex>`); add `max_concurrent_provisioning` config knob with **DEFAULT=1** (behaviorally identical). Ship machinery first, raise N only after operator verifies node headroom. **Deferred — needs operator sign-off on concurrency level.** |
 | **TD-1** | #444 — Large source-file splits (>2700 lines) | **5** | **L** | Deferred → split into M-effort subtasks. `accounts.rs` 2230→973 DONE. `dc-agent/src/main.rs` (3681L) split planned into 5 M-effort waves (S1–S5): `docs/plans/2026-08-12-dc-agent-main-split.md`. `cloud_resources.rs` (2701L) is mostly tests (~1091L prod) — SKIP. `providers.rs` (4082L) + `offerings.rs` (2981L) have no clean decoupled clusters — need dedicated design passes. `spec_snapshot` guard locks byte-identical OpenAPI for future `*Api` splits. Roadmap: `docs/plans/2026-07-25-large-file-splits-444.md`. |
 
