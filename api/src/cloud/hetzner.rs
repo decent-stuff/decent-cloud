@@ -167,6 +167,11 @@ struct HetznerServerType {
     cores: i32,
     memory: f64,
     disk: i32,
+    /// CPU architecture reported by Hetzner: "x86" or "arm". Hetzner always
+    /// returns this for server types, and an image MUST match the server
+    /// type's architecture (every system image ships in BOTH variants under
+    /// the SAME name — e.g. "ubuntu-24.04" exists as both x86 and arm).
+    architecture: String,
     prices: Vec<HetznerPrice>,
 }
 
@@ -197,6 +202,10 @@ struct HetznerImage {
     name: Option<String>,
     os_flavor: String,
     status: String,
+    /// Architecture this image variant targets: "x86" or "arm". Hetzner
+    /// returns one image record per (name, architecture), so the same name
+    /// (e.g. "ubuntu-24.04") appears twice — once per arch.
+    architecture: String,
     #[serde(rename = "type")]
     type_: Option<String>,
     description: Option<String>,
@@ -208,6 +217,25 @@ pub struct HetznerProvisionerConfig {
     pub server_type: String,
     pub location: String,
     pub image: String,
+}
+
+/// Catalog-resolved hardware specs for a validated Hetzner offering.
+///
+/// Returned by [`HetznerBackend::validate_offering_config`] so the caller can
+/// (a) inject `architecture` into the offering's `provisioner_config` (the
+/// marketplace surfaces it as a badge/filter), and (b) auto-populate the
+/// offering's spec fields (vCPU / memory / disk) from the authoritative
+/// catalog rather than trusting operator-entered values.
+///
+/// Units match Hetzner's native API: memory in GB (f64), disk in GB (i32).
+/// The offering's display fields also use GB, so no unit conversion is needed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HetznerCatalogSpecs {
+    /// "x86" or "arm" — the architecture of the matched server_type.
+    pub architecture: String,
+    pub cores: i32,
+    pub memory_gb: f64,
+    pub disk_gb: i32,
 }
 
 /// Resolve Hetzner provisioner config from offering fields, applying fallback logic.
@@ -252,11 +280,15 @@ pub fn resolve_provisioner_config(
 
 /// Check that `server_type` exists in the catalog and is available in `location`.
 /// Pure function for testability — the caller fetches the catalog from the API.
-fn check_server_type_location(
-    server_types: &[HetznerServerType],
+///
+/// Returns the matched server type so the caller can read its architecture and
+/// hardware specs (single source of truth for the match — avoids a second
+/// `.find()` in `validate_offering_config`).
+fn check_server_type_location<'a>(
+    server_types: &'a [HetznerServerType],
     server_type: &str,
     location: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<&'a HetznerServerType> {
     let st = server_types
         .iter()
         .find(|s| s.name == server_type)
@@ -288,44 +320,95 @@ fn check_server_type_location(
         );
     }
 
-    Ok(())
+    Ok(st)
 }
 
-/// Check that `image` exists in the Hetzner image catalog.
+/// Check that an image matching `image_name` AND `server_architecture` exists
+/// in the Hetzner image catalog and is provisionable.
+///
+/// Hetzner ships every system image in BOTH x86 and arm variants under the
+/// SAME name (e.g. "ubuntu-24.04" has two records: one per architecture).
+/// Matching by name alone — the old behavior — silently accepted an arm server
+/// type paired with the x86 image id, which Hetzner rejects at provision time.
+/// This cross-validates architecture so the mismatch is caught at offering
+/// validation, with an actionable error listing the architectures actually
+/// available for the requested image name.
+///
 /// Pure function for testability — the caller fetches the catalog from the API.
-fn check_image_exists(images: &[HetznerImage], image_name: &str) -> anyhow::Result<()> {
-    let found = images.iter().any(|img| {
-        img.name.as_deref() == Some(image_name)
-            && img.status == "available"
-            && img.type_.as_deref() != Some("backup")
-    });
+fn check_image_compatible(
+    images: &[HetznerImage],
+    image_name: &str,
+    server_architecture: &str,
+) -> anyhow::Result<()> {
+    // Candidate variants of this image name that are available and not backups.
+    let variants: Vec<&HetznerImage> = images
+        .iter()
+        .filter(|img| {
+            img.name.as_deref() == Some(image_name)
+                && img.status == "available"
+                && img.type_.as_deref() != Some("backup")
+        })
+        .collect();
 
-    if !found {
+    if variants
+        .iter()
+        .any(|img| img.architecture == server_architecture)
+    {
+        return Ok(());
+    }
+
+    // Distinguish "name doesn't exist at all" from "name exists, wrong arch".
+    if variants.is_empty() {
         let known: Vec<&str> = images
             .iter()
             .filter(|img| img.status == "available" && img.type_.as_deref() != Some("backup"))
             .filter_map(|img| img.name.as_deref())
+            // De-dup: every name appears once per architecture; listing
+            // "ubuntu-24.04, ubuntu-24.04" would be noise.
+            .collect::<Vec<&str>>()
+            .into_iter()
             .collect();
+        let mut seen = std::collections::HashSet::new();
+        let unique: Vec<&str> = known.into_iter().filter(|n| seen.insert(*n)).collect();
         anyhow::bail!(
             "Unknown Hetzner image '{}'. Available images: {}",
             image_name,
-            if known.is_empty() {
+            if unique.is_empty() {
                 "(none)".to_string()
             } else {
-                known.join(", ")
+                unique.join(", ")
             }
         );
     }
 
-    Ok(())
+    // Name exists but no variant for the requested architecture.
+    let archs: Vec<&str> = variants.iter().map(|img| img.architecture.as_str()).collect();
+    anyhow::bail!(
+        "Hetzner image '{}' has no variant for architecture '{}'. \
+         Available architectures for '{}': {}",
+        image_name,
+        server_architecture,
+        image_name,
+        if archs.is_empty() {
+            "(none)".to_string()
+        } else {
+            archs.join(", ")
+        }
+    );
 }
 
 impl HetznerBackend {
     /// Validate server_type, location, and image against the live Hetzner catalog.
+    ///
+    /// Cross-validates that the chosen image has a variant matching the server
+    /// type's architecture (every system image ships in BOTH x86 and arm under
+    /// the same name — see [`check_image_compatible`]). Returns the catalog-
+    /// resolved hardware specs so the caller can store architecture + real
+    /// vCPU/memory/disk on the offering.
     pub async fn validate_offering_config(
         &self,
         config: &HetznerProvisionerConfig,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<HetznerCatalogSpecs> {
         // Fetch server types (filtered by name for efficiency)
         let st_response = self
             .request_builder(reqwest::Method::GET, "/server_types")
@@ -339,9 +422,14 @@ impl HetznerBackend {
         }
 
         let st_data: ServerTypesResponse = st_response.json().await?;
-        check_server_type_location(&st_data.server_types, &config.server_type, &config.location)?;
+        let matched = check_server_type_location(
+            &st_data.server_types,
+            &config.server_type,
+            &config.location,
+        )?;
 
-        // Fetch images and validate
+        // Fetch images and validate (architecture cross-checked against the
+        // matched server type — not just the image name).
         let img_response = self
             .request_builder(reqwest::Method::GET, "/images?type=system")
             .send()
@@ -353,9 +441,14 @@ impl HetznerBackend {
         }
 
         let img_data: ImagesResponse = img_response.json().await?;
-        check_image_exists(&img_data.images, &config.image)?;
+        check_image_compatible(&img_data.images, &config.image, &matched.architecture)?;
 
-        Ok(())
+        Ok(HetznerCatalogSpecs {
+            architecture: matched.architecture.clone(),
+            cores: matched.cores,
+            memory_gb: matched.memory,
+            disk_gb: matched.disk,
+        })
     }
 
     fn convert_server(&self, s: HetznerServer) -> Server {
@@ -1004,6 +1097,7 @@ mod tests {
             cores: 2,
             memory: 4.0,
             disk: 40,
+            architecture: "x86".to_string(),
             prices: vec![HetznerPrice {
                 location: "fsn1".to_string(),
                 price_monthly: HetznerPriceDetail {
@@ -1028,6 +1122,7 @@ mod tests {
             cores: 2,
             memory: 4.0,
             disk: 40,
+            architecture: "x86".to_string(),
             prices: vec![],
         };
         let converted = backend.convert_server_type(st);
@@ -1048,6 +1143,7 @@ mod tests {
             cores: 2,
             memory: 4.0,
             disk: 40,
+            architecture: "x86".to_string(),
             prices: vec![HetznerPrice {
                 location: "fsn1".to_string(),
                 price_monthly: HetznerPriceDetail {
@@ -1072,6 +1168,7 @@ mod tests {
             "name": "ubuntu-22.04",
             "os_flavor": "ubuntu",
             "status": "available",
+            "architecture": "x86",
             "type": "system",
             "description": "Ubuntu 22.04 LTS"
         }"#;
@@ -1079,6 +1176,7 @@ mod tests {
         assert_eq!(img.id, 67794396);
         assert_eq!(img.type_, Some("system".to_string()));
         assert_eq!(img.os_flavor, "ubuntu");
+        assert_eq!(img.architecture, "x86");
     }
 
     #[test]
@@ -1089,6 +1187,7 @@ mod tests {
             name: Some("old-image".to_string()),
             os_flavor: "ubuntu".to_string(),
             status: "deprecated".to_string(),
+            architecture: "x86".to_string(),
             type_: Some("system".to_string()),
             description: None,
         };
@@ -1103,6 +1202,7 @@ mod tests {
             name: Some("my-backup".to_string()),
             os_flavor: "ubuntu".to_string(),
             status: "available".to_string(),
+            architecture: "x86".to_string(),
             type_: Some("backup".to_string()),
             description: None,
         };
@@ -1118,6 +1218,7 @@ mod tests {
                 "cores": 2,
                 "memory": 2.0,
                 "disk": 40,
+                "architecture": "x86",
                 "prices": [{
                     "location": "fsn1",
                     "price_monthly": {"net": "4.0756", "gross": "4.8499"},
@@ -1128,6 +1229,7 @@ mod tests {
         let resp: ServerTypesResponse = serde_json::from_str(json).unwrap();
         assert_eq!(resp.server_types.len(), 1);
         assert_eq!(resp.server_types[0].name, "cpx11");
+        assert_eq!(resp.server_types[0].architecture, "x86");
     }
 
     fn make_test_catalog() -> Vec<HetznerServerType> {
@@ -1138,6 +1240,7 @@ mod tests {
                 cores: 2,
                 memory: 4.0,
                 disk: 40,
+                architecture: "x86".to_string(),
                 prices: vec![
                     HetznerPrice {
                         location: "fsn1".to_string(),
@@ -1165,6 +1268,7 @@ mod tests {
                 cores: 2,
                 memory: 8.0,
                 disk: 80,
+                architecture: "x86".to_string(),
                 prices: vec![HetznerPrice {
                     location: "fsn1".to_string(),
                     price_monthly: HetznerPriceDetail {
@@ -1268,12 +1372,25 @@ mod tests {
     }
 
     fn make_test_images() -> Vec<HetznerImage> {
+        // Mirrors the real Hetzner catalog shape: "ubuntu-24.04" ships in BOTH
+        // x86 and arm variants under the same name. Other images are single-arch
+        // to exercise the mismatch path.
         vec![
             HetznerImage {
                 id: 1,
                 name: Some("ubuntu-24.04".to_string()),
                 os_flavor: "ubuntu".to_string(),
                 status: "available".to_string(),
+                architecture: "x86".to_string(),
+                type_: Some("system".to_string()),
+                description: Some("Ubuntu 24.04".to_string()),
+            },
+            HetznerImage {
+                id: 5,
+                name: Some("ubuntu-24.04".to_string()),
+                os_flavor: "ubuntu".to_string(),
+                status: "available".to_string(),
+                architecture: "arm".to_string(),
                 type_: Some("system".to_string()),
                 description: Some("Ubuntu 24.04".to_string()),
             },
@@ -1282,6 +1399,7 @@ mod tests {
                 name: Some("debian-12".to_string()),
                 os_flavor: "debian".to_string(),
                 status: "available".to_string(),
+                architecture: "x86".to_string(),
                 type_: Some("system".to_string()),
                 description: Some("Debian 12".to_string()),
             },
@@ -1290,6 +1408,7 @@ mod tests {
                 name: Some("old-image".to_string()),
                 os_flavor: "ubuntu".to_string(),
                 status: "deprecated".to_string(),
+                architecture: "x86".to_string(),
                 type_: Some("system".to_string()),
                 description: None,
             },
@@ -1298,6 +1417,7 @@ mod tests {
                 name: Some("my-backup".to_string()),
                 os_flavor: "ubuntu".to_string(),
                 status: "available".to_string(),
+                architecture: "x86".to_string(),
                 type_: Some("backup".to_string()),
                 description: None,
             },
@@ -1305,16 +1425,61 @@ mod tests {
     }
 
     #[test]
-    fn test_check_image_exists_valid() {
+    fn test_check_image_compatible_accepts_matching_architecture() {
         let images = make_test_images();
-        assert!(check_image_exists(&images, "ubuntu-24.04").is_ok());
-        assert!(check_image_exists(&images, "debian-12").is_ok());
+        // cx23 is x86 — the x86 variant of ubuntu-24.04 must match.
+        assert!(check_image_compatible(&images, "ubuntu-24.04", "x86").is_ok());
+        // cax11 is arm — the arm variant must be found, NOT the x86 one.
+        assert!(check_image_compatible(&images, "ubuntu-24.04", "arm").is_ok());
+        // Single-arch image: debian-12 x86 matches x86 server.
+        assert!(check_image_compatible(&images, "debian-12", "x86").is_ok());
     }
 
     #[test]
-    fn test_check_image_exists_invalid() {
+    fn test_check_image_compatible_rejects_wrong_architecture() {
+        // debian-12 ships ONLY as x86 in this catalog; an arm server type must
+        // be rejected rather than silently paired with the x86 image id (which
+        // Hetzner refuses at provision time).
         let images = make_test_images();
-        let err = check_image_exists(&images, "nonexistent")
+        let err = check_image_compatible(&images, "debian-12", "arm")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("no variant for architecture 'arm'"),
+            "error should explain the architecture mismatch: {err}"
+        );
+        assert!(
+            err.contains("debian-12"),
+            "error should name the image: {err}"
+        );
+    }
+
+    #[test]
+    fn test_check_image_compatible_lists_available_archs_on_mismatch() {
+        // On a name-exists-but-arch-mismatch, the error MUST enumerate the
+        // architectures actually available for that image name so the operator
+        // can pick a compatible server type.
+        let images = make_test_images();
+        let err = check_image_compatible(&images, "debian-12", "arm")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("Available architectures"),
+            "error should list available architectures: {err}"
+        );
+        assert!(
+            err.contains("x86"),
+            "error should list the x86 variant: {err}"
+        );
+    }
+
+    #[test]
+    fn test_check_image_compatible_unknown_image_name() {
+        // A name that matches no variant at all is "unknown image", not an
+        // architecture mismatch — and the list de-dups names that appear once
+        // per architecture (no "ubuntu-24.04, ubuntu-24.04").
+        let images = make_test_images();
+        let err = check_image_compatible(&images, "nonexistent", "x86")
             .unwrap_err()
             .to_string();
         assert!(
@@ -1325,7 +1490,13 @@ mod tests {
             err.contains("ubuntu-24.04") && err.contains("debian-12"),
             "error should list available images: {err}"
         );
-        // Deprecated and backup images should NOT appear in the list
+        // The dual-arch ubuntu-24.04 must appear only once.
+        assert_eq!(
+            err.matches("ubuntu-24.04").count(),
+            1,
+            "dual-arch image name should be de-duplicated: {err}"
+        );
+        // Deprecated and backup images should NOT appear in the list.
         assert!(
             !err.contains("old-image"),
             "deprecated images should not be listed: {err}"
@@ -1337,9 +1508,9 @@ mod tests {
     }
 
     #[test]
-    fn test_check_image_exists_deprecated_rejected() {
+    fn test_check_image_compatible_deprecated_rejected() {
         let images = make_test_images();
-        let err = check_image_exists(&images, "old-image")
+        let err = check_image_compatible(&images, "old-image", "x86")
             .unwrap_err()
             .to_string();
         assert!(
