@@ -636,7 +636,7 @@ impl Database {
         };
 
         // Calculate trust score and critical flags
-        let (trust_score, has_critical_flags, critical_flag_reasons) =
+        let (raw_trust_score, has_critical_flags, critical_flag_reasons) =
             Self::calculate_trust_score_and_flags(
                 early_cancellation_rate_pct,
                 provisioning_failure_rate_pct,
@@ -653,6 +653,21 @@ impl Database {
                 feedback_stats.service_match_rate_pct,
                 feedback_stats.would_rent_again_rate_pct,
             );
+
+        // Honesty gate: a brand-new provider with ZERO completed contracts has
+        // no behavioural track record. The scoring starts at 100 and only
+        // deducts for observed negative signals, so a near-100 score would
+        // otherwise read as a dishonest "Reliable" verdict (cancelled /
+        // rejected / requested contracts are not rentals and must not look
+        // like one). Drop the score to NULL until at least one contract
+        // completes; this matches the reliability_score insufficient-data
+        // pattern and lets every consumer (leaderboard, marketplace card,
+        // TrustDashboard) treat NULL as "not enough data".
+        let trust_score = if completed_contracts == 0 {
+            None
+        } else {
+            Some(raw_trust_score)
+        };
 
         // Update cached scores in provider_profiles
         sqlx::query!(
@@ -934,8 +949,11 @@ impl Database {
 
     /// Get the reputation leaderboard: top providers ranked by trust score,
     /// then completed contracts, then volume. The honesty gate
-    /// (`total_contracts > 0`) excludes providers with no contract track
-    /// record, so a brand-new profile can never appear as a "top" provider.
+    /// (`completed_contracts > 0`) excludes any provider without at least one
+    /// successfully completed rental — a brand-new profile, or one whose only
+    /// contracts were requested/cancelled/rejected, can never appear as a
+    /// "top" provider. This is stricter than `total_contracts > 0` (which
+    /// counted cancelled contracts as track record).
     pub async fn get_reputation_leaderboard(
         &self,
         limit: i64,
@@ -963,7 +981,7 @@ impl Database {
                        COALESCE(SUM(payment_amount_e9s) FILTER (WHERE status='completed'),0)::BIGINT AS volume_e9s
                 FROM contract_sign_requests GROUP BY provider_pubkey
             ) cs ON pp.pubkey = cs.provider_pubkey
-            WHERE COALESCE(cs.total_contracts,0) > 0
+            WHERE COALESCE(cs.completed_contracts,0) > 0
             ORDER BY COALESCE(pp.trust_score,0) DESC, completed_contracts DESC, volume_e9s DESC, pp.name ASC
             LIMIT $1"#,
         )
@@ -1004,8 +1022,14 @@ pub struct ProviderTrustMetrics {
     pub pubkey: String,
 
     // Core metrics
-    /// Composite trust score 0-100
-    pub trust_score: i64,
+    /// Composite trust score 0-100. None when the provider has zero completed
+    /// contracts (no behavioural track record) — the score would otherwise
+    /// start at 100 and read as a dishonest "Reliable" verdict. See
+    /// `get_provider_trust_metrics` for the gate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[oai(skip_serializing_if_is_none)]
+    #[ts(type = "number | undefined")]
+    pub trust_score: Option<i64>,
     /// Median hours from payment to provisioned service
     #[serde(skip_serializing_if = "Option::is_none")]
     #[oai(skip_serializing_if_is_none)]

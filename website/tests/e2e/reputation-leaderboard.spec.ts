@@ -20,14 +20,19 @@ import {
  *     contracts -> rank #1.
  *   - Provider B: a provider profile (lower trust) + 1 completed contract.
  *   - Provider C: a provider profile but ZERO contracts -> the honesty gate
- *     (total_contracts > 0) must EXCLUDE it from the leaderboard.
+ *     must EXCLUDE it from the leaderboard.
+ *   - Provider D: a provider profile + 2 cancelled contracts (0 completed).
+ *     The honesty gate is `completed_contracts > 0`, NOT the older
+ *     `total_contracts > 0`, so D must also be excluded — this is the
+ *     hetzner-reseller-shaped case where requested-then-cancelled rentals
+ *     must not look like a track record.
  *
  * Asserts the leaderboard is visible on landing (no search needed), the
- * honesty gate hides C, A ranks #1 with its trust/completion metrics, and
- * clicking the row navigates to A's reputation detail page.
+ * honesty gate hides C and D, A ranks #1 with its trust/completion metrics,
+ * and clicking the row navigates to A's reputation detail page.
  *
- * Not @smoke: moderate DB seeding (account + 3 profiles + 4 contracts) puts it
- * above the <5s smoke bar; it is a regular full-suite test.
+ * Not @smoke: moderate DB seeding (account + 4 profiles + 5 contracts) puts
+ * it above the <5s smoke bar; it is a regular full-suite test.
  */
 
 const COMPLETED_CONTRACT_SQL = `
@@ -43,7 +48,7 @@ const COMPLETED_CONTRACT_SQL = `
 		'email:test@example.com',
 		decode('{provider}', 'hex'),
 		'lb-off', {amount}, 'lb seed',
-		{ts}, 'completed', {ts}, 'test', NULL, NULL, 'usd'
+		{ts}, '{status}', {ts}, 'test', NULL, NULL, 'usd'
 	)
 `;
 
@@ -56,15 +61,18 @@ test.describe('/dashboard/reputation leaderboard', () => {
 		const pubkeyA = pubkeyHexFromSeed(seedA);
 		const pubkeyB = randomHex(32);
 		const pubkeyC = randomHex(32);
+		const pubkeyD = randomHex(32);
 		const requester = randomHex(32);
 		const ts = nowNs().toString();
 
 		const nameA = `Leaderboard Prov A ${tag}`;
 		const nameB = `Leaderboard Prov B ${tag}`;
 		const nameC = `Leaderboard Prov C ${tag}`;
+		const nameD = `Leaderboard Prov D ${tag}`;
 
 		try {
-			// provider_profiles: A (trust 95), B (trust 70), C (trust 100 but 0 contracts).
+			// provider_profiles: A (trust 95), B (trust 70), C (trust 100 but 0
+			// contracts), D (trust 80, only cancelled contracts).
 			await sql(`
 				INSERT INTO provider_profiles (pubkey, name, trust_score, api_version, profile_version, updated_at_ns)
 				VALUES (decode('${pubkeyA}', 'hex'), '${nameA}', 95, '1.0', '1.0', 0);
@@ -72,6 +80,8 @@ test.describe('/dashboard/reputation leaderboard', () => {
 				VALUES (decode('${pubkeyB}', 'hex'), '${nameB}', 70, '1.0', '1.0', 0);
 				INSERT INTO provider_profiles (pubkey, name, trust_score, api_version, profile_version, updated_at_ns)
 				VALUES (decode('${pubkeyC}', 'hex'), '${nameC}', 100, '1.0', '1.0', 0);
+				INSERT INTO provider_profiles (pubkey, name, trust_score, api_version, profile_version, updated_at_ns)
+				VALUES (decode('${pubkeyD}', 'hex'), '${nameD}', 80, '1.0', '1.0', 0);
 			`);
 
 			// Provider A: 3 completed contracts (1 ICP each).
@@ -81,6 +91,7 @@ test.describe('/dashboard/reputation leaderboard', () => {
 						.replaceAll('{requester}', requester)
 						.replaceAll('{provider}', pubkeyA)
 						.replaceAll('{amount}', '1000000000')
+						.replaceAll('{status}', 'completed')
 						.replaceAll('{ts}', ts),
 				);
 			}
@@ -90,8 +101,22 @@ test.describe('/dashboard/reputation leaderboard', () => {
 					.replaceAll('{requester}', requester)
 					.replaceAll('{provider}', pubkeyB)
 					.replaceAll('{amount}', '1000000000')
+					.replaceAll('{status}', 'completed')
 					.replaceAll('{ts}', ts),
 			);
+			// Provider D: 2 cancelled contracts, 0 completed. The OLD
+			// leaderboard gate (total_contracts > 0) would wrongly include D;
+			// the strengthened gate (completed_contracts > 0) must exclude it.
+			for (let i = 0; i < 2; i++) {
+				await sql(
+					COMPLETED_CONTRACT_SQL.replace('{cid}', randomHex(32))
+						.replaceAll('{requester}', requester)
+						.replaceAll('{provider}', pubkeyD)
+						.replaceAll('{amount}', '0')
+						.replaceAll('{status}', 'cancelled')
+						.replaceAll('{ts}', ts),
+				);
+			}
 
 			await page.goto('/dashboard/reputation');
 
@@ -113,9 +138,11 @@ test.describe('/dashboard/reputation leaderboard', () => {
 			// Provider B appears (has 1 contract) somewhere in the table.
 			await expect(page.locator('table')).toContainText(nameB, { timeout: 10_000 });
 
-			// Honesty gate: Provider C (0 contracts) must NOT appear despite a
-			// higher raw trust_score.
+			// Honesty gate: Provider C (0 contracts) AND Provider D
+			// (cancelled-only, 0 completed) must NOT appear despite non-null
+			// trust_scores. Cancelled rentals are not a track record.
 			await expect(page.locator('table')).not.toContainText(nameC);
+			await expect(page.locator('table')).not.toContainText(nameD);
 
 			// Clicking row #1 navigates to A's reputation detail page.
 			await rowA.click();
@@ -125,9 +152,11 @@ test.describe('/dashboard/reputation leaderboard', () => {
 			// Contracts first (NO-ACTION child tables), then profiles, then account.
 			await deleteContractsByProvider(pubkeyA);
 			await deleteContractsByProvider(pubkeyB);
+			await deleteContractsByProvider(pubkeyD);
 			await deleteProviderProfileByPubkey(pubkeyA);
 			await deleteProviderProfileByPubkey(pubkeyB);
 			await deleteProviderProfileByPubkey(pubkeyC);
+			await deleteProviderProfileByPubkey(pubkeyD);
 			await deleteAccountByUsername(usernameA);
 		}
 	});
