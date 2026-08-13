@@ -10,6 +10,7 @@ pub const HTTP_TIMEOUT_SECS: Duration = Duration::from_secs(30);
 
 pub mod api_client;
 pub mod config;
+pub mod doctor;
 pub mod gateway;
 pub mod geolocation;
 pub mod host;
