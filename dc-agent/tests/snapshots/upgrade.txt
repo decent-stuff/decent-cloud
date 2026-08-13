@@ -1,0 +1,9 @@
+Check for and apply updates
+
+Usage: dc-agent upgrade [OPTIONS]
+
+Options:
+      --check-only  Only check for updates, don't install
+  -y, --yes         Skip confirmation prompt
+      --force       Force upgrade even if same version
+  -h, --help        Print help

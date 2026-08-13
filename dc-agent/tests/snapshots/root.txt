@@ -1,0 +1,17 @@
+Decent Cloud Provider Provisioning Agent
+
+Usage: dc-agent [OPTIONS] <COMMAND>
+
+Commands:
+  run             Start the agent polling loop
+  doctor          Check agent configuration and connectivity
+  setup           Set up a new provisioner
+  test-provision  Test provisioning by creating and optionally destroying a test VM
+  upgrade         Check for and apply updates
+  reset-password  Reset the root password on a provisioned VM
+  help            Print this message or the help of the given subcommand(s)
+
+Options:
+      --config <CONFIG>  Path to configuration file [default: /etc/dc-agent/dc-agent.toml]
+  -h, --help             Print help
+  -V, --version          Print version

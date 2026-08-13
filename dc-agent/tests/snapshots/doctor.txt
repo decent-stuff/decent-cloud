@@ -1,0 +1,8 @@
+Check agent configuration and connectivity
+
+Usage: dc-agent doctor [OPTIONS]
+
+Options:
+      --no-verify-api      Skip API authentication verification
+      --no-test-provision  Skip provisioning test (cloning and deleting a test VM)
+  -h, --help               Print help

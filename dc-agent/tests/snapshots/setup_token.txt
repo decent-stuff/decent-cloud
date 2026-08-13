@@ -1,0 +1,41 @@
+Set up agent using a setup token from the provider
+
+Usage: dc-agent setup token [OPTIONS] --token <TOKEN>
+
+Options:
+      --token <TOKEN>
+          Setup token from provider's pool management UI
+      --api-url <API_URL>
+          API endpoint (default: https://api.decent-cloud.org) [default: https://api.decent-cloud.org]
+      --output <OUTPUT>
+          Output config file path [default: /etc/dc-agent/dc-agent.toml]
+      --force
+          Force registration even if detected location doesn't match pool location
+      --setup-proxmox
+          Enable automatic Proxmox setup (creates templates and API token)
+      --proxmox-user <PROXMOX_USER>
+          Proxmox API username (default: root@pam) [default: root@pam]
+      --proxmox-storage <PROXMOX_STORAGE>
+          Storage for VM disks (default: local-lvm) [default: local-lvm]
+      --proxmox-templates <PROXMOX_TEMPLATES>
+          OS templates to create (comma-separated: ubuntu-24.04,debian-12,rocky-9) [default: ubuntu-24.04]
+      --non-interactive
+          Skip interactive prompts
+      --gateway-dc-id <GATEWAY_DC_ID>
+          Datacenter ID for gateway (2-20 chars [a-z0-9-]). Enables gateway setup. Generate with: openssl rand -hex 4
+      --gateway-public-ip <GATEWAY_PUBLIC_IP>
+          Host's public IPv4 address (auto-detected if not provided)
+      --gateway-domain <GATEWAY_DOMAIN>
+          Base domain for gateway subdomains (default: decent-cloud.org) [default: decent-cloud.org]
+      --gateway-gw-prefix <GATEWAY_GW_PREFIX>
+          Gateway DNS prefix (default: gw, use dev-gw for dev) [default: gw]
+      --gateway-port-start <GATEWAY_PORT_START>
+          Start of port range for VM allocation (default: 20000) [default: 20000]
+      --gateway-port-end <GATEWAY_PORT_END>
+          End of port range for VM allocation (default: 59999) [default: 59999]
+      --gateway-ports-per-vm <GATEWAY_PORTS_PER_VM>
+          Number of ports per VM (default: 10) [default: 10]
+      --install-service <INSTALL_SERVICE>
+          Install and start systemd service after setup (default: true when Proxmox setup succeeds or service already exists) [possible values: true, false]
+  -h, --help
+          Print help

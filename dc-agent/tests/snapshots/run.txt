@@ -1,0 +1,6 @@
+Start the agent polling loop
+
+Usage: dc-agent run
+
+Options:
+  -h, --help  Print help

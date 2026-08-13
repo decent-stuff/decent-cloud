@@ -1,0 +1,11 @@
+Test provisioning by creating and optionally destroying a test VM
+
+Usage: dc-agent test-provision [OPTIONS]
+
+Options:
+      --ssh-pubkey <SSH_PUBKEY>    SSH public key to inject into the test VM
+      --keep                       Keep the VM running after provisioning (don't terminate)
+      --contract-id <CONTRACT_ID>  Custom contract ID for the test (default: test-<timestamp>)
+      --test-gateway               Also test gateway setup (subdomain, port forwarding, DNS)
+      --skip-dns                   Skip DNS record creation during gateway test (for local testing)
+  -h, --help                       Print help
