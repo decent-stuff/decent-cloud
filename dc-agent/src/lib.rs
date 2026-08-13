@@ -14,6 +14,7 @@ pub mod gateway;
 pub mod geolocation;
 pub mod host;
 pub mod orphan_tracker;
+pub mod ops;
 pub mod provisioner;
 pub mod registration;
 pub mod setup;
