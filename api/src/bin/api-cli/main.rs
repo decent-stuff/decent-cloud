@@ -42,7 +42,6 @@ use api::database::Database;
 use clap::{Parser, Subcommand, ValueEnum};
 use email_utils::{validate_email, EmailService};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::env;
 
 const DEFAULT_DEV_API_URL: &str = "http://localhost:3000";
@@ -146,24 +145,6 @@ enum Commands {
         #[arg(long)]
         with_dkim: bool,
     },
-    /// Seed external provider offerings from CSV
-    SeedProvider {
-        /// Provider name (e.g., "Hetzner")
-        #[arg(long)]
-        name: String,
-        /// Provider domain (e.g., "hetzner.com")
-        #[arg(long)]
-        domain: String,
-        /// Path to offerings CSV file
-        #[arg(long)]
-        csv: String,
-        /// Provider website URL (defaults to https://{domain})
-        #[arg(long)]
-        website: Option<String>,
-        /// Update existing offerings if they exist
-        #[arg(long)]
-        upsert: bool,
-    },
 }
 
 #[tokio::main]
@@ -199,13 +180,6 @@ async fn main() -> Result<()> {
         Commands::Cloud { action } => handle_cloud_action(action, &api_url).await,
         Commands::Recipe { action } => handle_recipe_action(action, &api_url).await,
         Commands::TestEmail { to, with_dkim } => handle_test_email(&to, with_dkim).await,
-        Commands::SeedProvider {
-            name,
-            domain,
-            csv,
-            website,
-            upsert,
-        } => handle_seed_provider(&name, &domain, &csv, website.as_deref(), upsert).await,
     }
 }
 
@@ -292,7 +266,7 @@ struct ProvisionResourceRequest {
 }
 
 // =============================================================================
-// Shared helpers (DB connect, contract lifecycle wait/cancel, test email, seed)
+// Shared helpers (DB connect, contract lifecycle wait/cancel, test email)
 // =============================================================================
 
 async fn connect_db() -> Result<Database> {
@@ -464,82 +438,5 @@ async fn handle_test_email(to: &str, with_dkim: bool) -> Result<()> {
         .await?;
     println!("\n✓ SUCCESS! Test email sent.");
     println!("Please check your inbox at: {}", to);
-    Ok(())
-}
-
-async fn handle_seed_provider(
-    name: &str,
-    domain: &str,
-    csv_path: &str,
-    website: Option<&str>,
-    upsert: bool,
-) -> Result<()> {
-    println!("\n========================================");
-    println!("  Seed External Provider");
-    println!("========================================\n");
-
-    let db = connect_db().await?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"external-provider:");
-    hasher.update(domain.as_bytes());
-    let hash = hasher.finalize();
-    let pubkey = &hash[0..32];
-
-    println!("Provider: {}", name);
-    println!("Domain: {}", domain);
-    println!("Pubkey: {}", hex::encode(pubkey));
-
-    let website_url = website.unwrap_or_else(|| {
-        let default = format!("https://{}", domain);
-        println!("Website URL: {} (default)", default);
-        Box::leak(default.into_boxed_str()) as &str
-    });
-    if website.is_some() {
-        println!("Website URL: {}", website_url);
-    }
-
-    println!("\nCreating/updating external provider record...");
-    db.create_or_update_external_provider(pubkey, name, domain, website_url, "scraper")
-        .await?;
-    println!("✓ External provider record saved");
-
-    println!("\nReading CSV file: {}", csv_path);
-    let csv_data = std::fs::read_to_string(csv_path)?;
-    let line_count = csv_data.lines().count().saturating_sub(1);
-    println!("Found {} offerings in CSV", line_count);
-
-    println!("\nImporting offerings...");
-    let (success_count, errors) = db
-        .import_seeded_offerings_csv(pubkey, &csv_data, upsert)
-        .await?;
-
-    println!("\n========================================");
-    println!("  Import Summary");
-    println!("========================================");
-    println!(
-        "Total: {}, Success: {}, Errors: {}",
-        line_count,
-        success_count,
-        errors.len()
-    );
-
-    if !errors.is_empty() {
-        println!("\nErrors:");
-        for (row, error) in errors.iter().take(10) {
-            println!("  Row {}: {}", row, error);
-        }
-        if errors.len() > 10 {
-            println!("  ... and {} more", errors.len() - 10);
-        }
-    }
-
-    if success_count > 0 {
-        println!(
-            "\n✓ Successfully seeded {} offerings for {}",
-            success_count, name
-        );
-    }
-
     Ok(())
 }

@@ -5140,6 +5140,48 @@ async fn test_get_trending_offerings_ordered_by_view_count_descending() {
     );
 }
 
+#[tokio::test]
+async fn test_get_trending_offerings_excludes_offline_provider() {
+    let db = setup_test_db().await;
+    // Provider with NO online agent (offline), not cloud-resell, not
+    // self-provisioned — so the provider-online predicate is FALSE.
+    let offline_provider = vec![0xB4u8; 32];
+    let test_id = 15;
+    let db_id = test_id_to_db_id(test_id);
+    let offering_id_str = format!("off-{}", test_id);
+    sqlx::query(
+        "INSERT INTO provider_offerings (id, pubkey, offering_id, offer_name, currency, monthly_price, setup_fee, visibility, product_type, billing_interval, stock_status, datacenter_country, datacenter_city, unmetered_bandwidth, created_at_ns, is_draft) VALUES ($1, $2, $3, 'Offline Offer', 'USD', 10.0, 0, 'public', 'compute', 'monthly', 'in_stock', 'US', 'City', FALSE, 0, FALSE)",
+    )
+    .bind(db_id)
+    .bind(&offline_provider)
+    .bind(&offering_id_str)
+    .execute(&db.pool)
+    .await
+    .expect("Failed to insert offline-provider offering");
+
+    let offering_id = test_id_to_db_id(test_id);
+    // Several views so it WOULD trend if the online filter were absent.
+    db.record_offering_view(offering_id, None, &[0xE1u8; 32])
+        .await
+        .expect("view 1 failed");
+    db.record_offering_view(offering_id, None, &[0xE2u8; 32])
+        .await
+        .expect("view 2 failed");
+    db.record_offering_view(offering_id, None, &[0xE3u8; 32])
+        .await
+        .expect("view 3 failed");
+
+    let trending = db
+        .get_trending_offerings(10)
+        .await
+        .expect("get_trending_offerings failed");
+    let found = trending.iter().any(|t| t.offering_id == offering_id);
+    assert!(
+        !found,
+        "Offering from an offline provider must NOT appear in trending"
+    );
+}
+
 // ==================== Scheduled Publish Tests ====================
 
 /// Build a minimal draft Offering for testing publish scheduling.

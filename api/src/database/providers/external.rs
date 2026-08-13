@@ -46,40 +46,6 @@ impl Database {
         Ok(validators)
     }
 
-    /// Create or update an external provider.
-    /// Used by: `api-cli scrape-provider` command
-    #[allow(dead_code)] // Used by api-cli binary, not api-server
-    pub async fn create_or_update_external_provider(
-        &self,
-        pubkey: &[u8],
-        name: &str,
-        domain: &str,
-        website_url: &str,
-        data_source: &str,
-    ) -> Result<()> {
-        let created_at_ns = crate::now_ns()?;
-
-        sqlx::query!(
-            r#"INSERT INTO external_providers (pubkey, name, domain, website_url, data_source, created_at_ns)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               ON CONFLICT(pubkey) DO UPDATE SET
-                   name = excluded.name,
-                   domain = excluded.domain,
-                   website_url = excluded.website_url,
-                   data_source = excluded.data_source"#,
-            pubkey,
-            name,
-            domain,
-            website_url,
-            data_source,
-            created_at_ns
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
     // Provider registrations
     pub(crate) async fn insert_provider_registrations(
         &self,

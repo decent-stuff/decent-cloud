@@ -49,9 +49,9 @@ async fn send_test_telegram(
         .await
         .context("Failed to send Telegram message")?;
 
-    db.increment_notification_usage(provider_id, "telegram")
-        .await
-        .ok();
+    if let Err(e) = db.increment_notification_usage(provider_id, "telegram").await {
+        tracing::warn!(error = %e, "failed to increment notification usage");
+    }
 
     Ok(format!(
         "Telegram test sent (message_id: {})",
@@ -97,9 +97,9 @@ async fn send_test_email(
         .await
         .context("Failed to send email")?;
 
-    db.increment_notification_usage(provider_id, "email")
-        .await
-        .ok();
+    if let Err(e) = db.increment_notification_usage(provider_id, "email").await {
+        tracing::warn!(error = %e, "failed to increment notification usage");
+    }
 
     Ok(format!("Email test sent to {}", to_email))
 }
@@ -121,9 +121,9 @@ async fn send_test_sms(db: &Database, provider_id: &str, phone: &Option<String>)
         .await
         .with_context(|| format!("Failed to send SMS via {}", provider_name))?;
 
-    db.increment_notification_usage(provider_id, "sms")
-        .await
-        .ok();
+    if let Err(e) = db.increment_notification_usage(provider_id, "sms").await {
+        tracing::warn!(error = %e, "failed to increment notification usage");
+    }
 
     Ok(format!(
         "SMS test sent via {} to {} (id: {})",

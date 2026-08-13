@@ -2562,12 +2562,21 @@ impl Database {
     }
 
     /// Get the top N offerings by view count in the last 7 days.
-    /// Only public, non-draft, in-stock offerings are considered.
+    /// Only public, non-draft, in-stock offerings whose provider is online are
+    /// considered. The provider-online predicate mirrors the marketplace's
+    /// canonical definition (see `compute_provider_online_status` /
+    /// `is_rentable_now`): cloud-resell (`BackendType`) and self-provisioned
+    /// offerings are always online, while agent-backed offerings require an
+    /// online agent heartbeat within the last 5 minutes. Without this filter,
+    /// offerings from offline/test providers leaked into trending.
     /// `limit` is capped at 10.
     pub async fn get_trending_offerings(&self, limit: i64) -> Result<Vec<TrendingOffering>> {
         let limit = limit.min(10);
         let now_ms = chrono::Utc::now().timestamp_millis();
         let cutoff_7d = now_ms - 7 * 24 * 60 * 60 * 1000i64;
+        // Agent liveness cutoff (5 min), same window as OFFERING_BASE_SELECT.
+        let now_ns = crate::now_ns()?;
+        let heartbeat_cutoff = now_ns - 5 * 60 * 1_000_000_000i64;
         let rows = sqlx::query_as::<_, TrendingOffering>(
             r#"SELECT
                 o.id AS offering_id,
@@ -2585,12 +2594,23 @@ impl Database {
                WHERE LOWER(o.visibility) = 'public'
                  AND o.is_draft = false
                  AND o.stock_status != 'out_of_stock'
+                 AND (
+                     o.offering_source = 'self_provisioned'
+                     OR o.provisioner_type IN ('hetzner', 'proxmox_api', 'vultr')
+                     OR EXISTS (
+                         SELECT 1 FROM provider_agent_status s
+                         WHERE s.provider_pubkey = o.pubkey
+                           AND s.online = TRUE
+                           AND s.last_heartbeat_ns > $3
+                     )
+                 )
                GROUP BY o.id
                ORDER BY views_7d DESC
                LIMIT $2"#,
         )
         .bind(cutoff_7d)
         .bind(limit)
+        .bind(heartbeat_cutoff)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
