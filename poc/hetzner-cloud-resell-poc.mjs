@@ -14,7 +14,7 @@
 // No VM is created, rented, or provisioned. The script STOPS at "rentable".
 //
 // Uses a FRESH identity (api-cli-style) seeded DB-direct into the local DB so
-// the real `hetzner-reseller` prod identity is never touched in this throwaway
+// the real `decent-cloud` prod identity is never touched in this throwaway
 // local stack. Cleanup runs in `finally` to leave the local DB clean.
 //
 // Usage:
@@ -25,7 +25,7 @@
 // Reusable for the sanctioned stage/prod seeding run: point API_URL + DB_URL at
 // the target env and (for prod) replace `generateMnemonic` with
 // `deriveIdentity(process.env.DC_PROD_RESELLER_SEED)` to act as the existing
-// hetzner-reseller provider.
+// `decent-cloud` provider.
 
 import { execFileSync } from 'node:child_process';
 import { ed25519ph } from '../website/node_modules/@noble/curves/esm/ed25519.js';

@@ -59,6 +59,23 @@
 	let analyticsMap = $state<Record<number, OfferingAnalytics>>({});
 	let trendsMap = $state<Record<number, DailyViewTrend[]>>({});
 
+	// Backend cloud-resell provisioner types (api/src/cloud/types.rs `BackendType`).
+	// Offerings with one of these provision via a connected cloud account ("Path A")
+	// and are marketplace-visible WITHOUT a pool.
+	const CLOUD_RESELL_PROVISIONER_TYPES = ['hetzner', 'vultr', 'proxmox_api'];
+
+	// Mirrors `is_marketplace_visible` in api/src/database/offerings.rs: an offering
+	// is listed even without a pool when it is `self_provisioned` or a cloud-resell
+	// offering (Path A, provisioned on demand via a connected cloud account). The
+	// "no pool" warning below must NOT fire for these — they are NOT hidden.
+	function isMarketplaceVisibleWithoutPool(o: Offering): boolean {
+		return (
+			o.offering_source === 'self_provisioned' ||
+			(o.provisioner_type != null &&
+				CLOUD_RESELL_PROVISIONER_TYPES.includes(o.provisioner_type))
+		);
+	}
+
 	async function loadOfferings() {
 		try {
 			loading = true;
@@ -656,8 +673,8 @@
 		</div>
 	{/if}
 
-	{#if offerings.filter(o => !o.resolved_pool_id).length > 0}
-		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id)}
+	{#if offerings.filter(o => !o.resolved_pool_id && !isMarketplaceVisibleWithoutPool(o)).length > 0}
+		{@const offeringsWithoutPool = offerings.filter(o => !o.resolved_pool_id && !isMarketplaceVisibleWithoutPool(o))}
 		<div class="bg-amber-500/20 border border-amber-500/30  p-4 flex items-start gap-3">
 			<Icon name="alert" size={24} class="text-amber-400 shrink-0" />
 			<div class="flex-1">

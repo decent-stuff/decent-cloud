@@ -1,5 +1,5 @@
 // Flow #4 — provider-onboard-path-a
-// The core reseller flow ("Path A": resell a managed cloud, gateway-free). As
+// The provider-onboard (Path A) flow: resell a managed cloud, gateway-free. As
 // the signed-up user, via SIGNED API calls:
 //   1. register a provider_profile (PUT /providers/:pubkey/onboarding)
 //   2. add the Hetzner cloud account (POST /cloud-accounts — token validated LIVE)
@@ -14,11 +14,11 @@ import { assertEquals } from '../assert.js';
 import { failDetail, excerpt } from '../http.js';
 import { signRequest } from '../crypto.js';
 
-const DISPLAY_NAME = 'E2E Harness Reseller (automated)';
+const DISPLAY_NAME = 'E2E Harness Provider (automated)';
 
 const flow = {
 	name: 'provider-onboard-path-a',
-	description: 'Provider reseller flow: provider_profile → Hetzner cloud account → catalog → offering',
+	description: 'Provider-onboard (Path A) flow: provider_profile → Hetzner cloud account → catalog → offering',
 	requires: ['signup'],
 	async run(ctx) {
 		const { apiUrl, hetznerToken } = ctx.config;
