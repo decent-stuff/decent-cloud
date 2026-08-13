@@ -571,8 +571,8 @@
 		</p>
 	</div>
 
-	<!-- Profile Completeness Card (always visible) -->
-	{#if isAuthenticated && !loading}
+	<!-- Profile Completeness Card -->
+	{#if isAuthenticated && !loading && CHATWOOT_BASE_URL}
 		<div class="card p-5 border border-neutral-800 space-y-4">
 			<div class="flex items-center justify-between">
 				<h3 class="text-base font-semibold text-white">Profile completeness</h3>
@@ -615,7 +615,7 @@
 	{/if}
 
 	<!-- Step Indicator -->
-	{#if isAuthenticated && !loading}
+	{#if isAuthenticated && !loading && CHATWOOT_BASE_URL}
 		<div class="flex items-center gap-0">
 			{#each wizardStepLabels as label, i}
 				{@const stepNum = i + 1}
@@ -685,6 +685,30 @@
 				class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-400"
 			></div>
 		</div>
+	{:else if !CHATWOOT_BASE_URL}
+		<section class="card p-8 border border-neutral-800">
+			<div class="flex items-start gap-4">
+				<span class="text-4xl">🎧</span>
+				<div class="space-y-2">
+					<h2 class="text-xl font-bold text-white">Support Portal</h2>
+					<p class="text-neutral-400">
+						Customer support chat is not enabled in this deployment.
+					</p>
+					<p class="text-neutral-500 text-sm">
+						{#if accountEmail}
+							Reach the operator at
+							<a
+								href="mailto:{accountEmail}"
+								class="text-primary-400 hover:underline">{accountEmail}</a
+							>
+							to enable customer support chat.
+						{:else}
+							Contact your administrator to enable customer support chat.
+						{/if}
+					</p>
+				</div>
+			</div>
+		</section>
 	{:else}
 		<!-- Step 1: Support Portal -->
 		{#if currentStep === 1}
@@ -699,9 +723,6 @@
 					</p>
 				</div>
 
-				<!-- Quick Links — only render live links when Chatwoot is
-				     configured for this deployment. Otherwise show a static
-				     notice so providers aren't sent to a dead/404 host. -->
 				{#if CHATWOOT_BASE_URL}
 					<div class="grid md:grid-cols-2 gap-4">
 						<a
@@ -763,29 +784,6 @@
 								</div>
 							</div>
 						{/if}
-					</div>
-				{:else}
-					<div
-						class="flex items-start gap-4 p-4 bg-surface-elevated border border-neutral-800"
-					>
-						<span class="text-3xl opacity-50">🎧</span>
-						<div>
-							<h3 class="text-neutral-500 font-semibold">
-								Support chat is not configured
-							</h3>
-							<p class="text-neutral-600 text-sm mt-1">
-								This deployment hasn't wired up the support portal.
-								{#if accountEmail}
-									Reach the operator at
-									<a
-										href="mailto:{accountEmail}"
-										class="text-primary-400 hover:underline">{accountEmail}</a
-									>.
-								{:else}
-									Contact your operator to enable it.
-								{/if}
-							</p>
-						</div>
 					</div>
 				{/if}
 
@@ -858,8 +856,14 @@
 						</div>
 					{:else}
 						<p class="text-neutral-500 text-sm">
-							Unable to load portal status
+							Couldn't reach the support portal right now.
 						</p>
+						<button
+							onclick={loadPortal}
+							class="px-4 py-2 bg-surface-elevated border border-neutral-800 hover:border-neutral-600 text-white text-sm transition-colors"
+						>
+							Retry
+						</button>
 					{/if}
 				</div>
 

@@ -27,7 +27,8 @@ import {
  * default, surfaced by the reveal).
  *
  * PARALLEL-ISOLATION (#477): the test asserts an empty visible list
- * (`filteredOfferings.length === 0` → "No offerings found"), which only holds
+ * (`filteredOfferings.length === 0` → "No providers are online right now"),
+ * which only holds
  * when NO online offerings exist in the current view. Under Playwright's
  * default parallel workers, sibling specs seed always-online
  * (`self_provisioned`) offerings into the SAME test DB (search-dsl seeds 6 in
@@ -90,16 +91,15 @@ test.describe('Marketplace default-hide empty state', () => {
 		await page.goto(`/dashboard/marketplace?provider=${providerPubkeyHex}`);
 
 		// Empty state: no visible offerings after the default-hide filters run.
-		await expect(page.getByText('No offerings found')).toBeVisible({ timeout: 10000 });
+		// All matching offerings are offline, so the headline explains that
+		// rather than reading as a dead marketplace.
+		await expect(page.getByText('No providers are online right now')).toBeVisible({ timeout: 10000 });
 		await expect(page.locator('[id^="offering-"]')).toHaveCount(0);
 
 		// The reveal button (not "Clear all filters") surfaces the offline
 		// offerings. It reads "Show N offering(s)".
 		const reveal = page.getByRole('button', { name: /^Show \d+ offering/ });
 		await expect(reveal).toBeVisible();
-		await expect(
-			page.getByText('hidden because no providers are currently online'),
-		).toBeVisible();
 
 		// Clicking reveal surfaces the previously-hidden offerings.
 		await reveal.click();

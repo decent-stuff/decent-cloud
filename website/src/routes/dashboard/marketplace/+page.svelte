@@ -1421,29 +1421,34 @@
 					<div class="flex justify-center mb-3">
 						<Icon name="search" size={48} class="text-neutral-600" />
 					</div>
-					{#if searchQuery}
-						<p class="text-neutral-400 mb-1 font-medium">No results for "{searchQuery}"</p>
-						<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">type:gpu</code></p>
+				{#if searchQuery}
+					<p class="text-neutral-400 mb-1 font-medium">No results for "{searchQuery}"</p>
+					<p class="text-neutral-600 text-sm mb-4">Try a different term, or use field syntax like <code class="text-neutral-400 bg-neutral-800 px-1">type:gpu</code></p>
+				{:else if defaultHiddenCount > 0}
+					<p class="text-neutral-400 mb-1 font-medium">No providers are online right now</p>
+					<p class="text-neutral-600 text-sm mb-4">{defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering is' : 'offerings are'} waiting — they'll reappear as soon as a provider reconnects. Check back soon!</p>
+					<button
+						onclick={() => { showOfflineOfferings = true; syncFiltersToUrl(); }}
+						class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
+					>
+						Show {defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering' : 'offerings'}
+					</button>
+				{:else if offerings.length === 0}
+					<p class="text-neutral-400 mb-1 font-medium">No offerings available yet</p>
+					<p class="text-neutral-600 text-sm mb-4">Check back soon, or become a provider and list the first cloud resources.</p>
+					<a href="/dashboard/provider/start" class="inline-block px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
+						Become a provider
+					</a>
 				{:else}
-					<p class="text-neutral-500 mb-2">No offerings found</p>
+					<p class="text-neutral-400 mb-1 font-medium">No offerings found</p>
 				{/if}
-			{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || showOfflineOfferings || recipesOnly || searchQuery}
-				<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
-				<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
-					Clear all filters
-				</button>
-			{:else if defaultHiddenCount > 0}
-				<p class="text-neutral-600 text-sm mb-4">
-					{defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering is' : 'offerings are'} hidden because no providers are currently online. Show offline offerings?
-				</p>
-				<button
-					onclick={() => { showOfflineOfferings = true; syncFiltersToUrl(); }}
-					class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors"
-				>
-					Show {defaultHiddenCount} {defaultHiddenCount === 1 ? 'offering' : 'offerings'}
-				</button>
-			{/if}
-				</div>
+				{#if selectedTypes.size > 0 || minPrice !== null || maxPrice !== null || selectedRegion || selectedCountry || selectedCity || minCores !== null || minMemoryGb !== null || minSsdGb !== null || selectedVirt || unmeteredOnly || minTrust !== null || showOfflineOfferings || recipesOnly || searchQuery}
+					<p class="text-neutral-600 text-sm mb-4">Your active filters are narrowing the results.</p>
+					<button onclick={clearFilters} class="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white text-sm font-medium transition-colors">
+						Clear all filters
+					</button>
+				{/if}
+			</div>
 			{:else}
 				<!-- Desktop Table -->
 				<div id="marketplace-desktop-table" class="hidden md:block overflow-x-auto" inert={!isDesktopViewport} aria-hidden={!isDesktopViewport}>
