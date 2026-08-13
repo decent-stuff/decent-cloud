@@ -286,8 +286,6 @@ impl Database {
             "invoices",
             "cloud_resources",
             "escrow",
-            "reseller_commissions",
-            "reseller_orders",
             "receipt_tracking",
             "pending_stripe_receipts",
         ];

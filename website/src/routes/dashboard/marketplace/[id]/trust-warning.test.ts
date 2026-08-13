@@ -81,7 +81,7 @@ describe('trust banner: new provider', () => {
 	});
 
 	it('shows new-provider info for a cancelled-only provider (total_contracts>0, trust_score null)', () => {
-		// Mirrors the hetzner-reseller case: 2 cancelled rentals do not count
+		// Mirrors a cancelled-only provider: 2 cancelled rentals do not count
 		// as a track record, so the backend nulls trust_score and the UI must
 		// render the honest new-provider banner — NOT a low-trust warning.
 		const metrics: TrustMetricsSubset = { trust_score: null, total_contracts: 2 };

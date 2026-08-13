@@ -17,7 +17,7 @@ import {
 // Backend contract: get_provider_trust_metrics now stores / returns
 // trust_score = NULL when completed_contracts == 0, so the UI's honest signal
 // is trust_score == null (regardless of total_contracts — cancelled-only
-// providers like the hetzner-reseller case must also read as "no track record").
+// providers must also read as "no track record").
 // See TrustDashboard.svelte for the call site.
 describe('hasEnoughTrustData', () => {
 	it('returns false when trust_score is null (0 completed contracts)', () => {
@@ -41,7 +41,7 @@ describe('hasEnoughTrustData', () => {
 	});
 
 	it('does NOT trust total_contracts alone — cancelled-only providers still read as no-data when trust_score is null', () => {
-		// Mirrors the hetzner-reseller case: total_contracts=2 (cancelled),
+		// Mirrors a cancelled-only provider: total_contracts=2 (cancelled),
 		// completed_contracts=0 -> backend nulls trust_score. A caller that
 		// happened to have total_contracts in scope must not short-circuit
 		// the check; the trust_score nullness is the canonical signal.

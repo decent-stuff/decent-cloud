@@ -182,26 +182,6 @@ pub struct Validator {
     pub registered_at_ns: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, TS, Object)]
-#[ts(export, export_to = "../../website/src/lib/types/generated/")]
-#[oai(skip_serializing_if_is_none)]
-#[oai(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
-pub struct ExternalProvider {
-    pub pubkey: String,
-    pub name: String,
-    pub domain: String,
-    pub website_url: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[oai(skip_serializing_if_is_none)]
-    pub logo_url: Option<String>,
-    pub data_source: String,
-    #[ts(type = "number")]
-    pub offerings_count: i64,
-    #[ts(type = "number")]
-    pub created_at_ns: i64,
-}
-
 /// A recently joined provider with offering count and days-since-join.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]

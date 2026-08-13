@@ -46,43 +46,6 @@ impl Database {
         Ok(validators)
     }
 
-    /// List external providers with offering counts
-    pub async fn list_external_providers(&self) -> Result<Vec<ExternalProvider>> {
-        let rows = sqlx::query!(
-            r#"SELECT
-                ep.pubkey,
-                ep.name,
-                ep.domain,
-                ep.website_url,
-                ep.logo_url,
-                ep.data_source,
-                ep.created_at_ns,
-                CAST(COUNT(po.id) AS BIGINT) as "offerings_count!: i64"
-            FROM external_providers ep
-            LEFT JOIN provider_offerings po ON ep.pubkey = po.pubkey AND po.offering_source = 'seeded'
-            GROUP BY ep.pubkey, ep.name, ep.domain, ep.website_url, ep.logo_url, ep.data_source, ep.created_at_ns
-            ORDER BY ep.name"#
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let providers = rows
-            .into_iter()
-            .map(|row| ExternalProvider {
-                pubkey: hex::encode(&row.pubkey),
-                name: row.name,
-                domain: row.domain,
-                website_url: row.website_url,
-                logo_url: row.logo_url,
-                data_source: row.data_source,
-                offerings_count: row.offerings_count,
-                created_at_ns: row.created_at_ns,
-            })
-            .collect();
-
-        Ok(providers)
-    }
-
     /// Create or update an external provider.
     /// Used by: `api-cli scrape-provider` command
     #[allow(dead_code)] // Used by api-cli binary, not api-server

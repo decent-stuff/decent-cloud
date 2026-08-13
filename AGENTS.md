@@ -272,7 +272,8 @@ through the website sign-up flow.
   `/project/decent-cloud/secrets/shared/env.yaml` (age-SOPS; decrypt with
   `/project/decent-cloud/secrets/.age-identity`) holds:
   - `DC_PROD_RESELLER_SEED` — 12-word BIP-39 seed phrase for the prod
-    `hetzner-reseller` account (Ed25519 pubkey `1ed6136d…`).
+    `decent-cloud` operator account (display name "Decent Cloud"; Ed25519
+    pubkey `1ed6136d…`).
   - `DC_PROD_RESELLER_PUBKEY` — the matching Ed25519 pubkey (64 hex chars), for
     verifying the derivation below produced the right keypair.
   - Decrypt (value NEVER leaves this command's pipe):
@@ -291,7 +292,7 @@ through the website sign-up flow.
   (`tools/e2e-real-deployments/src/crypto.js`: `deriveIdentity` +
   `signRequest`) — do NOT re-implement either step. (Today the harness creates a
   fresh account per run; a small change lets it load `DC_PROD_RESELLER_SEED` from
-  env.yaml and act as the existing `hetzner-reseller` provider: create/manage
+  env.yaml and act as the existing `decent-cloud` provider: create/manage
   offerings, run flows, provision/teardown.)
 - **Security constraints (load-bearing):**
   - The seed is a **MASTER key** (full account control). It lives ONLY in the

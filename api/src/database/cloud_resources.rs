@@ -2150,8 +2150,6 @@ mod tests {
             publish_at: None,
             offering_source: Some("self_provisioned".to_string()),
             external_checkout_url: None,
-            reseller_name: None,
-            reseller_commission_percent: None,
             owner_username: None,
             provider_name: None,
             provisioner_type: None,

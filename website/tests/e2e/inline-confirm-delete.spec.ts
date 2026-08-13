@@ -23,8 +23,8 @@ import {
  * the real mutation fires on the second click), mirroring the offerings
  * delete (commit 1077dd33).
  *
- * This spec replaces 7 near-identical per-surface specs (contact-delete,
- * device-remove, external-key-delete, offering-delete, reseller-delete,
+ * This spec replaces 6 near-identical per-surface specs (contact-delete,
+ * device-remove, external-key-delete, offering-delete,
  * social-delete, agent-pool-revoke) with ONE parametrized table. Each entity
  * contributes: a seed helper, a route, the arm button label, a row locator
  * strategy, and the post-Confirm assertion. The shared driver exercises:
@@ -33,8 +33,8 @@ import {
  *
  * The Cancel branch is identical client-side logic across every editor, so it
  * is asserted for two representative entities (one account-page delete + one
- * provider-page signed-DELETE) rather than duplicated 7× — this drops ~6
- * redundant tests (~16 → 10) while keeping every Confirm path covered.
+ * provider-page signed-DELETE) rather than duplicated 6× — this keeps every
+ * Confirm path covered without redundant wall-clock.
  *
  * Not declared `serial`: each entity seeds its own uniquely-random row
  * (`randomHex` + `Date.now()`) and tears it down in a `finally`, so tests are
@@ -54,7 +54,7 @@ interface EntityHandle {
 	/** Locate the seeded row on the page after navigating to `route`. */
 	row: (page: Page) => Locator;
 	/** Optional: URL substring of the signed DELETE/PUT the Confirm click fires
-	 * (surfaces that round-trip a signed request before refetching — reseller,
+	 * (surfaces that round-trip a signed request before refetching —
 	 * agent-pool revoke). When set, confirmInlineAction awaits that response. */
 	deleteResponseUrl?: string;
 	/** Assert the Confirm click performed the real server-side mutation. */
@@ -209,38 +209,6 @@ const ENTITIES: InlineConfirmEntity[] = [
 		},
 	},
 	{
-		name: 'reseller',
-		arm: 'Delete',
-		route: () => '/dashboard/provider/reseller',
-		async seed({ seedPhrase }) {
-			const resellerPubkey = pubkeyHexFromSeed(seedPhrase);
-			const extPubkey = randomHex(32);
-			await sql(`
-				INSERT INTO reseller_relationships (reseller_pubkey, external_provider_pubkey, commission_percent, status, created_at_ns)
-				VALUES (decode('${resellerPubkey}', 'hex'), decode('${extPubkey}', 'hex'), 10, 'active', ${nowNs()})
-				ON CONFLICT (reseller_pubkey, external_provider_pubkey) DO NOTHING
-			`);
-			const prefix = extPubkey.slice(0, 8);
-			return {
-				row: (page) => page.locator('div.bg-surface-elevated', { hasText: prefix }).first(),
-				// The Confirm fires a signed DELETE; the helper awaits it before
-				// the list refetches.
-				deleteResponseUrl: `/api/v1/reseller/relationships/${extPubkey}`,
-				expectConfirmed: async (page) => {
-					await expect(page.getByText('Reseller relationship deleted')).toBeVisible({ timeout: 10000 });
-					await expect(page.locator('div.bg-surface-elevated', { hasText: prefix })).toHaveCount(0);
-				},
-				cleanup: async () => {
-					await sql(`
-						DELETE FROM reseller_relationships
-						WHERE reseller_pubkey = decode('${resellerPubkey}', 'hex')
-						  AND external_provider_pubkey = decode('${extPubkey}', 'hex')
-					`);
-				},
-			};
-		},
-	},
-	{
 		name: 'agent-pool-revoke',
 		arm: 'Revoke',
 		// Route depends on the seeded pool id, which is only known after seed.
@@ -343,10 +311,10 @@ test.describe('Inline two-step confirm-and-delete (parametrized)', () => {
 
 		// Cancel-keeps-row is asserted for a representative subset only: the
 		// client-side Cancel behavior is identical across every editor, so
-		// duplicating it 7× adds wall-clock without adding signal. Contact
-		// (account/profile delete) + reseller (provider-page signed flow) +
-		// device (the disable-flavor surface) cover the three distinct shapes.
-		if (entity.name === 'contact' || entity.name === 'reseller' || entity.name === 'device') {
+		// duplicating it 6× adds wall-clock without adding signal. Contact
+		// (account/profile delete) + device (the disable-flavor surface) cover
+		// the distinct shapes.
+		if (entity.name === 'contact' || entity.name === 'device') {
 			test(`${entity.name}: Cancel aborts and keeps the row`, async ({ page, testAccount }) => {
 				const handle = await entity.seed(testAccount);
 				try {

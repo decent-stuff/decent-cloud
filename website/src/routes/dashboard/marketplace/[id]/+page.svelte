@@ -226,10 +226,6 @@
 	}
 
 	function formatPrice(o: Offering): string {
-		if (o.reseller_commission_percent && o.monthly_price) {
-			const commission = o.monthly_price * (o.reseller_commission_percent / 100);
-			return `${(o.monthly_price + commission).toFixed(2)} ${o.currency}`;
-		}
 		if (o.monthly_price) return `${o.monthly_price.toFixed(2)} ${o.currency}`;
 		return 'On request';
 	}
@@ -238,10 +234,7 @@
 		if (!o.monthly_price) {
 			return 'On request';
 		}
-		let price = o.monthly_price;
-		if (o.reseller_commission_percent) {
-			price += price * (o.reseller_commission_percent / 100);
-		}
+		const price = o.monthly_price;
 		const currency = o.currency?.toUpperCase();
 		if (currency === 'USD') {
 			return `$${price.toFixed(2)}`;
@@ -394,7 +387,7 @@
 	<!-- Trust warning banners -->
 	{#if trustMetrics && (trustMetrics.trust_score === null || trustMetrics.trust_score === undefined)}
 		<!-- Honest "new provider" banner. The backend nulls trust_score when
-		     completed_contracts == 0 (the hetzner-reseller-shaped case where
+		     completed_contracts == 0 (the new-provider case where
 		     total_contracts > 0 from cancelled rentals still counts as no
 		     track record). trust_score nullness is the canonical signal. -->
 		<div class="bg-blue-500/10 border border-blue-500/30 p-4 flex items-start gap-3">

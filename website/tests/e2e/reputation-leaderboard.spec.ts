@@ -24,7 +24,7 @@ import {
  *   - Provider D: a provider profile + 2 cancelled contracts (0 completed).
  *     The honesty gate is `completed_contracts > 0`, NOT the older
  *     `total_contracts > 0`, so D must also be excluded — this is the
- *     hetzner-reseller-shaped case where requested-then-cancelled rentals
+ *     cancelled-only case where requested-then-cancelled rentals
  *     must not look like a track record.
  *
  * Asserts the leaderboard is visible on landing (no search needed), the

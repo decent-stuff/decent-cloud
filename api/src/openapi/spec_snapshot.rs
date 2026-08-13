@@ -79,15 +79,13 @@ fn openapi_spec_is_stable() {
     // Snapshot captured from the live combined API. Update ONLY as part of an
     // intentional, verified spec change — never silently.
     //
-    // Capture date: 2026-08-11. This refresh reflects one schema-content change
-    // from the honest-trust-scores fix: `ProviderTrustMetrics.trust_score`
-    // changed from required `i64` to optional `Option<i64>` (now `null` when a
-    // provider has 0 completed contracts — insufficient data, per
-    // PRODUCT-DIRECTION "honest N/A when no track record"). Path/schema COUNTS
-    // are unchanged (186/331); only the canonical hash moved.
-    const EXPECTED_PATHS: usize = 186;
-    const EXPECTED_SCHEMAS: usize = 331;
-    const EXPECTED_HASH: &str = "03727ac61fcba984e636c6d5f8c7b989782a5e4b6b1b3ddc51790aaa7338c33c";
+    // Capture date: 2026-08-13. The entire reseller-program feature was removed
+    // (the 5 `/reseller/*` endpoints, `ResellersApi`, the `Resellers` tag, and
+    // their request/response schemas incl. `ExternalProvider`). Path/schema
+    // counts dropped 186/331 -> 181/322; the canonical hash moved accordingly.
+    const EXPECTED_PATHS: usize = 181;
+    const EXPECTED_SCHEMAS: usize = 322;
+    const EXPECTED_HASH: &str = "8c7b1ffee5dc0a2809b66e92bc4045ff13475f8d3795c54b9e98516eef52367c";
 
     assert_eq!(paths, EXPECTED_PATHS, "OpenAPI path count drifted");
     assert_eq!(schemas, EXPECTED_SCHEMAS, "OpenAPI schema count drifted");

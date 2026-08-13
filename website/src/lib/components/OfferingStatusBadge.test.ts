@@ -10,15 +10,10 @@ function getSubscriptionLabel(isSubscription: boolean, days?: number): string | 
 }
 
 function getPrimaryStatus(
-	providerOnline: boolean,
-	isReseller: boolean,
-	resellerName?: string
+	providerOnline: boolean
 ): { label: string; color: string } | null {
 	if (!providerOnline) {
 		return { label: "Offline", color: "bg-danger/20 text-danger border-danger/30" };
-	}
-	if (isReseller && resellerName) {
-		return { label: `Via ${resellerName}`, color: "bg-primary-500/20 text-primary-400 border-primary-500/30" };
 	}
 	return null;
 }
@@ -32,22 +27,12 @@ function getTrustColor(score: number, hasCriticalFlags: boolean): string {
 
 describe('OfferingStatusBadge: primary status priority', () => {
 	it('returns Offline when provider is offline', () => {
-		const status = getPrimaryStatus(false, false);
+		const status = getPrimaryStatus(false);
 		expect(status).toEqual({ label: "Offline", color: expect.stringContaining("danger") });
 	});
 
-	it('returns reseller badge when via reseller', () => {
-		const status = getPrimaryStatus(true, true, "TestReseller");
-		expect(status).toEqual({ label: "Via TestReseller", color: expect.stringContaining("primary") });
-	});
-
 	it('returns null when no special status', () => {
-		const status = getPrimaryStatus(true, false);
-		expect(status).toBeNull();
-	});
-
-	it('returns null for reseller without name', () => {
-		const status = getPrimaryStatus(true, true);
+		const status = getPrimaryStatus(true);
 		expect(status).toBeNull();
 	});
 });

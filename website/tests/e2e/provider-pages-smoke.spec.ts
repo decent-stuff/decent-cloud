@@ -29,11 +29,6 @@ const EMPTY_STATE_PAGES = [
 		emptyText: 'No pending password reset requests.',
 	},
 	{
-		url: '/dashboard/provider/reseller',
-		heading: 'Reseller Program',
-		emptyText: 'You are not reselling for any providers yet',
-	},
-	{
 		url: '/dashboard/provider/sla',
 		heading: 'SLA Monitor',
 		emptyText: 'No offerings found.',

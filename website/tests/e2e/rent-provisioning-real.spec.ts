@@ -31,9 +31,9 @@ import {
  *   - warm stack up (api :59011, web :59010) with `RATE_LIMIT_ENABLED=false`;
  *   - the API's cloud-provisioning background loop running (it is, by default,
  *     every CLOUD_PROVISIONING_INTERVAL_SECS=10s);
- *   - offering 1628's provider (`hetzner-reseller`, auto_accept_rentals=true)
- *     owning a cloud_account whose stored Hetzner token can create/delete a
- *     cx23 in nbg1.
+ *   - offering 1628's provider (auto_accept_rentals=true) owning a
+ *     cloud_account whose stored Hetzner token can create/delete a cx23 in
+ *     nbg1.
  *
  * Cleanup discipline: even if an assertion throws, afterAll cancels every
  * non-terminal contract for the test requester so no VM is left running.

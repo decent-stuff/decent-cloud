@@ -674,23 +674,9 @@
 	}
 
 	function formatPrice(offering: Offering): string {
-		// If offering has a reseller, calculate price with commission
-		if (offering.reseller_commission_percent && offering.monthly_price) {
-			const basePrice = offering.monthly_price;
-			const commission =
-				basePrice * (offering.reseller_commission_percent / 100);
-			const totalPrice = basePrice + commission;
-			return `${totalPrice.toFixed(2)} ${offering.currency}`;
-		}
 		if (offering.monthly_price)
 			return `${offering.monthly_price.toFixed(2)} ${offering.currency}`;
 		return "On request";
-	}
-
-	function hasReseller(offering: Offering): boolean {
-		return !!(
-			offering.reseller_name && offering.reseller_commission_percent
-		);
 	}
 
 	function formatSpecs(offering: Offering): string {
@@ -1496,13 +1482,10 @@
 												class="font-medium text-white hover:text-primary-400 transition-colors"
 											>{offering.offer_name}</a
 											>
-											<OfferingStatusBadge
-												providerOnline={offering.provider_online}
-												trustScore={offering.trust_score}
-												hasCriticalFlags={offering.has_critical_flags}
-												isReseller={hasReseller(offering)}
-												resellerName={offering.reseller_name}
-											resellerCommission={offering.reseller_commission_percent}
+										<OfferingStatusBadge
+											providerOnline={offering.provider_online}
+											trustScore={offering.trust_score}
+											hasCriticalFlags={offering.has_critical_flags}
 											isSubscription={offering.is_subscription}
 											subscriptionIntervalDays={offering.subscription_interval_days}
 											hasRecipe={!!offering.post_provision_script}
@@ -1549,13 +1532,7 @@
 										{/if}
 									</td>
 								<td class="py-3">
-									{#if hasReseller(offering)}
-										<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-									{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-										<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
-									{:else}
-										<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-									{/if}
+									<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 								</td>
 							<td class="py-3 text-right">
 									{#if offering.id !== undefined}
@@ -1814,13 +1791,10 @@
 											providerOnline={offering.provider_online}
 											trustScore={offering.trust_score}
 											hasCriticalFlags={offering.has_critical_flags}
-											isReseller={hasReseller(offering)}
-											resellerName={offering.reseller_name}
-										resellerCommission={offering.reseller_commission_percent}
-										isSubscription={offering.is_subscription}
-										subscriptionIntervalDays={offering.subscription_interval_days}
-										hasRecipe={!!offering.post_provision_script}
-									/>
+											isSubscription={offering.is_subscription}
+											subscriptionIntervalDays={offering.subscription_interval_days}
+											hasRecipe={!!offering.post_provision_script}
+										/>
 									</div>
 									<div class="flex items-center gap-1 text-xs text-neutral-400">
 										<Icon name={getTypeIcon(offering.product_type)} size={20} />
@@ -1863,13 +1837,7 @@
 									{formatLocation(offering)}
 								</div>
 								</div>
-							{#if hasReseller(offering)}
-								<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-							{:else if offering.offering_source === "seeded" && offering.external_checkout_url}
-								<Button variant="sm" href={offering.external_checkout_url} target="_blank" rel="noopener noreferrer" onclick={(e) => e.stopPropagation()} class="{buildRowActionButtonClass('rent')} gap-1">Visit Provider <Icon name="external" size={20} class="text-white" /></Button>
-							{:else}
-								<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
-							{/if}
+							<Button variant="sm" onclick={(e) => handleRentClick(e, offering)} class={buildRowActionButtonClass('rent')}>Rent</Button>
 							</div>
 							{#if offering.id !== undefined}
 								{@const inCompare = compareIds.has(offering.id)}

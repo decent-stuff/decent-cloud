@@ -93,10 +93,6 @@
 
 	// Formatting helpers (same logic as marketplace page)
 	function formatPrice(o: Offering): string {
-		if (o.reseller_commission_percent && o.monthly_price) {
-			const commission = o.monthly_price * (o.reseller_commission_percent / 100);
-			return `${(o.monthly_price + commission).toFixed(2)} ${o.currency}`;
-		}
 		if (o.monthly_price) return `${o.monthly_price.toFixed(2)} ${o.currency}`;
 		return 'On request';
 	}

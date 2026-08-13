@@ -32,7 +32,6 @@ const PROVIDER_STATIC = [
 	'/dashboard/provider/sla',
 	'/dashboard/provider/password-resets',
 	'/dashboard/provider/ssh-key-rotations',
-	'/dashboard/provider/reseller',
 ] as const;
 
 // Dynamic routes: title is the route PATTERN (stable test name, also the

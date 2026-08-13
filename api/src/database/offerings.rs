@@ -73,7 +73,7 @@ fn is_rentable_now(o: &Offering) -> bool {
 /// path behind the stats rentable count) so the column set (and thus the
 /// `Offering` row mapping) stays identical across all three read paths.
 /// Bindings: `$1` = agent liveness cutoff in nanoseconds (`now_ns - 5min`).
-const OFFERING_BASE_SELECT: &str = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, p.reliability_score, o.is_draft, o.publish_at, o.offering_source, o.external_checkout_url, rp.name as reseller_name, rr.commission_percent as reseller_commission_percent, acc.username as owner_username, p.name as provider_name, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, EXISTS(SELECT 1 FROM provider_agent_status s WHERE s.provider_pubkey = o.pubkey AND s.online = TRUE AND s.last_heartbeat_ns > $1) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN reseller_relationships rr ON o.pubkey = rr.external_provider_pubkey AND rr.status = 'active' LEFT JOIN provider_profiles rp ON rr.reseller_pubkey = rp.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id";
+const OFFERING_BASE_SELECT: &str = "SELECT o.id, lower(encode(o.pubkey, 'hex')) as pubkey, o.offering_id, o.offer_name, o.description, o.product_page_url, o.currency, o.monthly_price, o.setup_fee, o.visibility, o.product_type, o.virtualization_type, o.billing_interval, o.billing_unit, o.pricing_model, o.price_per_unit, o.included_units, o.overage_price_per_unit, o.stripe_metered_price_id, o.is_subscription, o.subscription_interval_days, o.stock_status, o.processor_brand, o.processor_amount, o.processor_cores, o.processor_speed, o.processor_name, o.memory_error_correction, o.memory_type, o.memory_amount, o.hdd_amount, o.total_hdd_capacity, o.ssd_amount, o.total_ssd_capacity, o.unmetered_bandwidth, o.uplink_speed, o.traffic, o.datacenter_country, o.datacenter_city, o.datacenter_latitude, o.datacenter_longitude, o.control_panel, o.gpu_name, o.gpu_count, o.gpu_memory_gb, o.min_contract_hours, o.max_contract_hours, o.payment_methods, o.features, o.operating_systems, p.trust_score, CASE WHEN p.pubkey IS NULL THEN NULL WHEN p.has_critical_flags THEN TRUE ELSE FALSE END as has_critical_flags, p.reliability_score, o.is_draft, o.publish_at, o.offering_source, o.external_checkout_url, acc.username as owner_username, p.name as provider_name, o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script, EXISTS(SELECT 1 FROM provider_agent_status s WHERE s.provider_pubkey = o.pubkey AND s.online = TRUE AND s.last_heartbeat_ns > $1) as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name FROM provider_offerings o LEFT JOIN provider_profiles p ON o.pubkey = p.pubkey LEFT JOIN account_public_keys apk ON o.pubkey = apk.public_key AND apk.is_active = TRUE LEFT JOIN accounts acc ON apk.account_id = acc.id";
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, TS, Object)]
 #[ts(export, export_to = "../../website/src/lib/types/generated/")]
@@ -178,13 +178,6 @@ pub struct Offering {
     pub offering_source: Option<String>,
     // External checkout URL for seeded offerings
     pub external_checkout_url: Option<String>,
-    // Reseller information (if offering has an active reseller)
-    #[ts(type = "string | undefined")]
-    #[sqlx(default)]
-    pub reseller_name: Option<String>,
-    #[ts(type = "number | undefined")]
-    #[sqlx(default)]
-    pub reseller_commission_percent: Option<i64>,
     // Owner username from account_profiles (if they have an account)
     #[ts(type = "string | undefined")]
     #[sqlx(default)]
@@ -890,7 +883,7 @@ impl Database {
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
-               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               offering_source, external_checkout_url, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $1 ORDER BY monthly_price ASC"#
         )
@@ -918,7 +911,7 @@ impl Database {
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
-               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               offering_source, external_checkout_url, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $1 AND LOWER(visibility) = 'public' ORDER BY monthly_price ASC"#
         )
@@ -944,7 +937,7 @@ impl Database {
                 datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                 control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                 NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
-                offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, acc.username as owner_username, (SELECT name FROM provider_profiles WHERE pubkey = provider_offerings.pubkey) as provider_name,
+                offering_source, external_checkout_url, acc.username as owner_username, (SELECT name FROM provider_profiles WHERE pubkey = provider_offerings.pubkey) as provider_name,
                 provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                  FROM provider_offerings
                  LEFT JOIN account_public_keys apk ON provider_offerings.pubkey = apk.public_key AND apk.is_active = TRUE
@@ -979,7 +972,7 @@ impl Database {
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
-               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               offering_source, external_checkout_url, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $1 ORDER BY offering_id ASC"#
         )
@@ -1005,7 +998,7 @@ impl Database {
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score, is_draft, publish_at,
-               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               offering_source, external_checkout_url, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE pubkey = $1 AND product_type = $2 ORDER BY offering_id ASC"#
         )
@@ -1372,8 +1365,6 @@ impl Database {
             publish_at,
             offering_source,
             external_checkout_url,
-            reseller_name: _,
-            reseller_commission_percent: _,
             owner_username: _,
             provider_name: _,
             provisioner_type,
@@ -1630,8 +1621,6 @@ impl Database {
             publish_at,
             offering_source,
             external_checkout_url,
-            reseller_name: _,
-            reseller_commission_percent: _,
             owner_username: _,
             provider_name: _,
             provisioner_type,
@@ -1935,8 +1924,6 @@ impl Database {
             publish_at: None,
             offering_source: source.offering_source,
             external_checkout_url: source.external_checkout_url,
-            reseller_name: None,
-            reseller_commission_percent: None,
             owner_username: None,
             provider_name: None,
             provisioner_type: source.provisioner_type,
@@ -2409,8 +2396,6 @@ impl Database {
             publish_at: None,
             offering_source: get_opt_str("offering_source"),
             external_checkout_url: get_opt_str("external_checkout_url"),
-            reseller_name: None,
-            reseller_commission_percent: None,
             owner_username: None,
             provider_name: None,
             provisioner_type: get_opt_str("provisioner_type"),
@@ -2468,7 +2453,7 @@ impl Database {
                o.payment_methods, o.features, o.operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score,
                o.is_draft, o.publish_at,
-               o.offering_source, o.external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               o.offering_source, o.external_checkout_url, NULL as owner_username,
                o.provisioner_type, o.provisioner_config, o.template_name, o.agent_pool_id, o.post_provision_script,
                NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings o

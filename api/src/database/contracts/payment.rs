@@ -79,7 +79,7 @@ impl Database {
                datacenter_country, datacenter_city, datacenter_latitude, datacenter_longitude,
                control_panel, gpu_name, gpu_count, gpu_memory_gb, min_contract_hours, max_contract_hours, payment_methods, features, operating_systems,
                NULL as trust_score, NULL as has_critical_flags, NULL::DOUBLE PRECISION as reliability_score,
-               offering_source, external_checkout_url, NULL as reseller_name, NULL as reseller_commission_percent, NULL as owner_username,
+               offering_source, external_checkout_url, NULL as owner_username,
                provisioner_type, provisioner_config, template_name, agent_pool_id, post_provision_script, NULL as provider_online, NULL as resolved_pool_id, NULL as resolved_pool_name
                FROM provider_offerings WHERE offering_id = $1"#
         )

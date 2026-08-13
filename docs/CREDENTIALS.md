@@ -235,8 +235,8 @@ store.
 
 | Name | Source | Purpose | Scope |
 |---|---|---|---|
-| `DC_PROD_RESELLER_PUBKEY` | env.yaml | Operator `hetzner-reseller` Ed25519 pubkey (64 hex) | prod |
-| `DC_PROD_RESELLER_SEED` | env.yaml | Operator `hetzner-reseller` BIP-39 seed — **MASTER key** (see `repo/AGENTS.md` "Acting as an existing provider identity") | prod |
+| `DC_PROD_RESELLER_PUBKEY` | env.yaml | Operator `decent-cloud` ("Decent Cloud") Ed25519 pubkey (64 hex) | prod |
+| `DC_PROD_RESELLER_SEED` | env.yaml | Operator `decent-cloud` ("Decent Cloud") BIP-39 seed — **MASTER key** (see `repo/AGENTS.md` "Acting as an existing provider identity") | prod |
 | `CREDENTIAL_ENCRYPTION_KEY` | env; play.yaml; dev.yaml | API credential-at-rest encryption key | dev/stage |
 | `DATABASE_URL` | play.yaml; env.yaml | Primary Postgres connection URL | dev |
 | `TEST_DATABASE_URL` | play.yaml; env.yaml | Test Postgres connection URL | dev |

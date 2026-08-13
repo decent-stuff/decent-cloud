@@ -213,8 +213,6 @@
 				is_draft: offering.is_draft ?? false,
 				offering_source: offering.offering_source || undefined,
 				external_checkout_url: offering.external_checkout_url || undefined,
-				reseller_name: undefined,
-				reseller_commission_percent: undefined,
 				owner_username: undefined,
 				provider_name: undefined,
 				provisioner_type: offering.provisioner_type || undefined,

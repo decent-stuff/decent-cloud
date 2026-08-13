@@ -76,5 +76,4 @@ These predate and inform the direction; they describe mechanics, not the north s
 
 - `docs/specs/2026-02-14-hetzner-provisioner.md` — the Hetzner provisioner the first real offerings reuse.
 - `docs/specs/2026-02-14-self-provisioning-platform.md` — self-provisioning foundation.
-- `docs/specs/2025-12-07-reseller-infrastructure-spec.md` — early reseller-infra design.
 - `docs/reputation.md` — the reputation system the leaderboard surfaces.

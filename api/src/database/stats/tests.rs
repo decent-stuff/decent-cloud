@@ -250,7 +250,7 @@ async fn test_stats_headlines_count_only_rentable_offerings_and_providers() {
 
     // --- Cloud-resell provider: NO pool, NO agent. Always rentable. ----------
     sqlx::query(
-        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Hetzner Reseller', '1.0', '1.0', 0)",
+        "INSERT INTO provider_profiles (pubkey, name, api_version, profile_version, updated_at_ns) VALUES ($1, 'Hetzner Operator', '1.0', '1.0', 0)",
     )
     .bind(cloud_resell_pk.as_slice())
     .execute(&db.pool)
@@ -3439,7 +3439,7 @@ async fn test_get_offering_conversion_stats_only_counts_own_provider() {
 // and completion_rate math. Four providers: A (3 completed + high trust), B
 // (1 completed + 1 cancelled), C (0 contracts -> always excluded), D
 // (cancelled-only, 0 completed -> must be excluded even though
-// total_contracts > 0; this is the hetzner-reseller-shaped case where
+// total_contracts > 0; this is the operator-shaped case where
 // requested-then-cancelled rentals must NOT look like a track record).
 #[tokio::test]
 async fn test_get_reputation_leaderboard_honesty_gate_and_ordering() {

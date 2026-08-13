@@ -5,9 +5,6 @@
 		providerOnline?: boolean;
 		trustScore?: number;
 		hasCriticalFlags?: boolean;
-		isReseller?: boolean;
-		resellerName?: string;
-		resellerCommission?: number;
 		isSubscription?: boolean;
 		subscriptionIntervalDays?: number;
 		hasRecipe?: boolean;
@@ -17,9 +14,6 @@
 		providerOnline = true,
 		trustScore,
 		hasCriticalFlags = false,
-		isReseller = false,
-		resellerName,
-		resellerCommission,
 		isSubscription = false,
 		subscriptionIntervalDays,
 		hasRecipe = false
@@ -43,9 +37,6 @@
 	function getPrimaryStatus(): { label: string; color: string } | null {
 		if (providerOnline === false) {
 			return { label: "Offline", color: "bg-danger/20 text-danger border-danger/30" };
-		}
-		if (isReseller && resellerName) {
-			return { label: `Via ${resellerName}`, color: "bg-primary-500/20 text-primary-400 border-primary-500/30" };
 		}
 		return null;
 	}
@@ -82,9 +73,6 @@
 				<span class="h-1.5 w-1.5 rounded-full bg-danger"></span>
 			{/if}
 			{primaryStatus.label}
-			{#if isReseller && resellerCommission}
-				<span class="opacity-70">(+{resellerCommission}%)</span>
-			{/if}
 		</div>
 	{:else if trustScore !== undefined}
 		<div
