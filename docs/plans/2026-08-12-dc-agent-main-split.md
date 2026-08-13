@@ -4,7 +4,10 @@
 **Scope:** `repo/dc-agent/` only. Pure refactor — zero behavior change.
 **Parent:** `docs/plans/2026-07-25-large-file-splits-444.md` (Wave 13 candidate
 analysis flagged this file at 6/10, "Path-B" — no `#[OpenApi]`, no spec guard).
-**Status:** PLAN ONLY. No code changed, nothing committed.
+**Status:** **DONE (2026-08-13).** All 5 waves shipped (S1→S5→S2→S4→S3); `main.rs`
+3681→139 lines (thin clap dispatch), all logic in `dc_agent::` lib modules.
+Verified per-wave: build/clippy(`--tests`)/nextest green (252 passed, 4 skipped)
+and all 8 `dc-agent ... --help` outputs byte-identical to the pre-split baseline.
 
 ## Goal
 
