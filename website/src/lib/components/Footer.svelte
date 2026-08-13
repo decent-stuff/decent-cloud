@@ -24,9 +24,9 @@
 						</a>
 					</li>
 					<li>
-						<a href="/dashboard/offerings" class="text-neutral-400 hover:text-white transition-colors text-xs">
-							Offerings
-						</a>
+					<a href="/marketplace" class="text-neutral-400 hover:text-white transition-colors text-xs">
+						Offerings
+					</a>
 					</li>
 					<li>
 						<a href="/dashboard/reputation" class="text-neutral-400 hover:text-white transition-colors text-xs">

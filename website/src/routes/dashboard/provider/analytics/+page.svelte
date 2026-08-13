@@ -26,6 +26,11 @@
 	let sortKey = $state<SortKey>('conversionRate30d');
 	let sortAsc = $state(false);
 
+	// Below this sample size, aggregate percentage metrics are statistically
+	// meaningless (e.g. "100% conversion" from 2 views). Render "Insufficient
+	// data" instead of a falsely precise percentage.
+	const MIN_SAMPLE_SIZE = 10;
+
 	let sortedStats = $derived(
 		[...conversionStats].sort((a, b) => {
 			let av: string | number;
@@ -194,9 +199,13 @@
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6">
 						<p class="text-neutral-500 text-sm">Overall Conversion</p>
-						<p class="text-3xl font-bold mt-1 {conversionClass(overallConversionRate)}">
-							{overallConversionRate.toFixed(2)}%
-						</p>
+						{#if totalViews30d >= MIN_SAMPLE_SIZE}
+							<p class="text-3xl font-bold mt-1 {conversionClass(overallConversionRate)}">
+								{overallConversionRate.toFixed(2)}%
+							</p>
+						{:else}
+							<p class="text-xl font-semibold mt-1 text-neutral-500">Insufficient data</p>
+						{/if}
 						<p class="text-neutral-600 text-xs mt-1">Views to rentals</p>
 					</div>
 					<div class="bg-surface-elevated border border-neutral-800 p-6 border-l-2 border-l-emerald-500/50">
@@ -290,9 +299,13 @@
 			<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 				<div class="bg-surface-elevated border border-neutral-800 p-6">
 					<p class="text-neutral-500 text-sm">Overall Satisfaction Rate</p>
-					<p class="text-3xl font-bold mt-1 {satisfactionClass(overallSatisfactionRate)}">
-						{overallSatisfactionRate.toFixed(1)}%
-					</p>
+					{#if totalFeedback >= MIN_SAMPLE_SIZE}
+						<p class="text-3xl font-bold mt-1 {satisfactionClass(overallSatisfactionRate)}">
+							{overallSatisfactionRate.toFixed(1)}%
+						</p>
+					{:else}
+						<p class="text-xl font-semibold mt-1 text-neutral-500">Insufficient data</p>
+					{/if}
 					<p class="text-neutral-600 text-xs mt-1">Weighted across all offerings</p>
 				</div>
 				<div class="bg-surface-elevated border border-neutral-800 p-6">

@@ -36,6 +36,18 @@
 	// "Not enough data" label otherwise.
 	const scoreHasData = $derived(hasEnoughTrustData(metrics));
 
+	// Below this many contracts, the early-cancellation red flag rests on too
+	// small a sample to mean anything (e.g. "100% cancelled" from 2 test
+	// rentals). Suppress only that flag; other critical flags are unaffected.
+	const MIN_SAMPLE_SIZE = 10;
+	const visibleCriticalFlagReasons = $derived(
+		metrics.total_contracts >= MIN_SAMPLE_SIZE
+			? metrics.critical_flag_reasons
+			: metrics.critical_flag_reasons.filter(
+					(reason) => !reason.toLowerCase().includes('cancellation')
+				)
+	);
+
 	// Provider tenure badge helpers
 	function getTenureBadgeColor(tenure: string): string {
 		if (tenure === 'established') return 'bg-green-500/20 border-green-500/50 text-green-300';
@@ -258,13 +270,13 @@
 	{/if}
 
 	<!-- Critical Flags Section -->
-	{#if metrics.has_critical_flags && metrics.critical_flag_reasons.length > 0}
+	{#if metrics.has_critical_flags && visibleCriticalFlagReasons.length > 0}
 		<div class="border-t border-neutral-800 pt-4">
 			<h4 class="text-sm font-semibold text-red-400 mb-3 flex items-center gap-2">
 				<span>&#x26A0;</span> Red Flags Detected
 			</h4>
 			<ul class="space-y-2">
-				{#each metrics.critical_flag_reasons as reason}
+				{#each visibleCriticalFlagReasons as reason}
 					<li
 						class="flex items-start gap-2 text-sm text-red-300/80 bg-red-500/10 rounded px-3 py-2"
 					>
