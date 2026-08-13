@@ -19,4 +19,5 @@ pub mod ops;
 pub mod provisioner;
 pub mod registration;
 pub mod setup;
+pub mod setup_cmd;
 pub mod upgrade;
