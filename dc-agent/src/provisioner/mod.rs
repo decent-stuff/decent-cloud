@@ -5,9 +5,12 @@ use serde::{Deserialize, Serialize};
 
 pub mod digitalocean;
 pub mod docker;
+pub mod factory;
 pub mod manual;
 pub mod proxmox;
 pub mod script;
+
+pub use factory::{create_provisioner_from_config, create_provisioner_map, ProvisionerMap};
 
 pub fn extract_contract_id(name: &str) -> Option<String> {
     name.strip_prefix("dc-").map(String::from)
